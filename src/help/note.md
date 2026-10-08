@@ -76,13 +76,13 @@ Text size sets document text from 12 to 24 px for every note. `⌘=` and `⌘-` 
 ## Rename, copy, export and more
 Rename edits the type, title and date, and shows the new filename and every link it will change; click **Rename & update links**. The note stays in its folder, and a message offers **Undo** (or press `⌘Z`).
 
-**Export PDF…** (`⌘P`) saves a light PDF in the note's look, with the title and page numbers in the footer. **Copy rich text** pastes formatted into email or a document. **Move to the Trash** is on the ⋯ menu and the Note menu, with Undo.
+**Export PDF…** (`⌘P`, Mac only for now) saves a light PDF in the note's look, with the title and page numbers in the footer. **Copy rich text** pastes formatted into email or a document. **Move to the Trash** is on the ⋯ menu and the Note menu, with Undo.
 
 ## Focus mode
 Press `⌘.` (or the focus button, or **Focus Mode** on the Note menu) to give the page the whole window: the sidebar, side pane and details go, the text is centred a size larger, and the top bar keeps only the title, Read aloud, Text size and **Exit focus**. All three modes work. `Esc`, `⌘.` again, or another screen leaves it.
 
 ## Read aloud
-Click the speaker, or press `⇧⌘P`, to hear the note in View, with each word highlighted. To start from a paragraph, `⌥`-click it or right-click and choose **Read aloud from here**. The player bar at the foot has the controls, speed and voice; reading stops when you leave the note. Set the default voice and speed in [Settings › Notes](app:settings/notes).
+Read aloud is Mac only for now, and is hidden on Windows. Click the speaker, or press `⇧⌘P`, to hear the note in View, with each word highlighted. To start from a paragraph, `⌥`-click it or right-click and choose **Read aloud from here**. The player bar at the foot has the controls, speed and voice; reading stops when you leave the note. Set the default voice and speed in [Settings › Notes](app:settings/notes).
 
 - `⇧⌘P` or `F8`: start reading, or play and pause
 - `Space`: play or pause

@@ -25,12 +25,12 @@ You tick the rest yourself: the other app's summaries off, its browser extension
 ## Start at login, and the menu bar
 - **Show in the menu bar** (on by default) puts Brainstead's icon and small window in the menu bar.
 - **Only in the menu bar when the window is closed** takes Brainstead out of the Dock when you close its window. It only appears while **Show in the menu bar** is on, and an assistant can't turn it on otherwise.
-- **Open at login** starts Brainstead when you log in. It only appears for the installed app, not one run from a folder. It's the same switch as in the menu-bar window and System Settings › General › Login Items. If macOS asks you to approve it, System Settings opens there; until you do, it shows as off.
+- **Open at login** starts Brainstead when you log in. It only appears for the installed app, not one run from a folder. It's the same switch as in the menu-bar window and, on a Mac, System Settings › General › Login Items; on Windows it adds Brainstead to your startup apps. If macOS asks you to approve it, System Settings opens there; until you do, it shows as off.
 
 What the two together do is in [The menu bar](help:menubar).
 
 ## Change the quick capture shortcut
-The [Quick capture](help:capture) shortcut is `⌃⌥Space` by default. Click the shortcut button and press the new keys, including at least one modifier. `Esc` or a click elsewhere keeps the old one. **Reset to ⌃⌥Space** puts it back. If macOS won't take a shortcut, a message says why. An assistant can change it when you ask, with the same checks.
+The [Quick capture](help:capture) shortcut has a default, shown on its button (Ctrl+Shift+Space on Windows). Click the shortcut button and press the new keys, including at least one modifier. `Esc` or a click elsewhere keeps the old one. **Reset to ⌃⌥Space** puts it back. If macOS won't take a shortcut, a message says why. An assistant can change it when you ask, with the same checks.
 
 ## Set your name
 Type your first name under **Your name**, as Teams writes it. Today greets you by it. In meeting notes made from transcripts it tells Brainstead which speaker is you, so your actions become tasks and a meeting with one other person counts as a 1-1.

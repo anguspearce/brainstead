@@ -25,7 +25,7 @@ Right-click a row for its menu:
 
 - **Ask about this note**, **Ingest into the wiki**, **Bookmark** (or **Remove bookmark**).
 - **Copy markdown**, **Copy path**, **Copy title**.
-- **Reveal in Finder**.
+- **Reveal in Finder** (**Show in Explorer** on Windows).
 - **Rename…**, which can update every link to the note, and **Discard draft** when it has one.
 - **Move to the Trash** (the vault's `.trash` folder), with Undo. See [Trash](app:trash).
 

@@ -5,7 +5,9 @@ screens: []
 order: 40
 summary: Every key the app answers to, by where it works.
 ---
-Each key works where its heading says. Quick capture's shortcut is set in [Settings › General](app:settings/general); `⌃⌥Space` is the default.
+Each key works where its heading says. Quick capture's shortcut is set in [Settings › General](app:settings/general); the default is shown on its button in Settings.
+
+Keys are shown for this computer: Windows uses Ctrl, Alt and Shift where the Mac uses its own modifier keys, and the screen shortcuts are Ctrl+Shift+1 to 0 on Windows. Read aloud, Export PDF and Quick Look are Mac only for now.
 
 ## Anywhere
 - `⌘K` — Search or jump anywhere
@@ -33,7 +35,7 @@ Each key works where its heading says. Quick capture's shortcut is set in [Setti
 - `Space` `Esc` — Play or pause, stop (reading aloud)
 - `F7` `F9` — Previous, next paragraph (reading aloud)
 - `⇧⌘R` — Rename
-- `⌥⌘R` — Reveal in Finder
+- `⌥⌘R` — Reveal in Finder (Show in Explorer on Windows)
 - `⌥⌘C` — Copy path
 - `[[` `#` — Link a note, add a tag
 - `⌃Space` — Suggestions in a template's `<% %>` tag
@@ -64,7 +66,7 @@ Each key works where its heading says. Quick capture's shortcut is set in [Setti
 ## Lists
 - `↑` `↓` — Move between rows
 - `↩` — Open
-- `Space` — Quick Look (Trash; Word, PowerPoint or Excel sources)
+- `Space` — Quick Look (Trash; Word, PowerPoint or Excel sources; Mac only)
 
 ## Task lists
 - `↑` `↓` — Choose a task, across lists

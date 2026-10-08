@@ -71,7 +71,7 @@ Reading pages, search, facts, the summaries, the health report and the Page shap
 
 An assistant can also bring Brainstead's window to the front when you ask to see something: a screen, a Settings pane, a note, a search, or [Graph](app:graph) around a page.
 
-Some things stay with you: what you're typing and haven't saved, **Edit before accepting** in Changes, and the file menu's **Export PDF…**, copying and **Reveal in Finder**. While the vault is read-only ([Settings › Vault](app:settings/vault)) nothing can be changed.
+Some things stay with you: what you're typing and haven't saved, **Edit before accepting** in Changes, and the file menu's **Export PDF…**, copying and **Reveal in Finder** (**Show in Explorer** on Windows). While the vault is read-only ([Settings › Vault](app:settings/vault)) nothing can be changed.
 
 ## Limits
 - An assistant can make up to 120 tool calls a minute.

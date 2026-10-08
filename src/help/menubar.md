@@ -5,7 +5,7 @@ screens: []
 order: 39
 summary: Brainstead's menu-bar icon and its window: today at a glance, a capture box, what's running and what waits, without opening the app.
 ---
-While Brainstead runs, its menu-bar icon opens a small window. Click the icon again, click elsewhere or press `Esc` to close it. Turn the icon off, or keep Brainstead in the menu bar alone, in [Settings › General](app:settings/general).
+While Brainstead runs, its menu-bar icon opens a small window. On Windows the icon is in the system tray at the bottom right of the taskbar, under the ^ arrow if Windows hides it. Click the icon again, click elsewhere or press `Esc` to close it. Turn the icon off, or keep Brainstead in the menu bar alone, in [Settings › General](app:settings/general).
 
 ## What the icon says
 - Plain: nothing to see.
@@ -18,7 +18,7 @@ While Brainstead runs, its menu-bar icon opens a small window. Click the icon ag
 - A capture box, like Quick capture: type a task and press `↩` for the To Do list, or switch to **Thought** for the Scratchpad.
 - Each run going, with its progress and **Stop**.
 - Changes held for you and items in the Inbox, each opening its screen.
-- **Open at login**, as in [Settings › General](app:settings/general), when macOS can manage it. If macOS asks for approval, System Settings opens at Login Items.
+- **Open at login**, as in [Settings › General](app:settings/general), when the system can manage it (on a Mac, if macOS asks for approval, System Settings opens at Login Items).
 - **Run the daily check now**, which says **Daily check started** or what went wrong.
 - At the foot, when the next scheduled daily or weekly summary is due.
 
@@ -26,4 +26,4 @@ While Brainstead runs, its menu-bar icon opens a small window. Click the icon ag
 While the window is open: `⌘O` opens Brainstead, `⌘T` Today, `⌘J` Ask, `⌘,` Settings and `⌘Q` quits. They don't work while you're typing in the capture box.
 
 ## Keep Brainstead in the menu bar
-Turn on **Open at login** and **Only in the menu bar when the window is closed** in [Settings › General](app:settings/general). Brainstead then starts at login, and closing its window takes it out of the Dock; the icon, or opening the app, brings it back. Quick capture, browser captures and the scheduled summaries keep working.
+Turn on **Open at login** and **Only in the menu bar when the window is closed** in [Settings › General](app:settings/general). Brainstead then starts at login, and closing its window takes it out of the Dock (the taskbar on Windows); the icon, or opening the app, brings it back. Quick capture, browser captures and the scheduled summaries keep working. On Windows, with **Show in the menu bar** off, closing the window quits Brainstead; starting it again while it runs brings its window forward.
