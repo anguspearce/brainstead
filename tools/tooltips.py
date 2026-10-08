@@ -48,7 +48,7 @@ def main() -> int:
     for f in sorted((ROOT / "src").rglob("*.tsx")):
         if ".test." in f.name:
             continue
-        s = f.read_text()
+        s = f.read_text(encoding="utf-8")
         for m in re.finditer(r"<button\b", s):
             if "title=" not in open_tag(s, m.start()) and not wrapped(s, m.start()):
                 missing.append(f"{f.relative_to(ROOT)}:{s.count(chr(10), 0, m.start()) + 1}")
