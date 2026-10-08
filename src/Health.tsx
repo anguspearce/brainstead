@@ -45,6 +45,7 @@ import { toast } from "./Toast";
 import { TopBar } from "./TopBar";
 import { Dialog } from "./ui";
 import { Store, useStore } from "./store";
+import { keyLabel } from "./platform";
 import { vaultVersion } from "./state";
 
 const undo = { label: "Undo", kbd: "⌘Z", run: () => void undoLast() };
@@ -899,8 +900,8 @@ function SideCards({ r }: { r: LintReport }) {
         ))}
       </div>
       <p className="faint small">
-        Safe fixes (cross-links, dates, log lines, system-note headers) apply straight away and can be undone with ⌘Z. Anything that changes
-        meaning is an agent change, listed in Changes with Revert.
+        Safe fixes (cross-links, dates, log lines, system-note headers) apply straight away and can be undone with {keyLabel("⌘Z")}.
+        Anything that changes meaning is an agent change, listed in Changes with Revert.
       </p>
     </>
   );

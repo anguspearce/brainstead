@@ -17,6 +17,8 @@ import { canIngest as ingestOffered } from "./Lists";
 import { copyRich, errText, exportPdf, fullPath, openRename, toggleBookmark, trashFile, useBookmarked } from "./notes/actions";
 import { Popover } from "./ui";
 import { toast } from "./Toast";
+import { fileManager, isMac, keyLabel } from "./platform";
+import { useFeatures } from "./features";
 
 export interface MenuState {
   at: DOMRect | null;
@@ -76,6 +78,7 @@ export function FileMenu({ menu, doc, readFrom }: { menu: MenuState; doc?: () =>
     };
   }, [f, menu.at]);
   const bookmarked = useBookmarked(menu.at ? f?.path : undefined);
+  const features = useFeatures();
   if (!menu.at || !f) return null;
   const isText = /\.(md|txt)$/i.test(f.path);
   const system = isSystemNote(f.path);
@@ -90,7 +93,7 @@ export function FileMenu({ menu, doc, readFrom }: { menu: MenuState; doc?: () =>
   const el = doc?.();
   // The Note menu's shortcuts (src-tauri/src/menu.rs) act on the open note, so they're shown
   // only on its menu, not on a list row's.
-  const kbd = (k: string) => (doc ? <span className="kbd">{k}</span> : null);
+  const kbd = (k: string) => (doc ? <span className="kbd">{keyLabel(k)}</span> : null);
   const sc = (k: string) => (doc ? ` (${k})` : "");
   return (
     <Popover anchor={menu.at} onClose={menu.close} width={230}>
@@ -101,7 +104,7 @@ export function FileMenu({ menu, doc, readFrom }: { menu: MenuState; doc?: () =>
           <button
             type="button"
             role="menuitem"
-            title="Read the note aloud from this paragraph (or ⌥-click it)"
+            title={keyLabel("Read the note aloud from this paragraph (or ⌥-click it)")}
             onClick={() => {
               menu.close();
               readFrom();
@@ -183,7 +186,7 @@ export function FileMenu({ menu, doc, readFrom }: { menu: MenuState; doc?: () =>
             Copy markdown
           </button>
         )}
-        {el && (
+        {el && features.richCopy && (
           <button
             type="button"
             role="menuitem"
@@ -197,7 +200,7 @@ export function FileMenu({ menu, doc, readFrom }: { menu: MenuState; doc?: () =>
         <button
           type="button"
           role="menuitem"
-          title={`Copy the file's full path, ${fullPath(f.path)}${sc("⌥⌘C")}`}
+          title={keyLabel(`Copy the file's full path, ${fullPath(f.path)}${sc("⌥⌘C")}`)}
           onClick={run(() => api.copyText(fullPath(f.path)), "Path copied")}
         >
           <Icon name="copy" size={14} />
@@ -214,8 +217,13 @@ export function FileMenu({ menu, doc, readFrom }: { menu: MenuState; doc?: () =>
           Copy title
         </button>
         <div className="sep" />
-        {el && (
-          <button type="button" role="menuitem" title={`Save the note as a PDF${sc("⌘P")}`} onClick={run(() => exportPdf(f.title))}>
+        {el && features.exportPdf && (
+          <button
+            type="button"
+            role="menuitem"
+            title={keyLabel(`Save the note as a PDF${sc("⌘P")}`)}
+            onClick={run(() => exportPdf(f.title))}
+          >
             <Icon name="export" size={14} />
             Export PDF…
             {kbd("⌘P")}
@@ -224,18 +232,18 @@ export function FileMenu({ menu, doc, readFrom }: { menu: MenuState; doc?: () =>
         <button
           type="button"
           role="menuitem"
-          title={`Show the file in a Finder window${sc("⌥⌘R")}`}
-          onClick={run(() => api.reveal(f.path), "Shown in Finder")}
+          title={keyLabel(`Show the file in a ${fileManager} window${sc("⌥⌘R")}`)}
+          onClick={run(() => api.reveal(f.path), `Shown in ${fileManager}`)}
         >
           <Icon name="finder" size={14} />
-          Reveal in Finder
+          {isMac ? "Reveal in Finder" : `Show in ${fileManager}`}
           {kbd("⌥⌘R")}
         </button>
         <div className="sep" />
         <button
           type="button"
           role="menuitem"
-          title={system ? systemTip : `Rename the file in its folder; links to it can be updated too${sc("⇧⌘R")}`}
+          title={system ? systemTip : keyLabel(`Rename the file in its folder; links to it can be updated too${sc("⇧⌘R")}`)}
           disabled={system}
           onClick={() => {
             menu.close();

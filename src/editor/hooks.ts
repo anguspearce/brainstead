@@ -16,7 +16,7 @@ import { openDoc } from "../nav";
 import { reportEditError } from "../taskModel";
 import type { EditorHooks } from "./Editor";
 
-const join = (root: string, rel: string) => `${root.replace(/\/$/, "")}/${rel.replace(/^\/+/, "")}`;
+const join = (root: string, rel: string) => `${root.replace(/[\\/]$/, "")}/${rel.replace(/^\/+/, "")}`;
 
 /** The embed for an image saved at a vault path, as markdown vault editors write it. */
 export const imageEmbed = (rel: string) => `![[${rel}]]`;

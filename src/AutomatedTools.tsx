@@ -14,7 +14,7 @@ import { reportEditError } from "./taskModel";
 import { toast } from "./Toast";
 
 /** A folder's last part, for a tool's name: `/work/digest` → `digest`. */
-const folderName = (cwd: string) => cwd.split("/").filter(Boolean).pop() ?? cwd;
+const folderName = (cwd: string) => cwd.split(/[\\/]/).filter(Boolean).pop() ?? cwd;
 
 /** A suggested folder as a tool to list: named after the folder, its sessions matched by it. */
 export const fromSuggestion = (g: AutomationSuggestion): Automation => ({ label: folderName(g.cwd), cwd_contains: g.cwd, opening: "" });

@@ -54,7 +54,7 @@ describe.each(vaults)("every note in %s renders", (root) => {
     expect(files.length).toBeGreaterThan(5);
     const failed: string[] = [];
     for (const f of files) {
-      const rel = path.relative(root, f);
+      const rel = path.relative(root, f).split(path.sep).join("/");
       errors.length = 0;
       try {
         const { unmount } = render(<Markdown content={fs.readFileSync(f, "utf8")} path={rel} root={root} />);

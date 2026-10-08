@@ -21,6 +21,8 @@ import { recheckPermissions, startStatus } from "./state";
 import { applyReadSize, applyTheme, installFlushers, settings } from "./store";
 import { startMoves } from "./moves";
 import { isTranscriptPath } from "./meetingFlow";
+import { loadFeatures } from "./features";
+import { applyPlatform, blockBrowserKeys } from "./platform";
 
 // WebKit's own right-click menu offers Reload, which throws away the app's state. Keep it only
 // where it's useful — in text fields and on selected text — and leave custom menus to their owners.
@@ -32,7 +34,10 @@ document.addEventListener("contextmenu", (e) => {
 });
 
 async function start() {
-  const [s, sceneJson] = await Promise.all([api.settingsRead(), api.scene().catch(() => null)]);
+  // The stylesheet reads data-platform; the backend's own report of the platform wins once it arrives.
+  applyPlatform();
+  blockBrowserKeys();
+  const [s, sceneJson] = await Promise.all([api.settingsRead(), api.scene().catch(() => null), loadFeatures()]);
   settings.loadFrom(s);
   applyTheme(s.theme);
   applyReadSize(s.readSize);

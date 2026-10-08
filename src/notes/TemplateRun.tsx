@@ -14,6 +14,7 @@ import { place } from "../nav";
 import { settings } from "../store";
 import { Dialog } from "../ui";
 import { Ask, Env, PromptRequest, runTemplate, RunResult, StopRun, SuggestRequest, tfile } from "./templater";
+import { isMod, keyLabel } from "../platform";
 
 export const TEMPLATER_DOCS = "https://silentvoid13.github.io/Templater/";
 export const DEFAULT_SCRIPTS = "Templates/scripts";
@@ -120,7 +121,7 @@ function PromptAsk({ q, onAnswer }: { q: PromptRequest; onAnswer: (a: string) =>
     else el.setSelectionRange(el.value.length, el.value.length);
   }, [q]);
   const key = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && (!q.multiline || e.metaKey)) {
+    if (e.key === "Enter" && (!q.multiline || isMod(e))) {
       e.preventDefault();
       e.stopPropagation();
       onAnswer(v);
@@ -137,12 +138,12 @@ function PromptAsk({ q, onAnswer }: { q: PromptRequest; onAnswer: (a: string) =>
         )}
       </span>
       <div className="row">
-        <span className="faint small">{q.multiline ? "⌘↩ to answer" : "↩ to answer"}</span>
+        <span className="faint small">{keyLabel(q.multiline ? "⌘↩ to answer" : "↩ to answer")}</span>
         <span className="grow" />
         <button
           type="button"
           className="btn pri sm"
-          title={`Answer with what's typed (${q.multiline ? "⌘↩" : "↩"})`}
+          title={keyLabel(`Answer with what's typed (${q.multiline ? "⌘↩" : "↩"})`)}
           onClick={() => onAnswer(v)}
         >
           OK
@@ -176,7 +177,7 @@ function SuggestAsk({ q, onAnswer }: { q: SuggestRequest; onAnswer: (a: number[]
     } else if (e.key === "Enter") {
       e.preventDefault();
       e.stopPropagation();
-      if (multi && e.metaKey) onAnswer(chosen);
+      if (multi && isMod(e)) onAnswer(chosen);
       else if (shown[at]) pick(shown[at][1]);
     }
   };
@@ -215,10 +216,15 @@ function SuggestAsk({ q, onAnswer }: { q: SuggestRequest; onAnswer: (a: number[]
         {!shown.length && <span className="faint small">Nothing matches.</span>}
       </div>
       <div className="row">
-        <span className="faint small">{multi ? "↩ to tick · ⌘↩ when done" : "↑↓ and ↩ to choose"}</span>
+        <span className="faint small">{keyLabel(multi ? "↩ to tick · ⌘↩ when done" : "↑↓ and ↩ to choose")}</span>
         <span className="grow" />
         {multi && (
-          <button type="button" className="btn pri sm" title="Answer with the ticked choices (⌘↩)" onClick={() => onAnswer(chosen)}>
+          <button
+            type="button"
+            className="btn pri sm"
+            title={keyLabel("Answer with the ticked choices (⌘↩)")}
+            onClick={() => onAnswer(chosen)}
+          >
             Done ({chosen.length})
           </button>
         )}

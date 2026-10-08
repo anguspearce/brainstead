@@ -52,6 +52,7 @@ import { settings, useStore } from "./store";
 import { Toasts } from "./Toast";
 import { startUpdates, UpdateHost, updateView } from "./Update";
 import { Tooltips } from "./ui";
+import { isMod, isScreenMod, strayCtrl } from "./platform";
 
 const SCREENS: Partial<Record<Screen, () => React.ReactElement>> = {
   settings: SettingsScreen,
@@ -136,14 +137,14 @@ export default function App({ scene }: { scene: Scene | null }) {
   // ⌘K palette, ⌘⇧F Search, ⌘, Settings, ⌘[ ⌘] back and forward.
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      // ⌥⌘1 to ⌥⌘9, then ⌥⌘0: the sidebar's screens used most. By the key's place: ⌥ changes what's typed.
+      // ⌥⌘1 to ⌥⌘9, then ⌥⌘0 (Ctrl+Shift+digit on Windows): the sidebar's screens used most. By the key's place: ⌥ changes what's typed.
       const digit = /^Digit([0-9])$/.exec(e.code);
-      if (e.metaKey && e.altKey && !e.ctrlKey && !e.shiftKey && digit) {
+      if (isScreenMod(e) && digit) {
         nav.go(HOTKEYS[(Number(digit[1]) + 9) % 10]);
         e.preventDefault();
         return;
       }
-      if (!e.metaKey || e.altKey || e.ctrlKey) return;
+      if (!isMod(e) || e.altKey || strayCtrl(e)) return;
       const inField = (e.target as HTMLElement)?.closest?.("input, textarea, [contenteditable]");
       if (e.key === "z" && !e.shiftKey && !inField) {
         void undoLast();

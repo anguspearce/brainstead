@@ -26,6 +26,7 @@ import { useDraftPaths } from "./drafts";
 import { IMAGE_EXT } from "./md/wikilinks";
 import { TopBar } from "./TopBar";
 import { Dialog, fmtBytes, fmtCount, Popover, Seg } from "./ui";
+import { keyLabel } from "./platform";
 
 function useFiles<T = FileSummary>(load: () => Promise<T[]>): T[] | null {
   const [rows, setRows] = useState<T[] | null>(null);
@@ -141,7 +142,7 @@ export function NotesScreen() {
           type ? { about: `your ${type} notes`, prompt: `About my ${type} notes: ` } : { about: "your notes", prompt: "About my notes: " }
         }
       >
-        <button type="button" className="btn pri" onClick={() => openNewNote()} title="New note (⌘N)">
+        <button type="button" className="btn pri" onClick={() => openNewNote()} title={keyLabel("New note (⌘N)")}>
           <Icon name="plus" size={14} />
           New note
         </button>

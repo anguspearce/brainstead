@@ -11,6 +11,7 @@ import { Icon } from "../icons";
 import { useStore } from "../store";
 import { Popover } from "../ui";
 import { acceptWord, applyFix, spellLang, spellMenu } from "./spelling";
+import { isMac } from "../platform";
 
 export function SpellMenuHost() {
   const m = useStore(spellMenu);
@@ -65,7 +66,7 @@ export function SpellMenuHost() {
           <button
             type="button"
             role="menuitem"
-            title="Add this word to the macOS dictionary so it is never marked again"
+            title={`Add this word to the ${isMac ? "macOS" : "system"} dictionary so it is never marked again`}
             onClick={() => (close(), acceptWord(m.view, m, true))}
           >
             <Icon name="plus" size={14} />

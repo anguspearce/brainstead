@@ -13,6 +13,7 @@ import { settings, useStore } from "../store";
 import { Popover, Switch } from "../ui";
 import { SpeechBlock, wordRange } from "./blocks";
 import { player, skipReading, SPEEDS, speechSettingsChanged, stopReading, toggleReading, voiceLabel, voices } from "./player";
+import { keyLabel } from "../platform";
 
 /** The top bar's speaker: starts reading the note, then plays or pauses it. Hidden where the
  *  system has no voices (not macOS). */
@@ -21,7 +22,7 @@ export function ReadAloudButton({ path, onStart }: { path: string; onStart: () =
   const vs = useStore(voices);
   if (!vs.length) return null;
   const mine = s.on && s.path === path;
-  const tip = !mine ? "Read aloud (⇧⌘P)" : s.paused ? "Carry on reading (⇧⌘P · Space)" : "Pause reading (⇧⌘P · Space)";
+  const tip = keyLabel(!mine ? "Read aloud (⇧⌘P)" : s.paused ? "Carry on reading (⇧⌘P · Space)" : "Pause reading (⇧⌘P · Space)");
   return (
     <button
       type="button"

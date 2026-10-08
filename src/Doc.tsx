@@ -58,6 +58,8 @@ import { ago, Dialog, Popover, Seg, useDebounced } from "./ui";
 import { scriptsAllowed } from "./md/scripts";
 import { getList, getScalar } from "./wiki/props";
 import { FactsCard, SourcesCard, WikiFields } from "./wiki/WikiFields";
+import { isMod, keyLabel, strayCtrl } from "./platform";
+import { useFeatures } from "./features";
 
 export const LAYER_LABEL: Record<string, string> = { note: "Note", wiki: "Wiki", source: "Source", template: "Template" };
 const isMarkdown = (p: string) => /\.(md|txt)$/i.test(p);
@@ -171,7 +173,7 @@ export function DocScreen() {
   // ⌘S.
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (!e.metaKey || e.altKey || e.ctrlKey || e.shiftKey) return;
+      if (!isMod(e) || e.altKey || strayCtrl(e) || e.shiftKey) return;
       if (e.key === "s") {
         e.preventDefault();
         void save();
@@ -360,6 +362,7 @@ export function DocScreen() {
     return () => setNoteMenu(null);
   }, [open]);
   const [copyAt, setCopyAt] = useState<DOMRect | null>(null);
+  const features = useFeatures();
 
   // Sources (and anything that isn't markdown) only read.
   const shown: DocMode = !s || !canEdit ? "read" : mode;
@@ -511,7 +514,7 @@ export function DocScreen() {
           </div>
           {readAloudButton}
           {textSizeButton}
-          <button type="button" className="btn sm" title="Leave focus mode (Esc or ⌘.)" onClick={() => focusMode.set(false)}>
+          <button type="button" className="btn sm" title={keyLabel("Leave focus mode (Esc or ⌘.)")} onClick={() => focusMode.set(false)}>
             Exit focus<span className="kbd">esc</span>
           </button>
         </div>
@@ -526,7 +529,7 @@ export function DocScreen() {
           }
         >
           {dirty && (
-            <button type="button" className="btn sm pri" onClick={() => void save()} disabled={view?.saving} title="Save (⌘S)">
+            <button type="button" className="btn sm pri" onClick={() => void save()} disabled={view?.saving} title={keyLabel("Save (⌘S)")}>
               {view?.saving ? "Saving…" : "Save"}
             </button>
           )}
@@ -593,9 +596,9 @@ export function DocScreen() {
               value={mode}
               onChange={setMode}
               options={[
-                ["read", "View", "View (⌘1)"],
-                ["live", "Edit", "Edit (⌘2)"],
-                ["source", "Source", "Source markdown (⌘3)"],
+                ["read", "View", keyLabel("View (⌘1)")],
+                ["live", "Edit", keyLabel("Edit (⌘2)")],
+                ["source", "Source", keyLabel("Source markdown (⌘3)")],
               ]}
             />
           )}
@@ -623,7 +626,13 @@ export function DocScreen() {
             </button>
           )}
           {s && (
-            <button type="button" className="ibtn" aria-label="Rename" title="Rename… (⇧⌘R)" onClick={() => void fileAction("rename", s)}>
+            <button
+              type="button"
+              className="ibtn"
+              aria-label="Rename"
+              title={keyLabel("Rename… (⇧⌘R)")}
+              onClick={() => void fileAction("rename", s)}
+            >
               <Icon name="rename" />
             </button>
           )}
@@ -647,7 +656,7 @@ export function DocScreen() {
               type="button"
               className="ibtn"
               aria-label="Focus mode"
-              title="Focus mode: just the text, full window (⌘.)"
+              title={keyLabel("Focus mode: just the text, full window (⌘.)")}
               onClick={() => focusMode.set(true)}
             >
               <Icon name="expand" />
@@ -705,8 +714,8 @@ export function DocScreen() {
                       {s.path}
                     </span>
                     {dirty && (
-                      <button type="button" className="unsaved" title="Save (⌘S)" onClick={() => void save()}>
-                        Unsaved · ⌘S
+                      <button type="button" className="unsaved" title={keyLabel("Save (⌘S)")} onClick={() => void save()}>
+                        Unsaved · {keyLabel("⌘S")}
                       </button>
                     )}
                     {isMarkdown(s.path) && <DocLookControls look={look} />}
@@ -752,9 +761,9 @@ export function DocScreen() {
                   >
                     Discard
                   </button>
-                  <span title={view?.saving ? "Saving…" : "Save the changes to the page (⌘S)"}>
+                  <span title={view?.saving ? "Saving…" : keyLabel("Save the changes to the page (⌘S)")}>
                     <button type="button" className="btn sm pri" onClick={() => void save()} disabled={view?.saving}>
-                      Save · ⌘S
+                      Save · {keyLabel("⌘S")}
                     </button>
                   </span>
                 </div>
@@ -855,7 +864,7 @@ export function DocScreen() {
             {(
               [
                 ["copy-markdown", "Markdown", isMarkdown(s.path)],
-                ["copy-rich", "Rich text", isMarkdown(s.path)],
+                ["copy-rich", "Rich text", isMarkdown(s.path) && features.richCopy],
                 ["copy-path", "Path", true, "⌥⌘C"],
                 ["copy-title", "Title", true],
               ] as [FileAction, string, boolean, string?][]
@@ -866,7 +875,7 @@ export function DocScreen() {
                   key={a}
                   type="button"
                   role="menuitem"
-                  title={`${COPY_TIPS[a] ?? `Copy the ${label.toLowerCase()}`}${key ? ` (${key})` : ""}`}
+                  title={keyLabel(`${COPY_TIPS[a] ?? `Copy the ${label.toLowerCase()}`}${key ? ` (${key})` : ""}`)}
                   onClick={() => {
                     setCopyAt(null);
                     void fileAction(a, s, richEl());
@@ -874,7 +883,7 @@ export function DocScreen() {
                 >
                   <Icon name="copy" size={14} />
                   {label}
-                  {key && <span className="kbd">{key}</span>}
+                  {key && <span className="kbd">{keyLabel(key)}</span>}
                 </button>
               ))}
           </div>
@@ -1100,7 +1109,7 @@ export function TextSizeButton({ off }: { off?: string } = {}) {
   useEffect(() => {
     if (off) return;
     const k = (e: KeyboardEvent) => {
-      if (!e.metaKey || e.altKey || e.ctrlKey) return;
+      if (!isMod(e) || e.altKey || strayCtrl(e)) return;
       const cur = settings.get().readSize ?? READ_SIZE.default;
       if (e.key === "=" || e.key === "+") set(cur + 1);
       else if (e.key === "-") set(cur - 1);
@@ -1125,7 +1134,7 @@ export function TextSizeButton({ off }: { off?: string } = {}) {
         type="button"
         className="ibtn"
         aria-label="Text size"
-        title="Text size (⌘+ ⌘− ⌘0)"
+        title={keyLabel("Text size (⌘+ ⌘− ⌘0)")}
         onClick={(e) => setA(e.currentTarget.getBoundingClientRect())}
       >
         <Icon name="textsize" />
@@ -1148,7 +1157,9 @@ export function TextSizeButton({ off }: { off?: string } = {}) {
               <span style={{ fontSize: 18 }}>A</span>
             </div>
             <span
-              title={size === READ_SIZE.default ? "The text is already the default size" : "Set the text back to the default size (⌘0)"}
+              title={
+                size === READ_SIZE.default ? "The text is already the default size" : keyLabel("Set the text back to the default size (⌘0)")
+              }
             >
               <button type="button" className="btn sm" disabled={size === READ_SIZE.default} onClick={() => set(READ_SIZE.default)}>
                 Reset to {READ_SIZE.default}px

@@ -209,6 +209,11 @@ input {
   height: 36px;
   flex: none;
 }
+
+/* Windows has a native title bar, so there are no traffic lights to leave room for. */
+html[data-platform="windows"] .tlspace {
+  height: 0;
+}
 .brand {
   display: flex;
   align-items: center;
@@ -1537,6 +1542,9 @@ mark.search-hit {
   /* Room for the traffic lights, with no sidebar under them. */
   padding-left: 88px;
   border-bottom: 0;
+}
+html[data-platform="windows"] .top.focusbar {
+  padding-left: 0;
 }
 .top.focusbar .focustitle {
   flex: 1;

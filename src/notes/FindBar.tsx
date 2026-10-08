@@ -9,6 +9,7 @@ import type { EditorView } from "@codemirror/view";
 import { useEffect, useRef, useState } from "react";
 import { clearView, editorFind, editorFindClose, editorStep, Found, paintView, rangesIn } from "../editor/find";
 import { Icon } from "../icons";
+import { keyLabel } from "../platform";
 
 /** Scrolls the page to the editor's selection (the editor grows with its text, so the page scrolls,
  *  not the editor). */
@@ -150,7 +151,7 @@ export function FindBar({
         type="button"
         className="ibtn sm"
         aria-label="Previous match"
-        title="Previous (⇧↩)"
+        title={keyLabel("Previous (⇧↩)")}
         disabled={!found.count}
         onClick={() => step(-1)}
       >

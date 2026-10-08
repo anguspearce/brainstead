@@ -25,6 +25,7 @@ import { toast } from "./Toast";
 import { TopBar } from "./TopBar";
 import { ago, Dialog } from "./ui";
 import { PrepHeader, PrepRows, prepStep, WEEKLY_STATE_CHANGED, when } from "./weeklyPrep";
+import { keyLabel } from "./platform";
 
 /** The ISO week a local date is in: "2026-W40". */
 export function isoWeek(day: string): string {
@@ -238,7 +239,7 @@ export function WeeklyScreen() {
       .weeklyFinish(week, reviewBody({ ...st, done: [...new Set([...st.done, st.step])] }))
       .then((file) => {
         void api.weeklyStateWrite(null);
-        toast(`Saved ${noteTitle(file)} (⌘Z undoes it)`, { label: "Open", run: () => openDoc(file) }, "ok");
+        toast(`Saved ${noteTitle(file)} (${keyLabel("⌘Z")} undoes it)`, { label: "Open", run: () => openDoc(file) }, "ok");
         nav.go("today");
       })
       .catch(reportEditError);

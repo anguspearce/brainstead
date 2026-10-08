@@ -27,6 +27,8 @@ import { ago, fmtCount, Popover, Seg, Switch } from "./ui";
 import { sayTest, speechSettingsChanged, voices } from "./speech/player";
 import { SpeedSlider, VoiceSelect } from "./speech/ReadAloud";
 import { DocButton, useIsGone } from "./docButton";
+import { accelLabel, captureDefault, fileManager, isMac, keyLabel, terminalApp } from "./platform";
+import { useFeatures } from "./features";
 
 const PANES: [SettingsPane, string, string][] = [
   ["general", "General", "settings"],
@@ -41,14 +43,16 @@ const PANES: [SettingsPane, string, string][] = [
 
 export function SettingsScreen() {
   const p = useStore(place).place;
-  const pane = p.pane ?? "general";
+  const features = useFeatures();
+  const panes = PANES.filter(([id]) => id !== "permissions" || features.fullDiskAccess);
+  const pane = p.pane === "permissions" && !features.fullDiskAccess ? "general" : (p.pane ?? "general");
   const title = PANES.find((x) => x[0] === pane)?.[1] ?? "Settings";
   return (
     <main className="main">
       <TopBar title="Settings" sub={title} ask={{ about: `Settings › ${title}`, prompt: `About Settings › ${title}: ` }} />
       <div className="body settings">
         <nav className="spanes" aria-label="Settings">
-          {PANES.map(([id, label, icon]) => (
+          {panes.map(([id, label, icon]) => (
             <button
               key={id}
               type="button"
@@ -77,23 +81,9 @@ export function SettingsScreen() {
   );
 }
 
-/** "Control+Alt+Space" as macOS writes it: ⌃⌥Space. */
+/** "Control+Alt+Space" as the platform writes it: ⌃⌥Space on macOS, Ctrl+Alt+Space elsewhere. */
 export function prettyShortcut(spec: string): string {
-  const sym: Record<string, string> = {
-    control: "⌃",
-    ctrl: "⌃",
-    alt: "⌥",
-    option: "⌥",
-    shift: "⇧",
-    super: "⌘",
-    command: "⌘",
-    cmd: "⌘",
-    meta: "⌘",
-  };
-  return spec
-    .split("+")
-    .map((p) => sym[p.toLowerCase()] ?? (p.toLowerCase().startsWith("key") ? p.slice(3) : p))
-    .join("");
+  return accelLabel(spec);
 }
 
 /** The shortcut a key press makes, in the plugin's terms ("Control+Alt+Space"), or null for a bare key. */
@@ -114,7 +104,7 @@ function CaptureShortcut() {
   const s = useStore(settings);
   const [status, setStatus] = useState<[string | null, string | null]>([null, null]);
   const [recording, setRecording] = useState(false);
-  const spec = s.captureShortcut ?? "Control+Alt+Space";
+  const spec = s.captureShortcut ?? captureDefault();
   useEffect(() => {
     let live = true;
     // The shortcut is registered when settings are saved, so ask a moment later.
@@ -159,14 +149,14 @@ function CaptureShortcut() {
         >
           {recording ? "Press the new shortcut…" : prettyShortcut(spec)}
         </button>
-        {spec !== "Control+Alt+Space" && (
+        {spec !== captureDefault() && (
           <button
             type="button"
             className="btn ghost sm"
-            title="Put the quick capture shortcut back to ⌃⌥Space"
-            onClick={() => settings.update({ captureShortcut: "Control+Alt+Space" })}
+            title={`Put the quick capture shortcut back to ${accelLabel(captureDefault())}`}
+            onClick={() => settings.update({ captureShortcut: captureDefault() })}
           >
-            Reset to ⌃⌥Space
+            Reset to {accelLabel(captureDefault())}
           </button>
         )}
       </div>
@@ -280,7 +270,7 @@ function OpenAtLogin() {
           </div>
           <Switch label="Show in the menu bar" on={menuBar} onChange={(v) => settings.update({ menuBar: v })} />
         </div>
-        {menuBar && (
+        {menuBar && isMac && (
           <div className="srow">
             <Icon name="eye" />
             <div className="t">
@@ -414,7 +404,7 @@ function SpellLanguage() {
         value={s.spellLanguage && have.includes(s.spellLanguage) ? s.spellLanguage : ""}
         onChange={(e) => settings.update({ spellLanguage: e.target.value || undefined })}
       >
-        <option value="">{/^en(_|$)/.test(system) ? `As macOS (${languageName(system)})` : "English"}</option>
+        <option value="">{/^en(_|$)/.test(system) ? `As ${isMac ? "macOS" : "the system"} (${languageName(system)})` : "English"}</option>
         {have.map((l) => (
           <option key={l} value={l}>
             {languageName(l)}
@@ -440,9 +430,9 @@ function ReadAloudSettings() {
           <div className="t">
             <div className="pt">Voice</div>
             <div className="faint">
-              More voices: System Settings › Accessibility › Spoken Content › System voice › Manage Voices. Premium voices sound the most
-              natural (Zoe or Ava for US English, Jamie for British); download one there and it's listed here. Siri's voices can't be used
-              by other apps.
+              {isMac
+                ? "More voices: System Settings › Accessibility › Spoken Content › System voice › Manage Voices. Premium voices sound the most natural (Zoe or Ava for US English, Jamie for British); download one there and it's listed here. Siri's voices can't be used by other apps."
+                : "More voices: install one in the system's speech settings and it's listed here."}
             </div>
           </div>
           <VoiceSelect onChange={speechSettingsChanged} />
@@ -478,34 +468,44 @@ function ReadAloudSettings() {
 function Notes() {
   const s = useStore(settings);
   const d = useDocDefaults();
+  const features = useFeatures();
   const look = useDocLook("");
   const own = Object.keys(s.docLooks ?? {}).length;
   return (
     <>
-      <section className="sgroup">
-        <h2 className="h3">Spelling and grammar</h2>
-        <div className="card">
-          <div className="srow">
-            <Icon name="text" />
-            <div className="t">
-              <div className="pt">Check spelling</div>
-              <div className="faint">
-                A red wavy line under words macOS doesn't know, as you write. Click one for guesses, Learn or Ignore.
+      {(features.spelling || features.grammar) && (
+        <section className="sgroup">
+          <h2 className="h3">Spelling and grammar</h2>
+          <div className="card">
+            {features.spelling && (
+              <div className="srow">
+                <Icon name="text" />
+                <div className="t">
+                  <div className="pt">Check spelling</div>
+                  <div className="faint">
+                    A red wavy line under words {isMac ? "macOS" : "the system"} doesn't know, as you write. Click one for guesses, Learn or
+                    Ignore.
+                  </div>
+                </div>
+                <Switch label="Check spelling" on={s.spellCheck !== false} onChange={(v) => settings.update({ spellCheck: v })} />
               </div>
-            </div>
-            <Switch label="Check spelling" on={s.spellCheck !== false} onChange={(v) => settings.update({ spellCheck: v })} />
+            )}
+            {features.grammar && (
+              <div className="srow">
+                <Icon name="check" />
+                <div className="t">
+                  <div className="pt">Check grammar</div>
+                  <div className="faint">
+                    A blue wavy line where {isMac ? "macOS" : "the system"} sees a grammar problem; click for its explanation and fixes.
+                  </div>
+                </div>
+                <Switch label="Check grammar" on={s.grammarCheck !== false} onChange={(v) => settings.update({ grammarCheck: v })} />
+              </div>
+            )}
+            {features.spelling && <SpellLanguage />}
           </div>
-          <div className="srow">
-            <Icon name="check" />
-            <div className="t">
-              <div className="pt">Check grammar</div>
-              <div className="faint">A blue wavy line where macOS sees a grammar problem; click for its explanation and fixes.</div>
-            </div>
-            <Switch label="Check grammar" on={s.grammarCheck !== false} onChange={(v) => settings.update({ grammarCheck: v })} />
-          </div>
-          <SpellLanguage />
-        </div>
-      </section>
+        </section>
+      )}
       <ReadAloudSettings />
       <section className="sgroup">
         <h2 className="h3">Document look</h2>
@@ -605,11 +605,11 @@ function Vault() {
           <button type="button" className="btn" title="Choose the vault folder Brainstead reads" onClick={() => void chooseVault()}>
             Choose…
           </button>
-          <span title={s.vaultPath ? "Show the vault folder in Finder" : "Choose a vault folder first"}>
+          <span title={s.vaultPath ? `Show the vault folder in ${fileManager}` : "Choose a vault folder first"}>
             <button
               type="button"
               className="ibtn"
-              aria-label="Show in Finder"
+              aria-label={`Show in ${fileManager}`}
               disabled={!s.vaultPath}
               onClick={() => void api.reveal("").catch(() => {})}
             >
@@ -818,7 +818,7 @@ export function foundDetail(c: CliInfo): string {
   if (!c.path) return "Not installed.";
   return c.models.length
     ? `${c.models.length} model${c.models.length === 1 ? "" : "s"} · ${c.path}`
-    : `No models listed: open Terminal, run ${c.cli === "antigravity" ? "agy" : c.cli} and sign in.`;
+    : `No models listed: open ${terminalApp}, run ${c.cli === "antigravity" ? "agy" : c.cli} and sign in.`;
 }
 
 function Assistants() {
@@ -1034,7 +1034,7 @@ function Assistants() {
 
 export const SCREEN_NAME: Record<string, string> = {
   sources: "Sources (Ingest)",
-  fixname: "Fix a name everywhere (⌘K)",
+  fixname: `Fix a name everywhere (${keyLabel("⌘K")})`,
   contradictions: "Contradictions (Knowledge health)",
   health: "Knowledge health",
   meeting: "Meeting note from a transcript",
@@ -1092,7 +1092,7 @@ const ADD_COMMAND: Record<CliName, (exe: string) => string> = {
 export const terminalCommands = (found: { cli: CliName; path: string | null }[], exe: string): [string, string][] =>
   found.filter((c) => c.path).map((c) => [CLI_LABEL[c.cli], ADD_COMMAND[c.cli](exe)]);
 
-/** Brainstead's MCP server: what Ask gives each CLI, and how to add it to one in Terminal. */
+/** Brainstead's MCP server: what Ask gives each CLI, and how to add it to one in a terminal. */
 function McpGroup() {
   const [info, setInfo] = useState<AppInfo | null>(null);
   useEffect(
@@ -1118,13 +1118,13 @@ function McpGroup() {
       {found && info && !cmds.length && (
         <p className="faint">
           No assistant is installed on this computer yet (see Found on this computer); once one is, its command to use Brainstead's tools
-          from Terminal shows here.
+          from {terminalApp} shows here.
         </p>
       )}
       {cmds.length > 0 && (
         <>
           <p className="faint">
-            To use them from an assistant in Terminal, run its command once; it registers Brainstead for all its sessions:
+            To use them from an assistant in {terminalApp}, run its command once; it registers Brainstead for all its sessions:
           </p>
           <div className="card">
             {cmds.map(([name, cmd]) => (
@@ -1251,7 +1251,9 @@ function CapturePane() {
               </div>
               <span
                 title={
-                  st?.folder ? `Show the ${e.name} extension's folder in Finder, to load it in Chrome` : "The extensions weren't found"
+                  st?.folder
+                    ? `Show the ${e.name} extension's folder in ${fileManager}, to load it in Chrome`
+                    : "The extensions weren't found"
                 }
               >
                 <button
@@ -1261,7 +1263,7 @@ function CapturePane() {
                   onClick={() => void api.captureReveal(e.id).catch((x) => setErr(String(x)))}
                 >
                   <Icon name="finder" size={13} />
-                  Show in Finder
+                  Show in {fileManager}
                 </button>
               </span>
             </div>
@@ -1274,7 +1276,7 @@ function CapturePane() {
           <li>
             In Chrome (or Edge, Brave), open <span className="mono">chrome://extensions</span> and switch on Developer mode.
           </li>
-          <li>Click Load unpacked and choose an extension's folder (Show in Finder above), then pin it to the toolbar.</li>
+          <li>Click Load unpacked and choose an extension's folder (Show in {fileManager} above), then pin it to the toolbar.</li>
           <li>Open an email thread or a Teams chat and click the extension's button.</li>
         </ol>
         <p className="faint">
@@ -1384,9 +1386,14 @@ function About() {
               </option>
             ))}
           </select>
-          <button type="button" className="btn sm" title="Show the folder of log files in Finder" onClick={() => void api.logsReveal()}>
+          <button
+            type="button"
+            className="btn sm"
+            title={`Show the folder of log files in ${fileManager}`}
+            onClick={() => void api.logsReveal()}
+          >
             <Icon name="finder" size={14} />
-            Show in Finder
+            Show in {fileManager}
           </button>
         </div>
       </div>

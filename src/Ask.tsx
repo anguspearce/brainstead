@@ -54,6 +54,7 @@ import { toast } from "./Toast";
 import { HistButtons } from "./TopBar";
 import { ago, Dialog, Popover, useDebounced } from "./ui";
 import { ASSISTANT_FRONTMATTER } from "./md/scripts";
+import { isMod, keyLabel, strayCtrl } from "./platform";
 
 export function AskScreen() {
   const s = useStore(ask);
@@ -65,7 +66,7 @@ export function AskScreen() {
     if (!ask.get().chats.length) newChat();
     // ⌘T: a new chat.
     const k = (e: KeyboardEvent) => {
-      if (e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey && e.key === "t") {
+      if (isMod(e) && !e.altKey && !strayCtrl(e) && !e.shiftKey && e.key === "t") {
         newChat();
         e.preventDefault();
       }
@@ -98,7 +99,7 @@ export function AskScreen() {
           {s.chats.map((x) => (
             <ChatTab key={x.id} c={x} on={x.id === s.active} />
           ))}
-          <button type="button" className="ibtn" aria-label="New chat" title="New chat (⌘T)" onClick={() => newChat()}>
+          <button type="button" className="ibtn" aria-label="New chat" title={keyLabel("New chat (⌘T)")} onClick={() => newChat()}>
             <Icon name="plus" size={14} />
           </button>
         </div>
@@ -865,7 +866,7 @@ function Composer({ c, found }: { c: Chat; found: CliInfo[] | null }) {
         </div>
         <div className="faint askhint">
           Runs {CLI_LABEL[cliOf(model)]} on this computer through Brainstead's tools; a chat stays in Brainstead until you Save it · / skill
-          · [[ note · # tag · ↑ earlier · ↩ send · ⇧↩ new line
+          · [[ note · # tag · ↑ earlier · {keyLabel("↩ send · ⇧↩ new line")}
         </div>
       </div>
       {models && (

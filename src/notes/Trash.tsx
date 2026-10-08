@@ -17,6 +17,7 @@ import { TopBar } from "../TopBar";
 import { ago, Dialog, fmtBytes, SearchBox, Seg } from "../ui";
 import { errText } from "./actions";
 import { folderOf } from "./filename";
+import { useFeatures } from "../features";
 
 const LABEL: Record<Layer, string> = { note: "Note", wiki: "Wiki", source: "Source", template: "Template" };
 
@@ -77,8 +78,10 @@ export function TrashScreen() {
   const total = (rows ?? []).reduce((n, r) => n + r.sizeBytes, 0);
   const picked = shown.filter((r) => sel.has(r.id));
   const quickLook = (r: TrashEntry) => api.trashQuickLook(r.id).catch((e) => toast(errText(e), undefined, "bad"));
-  // Space previews the one selected item, as in Finder.
+  // Space previews the one selected item, as in Finder (where Quick Look exists).
+  const canLook = useFeatures().quickLook;
   useEffect(() => {
+    if (!canLook) return;
     const k = (e: KeyboardEvent) => {
       if (e.key !== " " || picked.length !== 1 || (e.target as HTMLElement)?.closest?.("input, textarea, button, [contenteditable]"))
         return;
@@ -253,15 +256,17 @@ export function TrashScreen() {
                   </span>
                   <span className="faint r">{fmtBytes(r.sizeBytes)}</span>
                   <span className="tracts">
-                    <button
-                      type="button"
-                      className="ibtn"
-                      aria-label={`Quick Look ${r.basename}`}
-                      title="Quick Look (Space)"
-                      onClick={() => void quickLook(r)}
-                    >
-                      <Icon name="eye" size={14} />
-                    </button>
+                    {canLook && (
+                      <button
+                        type="button"
+                        className="ibtn"
+                        aria-label={`Quick Look ${r.basename}`}
+                        title="Quick Look (Space)"
+                        onClick={() => void quickLook(r)}
+                      >
+                        <Icon name="eye" size={14} />
+                      </button>
+                    )}
                     {stuck ? (
                       <button
                         type="button"

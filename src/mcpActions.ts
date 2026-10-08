@@ -133,6 +133,7 @@ import { LABEL as TRIAGE } from "./skills/Triage";
 import { ANSWERED, replyTask } from "./skills/Reply";
 import { actionLabel, actionsIn, filterLog, rankLog } from "./activityModel";
 import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from "./taskGroups";
+import { isMac, keyLabel, terminalApp } from "./platform";
 
 const TODO_LIST = "Me. To Do List.md";
 const SCRATCHPAD = "Me. Scratchpad.md";
@@ -1784,7 +1785,7 @@ async function weeklySuggestion(a: Args): Promise<string> {
     ? line.startsWith("Held ")
       ? `Accepted: ${line.replace(/\.$/, "")}. Nothing is changed until they accept it.`
       : `Accepted: ${line}; the link is made (revertable in Changes).`
-    : `Accepted: ${line}. ⌘Z in the app undoes it.`;
+    : `Accepted: ${line}. ${keyLabel("⌘Z")} in the app undoes it.`;
 }
 
 /** The weekly review's Start over: its progress, notes, decisions and handled suggestions dropped,
@@ -1862,7 +1863,7 @@ async function healthFix(a: Args): Promise<string> {
       : "Nothing to fix safely.";
   const said = await api.healthFix(fixes);
   told(`fixed ${fixes.length} Knowledge health issue${fixes.length === 1 ? "" : "s"}`);
-  return `${said} ⌘Z in the app undoes it.`;
+  return `${said} ${keyLabel("⌘Z")} in the app undoes it.`;
 }
 
 /** ignore_issue: Knowledge health's Ignore, or Show again with show_again. */
@@ -2033,7 +2034,7 @@ async function bookmarks(a: Args): Promise<string | Listing> {
     // As Triage's Archive and Remove: by the bookmark's target, so one whose note is gone comes off too.
     await api.bookmarkRemove(remove);
     told(`took the bookmark ${remove} off`);
-    return `Took the bookmark ${remove} off. Undoable with ⌘Z.`;
+    return `Took the bookmark ${remove} off. Undoable with ${keyLabel("⌘Z")}.`;
   }
   if (keep) {
     await api.bookmarkKeep(keep);
@@ -2205,11 +2206,11 @@ async function status(): Promise<string> {
     `Index: ${index}`,
     // Settings › Permissions' Full Disk Access, where macOS asks for it.
     perm?.applies
-      ? `Full Disk Access: ${perm.fullDiskAccess === true ? "granted" : perm.fullDiskAccess === false ? "not granted (Settings › Permissions says how to give it)" : "macOS can't say"}`
+      ? `Full Disk Access: ${perm.fullDiskAccess === true ? "granted" : perm.fullDiskAccess === false ? "not granted (Settings › Permissions says how to give it)" : `${isMac ? "macOS" : "the system"} can't say`}`
       : "",
     info ? `Brainstead ${info.version} (${info.build}); its app data folder: ${info.dataDir}; its website: ${WEBSITE}` : "",
     `Brainstead runs the daily and weekly summaries (Settings › Jobs & schedule): ${s.summariesHere ? "on" : "off"}`,
-    u ? `⌘Z would undo: ${u.label}` : "Nothing to undo.",
+    u ? `${keyLabel("⌘Z")} would undo: ${u.label}` : "Nothing to undo.",
     old
       ? "The previous app's skills or scripts are still in the vault (.claude/skills, scripts/): don't use them; use these tools. The user can retire them in Settings › General › Moving over."
       : "",
@@ -2273,8 +2274,8 @@ async function assistantsFound(a: Args): Promise<string> {
     ),
     "",
     cmds.length
-      ? "Brainstead's tools from an assistant in Terminal: run its command once, and it registers Brainstead for all its sessions:"
-      : "Brainstead's tools from Terminal: no assistant is installed yet, so there's no command to show.",
+      ? `Brainstead's tools from an assistant in ${terminalApp}: run its command once, and it registers Brainstead for all its sessions:`
+      : `Brainstead's tools from ${terminalApp}: no assistant is installed yet, so there's no command to show.`,
     ...cmds.map(([name, cmd]) => `- ${name}: ${cmd}`),
     ...(skills.length
       ? [
@@ -2391,7 +2392,7 @@ async function suggestions(a: Args): Promise<string> {
     }
     // With Undo ⌘Z, as Found's toast offers it.
     told("accepted a suggested task or project");
-    return `${(m ?? "Made it.").replace(/ Revert it in Changes\.$/, "")} ⌘Z in the app undoes it (Undo, as Found's toast offers), and it's in Changes too.`;
+    return `${(m ?? "Made it.").replace(/ Revert it in Changes\.$/, "")} ${keyLabel("⌘Z")} in the app undoes it (Undo, as Found's toast offers), and it's in Changes too.`;
   }
   if (action === "skip") {
     await api.findDecide(id, "skip", null);
@@ -2800,7 +2801,7 @@ async function healthIssue(a: Args): Promise<string> {
     // As the screen's Create: an entity page (a concept page is edit_page's, in wiki/concepts/).
     const p = await api.healthCreatePage(i.name!, "entities");
     told(`made the page ${pageName(p)}`);
-    return `Made ${p}. ⌘Z in the app undoes it; edit_page fills it in.`;
+    return `Made ${p}. ${keyLabel("⌘Z")} in the app undoes it; edit_page fills it in.`;
   }
   if (action === "link_to") {
     const to = str(a, "to")?.trim();
@@ -2952,7 +2953,7 @@ async function weeklyStep(a: Args): Promise<string> {
     const file = await api.weeklyFinish(week, reviewBody({ ...st, done: [...new Set([...st.done, st.step])] }));
     await save(null);
     told(`saved the weekly review in ${file}`);
-    return `Saved the review of ${week} in ${file}. ⌘Z in the app undoes it.`;
+    return `Saved the review of ${week} in ${file}. ${keyLabel("⌘Z")} in the app undoes it.`;
   }
   throw new Error("action is start, done, notes or finish.");
 }
@@ -3068,7 +3069,7 @@ type SettingKind = "bool" | "time" | "text" | "number" | "day" | "theme" | "choi
 /** A choice setting's choices, as its menu offers them: each value and how the screen names it. */
 type Choices = () => Promise<[string, string][]> | [string, string][];
 /** What the settings tool can change, by key: its pane, label, kind and default, a choice's
- *  choices, and the name of its default choice when it has one (set by null: As macOS…). The vault,
+ *  choices, and the name of its default choice when it has one (set by null: As macOS…, As the system off a Mac). The vault,
  *  Read-only and the excluded folders stay the user's (D-20261006-20); a note's own look is
  *  note_look's (settings.docLooks, by path). */
 type SettingRow = [key: string, pane: string, label: string, kind: SettingKind, def: unknown, choices?: Choices, none?: string];
@@ -3086,7 +3087,7 @@ const SETTINGS: SettingRow[] = [
   ["theme", "General", "Appearance (system, light or dark)", "theme", "system"],
   ["openAtLogin", "General", "Open at login", "bool", false],
   ["menuBar", "General", "Show in the menu bar", "bool", true],
-  ["menuBarOnly", "General", "Only in the menu bar when the window is closed", "bool", false],
+  ["menuBarOnly", "General", `Only in the menu bar when the window is closed${isMac ? "" : " (Mac only; no effect here)"}`, "bool", false],
   ["captureShortcut", "General", "Quick capture shortcut (as Control+Alt+Space)", "shortcut", "Control+Alt+Space"],
   ["spellCheck", "Notes", "Check spelling", "bool", true],
   ["grammarCheck", "Notes", "Check grammar", "bool", true],
@@ -3098,7 +3099,7 @@ const SETTINGS: SettingRow[] = [
     null,
     // By name, as its menu lists them (English (South Africa)), the code (en_ZA) taken too.
     async () => (await api.spellLanguages())[0].map((l) => [l, languageName(l)]),
-    "As macOS",
+    isMac ? "As macOS" : "As the system",
   ],
   [
     "speechVoice",
@@ -3227,11 +3228,15 @@ async function settingsTool(a: Args): Promise<string> {
   if (!row)
     throw new Error(
       key === "openAtLogin"
-        ? "Open at login can't be changed for this copy of Brainstead (macOS manages it only for the installed app)."
+        ? `Open at login can't be changed for this copy of Brainstead (${isMac ? "macOS" : "the system"} manages it only for the installed app).`
         : `Not a setting this tool changes: ${key}. list_settings lists them; the vault, Read-only and the folders left out are the user's, in the app.`,
     );
   const [, pane, label, kind, , choices, none] = row;
   // The screen shows Only in the menu bar… only while Show in the menu bar is on.
+  if (key === "menuBarOnly" && !isMac)
+    throw new Error(
+      "Only in the menu bar when the window is closed is a Mac-only setting: on Windows, closing the window quits when Show in the menu bar is off and hides to the tray when it is on.",
+    );
   if (key === "menuBarOnly" && s.menuBar === false)
     throw new Error(
       "Only in the menu bar when the window is closed is there only while Show in the menu bar (menuBar) is on: turn that on first.",
@@ -3376,7 +3381,7 @@ async function noteLook(a: Args): Promise<string | Listing> {
   await settings.flush();
   const l = lookOf(settings.get(), path);
   noted(`set the look of ${pageName(path)}`);
-  return `${pageName(path)} now looks ${styleName(l.style)}, ${accentName(l.accent)}${l.own ? "" : " (the defaults)"}. ⌘Z doesn't undo it; use_defaults puts it back.`;
+  return `${pageName(path)} now looks ${styleName(l.style)}, ${accentName(l.accent)}${l.own ? "" : " (the defaults)"}. ${keyLabel("⌘Z")} doesn't undo it; use_defaults puts it back.`;
 }
 
 // ---- Sources' Import
@@ -3422,7 +3427,7 @@ async function openApp(a: Args): Promise<string> {
     const p = IMAGE_EXT.test(name) ? await api.assetFind(name).catch(() => null) : null;
     if (!p) throw new Error(`There's no image called ${image} in the vault.`);
     await invoke("main_show", { screen: null });
-    imageView.set({ url: convertFileSrc(`${(settings.get().vaultPath ?? "").replace(/\/$/, "")}/${p}`), alt: pageName(p) });
+    imageView.set({ url: convertFileSrc(`${(settings.get().vaultPath ?? "").replace(/[\\/]$/, "")}/${p}`), alt: pageName(p) });
     return `Brainstead shows ${p} full size.`;
   }
   const page = str(a, "page")?.trim();

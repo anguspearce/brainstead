@@ -25,6 +25,7 @@ import { askLink, askQuote, TopBar } from "./TopBar";
 import { fmtCount, Popover, SearchBox, Seg, TableBand, useDebounced } from "./ui";
 import { settings, useStore } from "./store";
 import type { SavedTaskList } from "./api";
+import { keyLabel } from "./platform";
 
 /** Each grouping's band icon, and what its count's tooltip says. */
 const GROUP_ICON: Record<GroupBy, string> = { none: "", project: "project", context: "tag", due: taskDate("due").icon };
@@ -553,7 +554,7 @@ function TaskMore({ t }: { t: TaskRow }) {
               type="button"
               role="menuitem"
               className="danger"
-              title="Takes the line out of its note; ⌘Z puts it back"
+              title={keyLabel("Takes the line out of its note; ⌘Z puts it back")}
               onClick={run(() => void changeTask(t, "delete"))}
             >
               <Icon name="trash" size={14} />
