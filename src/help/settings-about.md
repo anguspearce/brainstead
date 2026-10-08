@@ -14,7 +14,7 @@ About shows which Brainstead you're running and where it keeps its own files. **
 Brainstead checks for a new version 20 seconds after it opens and then once a day. When there is one it asks in its window the next time the window has the focus, with what's new in it: **Install and Restart**, **Later** (asked again at the next day's check) or **Skip This Version**. Brainstead › Check for Updates… checks now and says so when you're up to date. Installing shows the download's progress, then restarts. An update waits while something is running, such as Ask answering, an ingest or a summary; restarting asks about unsaved edits first, as quitting does.
 
 ## Find the logs
-**The app's logs** are one file a day in the app data folder. **Keep** them for 7, 14, 30 or 90 days (14 by default); older files are deleted. **Show in Finder** opens the folder, which helps when reporting a problem.
+**The app's logs** are one file a day in the app data folder. **Keep** them for 7, 14, 30 or 90 days (14 by default); older files are deleted. **Show in Finder** (**Show in Explorer** on Windows) opens the folder, which helps when reporting a problem.
 
 ## Licence
 Brainstead is free software under the GNU General Public License, version 3 or later. You may use, study, share and change it under that licence; the full text is in the LICENSE file that comes with the source.

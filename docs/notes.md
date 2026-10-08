@@ -20,7 +20,7 @@ The top bar has **Ask** (a chat about this note), a bookmark, **Copy** (markdown
 
 <a href="images/index.md#notes"><picture><source media="(prefers-color-scheme: dark)" srcset="images/read-aloud-dark.png"><img alt="A wiki page being read aloud: the word being said highlighted, and the player bar at the foot of the page" src="images/read-aloud-light.png"></picture></a>
 
-Click the speaker on the top bar, or press ⇧⌘P, to hear the note or wiki page in macOS's voices. Each word is highlighted as it's said. Space plays and pauses; Esc stops. Choose the voice and speed in Settings › Notes.
+Click the speaker on the top bar, or press ⇧⌘P, to hear the note or wiki page in macOS's voices. Read aloud is Mac only for now: it's hidden on Windows. Each word is highlighted as it's said. Space plays and pauses; Esc stops. Choose the voice and speed in Settings › Notes.
 
 ## Writing
 
@@ -86,4 +86,4 @@ Other apps can still change these files.
 
 ## The Trash
 
-Moving a note to the Trash puts it in the vault's `.trash` folder, with Undo. Trashing a transcript first points its links at its meeting note, when it has one. A capture restored from the Trash goes back to the Inbox. The Trash screen lists and searches what's there, puts files back where they were, and deletes them for good.
+Moving a note to the Trash puts it in the vault's `.trash` folder, with Undo. Trashing a transcript first points its links at its meeting note, when it has one. A capture restored from the Trash goes back to the Inbox. The Trash screen lists and searches what's there, puts files back where they were, and deletes them for good. **Quick Look** (`Space`) previews a file on a Mac; Windows has no preview yet.

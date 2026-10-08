@@ -15,7 +15,7 @@ Captures are refused while the vault is read-only; turn that off in [Settings â€
 
 ## Install the extensions
 1. In Chrome, Edge, Brave, Vivaldi or Chromium, open `chrome://extensions` and switch on Developer mode.
-2. Click Load unpacked and choose an extension's folder. **Show in Finder** on its row shows the folder.
+2. Click Load unpacked and choose an extension's folder. **Show in Finder** (**Show in Explorer** on Windows) on its row shows the folder. The first time Brainstead starts on Windows it registers itself for Chrome, Edge, Brave and Chromium, so captures reach it.
 3. Pin the extension to the toolbar.
 4. Open an email thread or a Teams chat and click the extension's button.
 

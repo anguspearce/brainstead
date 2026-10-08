@@ -8,7 +8,7 @@ summary: Which folder is your vault, whether Brainstead may change it, and which
 The vault is the folder of markdown notes Brainstead reads. Its index is kept outside the folder.
 
 ## Choose the vault folder
-Under **Vault folder**, click **Choose…** and pick the folder. Every `.md` and `.txt` file in it is indexed, except in system and excluded folders. **Show in Finder** opens it.
+Under **Vault folder**, click **Choose…** and pick the folder. Every `.md` and `.txt` file in it is indexed, except in system and excluded folders. **Show in Finder** (**Show in Explorer** on Windows) opens it.
 
 The card below counts the indexed files (notes, wiki pages, sources, templates, open tasks and unresolved links) and says when the index was last updated. **Rebuild index** reads every file again and rebuilds the index; the files aren't changed. An assistant sees the same counts, or why the index failed.
 

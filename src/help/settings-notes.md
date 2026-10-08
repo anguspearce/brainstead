@@ -8,6 +8,8 @@ summary: Spelling and grammar checks, reading aloud, how documents look by defau
 Notes sets how you write and how notes and wiki pages look.
 
 ## Check spelling and grammar
+Spelling and grammar checks and Read aloud are Mac only for now, and are hidden on Windows.
+
 **Check spelling** underlines unknown words in red as you write; click one for guesses, Learn or Ignore. **Check grammar** underlines grammar problems in blue; click one for the explanation and fixes. Both are on by default.
 
 **Spelling language** picks which English to check against, such as colour or color. It lists the English dictionaries macOS has and starts as macOS is set. An assistant uses the same names, such as British English.

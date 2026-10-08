@@ -1,10 +1,12 @@
 # Day to day
 
-Brainstead keeps working while its window is closed: Quick capture, captures from the browser, the daily and weekly summaries and the daily check all run from the menu bar.
+Brainstead keeps working while its window is closed: Quick capture, captures from the browser, the daily and weekly summaries and the daily check all run from the menu bar (the system tray, bottom right, on Windows).
 
 [The menu bar](#the-menu-bar) · [Summaries and jobs](#summaries-and-jobs) · [Help](#help) · [Settings](#settings) · [In the background](#in-the-background)
 
 ## The menu bar
+
+On Windows this is a system tray icon, usually under the ^ arrow at the bottom right of the taskbar. Everything below applies to it too.
 
 <a href="images/index.md#day-to-day"><picture><source media="(prefers-color-scheme: dark)" srcset="images/tray-dark.png"><img alt="The menu-bar window: one task overdue, the counts, the capture box, what waits for you, and the menu" src="images/tray-light.png" width="360"></picture></a>
 
@@ -16,7 +18,7 @@ Brainstead's menu-bar icon shows three dots while a run is going, and a dot when
 - Changes held for you and items in the Inbox, each opening its screen.
 - **Open Brainstead** (⌘O), **Today** (⌘T), **Ask** (⌘J), **Run the daily check now**, **Settings…** (⌘,) and **Quit Brainstead** (⌘Q).
 
-Turn on **Open at login** (in Settings › General or the menu-bar window) and **Only in the menu bar when the window is closed** (Settings › General), and Brainstead starts when you log in and stays out of the Dock until you open its window.
+Turn on **Open at login** (in Settings › General or the menu-bar window) and **Only in the menu bar when the window is closed** (Settings › General), and Brainstead starts when you log in and stays out of the Dock until you open its window (on Windows, out of the taskbar). On Windows, with **Show in the menu bar** off, closing the window quits Brainstead; with it on, closing hides the window to the tray. Starting Brainstead a second time brings the running window forward.
 
 ## Summaries and jobs
 
@@ -32,7 +34,7 @@ In Settings › Jobs & schedule:
 
 The summaries split what you did into **Work done** and **Personal** by your projects' areas: a project in the area Personal is personal, any other is work, done projects included. A Claude Code session whose folder is named after a project counts for it (`orbit-app` is Orbit App).
 
-A run missed while the Mac slept catches up when Brainstead next runs.
+A run missed while the computer slept catches up when Brainstead next runs.
 
 To keep sessions started by your own tools (a script, another app) out of the daily summary, list them under **Your tools that start Claude Code sessions** in Settings › Jobs & schedule. Each has a name, and the folder its sessions run in, the words their first message starts with, or both. Their sessions then count as automated, not as your work. **Add a tool** adds one by hand; folders whose sessions look like a tool's are offered in one click. Assistants can list, add and remove them too.
 
@@ -42,7 +44,7 @@ The ingest switches (ingest new sources as they arrive, refresh pages whose sour
 
 <a href="images/index.md#day-to-day"><picture><source media="(prefers-color-scheme: dark)" srcset="images/help-dark.png"><img alt="The help drawer on Tasks: its sections, the getting-started guides and the screen's keys" src="images/help-light.png"></picture></a>
 
-Press `?` on any screen, click **?** on the top bar, or choose Help › Brainstead Help (⇧⌘?) for that screen's help in a drawer. Type to search every topic.
+On Windows, ⌘ is Ctrl, ⌥ is Alt and ⇧ is Shift. Press `?` on any screen, click **?** on the top bar, or choose Help › Brainstead Help (⇧⌘?) for that screen's help in a drawer. Type to search every topic.
 
 - **Getting started** has six step-by-step guides: Start here, Capture and write, Build the wiki, Find, GTD and Knowledge health.
 - **Ask about Brainstead** puts a question to Ask, which [answers from the same help](ask.md#questions-about-brainstead).
@@ -53,7 +55,7 @@ Press `?` on any screen, click **?** on the top bar, or choose Help › Brainste
 
 <a href="images/index.md#day-to-day"><picture><source media="(prefers-color-scheme: dark)" srcset="images/settings-general-dark.png"><img alt="Settings › General: the switch-over checklist (shown when the previous app's files are in the vault), the menu bar and Open at login, the capture shortcut, your name and appearance" src="images/settings-general-light.png"></picture></a>
 
-Settings (⌘,) has General, Notes, Vault, AI assistants, Jobs & schedule, Capture extensions, Permissions and About. Press `?` on each for what's in it.
+Settings (⌘,) has General, Notes, Vault, AI assistants, Jobs & schedule, Capture extensions, Permissions (Mac only) and About. Press `?` on each for what's in it.
 
 ## In the background
 

@@ -9,7 +9,7 @@ summary: The raw material the wiki is built from, and where you ingest it into t
 Sources are the files in your vault's `sources/` folder: captured emails and chats, transcripts, documents, images and notes. They are the record, so Brainstead doesn't edit them, except that an ingest (the AI reading a source into the wiki) corrects misheard names, listed in [Changes](app:review) with Revert. Go to Sources with `⌥⌘0`.
 
 ## Add a source
-- Drag files from Finder onto the Sources screen, or click **Import** and pick them. Each is copied into `sources/`, renamed if the name is taken. Folders, files already in the vault and files over 200 MB are refused.
+- Drag files from Finder (or Explorer) onto the Sources screen, or click **Import** and pick them. Each is copied into `sources/`, renamed if the name is taken. Folders, files already in the vault and files over 200 MB are refused.
 - Capture from the browser with the Outlook and Teams extensions (set up in [Settings › Capture extensions](app:settings/capture)). A capture lands in `sources/` as an `Email. …` or `Teams. …` note, and also waits in the [Inbox](app:inbox).
 
 Nothing can be added while Read-only is on in [Settings › Vault](app:settings/vault).
@@ -55,13 +55,13 @@ The **Ingest runs** pane on the right shows each run's steps, with **Stop** whil
 Open a source to read it.
 
 - **PDF**: a bar with page n of N, previous and next, and zoom from 50% to 300% (click the percentage to fit the width again). **Find in this file** lists the pages that match; `↩` goes to the next match and `⇧↩` the one before.
-- **Word, PowerPoint and Excel**: the text Brainstead reads from them, which search, ingest and quotes use. To see the file as it looks in its app, press **Quick Look** or `Space`.
+- **Word, PowerPoint and Excel**: the text Brainstead reads from them, which search, ingest and quotes use. To see the file as it looks in its app, press **Quick Look** or `Space` (Mac only for now).
 - **Image**: shown with **Text in the image** folded under it; click it to see the text Brainstead read, which search and ingest use.
 - **Open in its app** opens the file in its usual app. A file Brainstead can't show has both buttons.
 
 When you ingest an image, Claude Code and Codex see the picture as well as its text; Copilot and Antigravity get the text only. So an image with no text needs Claude Code or Codex. A change from an image is flagged in [Changes](app:review), to check against the picture.
 
 ## See where a source is used
-Beside the preview, the provenance card, **Cited by N pages**, says when the source was last ingested and by which model, and lists the wiki pages that cite it and the passages they cite; **Details** adds the file's hash and passages indexed. **Re-ingest** and **Reveal** (in Finder) are at the foot, with **Move to the Trash** at the right. An assistant can read the same card.
+Beside the preview, the provenance card, **Cited by N pages**, says when the source was last ingested and by which model, and lists the wiki pages that cite it and the passages they cite; **Details** adds the file's hash and passages indexed. **Re-ingest** and **Reveal** (in Finder, or Explorer on Windows) are at the foot, with **Move to the Trash** at the right. An assistant can read the same card.
 
 A source's top bar has **Ask**, which starts a chat about it. A captured thread has **Draft a reply**, and other documents have **Doc check**. On the Sources list, **Meeting notes** opens [Meeting note from a transcript](app:meeting).

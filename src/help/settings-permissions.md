@@ -5,7 +5,7 @@ screens: [settings/permissions]
 order: 36
 summary: Whether Brainstead has Full Disk Access.
 ---
-Permissions shows whether Brainstead has Full Disk Access. Notifications and automation are asked for when a feature first needs them.
+Permissions shows whether Brainstead has Full Disk Access. This is a Mac setting: Windows has no such step, so there is no Permissions pane there. Notifications and automation are asked for when a feature first needs them.
 
 ## Give Brainstead Full Disk Access
 If your vault is in a cloud-synced folder, macOS without Full Disk Access asks separately for each protected place Brainstead reads, or blocks it. To grant it:
