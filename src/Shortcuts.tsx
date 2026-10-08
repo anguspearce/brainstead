@@ -10,38 +10,23 @@ import { Icon } from "./icons";
 import { Dialog } from "./ui";
 import { settings, Store, useStore } from "./store";
 import { KEYS } from "./help";
+import { accelLabel, captureDefault, keyLabel } from "./platform";
 
 export const shortcutsOpen = new Store(false);
 
-/** The capture shortcut as the sheet shows it: "Control+Alt+Space" → "⌃⌥Space". */
-export function fmtAccel(a: string): string {
-  const map: Record<string, string> = {
-    Control: "⌃",
-    Ctrl: "⌃",
-    Alt: "⌥",
-    Option: "⌥",
-    Shift: "⇧",
-    Command: "⌘",
-    Cmd: "⌘",
-    CmdOrCtrl: "⌘",
-    Super: "⌘",
-  };
-  return a
-    .split("+")
-    .map((p) => map[p] ?? p)
-    .join("");
-}
+/** The capture shortcut as the sheet shows it: "Control+Alt+Space" → "⌃⌥Space" on macOS, "Ctrl+Alt+Space" elsewhere. */
+export const fmtAccel = accelLabel;
 
 /** Every key by where it works, from the help (src/help/keyboard.md), with the capture shortcut
  *  as it's set. */
 export const SECTIONS = (capture: string): [string, [string, string][]][] =>
-  KEYS.map(([title, rows]) => [title, rows.map(([k, what]): [string, string] => [k.replace("⌃⌥Space", capture), what])]);
+  KEYS.map(([title, rows]) => [title, rows.map(([k, what]): [string, string] => [keyLabel(k.replace("⌃⌥Space", capture)), what])]);
 
 export function ShortcutsHost() {
   const open = useStore(shortcutsOpen);
   const s = useStore(settings);
   if (!open) return null;
-  const capture = fmtAccel(s.captureShortcut || "Control+Alt+Space");
+  const capture = fmtAccel(s.captureShortcut || captureDefault());
   return (
     <Dialog onClose={() => shortcutsOpen.set(false)} width={720} label="Keyboard shortcuts">
       <div className="confirm shortcuts">
@@ -60,7 +45,7 @@ export function ShortcutsHost() {
         <div className="kgrid">
           {SECTIONS(capture).map(([title, keys]) => (
             <section key={title}>
-              <div className="eyebrow">{title}</div>
+              <div className="eyebrow">{keyLabel(title)}</div>
               <dl>
                 {keys.map(([k, what]) => (
                   <div key={k + what} className="krow">

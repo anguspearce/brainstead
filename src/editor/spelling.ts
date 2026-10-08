@@ -16,6 +16,8 @@ import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from "@
 import { api } from "../api";
 import { settings, Store } from "../store";
 import { maskLines } from "./spellMask";
+import { isMod } from "../platform";
+import { features } from "../features";
 
 interface Issue {
   start: number;
@@ -53,7 +55,8 @@ export const spellMenu = new Store<(SpellHit & { view: EditorView; rect: DOMRect
 
 const on = () => {
   const s = settings.get();
-  return { spelling: s.spellCheck !== false, grammar: s.grammarCheck !== false, lang: s.spellLanguage || null };
+  const f = features.get();
+  return { spelling: f.spelling && s.spellCheck !== false, grammar: f.grammar && s.grammarCheck !== false, lang: s.spellLanguage || null };
 };
 
 /** The language the cache was filled in: a new one starts it afresh. */
@@ -213,7 +216,7 @@ const plugin = ViewPlugin.fromClass(Spelling, {
   decorations: (p) => p.decorations,
   eventHandlers: {
     click(e, view) {
-      if (e.metaKey || e.altKey || e.shiftKey || e.button !== 0) return false;
+      if (isMod(e) || e.altKey || e.shiftKey || e.button !== 0) return false;
       const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
       if (pos == null) return false;
       const hit = this.hits.find((h) => pos >= h.from && pos <= h.to);

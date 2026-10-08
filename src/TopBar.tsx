@@ -8,6 +8,7 @@ import { Icon } from "./icons";
 import { nav, place } from "./nav";
 import { useStore } from "./store";
 import { HelpButton } from "./help/HelpDrawer";
+import { keyLabel } from "./platform";
 
 /** Back and forward, on every screen's top bar. */
 export function HistButtons() {
@@ -15,12 +16,12 @@ export function HistButtons() {
   return (
     <div className="hist">
       {/* Disabled buttons get no pointer events in WebKit, so the tooltip goes on a wrapper. */}
-      <span title="Back (⌘[)">
+      <span title={keyLabel("Back (⌘[)")}>
         <button type="button" className="ibtn" aria-label="Back" disabled={!p.canBack} onClick={nav.back}>
           <Icon name="back" />
         </button>
       </span>
-      <span title="Forward (⌘])">
+      <span title={keyLabel("Forward (⌘])")}>
         <button type="button" className="ibtn" aria-label="Forward" disabled={!p.canForward} onClick={nav.forward}>
           <Icon name="forward" />
         </button>

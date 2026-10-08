@@ -33,6 +33,7 @@ import { useSearchOf } from "./Search";
 import { ALL_ITEMS, HOTKEYS, hotkey } from "./Sidebar";
 import { applyTheme, settings } from "./store";
 import { useDebounced } from "./ui";
+import { fileManager, isMod, keyLabel } from "./platform";
 
 export interface Command {
   id: string;
@@ -228,7 +229,7 @@ export function commands(): Command[] {
       id: "reveal",
       group: "Do",
       icon: "finder",
-      label: "Show vault in Finder",
+      label: `Show vault in ${fileManager}`,
       keywords: "reveal open folder",
       run: () => void api.reveal("").catch(() => {}),
     },
@@ -424,8 +425,8 @@ export function Palette({ onClose }: { onClose: () => void }) {
       setI(paletteMove(items, i, e.key === "ArrowRight" ? "right" : "left"));
       e.preventDefault();
     } else if (e.key === "Enter") {
-      if (!e.metaKey && stale && i === 0) setEnterWanted(true);
-      else run(e.metaKey ? items.find((c) => c.id === "search") : items[i]);
+      if (!isMod(e) && stale && i === 0) setEnterWanted(true);
+      else run(isMod(e) ? items.find((c) => c.id === "search") : items[i]);
       e.preventDefault();
     } else if (e.key === "Escape") {
       onClose();
@@ -500,7 +501,9 @@ export function Palette({ onClose }: { onClose: () => void }) {
                       type="button"
                       role="option"
                       aria-selected={k === i}
-                      title={`${c.group === "Files" ? `Open ${c.label}` : c.group === "Tasks" ? `Open the note with this task, ${c.keywords}` : c.label}${c.kbd ? ` (${c.kbd})` : ""}`}
+                      title={keyLabel(
+                        `${c.group === "Files" ? `Open ${c.label}` : c.group === "Tasks" ? `Open the note with this task, ${c.keywords}` : c.label}${c.kbd ? ` (${c.kbd})` : ""}`,
+                      )}
                       className={`pr ${k === i ? "on" : ""}`}
                       onMouseEnter={() => setI(k)}
                       onClick={() => run(c)}
@@ -510,7 +513,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
                         <span className="ell">{c.label}</span>
                         {c.hit && <Snippet hit={c.hit} />}
                       </span>
-                      {c.kbd && <span className="kbd">{c.kbd}</span>}
+                      {c.kbd && <span className="kbd">{keyLabel(c.kbd)}</span>}
                     </button>
                   );
                 })}
@@ -523,10 +526,10 @@ export function Palette({ onClose }: { onClose: () => void }) {
             <span className="kbd">↑↓←→</span> move
           </span>
           <span>
-            <span className="kbd">↩</span> open
+            <span className="kbd">{keyLabel("↩")}</span> open
           </span>
           <span>
-            <span className="kbd">⌘↩</span> search everything
+            <span className="kbd">{keyLabel("⌘↩")}</span> search everything
           </span>
         </div>
       </div>

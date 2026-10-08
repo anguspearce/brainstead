@@ -15,6 +15,7 @@ import { settings, useStore } from "./store";
 import { toast } from "./Toast";
 import { reportEditError } from "./taskModel";
 import { Dialog } from "./ui";
+import { keyLabel } from "./platform";
 
 /** One line of the checklist. */
 export interface Item {
@@ -205,7 +206,7 @@ export function Switchover() {
             <h2 className="h2">Retire the other app&apos;s skills and scripts?</h2>
             <p className="muted">
               .claude/skills and scripts/ go to Brainstead&apos;s Trash, where you can restore them. CLAUDE.md gets a section telling agents
-              to change the vault only through Brainstead&apos;s tools (⌘Z undoes it). Your name corrections are kept.
+              to change the vault only through Brainstead&apos;s tools ({keyLabel("⌘Z")} undoes it). Your name corrections are kept.
             </p>
             <div className="row">
               <span className="grow" />

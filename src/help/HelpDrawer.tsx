@@ -19,6 +19,7 @@ import { shortcutsOpen } from "../Shortcuts";
 import { settings, Store, useStore } from "../store";
 import { SearchBox } from "../ui";
 import { appLink, GUIDES, helpUrl, openSection, HelpSection, HelpTopic, KEYS, searchHelp, TOPICS, topicFor } from ".";
+import { accelLabel, captureDefault, keyLabel } from "../platform";
 
 /** What the drawer shows: a topic (the screen's when none is named), or a guide at a step. */
 export type HelpView = { topic?: string; guide?: string; step?: number; q?: string };
@@ -71,7 +72,7 @@ function HelpText({ text }: { text: string }) {
   return (
     <div className="help-text">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components} urlTransform={helpUrl}>
-        {text}
+        {keyLabel(text)}
       </ReactMarkdown>
     </div>
   );
@@ -82,7 +83,7 @@ function Section({ s, open }: { s: HelpSection; open?: boolean }) {
     <details className="help-sec" open={open}>
       <summary>
         <Icon name="chevright" size={13} className="help-chev" />
-        {s.title}
+        {keyLabel(s.title)}
       </summary>
       <HelpText text={s.body} />
     </details>
@@ -92,10 +93,7 @@ function Section({ s, open }: { s: HelpSection; open?: boolean }) {
 function Keys({ screen }: { screen: Place["screen"] }) {
   const s = useStore(settings);
   const wanted = ["Anywhere", KEY_SECTION[screen]].filter(Boolean);
-  const capture = (s.captureShortcut ? s.captureShortcut : "Control+Alt+Space")
-    .split("+")
-    .map((p) => ({ Control: "⌃", Alt: "⌥", Shift: "⇧", Super: "⌘" })[p] ?? p)
-    .join("");
+  const capture = accelLabel(s.captureShortcut ? s.captureShortcut : captureDefault());
   return (
     <section className="help-block">
       <div className="help-blockhead">
@@ -106,13 +104,12 @@ function Keys({ screen }: { screen: Place["screen"] }) {
       </div>
       {KEYS.filter(([t]) => wanted.includes(t)).map(([t, rows]) => (
         <div key={t} className="help-keys">
-          {wanted.length > 1 && <div className="faint small">{t}</div>}
+          {wanted.length > 1 && <div className="faint small">{keyLabel(t)}</div>}
           {rows.map(([k, what]) => (
             <div key={k + what} className="help-key">
               <span>{what}</span>
               <span>
-                {k
-                  .replace("⌃⌥Space", capture)
+                {keyLabel(k.replace("⌃⌥Space", capture))
                   .split("  ")
                   .map((x) => (
                     <span key={x} className="kbd">

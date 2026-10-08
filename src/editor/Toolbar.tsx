@@ -31,6 +31,7 @@ import {
 import { imageEmbed } from "./hooks";
 import { HL_COLOURS, HlColour } from "./paint";
 import { settings, useStore } from "../store";
+import { isMod, keyLabel } from "../platform";
 import { openBuilderAt } from "./queryAssist";
 
 // Line icons in the style of src/icons.tsx (24 box, 1.75 stroke).
@@ -75,7 +76,6 @@ const HEADINGS: [number, string][] = [
   [4, "Heading 4"],
 ];
 
-const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
 const KEYS: Record<string, [Mark, boolean]> = {
   b: ["bold", false],
   i: ["italic", false],
@@ -108,7 +108,7 @@ export function Toolbar({ view, bar = true }: { view: EditorView | null; bar?: b
     if (!view) return;
     const update = () => setActive(activeAt(view.state));
     const key = (e: KeyboardEvent) => {
-      const mod = isMac ? e.metaKey : e.ctrlKey;
+      const mod = isMod(e);
       const k = KEYS[e.key.toLowerCase()];
       if (mod && k && !e.altKey && e.shiftKey === k[1]) {
         e.preventDefault();
@@ -187,7 +187,6 @@ export function Toolbar({ view, bar = true }: { view: EditorView | null; bar?: b
     }
   };
   const level = active?.heading ?? 0;
-  const mod = isMac ? "⌘" : "Ctrl+";
   return (
     <div className="etoolbar" role="toolbar" aria-label="Formatting" data-no-print>
       <button
@@ -205,15 +204,15 @@ export function Toolbar({ view, bar = true }: { view: EditorView | null; bar?: b
         </svg>
       </button>
       <span className="tsep" />
-      {mark("bold", "Bold", `${mod}B`, <b>B</b>)}
-      {mark("italic", "Italic", `${mod}I`, <i>I</i>)}
-      {mark("strike", "Strikethrough", `${mod}⇧X`, <s>S</s>)}
+      {mark("bold", "Bold", keyLabel("⌘B"), <b>B</b>)}
+      {mark("italic", "Italic", keyLabel("⌘I"), <i>I</i>)}
+      {mark("strike", "Strikethrough", keyLabel("⌘⇧X"), <s>S</s>)}
       <span className="tbsplit">
         <button
           type="button"
           className={`tbtn ${active?.marks.has("highlight") ? "on" : ""}`}
           aria-label={`Highlight ${HL_NAMES[hl].toLowerCase()}`}
-          title={`Highlight ${HL_NAMES[hl].toLowerCase()} (${mod}⇧H)`}
+          title={keyLabel(`Highlight ${HL_NAMES[hl].toLowerCase()} (⌘⇧H)`)}
           onMouseDown={(e) => e.preventDefault()}
           onClick={run(() => paint(view, hl))}
         >
@@ -233,7 +232,7 @@ export function Toolbar({ view, bar = true }: { view: EditorView | null; bar?: b
           </svg>
         </button>
       </span>
-      {mark("code", "Inline code", `${mod}E`, <code>{"<>"}</code>)}
+      {mark("code", "Inline code", keyLabel("⌘E"), <code>{"<>"}</code>)}
       <span className="tsep" />
       {block("bullet", "Bulleted list")}
       {block("number", "Numbered list")}

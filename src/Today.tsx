@@ -23,6 +23,7 @@ import { deferredPast, tasksFailed, todayRows, useAllTasks, viewRows, VIEWS } fr
 import { useVaultOpening, useVaultVersion, vaultStatus } from "./state";
 import { TopBar } from "./TopBar";
 import { ago, fmtCount, TableBand } from "./ui";
+import { captureDefault, keyLabel } from "./platform";
 
 export function greeting(h: number, name?: string) {
   const g = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
@@ -97,7 +98,7 @@ export function TodayScreen() {
         <button
           type="button"
           className="btn"
-          title={`Quick capture, from any app (${fmtAccel(s.captureShortcut ?? "Control+Alt+Space")})`}
+          title={`Quick capture, from any app (${fmtAccel(s.captureShortcut ?? captureDefault())})`}
           onClick={() => void api.captureShow()}
         >
           <Icon name="plus" size={14} />
@@ -205,7 +206,7 @@ export function TodayScreen() {
               <button
                 type="button"
                 className="btn sm ghost"
-                title="Go to Tasks, every open task in the vault (⌥⌘3)"
+                title={keyLabel("Go to Tasks, every open task in the vault (⌥⌘3)")}
                 onClick={() => nav.go("tasks")}
               >
                 All tasks
@@ -500,7 +501,7 @@ function ProcessCard() {
             <button
               type="button"
               className="btn sm ghost ract"
-              title="Go to the Inbox to decide what each item is (⌥⌘2)"
+              title={keyLabel("Go to the Inbox to decide what each item is (⌥⌘2)")}
               onClick={() => nav.go("inbox")}
             >
               Clarify
@@ -579,7 +580,7 @@ function HeldCard() {
           key={p.id}
           type="button"
           className="rrow rlink"
-          title={`${pageName(p.page)}: ${p.title}\n${p.flags[0] ?? ""}\nOpen Changes to accept or reject it (⌥⌘5)`}
+          title={keyLabel(`${pageName(p.page)}: ${p.title}\n${p.flags[0] ?? ""}\nOpen Changes to accept or reject it (⌥⌘5)`)}
           onClick={() => nav.go("review")}
         >
           <span className={`lb ${p.page.startsWith("wiki/") ? "wiki" : "note"}`}>
@@ -592,7 +593,7 @@ function HeldCard() {
         <button
           type="button"
           className="btn sm ghost ract"
-          title="Open Changes to accept or reject the held changes (⌥⌘5)"
+          title={keyLabel("Open Changes to accept or reject the held changes (⌥⌘5)")}
           onClick={() => nav.go("review")}
         >
           Review {fmtCount(rows.length)}

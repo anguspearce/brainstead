@@ -25,6 +25,7 @@ import { focusMode, startFocus } from "./focus";
 import { nav } from "./nav";
 import { imageView } from "./ImageViewer";
 import { followUp } from "./Ingest";
+import { isMac, keyLabel, terminalApp } from "./platform";
 
 const row = (over: Partial<TaskRow>): TaskRow => ({
   path: "Me. To Do List.md",
@@ -1492,8 +1493,9 @@ describe("MCP actions", () => {
       expect(all).toContain(
         "jobModels.summaries · Settings › AI assistants › Models by job › Daily and weekly summaries: null (As new chats)",
       );
+      const none = isMac ? "As macOS" : "As the system";
       expect(all).toContain(
-        "spellLanguage · Settings › Notes › Spelling language: null (As macOS) (one of: en_GB (British English), en_US (American English); null for As macOS)",
+        `spellLanguage · Settings › Notes › Spelling language: null (${none}) (one of: en_GB (British English), en_US (American English); null for ${none})`,
       );
       expect(all).toContain("docTheme · Settings › Notes › Light or dark › Documents: null (As the app)");
       await run("settings", { action: "set", key: "openAtLogin", value: true });
@@ -1923,7 +1925,7 @@ describe("MCP actions", () => {
       expect(calls.filter(([c]) => c === "ask_clis")).toHaveLength(1);
       expect(out).toMatch(/^Found on this computer \(Settings › AI assistants\), looked for again just now: 2 assistants\./);
       expect(out).toContain("- Claude Code · 2.1.0: 1 model · /usr/local/bin/claude");
-      expect(out).toContain("- ChatGPT (Codex): No models listed: open Terminal, run codex and sign in.");
+      expect(out).toContain(`- ChatGPT (Codex): No models listed: open ${terminalApp}, run codex and sign in.`);
       expect(out).toContain("- GitHub Copilot: Not installed. How to install: https://docs.github.com/");
     });
 
@@ -2105,7 +2107,7 @@ describe("MCP actions", () => {
     it("says ⌘Z undoes an accepted suggestion, as Found's toast does", async () => {
       answers.find_decide = () => "Added “Book the room” to Orbit App launch. Revert it in Changes.";
       expect(await run("suggestions", { action: "accept", id: "s1" })).toBe(
-        "Added “Book the room” to Orbit App launch. ⌘Z in the app undoes it (Undo, as Found's toast offers), and it's in Changes too.",
+        `Added “Book the room” to Orbit App launch. ${keyLabel("⌘Z")} in the app undoes it (Undo, as Found's toast offers), and it's in Changes too.`,
       );
       expect(calls.find(([c]) => c === "find_decide")![1]).toMatchObject({ unattended: false });
     });

@@ -31,6 +31,7 @@ import { useVaultVersion } from "./state";
 import { makeMeetingNotes } from "./meetingFlow";
 import { TaskText } from "./TaskList";
 import { appendAsReference, doneNow, newReferenceNote, settleInboxItem } from "./inboxActions";
+import { keyLabel } from "./platform";
 
 export { unclarified } from "./gtd";
 
@@ -365,7 +366,9 @@ export function InboxScreen() {
                       "⌫",
                       "delete",
                       cur.kind === "capture" ? "Move to the Trash" : "Delete",
-                      cur.kind === "capture" ? "Move the captured file to the vault’s Trash" : "Delete it from the Inbox; ⌘Z undoes",
+                      cur.kind === "capture"
+                        ? "Move the captured file to the vault’s Trash"
+                        : keyLabel("Delete it from the Inbox; ⌘Z undoes"),
                     ],
                   ] as const
                 ).map(([k, b, l, tip]) => (
@@ -375,7 +378,7 @@ export function InboxScreen() {
                   </button>
                 ))}
               </div>
-              <p className="faint small">Nothing changes until you choose. J / K move between items; ⌘Z undoes.</p>
+              <p className="faint small">Nothing changes until you choose. J / K move between items; {keyLabel("⌘Z")} undoes.</p>
             </>
           ) : (
             raw && (

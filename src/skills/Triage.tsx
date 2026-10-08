@@ -18,6 +18,7 @@ import { useVaultVersion } from "../state";
 import { reportEditError, undoAction } from "../taskModel";
 import { toast } from "../Toast";
 import { TopBar } from "../TopBar";
+import { keyLabel } from "../platform";
 
 export type Decision = "keep" | "promote" | "task" | "archive" | "remove";
 
@@ -249,7 +250,7 @@ export function TriageScreen() {
             })}
         </div>
         <p className="faint small">
-          K Keep · I Ingest into the wiki · T Make a task · A Archive · ⌫ Remove · ↩ accept the suggestion · ⌘Z undoes
+          K Keep · I Ingest into the wiki · T Make a task · A Archive · {keyLabel("⌫ Remove · ↩ accept the suggestion · ⌘Z")} undoes
         </p>
       </div>
     </main>

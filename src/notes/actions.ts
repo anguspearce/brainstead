@@ -15,6 +15,8 @@ import { useVaultVersion } from "../state";
 import { reportEditError, undoLast } from "../taskModel";
 import { toast } from "../Toast";
 import { noteDialog } from "./dialogs";
+import { features } from "../features";
+import { fileManager } from "../platform";
 
 /** An error from Rust as one line for a person. */
 export const errText = (e: unknown) => (typeof e === "object" && e && "message" in e ? String((e as EditError).message) : String(e));
@@ -29,6 +31,7 @@ export function richOf(el: HTMLElement): { html: string; text: string } {
 
 /** Copies a rendered document (the read view's element). Rust inlines its vault images. */
 export async function copyRich(el: HTMLElement): Promise<void> {
+  if (!features.get().richCopy) return toast("Copying as rich text isn't available on this computer", undefined, "bad");
   const { html, text } = richOf(el);
   try {
     await api.copyRich(html, text);
@@ -40,6 +43,7 @@ export async function copyRich(el: HTMLElement): Promise<void> {
 
 /** Asks where to save, then prints the window's document (its print styles) to a PDF there. */
 export async function exportPdf(title: string): Promise<void> {
+  if (!features.get().exportPdf) return toast("Export as PDF isn't available on this computer", undefined, "bad");
   const dest = await save({ defaultPath: `${title}.pdf`, filters: [{ name: "PDF", extensions: ["pdf"] }] });
   if (!dest) return;
   // Long tables repeat their header on each page (WebKit's print doesn't): split for the print,
@@ -107,7 +111,7 @@ export async function fileAction(a: FileAction, f: { path: string; title: string
         return openRename(f.path);
       case "reveal":
         await api.reveal(f.path);
-        return toast("Shown in Finder");
+        return toast(`Shown in ${fileManager}`);
       case "trash":
         return await trashFile(f.path);
     }

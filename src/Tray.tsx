@@ -21,6 +21,7 @@ import { ReadOnlyPill } from "./Sidebar";
 import { applyTheme, settings, useStore } from "./store";
 import { Switch } from "./ui";
 import { deferredPast, todayRows, viewRows, VIEWS } from "./taskModel";
+import { isMod, keyLabel } from "./platform";
 
 export interface Running {
   key: string;
@@ -209,7 +210,7 @@ function Item({
     <button
       type="button"
       className={`tray-item${strong ? " strong" : ""}`}
-      title={keys ? `${label} (${keys})` : label}
+      title={keys ? `${label} (${keyLabel(keys)})` : label}
       onClick={() => {
         onClick();
         if (!keepOpen) hide();
@@ -217,7 +218,7 @@ function Item({
     >
       <Icon name={icon} size={14} />
       <span className="grow">{label}</span>
-      {keys && <span className="kbd">{keys}</span>}
+      {keys && <span className="kbd">{keyLabel(keys)}</span>}
     </button>
   );
 }
@@ -287,7 +288,7 @@ export function TrayWindow() {
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.key === "Escape") return hide();
-      if (!e.metaKey || (e.target as HTMLElement)?.closest?.("textarea, input")) return;
+      if (!isMod(e) || (e.target as HTMLElement)?.closest?.("textarea, input")) return;
       const act: Record<string, () => unknown> = {
         o: () => show(),
         t: () => show("today"),

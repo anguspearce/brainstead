@@ -98,7 +98,7 @@ function attrJson<T>(raw: string): T | null {
   }
 }
 
-const join = (root: string, rel: string) => `${root.replace(/\/$/, "")}/${rel.replace(/^\/+/, "")}`;
+const join = (root: string, rel: string) => `${root.replace(/[\\/]$/, "")}/${rel.replace(/^\/+/, "")}`;
 
 /** Where an image's src points: a URL to use as it is, a name to look up, or a vault path.
  *  the previous app's own URLs (`/api/vault-assets/<path>`, `/api/vault-assets/by-name/<name>`), which

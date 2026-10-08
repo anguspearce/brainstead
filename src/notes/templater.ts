@@ -316,7 +316,7 @@ export async function runTemplate(src: string, env: Env): Promise<RunResult> {
       },
       exists: async (path: string) => exists(String(path)),
       find_tfile: (name: string) => findTfile(String(name)),
-      folder: (absolute = false) => (absolute ? target.folder : (target.folder.split("/").pop() ?? "")),
+      folder: (absolute = false) => (absolute ? target.folder : (target.folder.split(/[\\/]/).pop() ?? "")),
       async include(link: TFile | string) {
         const l = typeof link === "string" ? parseInclude(link) : { target: link.path };
         const f = findTfile(l.target);
@@ -330,7 +330,7 @@ export async function runTemplate(src: string, env: Env): Promise<RunResult> {
         target.title = i < 0 ? p : p.slice(i + 1);
         target.named = true;
       },
-      path: (relative = false) => (relative ? targetPath() : `${env.root.replace(/\/+$/, "")}/${targetPath()}`),
+      path: (relative = false) => (relative ? targetPath() : `${env.root.replace(/[\\/]+$/, "")}/${targetPath()}`),
       async rename(newTitle: string) {
         target.title = String(newTitle);
         target.named = true;

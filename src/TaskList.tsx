@@ -24,6 +24,7 @@ import { splitTaskDates, taskDate, TaskDateId } from "./taskDates";
 import { useStore } from "./store";
 import { useVaultOpening } from "./state";
 import { Popover } from "./ui";
+import { keyLabel } from "./platform";
 
 export const taskKey = (t: TaskRow) => `${t.path}:${t.line}`;
 
@@ -371,7 +372,7 @@ function TaskMenu({ t, at, onClose }: { t: TaskRow; at: DOMRect; onClose: () => 
               type="button"
               role="menuitem"
               className="danger"
-              title="Takes the line out of its note; ⌘Z puts it back"
+              title={keyLabel("Takes the line out of its note; ⌘Z puts it back")}
               onClick={() => (onClose(), void changeTask(t, "delete"))}
             >
               <Icon name="trash" size={14} />
