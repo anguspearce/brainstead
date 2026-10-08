@@ -73,7 +73,7 @@ mod tests {
     fn batches_changes() {
         let t = tempfile::tempdir().unwrap();
         // FSEvents reports the real path (/private/var/... for /var/...).
-        let root = t.path().canonicalize().unwrap();
+        let root = crate::paths::canonical(t.path()).unwrap();
         let (tx, rx) = mpsc::channel();
         let _w = watch(&root, move |b| tx.send(b).unwrap()).unwrap();
         std::thread::sleep(Duration::from_millis(200));

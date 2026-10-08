@@ -136,7 +136,7 @@ impl VaultService {
     /// A vault-relative path as a full path, refusing anything that would leave the vault.
     pub fn resolve_path(&self, rel: &str) -> Result<PathBuf, String> {
         let root = self.root().ok_or("No vault is open.")?;
-        if rel.is_empty() || rel.starts_with(['/', '\\']) || rel.split(['/', '\\']).any(|s| s == ".." || s.is_empty()) {
+        if !brainstead_core::paths::is_vault_relative(rel) {
             return Err(format!("Not a path in the vault: {rel}"));
         }
         Ok(root.join(rel))
@@ -158,8 +158,9 @@ fn open(app: &AppHandle, path: &str, excluded: Vec<String>, rebuild: bool) -> Re
         }
         _ => format!("Couldn't read the vault folder: {e}"),
     })?;
-    // FSEvents reports real paths, so the vault is known by its real path too.
-    let root = root.canonicalize().unwrap_or(root);
+    // FSEvents reports real paths, so the vault is known by its real path too (on Windows without
+    // the `\\?\` prefix, under which nested vault-relative paths don't join).
+    let root = brainstead_core::paths::real_path(&root);
     if let Err(e) = app.asset_protocol_scope().allow_directory(&root, true) {
         crate::applog!("asset scope: {e}");
     }

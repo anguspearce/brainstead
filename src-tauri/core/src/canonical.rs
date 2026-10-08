@@ -52,16 +52,18 @@ fn separator(c: &[String]) -> bool {
     !c.is_empty() && c.iter().all(|x| x.contains('-') && x.chars().all(|ch| matches!(ch, '-' | ':' | ' ')))
 }
 
-/// A register path, vault-relative, `~/…` or absolute.
+/// A register path, vault-relative, `~/…` or absolute (`/docs/x.pdf`; on Windows also `~\…`,
+/// `\Docs\x.pdf` and `C:\Docs\x.pdf`), kept as written rather than joined onto the vault, which a
+/// rooted path would replace. Outside Windows a backslash is an ordinary character in a name.
 pub fn resolve_path(vault: &Path, raw: &str, home: &Path) -> PathBuf {
-    if let Some(rest) = raw.strip_prefix("~/") {
+    let home_rest = raw.strip_prefix("~/").or_else(|| if cfg!(windows) { raw.strip_prefix("~\\") } else { None });
+    if let Some(rest) = home_rest {
         return home.join(rest);
     }
-    let p = Path::new(raw);
-    if p.is_absolute() {
-        p.to_path_buf()
+    if crate::paths::is_rooted(raw) {
+        PathBuf::from(raw)
     } else {
-        vault.join(p)
+        vault.join(raw)
     }
 }
 
@@ -175,6 +177,32 @@ mod tests {
         assert!(r.problems[0].contains("empty path"));
         assert!(r.problems[1].contains("retired"));
         assert!(r.problems[2].contains("found 3"));
+    }
+
+    #[test]
+    fn register_paths_on_every_system() {
+        let (vault, home) = (Path::new("/vault"), Path::new("/home/maya"));
+        assert_eq!(resolve_path(vault, "~/Downloads/a.docx", home), home.join("Downloads/a.docx"));
+        assert_eq!(resolve_path(vault, "/Docs/a.pdf", home), PathBuf::from("/Docs/a.pdf"));
+        assert_eq!(resolve_path(vault, "sources/a.pdf", home), vault.join("sources/a.pdf"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn register_paths_written_the_windows_way_on_windows() {
+        let (vault, home) = (Path::new("/vault"), Path::new("/home/maya"));
+        assert_eq!(resolve_path(vault, r"~\Downloads\a.docx", home), home.join(r"Downloads\a.docx"));
+        assert_eq!(resolve_path(vault, r"\Docs\a.pdf", home), PathBuf::from(r"\Docs\a.pdf"));
+        assert_eq!(resolve_path(vault, r"C:\Docs\a.pdf", home), PathBuf::from(r"C:\Docs\a.pdf"));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn a_backslash_or_colon_in_a_register_path_is_part_of_its_name_elsewhere() {
+        let (vault, home) = (Path::new("/vault"), Path::new("/home/maya"));
+        for raw in ["C: Notes/x.md", r"C:\Docs\a.pdf", r"\Docs\a.pdf", r"~\Downloads\a.docx"] {
+            assert_eq!(resolve_path(vault, raw, home), vault.join(raw), "{raw}");
+        }
     }
 
     #[test]

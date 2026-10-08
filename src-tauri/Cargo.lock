@@ -391,6 +391,8 @@ dependencies = [
  "aho-corasick",
  "base64 0.23.1",
  "chrono",
+ "dirs 6.0.0",
+ "dunce",
  "flate2",
  "hex",
  "notify",
