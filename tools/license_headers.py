@@ -37,7 +37,7 @@ STYLES = {
 
 
 def files():
-    out = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    out = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True, encoding="utf-8", check=True).stdout
     for name in out.splitlines():
         p = ROOT / name
         if name.startswith(("_sift/", "src-tauri/starter-vault/")) or not p.is_file():
@@ -52,19 +52,19 @@ def header(p):
 
 
 def add(p):
-    text = p.read_text()
+    text = p.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
     # After a shebang or a doctype, which have to come first.
     at = 1 if lines and (lines[0].startswith("#!") or lines[0].lower().startswith("<!doctype")) else 0
     head = header(p)
     rest = "".join(lines[at:])
     sep = "" if rest.startswith("\n") or not rest else "\n"
-    p.write_text("".join(lines[:at]) + head + sep + rest)
+    p.write_text("".join(lines[:at]) + head + sep + rest, encoding="utf-8", newline="\n")
 
 
 def main():
     check = "--check" in sys.argv
-    missing = [p for p in files() if MARK not in "".join(p.read_text().splitlines(keepends=True)[:6])]
+    missing = [p for p in files() if MARK not in "".join(p.read_text(encoding="utf-8").splitlines(keepends=True)[:6])]
     if check:
         for p in missing:
             print(f"no licence header: {p.relative_to(ROOT)}")

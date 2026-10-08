@@ -1,0 +1,52 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Brainstead",
+        "width": 1320,
+        "height": 840,
+        "minWidth": 1040,
+        "minHeight": 640,
+        "visible": false
+      },
+      {
+        "label": "capture",
+        "url": "index.html?view=capture",
+        "title": "Quick capture",
+        "width": 700,
+        "height": 230,
+        "decorations": false,
+        "transparent": true,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "shadow": false,
+        "center": true
+      },
+      {
+        "label": "tray",
+        "url": "index.html?view=tray",
+        "title": "Brainstead",
+        "width": 360,
+        "height": 480,
+        "decorations": false,
+        "transparent": true,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "shadow": true
+      }
+    ]
+  },
+  "bundle": {
+    "targets": ["nsis"],
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "nsis": { "installMode": "currentUser", "installerHooks": "./windows/hooks.nsh" }
+    }
+  }
+}

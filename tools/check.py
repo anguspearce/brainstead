@@ -23,6 +23,9 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TAURI = ROOT / "src-tauri"
+# The running interpreter, quoted for the shell: `python3` is not on every Windows PATH, and a path
+# under "Program Files" needs the quotes.
+PY = f'"{sys.executable}"'
 CARGO_ENV = {"CARGO_TARGET_DIR": str(TAURI / "target" / "check")}
 
 # (directory, command, extra environment) per step, in order within the group.
@@ -49,8 +52,8 @@ GROUPS = {
         (ROOT, 'npx stylelint "src/**/*.css"', {}),
         (ROOT, "ruff check", {}),
         (ROOT, "ruff format --check", {}),
-        (ROOT, "python3 tools/license_headers.py --check", {}),
-        (ROOT, "python3 tools/tooltips.py", {}),
+        (ROOT, f"{PY} tools/license_headers.py --check", {}),
+        (ROOT, f"{PY} tools/tooltips.py", {}),
     ],
 }
 
@@ -64,7 +67,16 @@ def run(name: str) -> None:
     ok = True
     for cwd, cmd, env in GROUPS[name]:
         out.append(f"$ {cmd}")
-        p = subprocess.run(cmd, shell=True, cwd=cwd, env={**os.environ, **env}, capture_output=True, text=True)
+        p = subprocess.run(
+            cmd,
+            shell=True,
+            cwd=cwd,
+            env={**os.environ, "PYTHONUTF8": "1", **env},
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
         out.append((p.stdout + p.stderr).rstrip())
         if p.returncode != 0:
             ok = False
@@ -79,6 +91,10 @@ def run(name: str) -> None:
 
 
 def main() -> int:
+    # The box-drawing characters in the group headers are not encodable in a legacy Windows console
+    # code page (cp1252), so stdout is switched to UTF-8 rather than failing on print.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     names = sys.argv[1:] or list(GROUPS)
     unknown = [n for n in names if n not in GROUPS]
     if unknown:
