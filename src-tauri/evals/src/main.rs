@@ -101,11 +101,25 @@ fn copy_vault(to: &Path) {
     }
 }
 
-/// Finds a CLI as a terminal would.
-fn find(cli: Cli) -> Option<PathBuf> {
-    let out = Command::new("/bin/zsh").args(["-lc", &format!("command -v {}", cli.bin())]).output().ok()?;
-    let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    (!p.is_empty()).then(|| PathBuf::from(p))
+/// Finds a CLI as a terminal would: a login shell's `command -v`, or on Windows `where`, taking an
+/// `.exe` before a `.cmd` and running what an npm shim runs rather than the shim
+/// (brainstead_core::paths, the app's rule too). The program and its leading arguments.
+fn find(cli: Cli) -> Option<(PathBuf, Vec<String>)> {
+    #[cfg(unix)]
+    {
+        let out = Command::new("/bin/zsh").args(["-lc", &format!("command -v {}", cli.bin())]).output().ok()?;
+        let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        (!p.is_empty()).then(|| (PathBuf::from(p), Vec::new()))
+    }
+    #[cfg(windows)]
+    {
+        let where_ = |name: &str| {
+            let out = Command::new("where").arg(name).output().ok()?;
+            brainstead_core::paths::pick_program(&String::from_utf8_lossy(&out.stdout))
+        };
+        let p = where_(cli.bin())?;
+        Some(brainstead_core::paths::resolve_npm_shim(&p, || where_("node")).unwrap_or((p, Vec::new())))
+    }
 }
 
 /// One turn with a CLI, as Ask runs it; the answer's text.
@@ -116,13 +130,13 @@ fn ask_model(model: &str, prompt: &str, cwd: &Path, mcp: Option<&Mcp>) -> Result
 /// As `ask_model`; with `help`, told about the app's help as an Ask chat is (`ask::help_hint`).
 fn ask_model_with(model: &str, prompt: &str, cwd: &Path, mcp: Option<&Mcp>, help: bool) -> Result<String, String> {
     let cli = Cli::route(model);
-    let bin = find(cli).ok_or_else(|| format!("{} isn't installed.", cli.label()))?;
+    let (bin, prefix) = find(cli).ok_or_else(|| format!("{} isn't installed.", cli.label()))?;
     let mut system = ask::system_prompt(&chrono::Local::now().format("%A %-d %B %Y").to_string(), mcp.is_some());
     if let Some(h) = ask::help_hint(cli, mcp.is_some() && cli.takes_mcp()).filter(|_| help) {
         system = format!("{system}\n{h}");
     }
     let vault = cwd.to_string_lossy().into_owned();
-    let args = ask::args(
+    let launch = ask::args(
         cli,
         &Request { prompt, model, session: None, system: &system, vault: &vault, mcp: mcp.filter(|_| cli.takes_mcp()), images: &[] },
     )?;
@@ -145,12 +159,19 @@ fn ask_model_with(model: &str, prompt: &str, cwd: &Path, mcp: Option<&Mcp>, help
     };
     let mut child = Command::new(bin)
         .current_dir(&run_in)
-        .args(&args)
-        .stdin(Stdio::null())
+        .args(&prefix)
+        .args(&launch.args)
+        .stdin(if launch.stdin.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| e.to_string())?;
+    // The prompt, for the CLIs that read it from standard input, written on a thread and closed.
+    let fed = child.stdin.take().zip(launch.stdin).map(|(mut pipe, input)| {
+        std::thread::spawn(move || {
+            let _ = std::io::Write::write_all(&mut pipe, input.as_bytes());
+        })
+    });
     let mut p = ask::Parser::new(cli);
     for line in std::io::BufReader::new(child.stdout.take().unwrap()).lines().map_while(Result::ok) {
         p.feed(&line);
@@ -160,6 +181,7 @@ fn ask_model_with(model: &str, prompt: &str, cwd: &Path, mcp: Option<&Mcp>, help
         let _ = std::io::Read::read_to_string(&mut e, &mut err);
     }
     let ok = child.wait().is_ok_and(|s| s.success());
+    let _ = fed.map(|t| t.join());
     let out = p.finish(ok, &err);
     match out.error {
         Some(e) => Err(e),

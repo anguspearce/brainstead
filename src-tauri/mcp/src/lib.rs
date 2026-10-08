@@ -142,7 +142,11 @@ pub fn handle(ctx: &Ctx, msg: Value) -> Option<Value> {
             }))
         }
         "ping" => Ok(json!({})),
-        "tools/list" => Ok(json!({"tools": tools()})),
+        "tools/list" => {
+            let mut list = Value::Array(tools());
+            keys_in_descriptions(&mut list);
+            Ok(json!({"tools": list}))
+        }
         "tools/call" => {
             let name = params.get("name").and_then(Value::as_str).unwrap_or("");
             let args = params.get("arguments").cloned().unwrap_or(json!({}));
@@ -199,6 +203,31 @@ enum Effect {
 /// whole session (D-20261005-14).
 fn unattended() -> Value {
     json!({"type": "boolean", "description": "true when nobody is watching this session (a loop, a scheduled agent): a change that fails a check is held for the user instead of made, and from then on nothing held can be accepted and weekly_start_over and moving_over are refused."})
+}
+
+/// `text` with its shortcuts as this system names them. The help and the tools write them with
+/// macOS glyphs (⌘Z), which Windows names in words (Ctrl+Z), as the window does.
+fn keys(text: &str) -> String {
+    #[cfg(windows)]
+    return brainstead_core::help::windows_keys(text);
+    #[cfg(not(windows))]
+    text.to_string()
+}
+
+/// Every `description` in `v` (the tools and their inputs) through `keys`.
+fn keys_in_descriptions(v: &mut Value) {
+    match v {
+        Value::Object(o) => {
+            for (k, x) in o.iter_mut() {
+                match x {
+                    Value::String(s) if k == "description" => *s = keys(s),
+                    _ => keys_in_descriptions(x),
+                }
+            }
+        }
+        Value::Array(a) => a.iter_mut().for_each(keys_in_descriptions),
+        _ => {}
+    }
 }
 
 fn tool(name: &str, title: &str, effect: Effect, description: &str, mut input: Value) -> Value {
@@ -713,7 +742,7 @@ pub fn tools() -> Vec<Value> {
             "Glance's counts, as Activity and Knowledge health show them (needs the app): notes and wiki pages by type and by tag, most first, and the files the most others link to.",
             schema(json!({}), &[])),
         tool("app_status", "Brainstead's state", Read,
-            "The vault, whether it's read-only (then nothing can be changed until the user switches it off in Settings › Vault), the index as Settings › Vault shows it (its counts, or why it failed), Full Disk Access, Brainstead's version and its app data folder, whether Brainstead runs the daily and weekly summaries, whether the previous app's skills are still in the vault (moving_over retires them), and what ⌘Z would undo (needs the app).",
+            "The vault, whether it's read-only (then nothing can be changed until the user switches it off in Settings › Vault), the index as Settings › Vault shows it (its counts, or why it failed), Full Disk Access, Brainstead's version and its app data folder, whether Brainstead runs the daily and weekly summaries, whether the previous app's skills are still in the vault (moving_over retires them), and what ⌘Z would undo (needs the app). Then features: which of Quick Look, spelling, grammar, Read aloud, Export PDF, rich copy, Full Disk Access, Open at login and the text in images this system has; the window has no button or setting for the rest, so don't offer them.",
             schema(json!({}), &[])),
         tool("list_assistants", "AI assistants found", Read,
             "Settings › AI assistants' Found on this computer, as the pane lists it (needs the app): Claude Code, Codex, Antigravity and Copilot, each with its version, how many models it offers and where it is, or that it isn't installed (with where to read how to install it) or lists no models (then the user runs it in Terminal and signs in). look_again looks for them again, as the pane's Look again does, after one is installed or signed in. Then the pane's other groups: Brainstead's tools' command for each assistant found, to use them from Terminal, and Skills Brainstead does now (the vault's skills whose screen Brainstead has).",
@@ -851,6 +880,12 @@ fn outputs() -> std::collections::HashMap<&'static str, Value> {
             ),
         ),
         (
+            "app_status",
+            json!({"type": "object", "properties": {"features": {"type": "object", "description": "What this system has (platform: macos, windows or linux); false is hidden in the window.", "properties": {
+                "platform": s("string"), "quickLook": s("boolean"), "spelling": s("boolean"), "grammar": s("boolean"), "readAloud": s("boolean"), "exportPdf": s("boolean"), "richCopy": s("boolean"), "fullDiskAccess": s("boolean"), "openAtLogin": s("boolean"), "imageText": s("boolean")
+            }}}}),
+        ),
+        (
             "list_transcripts",
             page_schema(
                 json!({"path": s("string"), "type": sn(), "name": sn(), "date": sn(), "dateCheck": s("boolean"), "done": {"type": ["string", "null"], "description": "With show all: why it's done, ingested or linked (from a note); null while it's to do."}, "exists": {"type": ["string", "null"], "description": "The note it would make, when that note exists already (start_run meeting_note refuses it unless the name or date is changed)."}, "ask": {"type": "array", "items": s("string"), "description": "What the screen asks the user to check about it."}, "drafted": {"type": ["string", "null"], "enum": ["drafting", "drafted", null], "description": "drafting while a note is being drafted from it, drafted once one was (see Changes)."}}),
@@ -912,6 +947,52 @@ struct Paging {
 enum CallError {
     Unknown(String),
     Tool(String),
+}
+
+/// Which of the features that aren't on every system this one has, as the app's
+/// `platform::platform_features` says (this crate can't call the app's; a test there compares the
+/// two). `app_status` gives it.
+pub fn platform_features() -> Value {
+    let mac = cfg!(target_os = "macos");
+    let windows = cfg!(windows);
+    json!({
+        "platform": if mac { "macos" } else if windows { "windows" } else { "linux" },
+        "quickLook": mac,
+        "spelling": mac,
+        "grammar": mac,
+        "readAloud": mac,
+        "exportPdf": mac,
+        "richCopy": mac || windows,
+        "fullDiskAccess": mac,
+        "openAtLogin": mac || windows,
+        "imageText": mac,
+    })
+}
+
+/// `platform_features` as `app_status` says it: the system, and what it doesn't have.
+fn features_text(f: &Value) -> String {
+    let names = [
+        ("quickLook", "Quick Look"),
+        ("spelling", "spelling"),
+        ("grammar", "grammar"),
+        ("readAloud", "Read aloud"),
+        ("exportPdf", "Export PDF"),
+        ("richCopy", "rich copy"),
+        ("fullDiskAccess", "Full Disk Access"),
+        ("openAtLogin", "Open at login"),
+        ("imageText", "the text in images"),
+    ];
+    let system = match f["platform"].as_str() {
+        Some("macos") => "macOS",
+        Some("windows") => "Windows",
+        _ => "Linux",
+    };
+    let missing: Vec<&str> = names.iter().filter(|(k, _)| f[*k] != true).map(|(_, n)| *n).collect();
+    if missing.is_empty() {
+        format!("System: {system}, with every feature.")
+    } else {
+        format!("System: {system}. Not on this system, so not in the window: {}.", missing.join(", "))
+    }
 }
 
 /// What a tool gives back: its text, and for a listing tool with an output schema, the same rows
@@ -1120,7 +1201,14 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
         "capture_extensions" => act("capture.status", obj),
         "list_assistants" => act("assistants.found", obj),
         "glance" => act("glance", obj),
-        "app_status" => act("status", obj),
+        "app_status" => {
+            let mut out = act("status", obj)?;
+            let f = platform_features();
+            out.text.push('\n');
+            out.text.push_str(&features_text(&f));
+            out.structured = Some(json!({"features": f}));
+            Ok(out)
+        }
         "rebuild_index" => act("index.rebuild", obj),
         "list_automated_tools" => {
             act("automated", acting(obj, name, &["list"], "list", &["name", "folder_contains", "first_message_starts_with"])?)
@@ -1202,7 +1290,24 @@ fn open_app(ctx: &Ctx) -> Result<(), String> {
         // Its own process group: the app keeps running when the assistant's session ends.
         cmd.process_group(0);
     }
-    cmd.spawn().map_err(|e| format!("Brainstead isn't open, and opening it failed: {e}. Open it, then try again."))?;
+    #[cfg(windows)]
+    let spawned = {
+        use std::os::windows::process::CommandExt;
+        // No console, its own process group (a Ctrl+C in the assistant's terminal doesn't reach
+        // it), and out of the session's job object, so closing the session doesn't end the app.
+        // A job that doesn't allow breaking away refuses the start (access denied); then it's
+        // started inside the job.
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
+        cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB).spawn().or_else(|_| {
+            cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+            cmd.spawn()
+        })
+    };
+    #[cfg(not(windows))]
+    let spawned = cmd.spawn();
+    spawned.map_err(|e| format!("Brainstead isn't open, and opening it failed: {e}. Open it, then try again."))?;
     let start = std::time::Instant::now();
     while start.elapsed() < std::time::Duration::from_secs(45) {
         if bridge::app_alive(&ctx.data) {
@@ -1557,7 +1662,7 @@ struct HelpArgs {
     query: Option<String>,
 }
 
-/// The app's help (core/src/help.rs); it needs no vault.
+/// The app's help (core/src/help.rs), with its shortcuts as this system names them; it needs no vault.
 fn help(a: HelpArgs) -> Result<String, String> {
     let some = |s: Option<String>| s.filter(|x| !x.trim().is_empty());
     match (some(a.topic), some(a.query)) {
@@ -1565,6 +1670,7 @@ fn help(a: HelpArgs) -> Result<String, String> {
         (None, Some(q)) => Ok(brainstead_core::help::search(&q, 5)),
         (None, None) => Ok(brainstead_core::help::list()),
     }
+    .map(|t| keys(&t))
 }
 
 #[derive(Deserialize)]
