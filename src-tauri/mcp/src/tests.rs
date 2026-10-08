@@ -475,6 +475,23 @@ fn help_answers_from_the_apps_own_help() {
 }
 
 #[test]
+fn shortcuts_are_named_as_the_system_names_them() {
+    let f = fixture();
+    let list = rpc(&f.ctx, 1, "tools/list", json!({}));
+    let tools = list["result"]["tools"].as_array().unwrap();
+    let status = tools.iter().find(|t| t["name"] == "app_status").unwrap()["description"].as_str().unwrap().to_string();
+    let keys = ok(&f.ctx, "help", json!({"topic": "keyboard"}));
+    if cfg!(windows) {
+        assert!(status.contains("what Ctrl+Z would undo"), "{status}");
+        let all = list.to_string() + &keys;
+        assert!(!all.contains(['⌘', '⌥', '⇧', '⌃']), "a macOS glyph left on Windows");
+    } else {
+        assert!(status.contains("what ⌘Z would undo"), "{status}");
+        assert!(keys.contains('⌘'), "{keys}");
+    }
+}
+
+#[test]
 fn rate_limited() {
     let f = fixture();
     for _ in 0..120 {
