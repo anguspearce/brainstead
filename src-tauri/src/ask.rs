@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 
 use brainstead_core::ask::{self, Cli, Event, Outcome, Request};
@@ -61,7 +61,7 @@ impl Running {
     }
 }
 
-pub fn find(cli: Cli) -> Option<PathBuf> {
+pub fn find(cli: Cli) -> Option<platform::Program> {
     platform::find_program(cli.bin(), cli.extra_paths())
 }
 
@@ -80,13 +80,13 @@ pub struct CliInfo {
     models: Vec<Model>,
 }
 
-fn version(bin: &Path) -> Option<String> {
-    let out = Command::new(bin).arg("--version").stdin(Stdio::null()).output().ok()?;
+fn version(bin: &platform::Program) -> Option<String> {
+    let out = bin.command().arg("--version").stdin(Stdio::null()).output().ok()?;
     // The first line only: Copilot adds "Run 'copilot update' to check for updates."
     String::from_utf8_lossy(&out.stdout).lines().map(str::trim).find(|l| !l.is_empty()).map(|l| l.trim_end_matches('.').to_string())
 }
 
-fn models(cli: Cli, bin: &Path) -> Vec<Model> {
+fn models(cli: Cli, bin: &platform::Program) -> Vec<Model> {
     let m = |id: String, name: &str| Model { id, name: name.to_string() };
     match cli {
         Cli::Claude => [("fable", "Fable"), ("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku")]
@@ -113,7 +113,7 @@ fn models(cli: Cli, bin: &Path) -> Vec<Model> {
             ms.into_iter().map(|(_, x)| x).collect()
         }
         Cli::Antigravity => {
-            let Ok(out) = Command::new(bin).arg("models").stdin(Stdio::null()).output() else { return Vec::new() };
+            let Ok(out) = bin.command().arg("models").stdin(Stdio::null()).output() else { return Vec::new() };
             String::from_utf8_lossy(&out.stdout)
                 .lines()
                 .filter_map(|l| l.split_once('\t'))
@@ -134,9 +134,9 @@ pub async fn ask_clis() -> Vec<CliInfo> {
                 let bin = find(cli);
                 CliInfo {
                     cli,
-                    version: bin.as_deref().and_then(version),
-                    models: bin.as_deref().map(|b| models(cli, b)).unwrap_or_default(),
-                    path: bin.map(|p| p.to_string_lossy().into_owned()),
+                    version: bin.as_ref().and_then(version),
+                    models: bin.as_ref().map(|b| models(cli, b)).unwrap_or_default(),
+                    path: bin.map(|p| p.path.to_string_lossy().into_owned()),
                 }
             })
             .collect()
@@ -273,8 +273,8 @@ pub fn run_with_images(
     let vault_s = vault.to_string_lossy().into_owned();
     let mcp = mcp.filter(|_| cli.takes_mcp());
     let req = Request { prompt, model, session, system, vault: &vault_s, mcp, images };
-    let args = match ask::args(cli, &req) {
-        Ok(a) => a,
+    let launch = match ask::args(cli, &req) {
+        Ok(l) => l,
         Err(e) => return fail(e),
     };
     // Antigravity runs in a folder of its own holding its read-only agent, and adds the vault;
@@ -292,12 +292,23 @@ pub fn run_with_images(
     } else {
         vault.clone()
     };
-    let mut cmd = Command::new(&bin);
-    cmd.current_dir(&cwd).args(&args).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut cmd = bin.command();
+    let stdin = if launch.stdin.is_some() { Stdio::piped() } else { Stdio::null() };
+    cmd.current_dir(&cwd).args(&launch.args).stdin(stdin).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = match platform::spawn_group(&mut cmd) {
         Ok(c) => c,
+        // Through cmd.exe (a `.cmd` that isn't an npm shim it can read), std refuses an argument
+        // with a line break as invalid input.
+        Err(e) if e.kind() == std::io::ErrorKind::InvalidInput && bin.through_cmd() => {
+            return fail(format!(
+                "Couldn't start {}: it's installed as a script ({}) that can't be given text with line breaks. Install its own program instead (for Claude Code, its native installer), then try again.",
+                cli.label(),
+                bin.path.display()
+            ))
+        }
         Err(e) => return fail(format!("Couldn't start {}: {e}", cli.label())),
     };
+    let fed = feed_stdin(&mut child, launch.stdin);
     let running = app.state::<Arc<Running>>().inner().clone();
     running.add(chat_id, child.id());
     let stdout = child.stdout.take();
@@ -334,6 +345,7 @@ pub fn run_with_images(
         }
     }
     let ok = child.wait().is_ok_and(|s| s.success());
+    let _ = fed.map(|t| t.join());
     let _ = done_tx.send(());
     let _ = watchdog.join();
     running.remove(pid);
@@ -342,6 +354,16 @@ pub fn run_with_images(
         outcome.error = Some(format!("{} took longer than {} minutes, so Brainstead stopped it.", cli.label(), RUN_TIMEOUT.as_secs() / 60));
     }
     outcome
+}
+
+/// Writes `input` to the child's standard input on a thread of its own, then closes it so the CLI
+/// sees the end of its prompt. On a thread because a CLI may write a pipe full of output before
+/// it has read all its input, and the caller is the one reading that output.
+fn feed_stdin(child: &mut std::process::Child, input: Option<String>) -> Option<std::thread::JoinHandle<()>> {
+    let (mut pipe, input) = (child.stdin.take()?, input?);
+    Some(std::thread::spawn(move || {
+        let _ = std::io::Write::write_all(&mut pipe, input.as_bytes());
+    }))
 }
 
 /// The longest a model run may take before it's stopped.
@@ -413,11 +435,18 @@ pub async fn chat_title(user: String, assistant: String) -> Option<String> {
             cut(&user),
             cut(&assistant)
         );
-        let mut cmd = Command::new(bin);
+        // The prompt goes on standard input, as Ask's (`-p` without a prompt reads it there).
+        let mut cmd = bin.command();
         cmd.current_dir(platform::data_dir())
-            .args(["-p", &prompt, "--model", "haiku", "--tools", "", "--strict-mcp-config", "--permission-mode", "default"])
-            .stdin(Stdio::null());
-        let out = cmd.output().ok().filter(|o| o.status.success())?;
+            .args(["-p", "--model", "haiku", "--tools", "", "--strict-mcp-config", "--permission-mode", "default"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut child = cmd.spawn().ok()?;
+        let fed = feed_stdin(&mut child, Some(prompt));
+        let out = child.wait_with_output().ok();
+        let _ = fed.map(|t| t.join());
+        let out = out.filter(|o| o.status.success())?;
         let t = String::from_utf8_lossy(&out.stdout).lines().map(str::trim).find(|l| !l.is_empty())?.trim_matches(['"', '\'', '.']).to_string();
         let t = chats::clean(&t);
         (!t.is_empty() && t.chars().count() <= 80).then_some(t)
@@ -738,6 +767,21 @@ pub fn skills_list(svc: State<VaultService>) -> Vec<Skill> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Claude Code installed through npm on this computer is started without cmd.exe, and answers
+    /// `--version` that way. Runs only where `%APPDATA%\npm\claude.cmd` is installed.
+    #[cfg(windows)]
+    #[test]
+    fn npm_claude_runs_without_cmd() {
+        let Some(shim) = dirs::data_dir().map(|d| d.join("npm").join("claude.cmd")).filter(|p| p.is_file()) else { return };
+        let p = platform::find_program("claude", &[]).unwrap();
+        assert!(!p.through_cmd(), "{p:?}");
+        if p.path == shim {
+            assert_ne!(p.exe, shim);
+        }
+        let v = version(&p).unwrap_or_default();
+        assert!(v.contains("Claude Code"), "{v}");
+    }
 
     #[test]
     fn a_turn_is_running_until_it_ends_and_then_keeps_its_answer() {
