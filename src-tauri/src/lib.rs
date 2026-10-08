@@ -473,6 +473,8 @@ struct AppInfo {
     data_dir: String,
     /// This program, which is also the MCP server (`--mcp`).
     exe: String,
+    /// What this system has of the features that aren't everywhere (`platform_features`).
+    features: platform::PlatformFeatures,
 }
 
 #[tauri::command]
@@ -482,7 +484,14 @@ fn app_info(app: AppHandle) -> AppInfo {
         build: option_env!("BRAINSTEAD_BUILD").unwrap_or("dev").to_string(),
         data_dir: platform::data_dir().to_string_lossy().into_owned(),
         exe: std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default(),
+        features: platform::platform_features(),
     }
+}
+
+/// Which of the features that aren't on every system this one has, so the window hides the rest.
+#[tauri::command]
+fn platform_features() -> platform::PlatformFeatures {
+    platform::platform_features()
 }
 
 /// Set once the window has dealt with unsaved edits, so the next quit goes through.
@@ -717,7 +726,17 @@ pub fn run() {
     }
     let state = AppState { settings: Mutex::new(settings), settings_path };
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // First of the plugins, as the plugin requires: a second launch hands over to this copy, which
+    // shows its window, rather than running a second copy on the same index, bridge and capture
+    // shortcut. Not for a screenshot scene, which runs beside the app on purpose.
+    #[cfg(any(windows, target_os = "linux"))]
+    let builder = if scene().is_none() {
+        builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)))
+    } else {
+        builder
+    };
+    builder
         .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(STATE_FLAGS).with_denylist(&["capture", "tray"]).build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -917,6 +936,7 @@ pub fn run() {
             weekprep::weekprep_ensure,
             weekprep::weekprep_link,
             app_info,
+            platform_features,
             bridge::mcp_reply,
             bridge::mcp_ready,
             tray::tray_set_state,
@@ -1002,14 +1022,21 @@ pub fn run() {
                 }
                 menu::set_about(app.handle(), dark);
                 // Closing the window hides it: the app keeps running for the capture shortcut,
-                // and clicking the Dock icon brings the window back. ⌘Q quits.
+                // and clicking the Dock or tray icon brings the window back. ⌘Q quits. On Windows
+                // with no tray icon (`tray::close_quits`) closing quits, through the window's own
+                // quit so it asks about unsaved edits first.
                 let w2 = w.clone();
                 w.on_window_event(move |ev| match ev {
                     tauri::WindowEvent::CloseRequested { api, .. } => {
                         api.prevent_close();
-                        let _ = w2.app_handle().save_window_state(STATE_FLAGS);
-                        let _ = w2.hide();
-                        tray::main_closed(w2.app_handle());
+                        let app = w2.app_handle();
+                        let _ = app.save_window_state(STATE_FLAGS);
+                        if tray::close_quits(app) {
+                            let _ = tauri::Emitter::emit_to(app, "main", "quit-requested", ());
+                        } else {
+                            let _ = w2.hide();
+                            tray::main_closed(app);
+                        }
                     }
                     // The system went light or dark: About follows when the app's theme is System.
                     tauri::WindowEvent::ThemeChanged(t) => {

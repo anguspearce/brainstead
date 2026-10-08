@@ -41,20 +41,58 @@ const ITEMS: &[(&str, &str, Option<&str>)] = &[
     ("note:trash", "Move to the Trash", None),
 ];
 
+/// The label an item has on this system: Windows names its file manager in its own words.
+fn label(id: &str, label: &'static str) -> &'static str {
+    if cfg!(windows) && id == "note:reveal" {
+        return "Show in Explorer";
+    }
+    label
+}
+
+/// Whether this system has what the item needs (`PlatformFeatures`, which also decides what the
+/// window shows).
+fn available(id: &str, f: &crate::platform::PlatformFeatures) -> bool {
+    match id {
+        "note:read-aloud" => f.read_aloud,
+        "note:export-pdf" => f.export_pdf,
+        "note:copy-rich" => f.rich_copy,
+        _ => true,
+    }
+}
+
+/// `ITEMS` without what this system lacks, and without the separator a missing group would leave
+/// doubled or at either end.
+fn items(f: &crate::platform::PlatformFeatures) -> Vec<(&'static str, &'static str, Option<&'static str>)> {
+    let mut out: Vec<(&'static str, &'static str, Option<&'static str>)> = Vec::new();
+    for &(id, l, acc) in ITEMS {
+        if id == "-" {
+            if out.last().is_some_and(|(i, _, _)| *i != "-") {
+                out.push((id, l, acc));
+            }
+        } else if available(id, f) {
+            out.push((id, label(id, l), acc));
+        }
+    }
+    if out.last().is_some_and(|(i, _, _)| *i == "-") {
+        out.pop();
+    }
+    out
+}
+
 /// Puts the menu bar up and routes its Note items to the window.
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::default(app)?;
     let new = MenuItemBuilder::with_id("note:new", "New Note…").accelerator("CmdOrCtrl+N").build(app)?;
     let mut sub = SubmenuBuilder::new(app, "Note").item(&new).separator();
     let mut doc_items = Vec::new();
-    for (id, label, acc) in ITEMS {
-        if *id == "-" {
+    for (id, label, acc) in items(&crate::platform::platform_features()) {
+        if id == "-" {
             sub = sub.item(&PredefinedMenuItem::separator(app)?);
             continue;
         }
-        let mut b = MenuItemBuilder::with_id(*id, *label).enabled(false);
+        let mut b = MenuItemBuilder::with_id(id, label).enabled(false);
         if let Some(a) = acc {
-            b = b.accelerator(*a);
+            b = b.accelerator(a);
         }
         let item = b.build(app)?;
         sub = sub.item(&item);
@@ -78,7 +116,14 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
         }
         None => menu.append(&SubmenuBuilder::new(app, "Help").item(&help_open).item(&help_keys).build()?)?,
     }
+    // macOS has one menu bar for the app. Elsewhere a menu set on the app is attached to every
+    // window, the frameless capture and menu windows too, so it goes on the main window alone.
+    #[cfg(target_os = "macos")]
     app.set_menu(menu)?;
+    #[cfg(not(target_os = "macos"))]
+    if let Some(main) = app.get_webview_window("main") {
+        main.set_menu(menu)?;
+    }
     *app.state::<NoteMenu>().0.lock().unwrap() = doc_items;
     app.on_menu_event(|app, ev| {
         let id = ev.id().as_ref();
@@ -126,5 +171,37 @@ fn about_with_icon(app: &AppHandle, dark: bool) -> tauri::Result<()> {
 pub fn menu_note_open(menu: State<NoteMenu>, open: bool) {
     for i in menu.0.lock().unwrap().iter() {
         let _ = i.set_enabled(open);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_menu_has_what_the_system_has() {
+        let f = crate::platform::platform_features();
+        let ids: Vec<&str> = items(&f).iter().map(|(i, _, _)| *i).collect();
+        assert_eq!(ids.contains(&"note:read-aloud"), f.read_aloud);
+        assert_eq!(ids.contains(&"note:export-pdf"), f.export_pdf);
+        assert_eq!(ids.contains(&"note:copy-rich"), f.rich_copy);
+        assert!(ids.contains(&"note:trash"));
+        assert_ne!(ids.first(), Some(&"-"));
+        assert_ne!(ids.last(), Some(&"-"));
+        assert!(!ids.windows(2).any(|w| w == ["-", "-"]));
+    }
+
+    #[test]
+    fn every_item_is_kept_and_labelled_as_written_when_every_feature_is_there() {
+        let all = crate::platform::PlatformFeatures {
+            read_aloud: true,
+            export_pdf: true,
+            rich_copy: true,
+            ..crate::platform::platform_features()
+        };
+        let got = items(&all);
+        assert_eq!(got.len(), ITEMS.len());
+        let trash = got.iter().find(|(i, _, _)| *i == "note:trash").unwrap();
+        assert_eq!(trash.1, "Move to the Trash");
     }
 }
