@@ -138,10 +138,20 @@ pub async fn automated_suggest(app: AppHandle) -> Result<Vec<reviews::sessions::
         let automations = reviews::sessions::automations(listed.as_deref());
         let end = now();
         let sessions = reviews::sessions::sessions_for_window(&projects, end - chrono::Duration::days(14), end, &automations);
-        let temp = std::env::temp_dir().to_string_lossy().into_owned();
+        // Folders are compared with `/` for `\` and no trailing separator; Windows' are case-blind.
+        let norm = |p: &str| {
+            let p = p.replace('\\', "/").trim_end_matches('/').to_string();
+            if cfg!(windows) {
+                p.to_lowercase()
+            } else {
+                p
+            }
+        };
+        let (vault, temp) = (vault.as_deref().map(norm), norm(&std::env::temp_dir().to_string_lossy()));
         let skip = |cwd: &str| {
-            vault.as_deref().is_some_and(|v| cwd == v.trim_end_matches('/'))
-                || cwd.starts_with(temp.trim_end_matches('/'))
+            let cwd = norm(cwd);
+            vault.as_deref().is_some_and(|v| cwd == v)
+                || cwd.starts_with(&temp)
                 || cwd.starts_with("/tmp/")
                 || cwd.starts_with("/private/")
                 || cwd.starts_with("/var/folders/")

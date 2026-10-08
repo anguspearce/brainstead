@@ -329,8 +329,7 @@ pub fn import_file(vault: &Path, from: &Path) -> Result<String, WriteError> {
     if meta.len() > MAX_IMPORT_BYTES {
         return Err(WriteError::Invalid(format!("“{name}” is over {} MB.", MAX_IMPORT_BYTES / 1024 / 1024)));
     }
-    let (canon_from, canon_vault) =
-        (std::fs::canonicalize(from).unwrap_or(from.into()), std::fs::canonicalize(vault).unwrap_or(vault.into()));
+    let (canon_from, canon_vault) = (crate::paths::real_path(from), crate::paths::real_path(vault));
     if canon_from.starts_with(&canon_vault) {
         return Err(WriteError::Exists(format!("“{name}” is already in the vault.")));
     }

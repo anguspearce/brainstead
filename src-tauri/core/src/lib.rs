@@ -37,6 +37,7 @@ pub mod names;
 pub mod note;
 pub mod pageshape;
 pub mod pageview;
+pub mod paths;
 pub mod projects;
 pub mod proposals;
 pub mod read;

@@ -7,8 +7,6 @@
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let data = std::env::var_os("BRAINSTEAD_DATA").filter(|d| !d.is_empty()).map(std::path::PathBuf::from).unwrap_or_else(|| {
-        std::path::PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join("Library/Application Support/Brainstead")
-    });
-    std::process::exit(brainstead_mcp::main_with(&args, data));
+    // The app's own data folder (brainstead_core::paths::data_dir), so both read the same index.
+    std::process::exit(brainstead_mcp::main_with(&args, brainstead_core::paths::data_dir()));
 }

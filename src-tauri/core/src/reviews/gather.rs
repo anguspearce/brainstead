@@ -175,7 +175,7 @@ impl ProjectArea {
 /// comparing letters and digits only.
 pub fn project_of<'a>(cwd: &str, projects: &'a [ProjectArea]) -> Option<&'a ProjectArea> {
     let key = |s: &str| s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect::<String>();
-    let dir = key(cwd.trim_end_matches('/').rsplit('/').next().unwrap_or(""));
+    let dir = key(cwd.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().unwrap_or(""));
     if dir.is_empty() {
         return None;
     }
@@ -855,6 +855,7 @@ mod tests {
         assert_eq!(garden.domain(), Some("Personal"));
         assert_eq!(project_of("/home/me/Projects/orbit-app-launch/", &got.projects).unwrap().domain(), Some("Work"));
         assert_eq!(project_of("/home/me/Projects/garden", &got.projects).unwrap().name, "Garden");
+        assert_eq!(project_of(r"C:\Users\me\Projects\garden\", &got.projects).unwrap().name, "Garden");
         assert!(project_of("/home/me/Projects", &got.projects).is_none());
         let text = render(&got);
         assert!(text.contains("- Garden: area Personal (Personal)"), "{text}");

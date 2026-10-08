@@ -28,19 +28,10 @@ mod other;
 use other as imp;
 
 /// Where Brainstead keeps settings.json and index.db: `~/Library/Application Support/Brainstead/`
-/// on macOS. `BRAINSTEAD_DATA` overrides it (screenshots, tests).
+/// on macOS, `%APPDATA%\Brainstead` on Windows. `BRAINSTEAD_DATA` overrides it (screenshots,
+/// tests). The rule is in core, which the standalone MCP server shares.
 pub fn data_dir() -> PathBuf {
-    if let Some(d) = std::env::var_os("BRAINSTEAD_DATA").filter(|d| !d.is_empty()) {
-        return PathBuf::from(d);
-    }
-    imp::data_dir()
-}
-
-/// The installed Chromium browsers' folders for native messaging host manifests, by browser name
-/// (Chrome, Edge, Brave…). Only browsers that are there are listed. Empty on Windows for now, where
-/// hosts are registered in the registry.
-pub fn native_host_dirs() -> Vec<(&'static str, PathBuf)> {
-    imp::native_host_dirs()
+    brainstead_core::paths::data_dir()
 }
 
 /// A quick preview of a file without opening it: the Quick Look panel over `w` on macOS (as Finder's
@@ -100,7 +91,12 @@ pub fn show_painted(w: &tauri::WebviewWindow, rgb: (u8, u8, u8), focus: bool) {
         });
     }
     #[cfg(not(target_os = "macos"))]
-    let _ = w.show();
+    {
+        let _ = w.show();
+        if focus {
+            let _ = w.set_focus();
+        }
+    }
 }
 
 /// Makes a window invisible and click-through while it still draws, for screenshots
@@ -347,6 +343,21 @@ pub fn print_to_pdf(w: &tauri::WebviewWindow, dest: &Path) -> Result<(), String>
     }
 }
 
+/// A `Command` for a console program, started without a console window: a GUI app on Windows
+/// otherwise flashes one up for each program it runs (CREATE_NO_WINDOW). A plain `Command`
+/// elsewhere.
+pub fn command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    #[allow(unused_mut)]
+    let mut cmd = Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 /// Starts a program as the leader of its own process group, so stopping it also stops whatever it
 /// started (node, rg, a shell). Elsewhere it's started as it is.
 pub fn spawn_group(cmd: &mut Command) -> std::io::Result<Child> {
@@ -367,27 +378,90 @@ pub fn stop_group(pid: u32) {
     }
     #[cfg(windows)]
     {
-        let _ = Command::new("taskkill").args(["/PID", &pid.to_string(), "/T", "/F"]).output();
+        let _ = command("taskkill").args(["/PID", &pid.to_string(), "/T", "/F"]).output();
     }
 }
 
 /// Finds an installed command-line program. A GUI app doesn't get the login shell's PATH, so it
-/// looks where installers put programs (`extra` is under the home folder), then asks a login shell
-/// (`where` on Windows).
-pub fn find_program(name: &str, extra: &[&str]) -> Option<PathBuf> {
+/// looks where installers put programs (`extra` is under the home folder), then asks a login shell.
+/// On Windows it looks for `.local\bin\<name>.exe` (Claude Code's own installer), `extra`, and
+/// npm's `%APPDATA%\npm\<name>.cmd`, then asks `where`, taking an `.exe` before a `.cmd` and never
+/// the extensionless shell script npm installs beside it.
+pub fn find_program(name: &str, extra: &[&str]) -> Option<Program> {
+    locate(name, extra).map(Program::new)
+}
+
+/// An installed program and how to start it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Program {
+    /// Where it was found, as shown to the user.
+    pub path: PathBuf,
+    /// What is started, and the arguments that go before the caller's. On Windows an npm `.cmd`
+    /// shim is replaced by what it runs (node and its script, or a program), so arguments with line
+    /// breaks or quotes reach the CLI intact and the process stopped is the CLI's own.
+    pub exe: PathBuf,
+    pub prefix_args: Vec<String>,
+}
+
+impl Program {
+    fn new(path: PathBuf) -> Program {
+        #[cfg(windows)]
+        {
+            let node = || {
+                let out = command("where").arg("node").output().ok()?;
+                brainstead_core::paths::pick_program(&String::from_utf8_lossy(&out.stdout))
+            };
+            if let Some((exe, prefix_args)) = brainstead_core::paths::resolve_npm_shim(&path, node) {
+                return Program { path, exe, prefix_args };
+            }
+        }
+        Program { exe: path.clone(), path, prefix_args: Vec::new() }
+    }
+
+    /// A `command` that starts it, with its leading arguments.
+    pub fn command(&self) -> Command {
+        let mut cmd = command(&self.exe);
+        cmd.args(&self.prefix_args);
+        cmd
+    }
+
+    /// Whether it starts through cmd.exe (a `.cmd` or `.bat` that couldn't be resolved), where an
+    /// argument with a line break can't be passed: std refuses it as invalid input.
+    pub fn through_cmd(&self) -> bool {
+        self.exe.extension().is_some_and(|e| e.eq_ignore_ascii_case("cmd") || e.eq_ignore_ascii_case("bat"))
+    }
+}
+
+fn locate(name: &str, extra: &[&str]) -> Option<PathBuf> {
     let home = dirs::home_dir().unwrap_or_default();
-    let mut places: Vec<PathBuf> = vec![home.join(".local/bin").join(name)];
-    places.extend(extra.iter().map(|p| home.join(p)));
-    places.extend([PathBuf::from("/opt/homebrew/bin").join(name), PathBuf::from("/usr/local/bin").join(name)]);
+    #[cfg(not(windows))]
+    let places: Vec<PathBuf> = {
+        let mut places = vec![home.join(".local/bin").join(name)];
+        places.extend(extra.iter().map(|p| home.join(p)));
+        places.extend([PathBuf::from("/opt/homebrew/bin").join(name), PathBuf::from("/usr/local/bin").join(name)]);
+        places
+    };
+    #[cfg(windows)]
+    let places: Vec<PathBuf> = {
+        let mut places = vec![home.join(".local").join("bin").join(format!("{name}.exe"))];
+        places.extend(extra.iter().map(|p| home.join(p)));
+        places.extend(dirs::data_dir().map(|d| d.join("npm").join(format!("{name}.cmd"))));
+        places
+    };
     if let Some(p) = places.into_iter().find(|p| p.is_file()) {
         return Some(p);
     }
     #[cfg(unix)]
-    let out = Command::new("/bin/zsh").args(["-lc", &format!("command -v {name}")]).output().ok()?;
+    {
+        let out = command("/bin/zsh").args(["-lc", &format!("command -v {name}")]).output().ok()?;
+        let s = String::from_utf8_lossy(&out.stdout).lines().next().unwrap_or("").trim().to_string();
+        (!s.is_empty() && Path::new(&s).is_file()).then(|| PathBuf::from(s))
+    }
     #[cfg(windows)]
-    let out = Command::new("where").arg(name).output().ok()?;
-    let s = String::from_utf8_lossy(&out.stdout).lines().next().unwrap_or("").trim().to_string();
-    (!s.is_empty() && Path::new(&s).is_file()).then(|| PathBuf::from(s))
+    {
+        let out = command("where").arg(name).output().ok()?;
+        brainstead_core::paths::pick_program(&String::from_utf8_lossy(&out.stdout))
+    }
 }
 
 /// Spelling and grammar (the editor's marks): macOS's checker; nothing elsewhere yet.
@@ -468,6 +542,8 @@ pub struct Voice {
 }
 
 /// What the synthesiser says back: "word" (`char` and `len`, the word's UTF-16 range) or "end".
+/// Only macOS's synthesiser sends them.
+#[cfg(target_os = "macos")]
 #[derive(Clone, serde::Serialize)]
 pub struct SpeechEvent {
     pub id: u64,
@@ -542,5 +618,123 @@ pub fn keep_awake(on: bool) -> Result<(), String> {
     {
         let _ = on;
         Ok(())
+    }
+}
+
+/// A browser and the capture host's registration with it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NativeHost {
+    /// The browser's name (Chrome, Edge, Brave…).
+    pub browser: &'static str,
+    /// The browser can find a manifest for the host.
+    pub registered: bool,
+    /// What it finds is `manifest` as given (this copy of Brainstead, not another build).
+    pub current: bool,
+}
+
+/// Registers native messaging host `name`, described by `manifest`, with each installed Chromium
+/// browser where it isn't registered as that already; with `write` false it only reports. macOS and
+/// Linux: a `<name>.json` manifest in each browser's own NativeMessagingHosts folder. Windows: one
+/// manifest in the app data folder, which each browser's
+/// `HKCU\Software\<vendor>\NativeMessagingHosts\<name>` key names.
+pub fn register_native_host(name: &str, manifest: &serde_json::Value, write: bool) -> Vec<NativeHost> {
+    #[cfg(windows)]
+    return imp::register_native_host(name, manifest, write);
+    #[cfg(not(windows))]
+    imp::native_host_dirs()
+        .into_iter()
+        .map(|(browser, dir)| {
+            let (registered, current) = manifest_file(&dir.join(format!("{name}.json")), manifest, write);
+            NativeHost { browser, registered, current }
+        })
+        .collect()
+}
+
+/// Writes `want` to `file`, with its folder, unless it holds that already or `write` is false.
+/// Whether a manifest is there, and whether it is `want`.
+fn manifest_file(file: &Path, want: &serde_json::Value, write: bool) -> (bool, bool) {
+    let have: Option<serde_json::Value> = std::fs::read(file).ok().and_then(|b| serde_json::from_slice(&b).ok());
+    let mut current = have.as_ref() == Some(want);
+    if !current && write && file.parent().is_some_and(|d| std::fs::create_dir_all(d).is_ok()) {
+        if let Ok(b) = serde_json::to_vec_pretty(want) {
+            current = brainstead_core::write::write_atomic(file, &b, false).is_ok();
+        }
+    }
+    (current || have.is_some(), current)
+}
+
+/// Which of the features that aren't on every system this one has. The window hides what is
+/// missing, and the MCP server's `app_status` says it (`brainstead_mcp::platform_features`, the
+/// same table, checked against this one by a test).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformFeatures {
+    /// "macos", "windows" or "linux".
+    pub platform: &'static str,
+    pub quick_look: bool,
+    pub spelling: bool,
+    pub grammar: bool,
+    pub read_aloud: bool,
+    pub export_pdf: bool,
+    pub rich_copy: bool,
+    pub full_disk_access: bool,
+    pub open_at_login: bool,
+    /// The text in images (OCR), for search and the index.
+    pub image_text: bool,
+}
+
+pub fn platform_features() -> PlatformFeatures {
+    let none = PlatformFeatures {
+        platform: "linux",
+        quick_look: false,
+        spelling: false,
+        grammar: false,
+        read_aloud: false,
+        export_pdf: false,
+        rich_copy: false,
+        full_disk_access: false,
+        open_at_login: false,
+        image_text: false,
+    };
+    if cfg!(target_os = "macos") {
+        PlatformFeatures {
+            platform: "macos",
+            quick_look: true,
+            spelling: true,
+            grammar: true,
+            read_aloud: true,
+            export_pdf: true,
+            rich_copy: true,
+            full_disk_access: true,
+            open_at_login: true,
+            image_text: true,
+        }
+    } else if cfg!(windows) {
+        PlatformFeatures { platform: "windows", rich_copy: true, open_at_login: true, ..none }
+    } else {
+        none
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_mcp_server_reports_the_same_features_as_the_window() {
+        assert_eq!(serde_json::to_value(platform_features()).unwrap(), brainstead_mcp::platform_features());
+    }
+
+    #[test]
+    fn a_host_manifest_is_written_once_and_then_current() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("hosts").join("com.example.host.json");
+        let want = serde_json::json!({"name": "com.example.host", "path": "/x"});
+        assert_eq!(manifest_file(&file, &want, false), (false, false));
+        assert!(!file.exists());
+        assert_eq!(manifest_file(&file, &want, true), (true, true));
+        assert_eq!(manifest_file(&file, &want, false), (true, true));
+        let other = serde_json::json!({"name": "com.example.host", "path": "/y"});
+        assert_eq!(manifest_file(&file, &other, false), (true, false));
     }
 }

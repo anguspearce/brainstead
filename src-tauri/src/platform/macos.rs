@@ -26,10 +26,6 @@ pub fn native_host_dirs() -> Vec<(&'static str, PathBuf)> {
     .collect()
 }
 
-pub fn data_dir() -> PathBuf {
-    home().join("Library/Application Support/Brainstead")
-}
-
 #[link(name = "ServiceManagement", kind = "framework")]
 unsafe extern "C" {}
 

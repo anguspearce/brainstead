@@ -48,7 +48,7 @@ fn safe_id(id: &str) -> Result<()> {
 
 /// A vault-relative path that stays in the vault.
 pub fn safe_rel(rel: &str) -> Result<()> {
-    if rel.is_empty() || rel.starts_with(['/', '\\']) || rel.split(['/', '\\']).any(|s| s == ".." || s == "." || s.is_empty()) {
+    if !crate::paths::is_vault_relative(rel) || rel.split(['/', '\\']).any(|s| s == ".") {
         return Err(WriteError::Invalid(format!("Not a path in the vault: {rel}")));
     }
     Ok(())
