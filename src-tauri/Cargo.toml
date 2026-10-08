@@ -63,6 +63,12 @@ tauri-plugin-global-shortcut = "2"
 [target.'cfg(any(windows, target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = "2"
 
+# The capture host's registration and Open at login (HKCU), and rich copy (platform/other.rs).
+# arboard is the clipboard plugin's own, at its version.
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+arboard = { version = "3.6", default-features = false }
+
 [dev-dependencies]
 tempfile = "3"
 

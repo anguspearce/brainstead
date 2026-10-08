@@ -203,6 +203,66 @@ pub fn files() -> &'static [(&'static str, &'static str)] {
     HELP_FILES
 }
 
+/// Shortcuts written with macOS glyphs, as Windows names them; text without them is unchanged.
+/// The window's `keyLabel` (src/platform.ts) applies the same rule, and both are checked against
+/// tests/fixtures/keylabels.json. A run of modifiers becomes words joined by `+` (⌘ and ⌃ Ctrl,
+/// ⌥ Alt, ⇧ Shift), then `+` and the key that follows it, or `-click` as written: ⇧⌘R is
+/// Ctrl+Shift+R and ⌥-click is Alt-click. ⌥ with ⌃, and ⌥⌘ before a digit, are Ctrl+Shift instead
+/// (Ctrl+Alt is AltGr on many layouts), so ⌃⌥Space is Ctrl+Shift+Space and ⌥⌘1 Ctrl+Shift+1,
+/// while ⌥⌘C stays Ctrl+Alt+C. Key glyphs (↩ ⌫ ⌦ ⇥ ⎋ ␣) become their names wherever they stand.
+pub fn windows_keys(text: &str) -> String {
+    const MODS: [char; 4] = ['⌃', '⌥', '⇧', '⌘'];
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(c) = rest.chars().next() {
+        if !MODS.contains(&c) {
+            out.push(c);
+            rest = &rest[c.len_utf8()..];
+            continue;
+        }
+        let end = rest.find(|c: char| !MODS.contains(&c)).unwrap_or(rest.len());
+        let mods = &rest[..end];
+        rest = &rest[end..];
+        let key = match rest.chars().next() {
+            _ if rest.starts_with("-click") => "-click",
+            Some(k) if k.is_ascii_alphanumeric() => &rest[..rest.find(|c: char| !c.is_ascii_alphanumeric()).unwrap_or(rest.len())],
+            Some(k) if !k.is_whitespace() => &rest[..k.len_utf8()],
+            _ => "",
+        };
+        rest = &rest[key.len()..];
+        let has = |g: char| mods.contains(g);
+        let digit = key.len() == 1 && key.as_bytes()[0].is_ascii_digit();
+        let screen = has('⌥') && (has('⌃') || (has('⌘') && digit));
+        let mut words = Vec::new();
+        if has('⌃') || has('⌘') {
+            words.push("Ctrl");
+        }
+        if has('⌥') && !screen {
+            words.push("Alt");
+        }
+        if has('⇧') || screen {
+            words.push("Shift");
+        }
+        out.push_str(&words.join("+"));
+        match key {
+            "" => {}
+            "-click" => out.push_str(key),
+            _ => {
+                out.push('+');
+                out.push_str(key);
+            }
+        }
+    }
+    let names = [('↩', "Enter"), ('⌫', "Backspace"), ('⌦', "Delete"), ('⇥', "Tab"), ('⎋', "Esc"), ('␣', "Space")];
+    out.chars().fold(String::with_capacity(out.len()), |mut s, c| {
+        match names.iter().find(|(g, _)| *g == c) {
+            Some((_, name)) => s.push_str(name),
+            None => s.push(c),
+        }
+        s
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -243,5 +303,24 @@ mod tests {
         assert!(list().contains(&first.id));
         assert!(search(&s.title, 3).contains(&s.title));
         assert!(search("zzqx", 3).starts_with("Nothing in the help"));
+    }
+
+    #[test]
+    fn windows_keys_matches_the_windows_labels() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../tests/fixtures/keylabels.json")).expect("keylabels.json");
+        let labels = fixture["labels"].as_array().expect("labels");
+        assert!(!labels.is_empty());
+        for pair in labels {
+            let (mac, windows) = (pair["mac"].as_str().unwrap(), pair["windows"].as_str().unwrap());
+            assert_eq!(windows_keys(mac), windows, "{mac}");
+        }
+    }
+
+    #[test]
+    fn windows_keys_names_key_glyphs_and_bare_modifiers() {
+        assert_eq!(windows_keys("Undo (⌘Z), then ⇧⌘Z"), "Undo (Ctrl+Z), then Ctrl+Shift+Z");
+        assert_eq!(windows_keys("⌘ and ⇧ alone, ⌫ and ⎋"), "Ctrl and Shift alone, Backspace and Esc");
+        assert_eq!(windows_keys("no shortcut here"), "no shortcut here");
     }
 }

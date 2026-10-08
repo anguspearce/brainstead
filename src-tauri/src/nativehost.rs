@@ -7,7 +7,7 @@
 //! machine's byte order then that much JSON, both ways. A capture is written into `sources/` by
 //! `brainstead_core::webcapture`, whether or not the app is open, and noted in the app data
 //! folder's `captures.json` for Settings and the app's notification. The host's manifest, naming
-//! the two extensions Chrome may let in, is written into each browser's folder when the app starts.
+//! the two extensions Chrome may let in, is registered with each browser when the app starts.
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -267,25 +267,15 @@ pub struct Browser {
     pub current: bool,
 }
 
-/// Writes the host manifest into each installed browser's folder, when it isn't already this. A
-/// dev build only reports: it leaves the installed app's manifest alone.
+/// Registers the host with each installed browser (`platform::register_native_host`: a manifest
+/// in each browser's folder, or the registry on Windows), when it isn't already this. A dev build
+/// only reports: it leaves the installed app's registration alone.
 pub fn register() -> Vec<Browser> {
     let Ok(exe) = std::env::current_exe() else { return vec![] };
-    let want = manifest(&exe);
     let may_write = !cfg!(debug_assertions);
-    platform::native_host_dirs()
+    platform::register_native_host(HOST, &manifest(&exe), may_write)
         .into_iter()
-        .map(|(name, dir)| {
-            let file = dir.join(format!("{HOST}.json"));
-            let have: Option<Value> = std::fs::read(&file).ok().and_then(|b| serde_json::from_slice(&b).ok());
-            let mut current = have.as_ref() == Some(&want);
-            if !current && may_write && std::fs::create_dir_all(&dir).is_ok() {
-                if let Ok(b) = serde_json::to_vec_pretty(&want) {
-                    current = brainstead_core::write::write_atomic(&file, &b, false).is_ok();
-                }
-            }
-            Browser { name: name.to_string(), registered: current || have.is_some(), current }
-        })
+        .map(|h| Browser { name: h.browser.to_string(), registered: h.registered, current: h.current })
         .collect()
 }
 

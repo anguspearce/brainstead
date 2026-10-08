@@ -355,6 +355,7 @@ dependencies = [
 name = "brainstead"
 version = "1.0.0"
 dependencies = [
+ "arboard",
  "base64 0.22.1",
  "block2",
  "brainstead-core",
@@ -382,6 +383,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-window-state",
  "tempfile",
+ "winreg",
 ]
 
 [[package]]
