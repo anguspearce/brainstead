@@ -1,0 +1,72 @@
+{
+  "labels": [
+    {
+      "mac": "⌘K",
+      "windows": "Ctrl+K"
+    },
+    {
+      "mac": "⇧⌘R",
+      "windows": "Ctrl+Shift+R"
+    },
+    {
+      "mac": "⌃⌥Space",
+      "windows": "Ctrl+Shift+Space"
+    },
+    {
+      "mac": "⌥⌘1",
+      "windows": "Ctrl+Shift+1"
+    },
+    {
+      "mac": "⌥⌘7",
+      "windows": "Ctrl+Shift+7"
+    },
+    {
+      "mac": "⌥⌘C",
+      "windows": "Ctrl+Alt+C"
+    },
+    {
+      "mac": "⌘↩",
+      "windows": "Ctrl+Enter"
+    },
+    {
+      "mac": "⌘⌫",
+      "windows": "Ctrl+Backspace"
+    },
+    {
+      "mac": "⌘,",
+      "windows": "Ctrl+,"
+    },
+    {
+      "mac": "⌘[",
+      "windows": "Ctrl+["
+    },
+    {
+      "mac": "⌘]",
+      "windows": "Ctrl+]"
+    },
+    {
+      "mac": "Nothing to change",
+      "windows": "Nothing to change"
+    },
+    {
+      "mac": "Press ⌘K, then ⇧⌘R to review",
+      "windows": "Press Ctrl+K, then Ctrl+Shift+R to review"
+    },
+    {
+      "mac": "⌥-click to open",
+      "windows": "Alt-click to open"
+    },
+    {
+      "mac": "⌘.",
+      "windows": "Ctrl+."
+    },
+    {
+      "mac": "Save (⌘S)",
+      "windows": "Save (Ctrl+S)"
+    }
+  ],
+  "captureDefault": {
+    "macos": "Control+Alt+Space",
+    "windows": "Control+Shift+Space"
+  }
+}
