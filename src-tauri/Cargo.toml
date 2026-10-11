@@ -1,6 +1,6 @@
 [package]
 name = "brainstead"
-version = "1.1.4"
+version = "1.1.5"
 description = "A home for everything on your mind"
 authors = ["Wayne Davies"]
 license = "GPL-3.0-or-later"
