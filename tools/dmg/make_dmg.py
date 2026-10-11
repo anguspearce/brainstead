@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 """Packs the release build into a DMG laid out like other Mac installers: the app on the left,
-an arrow to Applications on the right, on a background with the mark, name and a hint.
+an arrow to Applications on the right, on a background like the product page's, with the mark, name and a hint.
 
     python3 tools/dmg/make_dmg.py        # after make app; writes the DMG next to the .app bundle
 
@@ -35,6 +35,7 @@ def background(tmp: Path) -> Path:
     """background.tiff, at 1x and 2x so it's sharp on Retina screens."""
     page = tmp / "background.html"
     shutil.copy(HERE / "background.html", page)
+    shutil.copytree(ROOT / "site/fonts", tmp / "fonts")  # the product page's Geist
     pngs = []
     for scale in (1, 2):
         png = tmp / f"background@{scale}x.png"

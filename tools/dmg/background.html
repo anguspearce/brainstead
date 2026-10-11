@@ -3,26 +3,36 @@
 <!-- See LICENSE for the full text. -->
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-<!-- The DMG window's background, 660×400. make_dmg.py puts the icons on it: the app centred at
-     (165, 230), Applications at (495, 230). The mark is src/icons.tsx's Mark in the light theme. -->
+<!-- The DMG window's background, 660×400, dressed like the product page (site/styles.css): white ground,
+     the hero's blue-to-teal glow, Geist, the mark, and the hero's line with its gradient. make_dmg.py puts
+     the icons on it, the app centred at (165, 230) and Applications at (495, 230), and copies site/fonts
+     beside it. Finder writes the icons' names below them (y 290–320), so that strip stays plain and light. -->
 <meta charset="utf-8">
 <style>
+  @font-face { font-family: "Geist"; src: url("fonts/geist.woff2") format("woff2"); font-weight: 100 900; }
   html, body { margin: 0; width: 660px; height: 400px; overflow: hidden; }
-  body { background: linear-gradient(#ffffff, #f0f2f1); color: #1d1d1f; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; position: relative; -webkit-font-smoothing: antialiased; }
-  .brand { position: absolute; top: 34px; width: 100%; display: flex; justify-content: center; align-items: center; gap: 12px;
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; font-weight: 650; letter-spacing: -0.02em; font-size: 34px; }
-  .tag { position: absolute; top: 96px; width: 100%; text-align: center; font-size: 15px; color: #57575c; }
+  body { background: #fff; color: #151a22; font-family: "Geist", -apple-system, "SF Pro Display", sans-serif; letter-spacing: -0.011em;
+    position: relative; -webkit-font-smoothing: antialiased; }
+  .glow { position: absolute; left: 60px; right: 60px; top: 130px; height: 170px; filter: blur(56px); opacity: 0.24;
+    background: radial-gradient(40% 50% at 28% 50%, #1d5fd6, transparent 70%), radial-gradient(40% 50% at 72% 50%, #0d7f74, transparent 70%); }
+  .brand { position: absolute; top: 30px; width: 100%; display: flex; justify-content: center; align-items: center; gap: 9px;
+    font-weight: 600; font-size: 19px; letter-spacing: -0.02em; }
+  h1 { position: absolute; top: 74px; width: 100%; margin: 0; text-align: center; font-size: 33px; font-weight: 700;
+    letter-spacing: -0.045em; line-height: 1; }
+  .grad { background: linear-gradient(100deg, #1d5fd6, #0d7f74); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .arrow { position: absolute; left: 250px; top: 206px; width: 160px; height: 48px; }
-  .hint { position: absolute; top: 334px; width: 100%; text-align: center; font-size: 15px; color: #57575c; }
-  .hint b { font-weight: 600; color: #1d1d1f; }
+  .hint { position: absolute; top: 346px; width: 100%; text-align: center; font-size: 14px; color: #4d5664; }
+  .hint b { font-weight: 600; color: #151a22; }
 </style>
 <body>
+  <div class="glow"></div>
   <div class="brand">
-    <svg width="40" height="40" viewBox="0 0 32 32"><path d="M4 15 16 4.5 28 15v11a2.5 2.5 0 0 1-2.5 2.5h-19A2.5 2.5 0 0 1 4 26z" fill="#1d5fd6" /><path d="M15.4 14.3c-.9-.7-2.4-.7-3.2.2-1.5-.2-2.8 1-2.6 2.5-1.2.6-1.6 2.1-.9 3.2-.6 1.2-.1 2.7 1.2 3.1.2 1.4 1.6 2.3 3 1.9.7.7 1.7.9 2.5.4V14.3zM16.6 14.3c.9-.7 2.4-.7 3.2.2 1.5-.2 2.8 1 2.6 2.5 1.2.6 1.6 2.1.9 3.2.6 1.2.1 2.7-1.2 3.1-.2 1.4-1.6 2.3-3 1.9-.7.7-1.7.9-2.5.4V14.3z" fill="#fff" /><path d="M12.4 17.6c.7-.6 1.8-.4 2.1.4M11.2 20.4c.6.6 1.7.6 2.2 0 .4.7 1.3 1 2 .6M12.6 23.2c.3-.7 1.1-1 1.8-.7M19.6 17.6c-.7-.6-1.8-.4-2.1.4M20.8 20.4c-.6.6-1.7.6-2.2 0-.4.7-1.3 1-2 .6M19.4 23.2c-.3-.7-1.1-1-1.8-.7" stroke="#1d5fd6" stroke-width=".9" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
+    <svg width="26" height="26" viewBox="0 0 32 32"><path d="M4 15 16 4.5 28 15v11a2.5 2.5 0 0 1-2.5 2.5h-19A2.5 2.5 0 0 1 4 26z" fill="#1d5fd6" /><path d="M15.4 14.3c-.9-.7-2.4-.7-3.2.2-1.5-.2-2.8 1-2.6 2.5-1.2.6-1.6 2.1-.9 3.2-.6 1.2-.1 2.7 1.2 3.1.2 1.4 1.6 2.3 3 1.9.7.7 1.7.9 2.5.4V14.3zM16.6 14.3c.9-.7 2.4-.7 3.2.2 1.5-.2 2.8 1 2.6 2.5 1.2.6 1.6 2.1.9 3.2.6 1.2.1 2.7-1.2 3.1-.2 1.4-1.6 2.3-3 1.9-.7.7-1.7.9-2.5.4V14.3z" fill="#fff" /><path d="M12.4 17.6c.7-.6 1.8-.4 2.1.4M11.2 20.4c.6.6 1.7.6 2.2 0 .4.7 1.3 1 2 .6M12.6 23.2c.3-.7 1.1-1 1.8-.7M19.6 17.6c-.7-.6-1.8-.4-2.1.4M20.8 20.4c-.6.6-1.7.6-2.2 0-.4.7-1.3 1-2 .6M19.4 23.2c-.3-.7-1.1-1-1.8-.7" stroke="#1d5fd6" stroke-width=".9" fill="none" stroke-linecap="round" stroke-linejoin="round" /></svg>
     Brainstead
   </div>
-  <div class="tag">Tasks, notes and a wiki that writes itself, over plain markdown.</div>
-  <svg class="arrow" viewBox="0 0 160 48" fill="none" stroke="#1d5fd6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+  <h1>Everything on your mind. <span class="grad">In one place.</span></h1>
+  <svg class="arrow" viewBox="0 0 160 48" fill="none" stroke="url(#g)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <defs><linearGradient id="g" gradientUnits="userSpaceOnUse" x1="8" x2="148"><stop offset="0" stop-color="#1d5fd6" /><stop offset="1" stop-color="#0d7f74" /></linearGradient></defs>
     <path d="M8 24 H146" /><path d="M126 8 L148 24 L126 40" />
   </svg>
   <div class="hint">Drag <b>Brainstead</b> onto <b>Applications</b> to install it</div>
