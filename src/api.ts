@@ -198,6 +198,22 @@ export interface Permissions {
   applies: boolean;
 }
 
+/** A newer version, offered by src-tauri/src/updates.rs. `date` is when it was released (RFC 3339). */
+export interface UpdateOffer {
+  name: string;
+  version: string;
+  current: string;
+  notes: string | null;
+  date: string | null;
+}
+
+/** An update installing: `total` is null when the download's size isn't known. */
+export interface UpdateProgress {
+  phase: "downloading" | "installing" | "restarting";
+  downloaded: number;
+  total: number | null;
+}
+
 export interface AppInfo {
   version: string;
   build: string;
@@ -983,6 +999,16 @@ export const api = {
   /** Restarts into an update just installed, once unsaved edits have been dealt with. */
   appRestart: () => invoke<void>("app_restart"),
   onRestartRequested: (f: () => void): Promise<UnlistenFn> => listen("restart-requested", () => f()),
+  /** The update dialog (src/Update.tsx): an offer, how its install is going, and what there is to say. */
+  onUpdateOffer: (f: (o: UpdateOffer) => void): Promise<UnlistenFn> => listen<UpdateOffer>("update-offer", (e) => f(e.payload)),
+  onUpdateProgress: (f: (p: UpdateProgress) => void): Promise<UnlistenFn> => listen<UpdateProgress>("update-progress", (e) => f(e.payload)),
+  onUpdateMessage: (f: (m: { title: string; text: string }) => void): Promise<UnlistenFn> =>
+    listen<{ title: string; text: string }>("update-message", (e) => f(e.payload)),
+  /** The offer waiting for an answer, if one is (for a window that loaded after it was made). */
+  updateOffered: () => invoke<UpdateOffer | null>("update_offered"),
+  updateInstall: () => invoke<void>("update_install"),
+  updateLater: () => invoke<void>("update_later"),
+  updateSkip: () => invoke<void>("update_skip"),
   fixnamePlan: (req: FixNameRequest) => invoke<{ rightPage: string | null; rows: FixNameRow[] }>("fixname_plan", { req }),
   fixnameApply: (req: FixNameRequest, rows: FixNameRow[]) => invoke<string>("fixname_apply", { req, rows }),
   /** Changes, newest first; with page, only that page's. */

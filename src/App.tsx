@@ -48,6 +48,7 @@ import { hideSplash } from "./splash";
 import { permissions } from "./state";
 import { settings, useStore } from "./store";
 import { Toasts } from "./Toast";
+import { startUpdates, UpdateHost, updateView } from "./Update";
 import { Tooltips } from "./ui";
 
 const SCREENS: Partial<Record<Screen, () => React.ReactElement>> = {
@@ -99,10 +100,21 @@ export default function App({ scene }: { scene: Scene | null }) {
   useEffect(() => {
     const off = [
       api.onQuitRequested(() => whenFree(() => void api.appQuit())),
-      api.onRestartRequested(() => whenFree(() => void settings.flush().then(() => api.appRestart()))),
+      api.onRestartRequested(() => {
+        let went = false;
+        whenFree(() => {
+          went = true;
+          void settings.flush().then(() => api.appRestart());
+        });
+        // Unsaved edits are asked about first: the update dialog steps aside for the question.
+        if (!went) updateView.set(null);
+      }),
     ].map((o) => o.catch(() => () => {}));
     return () => off.forEach((o) => void o.then((f) => f()));
   }, []);
+
+  // The update dialog: offers from src-tauri/src/updates.rs and what follows them.
+  useEffect(() => startUpdates(), []);
 
   // Read aloud: the synthesiser's events, the media keys and the voices (src/speech/player.ts).
   useEffect(() => startSpeech(), []);
@@ -189,6 +201,7 @@ export default function App({ scene }: { scene: Scene | null }) {
       <Tooltips />
       <FollowUp />
       <RevertConflict />
+      <UpdateHost />
       <Toasts />
     </div>
   );

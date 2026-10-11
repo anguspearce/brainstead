@@ -785,6 +785,10 @@ pub fn run() {
         .manage(tray::TrayState::default())
         .invoke_handler(tauri::generate_handler![
             graph,
+            updates::update_offered,
+            updates::update_install,
+            updates::update_later,
+            updates::update_skip,
             source_parts,
             spell_check,
             spell_grammar,

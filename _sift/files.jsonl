@@ -30,4 +30,5 @@
 {"desc": "Meeting note from a transcript screen: pick, check type/name/date, draft one or many", "hash": "a99fffc8977374f4", "path": "src/Meeting.tsx", "ts": "2026-10-02T20:41:27Z", "who": "waynetd777@users.noreply.github.com"}
 {"desc": "Review queue screen: per-hunk keep/drop diff, accept, reject, undo", "hash": "a3ed7c2e31c73918", "path": "src/Review.tsx", "ts": "2026-10-02T19:16:22Z", "who": "waynetd777@users.noreply.github.com"}
 {"desc": "The keyboard shortcut sheet (? or ⌘K)", "hash": "09015c218399c427", "path": "src/Shortcuts.tsx", "ts": "2026-10-02T21:05:47Z", "who": "waynetd777@users.noreply.github.com"}
+{"desc": "The update dialog: offers, download progress and the updater's messages from src-tauri/src/updates.rs", "hash": "318771f25bd11163", "path": "src/Update.tsx", "ts": "2026-10-11T21:17:25Z", "who": "waynetd777@users.noreply.github.com"}
 {"desc": "Proposals and health stores plus pure helpers", "hash": "636eb2b9bb338e1d", "path": "src/knowledge.ts", "ts": "2026-10-02T19:16:23Z", "who": "waynetd777@users.noreply.github.com"}

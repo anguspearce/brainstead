@@ -9,6 +9,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { focusMode } from "./focus";
 import { imageView } from "./ImageViewer";
 import { toast } from "./Toast";
+import { UpdateView, updateView } from "./Update";
 import { fixNameOpen } from "./FixName";
 import { shortcutsOpen } from "./Shortcuts";
 import { helpOpen, HelpView } from "./help/HelpDrawer";
@@ -64,6 +65,8 @@ export interface Scene {
   taskMenu?: string;
   /** A toast to show, with an Undo button. */
   toast?: string;
+  /** The update dialog: offering a sample version, downloading it, or saying it's up to date. */
+  update?: "offer" | "downloading" | "message";
 }
 
 /** The Ask scene's chat: a question about the fixture vault and an answer with links. */
@@ -176,4 +179,23 @@ export function applyScene(sc: Scene) {
   if (sc.help) helpOpen.set(sc.help);
   if (sc.reading) readingScene.set(sc.reading);
   if (sc.toast) toast(sc.toast, { label: "Undo", run: () => {} });
+  if (sc.update) updateView.set(sampleUpdate(sc.update));
+}
+
+/** The update scenes' dialog: a made-up next version with notes as tools/update_files.py writes them. */
+function sampleUpdate(kind: "offer" | "downloading" | "message"): UpdateView {
+  if (kind === "message") return { kind, title: "You're up to date", text: "Brainstead 1.1.3 is the newest version." };
+  const offer = {
+    name: "Brainstead",
+    version: "1.2.0",
+    current: "1.1.3",
+    date: "2026-10-09T08:00:00Z",
+    notes:
+      "- **Weekly review** remembers where you stopped.\n- Ask quotes its sources in the answer.\n- Search finds words inside PDFs in `sources/`.\n- Fixed: a renamed note kept its old title in the sidebar.",
+  };
+  return {
+    kind: "offer",
+    offer,
+    progress: kind === "downloading" ? { phase: "downloading", downloaded: 18_350_080, total: 41_943_040 } : null,
+  };
 }
