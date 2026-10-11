@@ -94,7 +94,7 @@ impl Find {
         let _ = app.emit(CHANGED, ());
     }
 
-    fn running(&self) -> bool {
+    pub fn running(&self) -> bool {
         crate::lock(&self.state).run.as_ref().is_some_and(|r| r.status == "running")
     }
 }

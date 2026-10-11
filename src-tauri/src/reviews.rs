@@ -161,6 +161,11 @@ fn stamp(t: NaiveDateTime) -> String {
 }
 
 impl Reviews {
+    /// Whether a summary is being written.
+    pub fn running(&self) -> bool {
+        !self.running.lock().unwrap().is_empty()
+    }
+
     pub fn load() -> Reviews {
         let path = dir().join("state.json");
         let mut state: Saved = std::fs::read(&path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();

@@ -89,5 +89,13 @@
       "../extensions/outlook-capture/": "extensions/outlook-capture/",
       "../extensions/teams-capture/": "extensions/teams-capture/"
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE5OEEwNkNDMTJFNTI5RDcKUldUWEtlVVN6QWFLR1hRL2VXRVcrNnRVZEZhT05EM0xQNERhTHE5YjRQOHZZMTU2VjJXVGdWVEQK",
+      "endpoints": [
+        "https://github.com/waynetd777/brainstead/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

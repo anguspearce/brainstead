@@ -94,10 +94,14 @@ export default function App({ scene }: { scene: Scene | null }) {
     if (p) hideSplash();
   }, [p]);
 
-  // ⌘Q: unsaved edits are asked about first (the leave dialog), then the app quits.
+  // ⌘Q: unsaved edits are asked about first (the leave dialog), then the app quits. Restarting
+  // into an update (src-tauri/src/updates.rs) asks the same, and saves the settings first.
   useEffect(() => {
-    const off = api.onQuitRequested(() => whenFree(() => void api.appQuit())).catch(() => () => {});
-    return () => void off.then((f) => f());
+    const off = [
+      api.onQuitRequested(() => whenFree(() => void api.appQuit())),
+      api.onRestartRequested(() => whenFree(() => void settings.flush().then(() => api.appRestart()))),
+    ].map((o) => o.catch(() => () => {}));
+    return () => off.forEach((o) => void o.then((f) => f()));
   }, []);
 
   // Read aloud: the synthesiser's events, the media keys and the voices (src/speech/player.ts).

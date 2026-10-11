@@ -45,6 +45,11 @@ pub struct Last {
     pub model: String,
 }
 
+/// Whether Write Current state is going.
+pub fn going() -> bool {
+    RUNNING.load(Ordering::SeqCst)
+}
+
 fn last_path() -> std::path::PathBuf {
     crate::platform::data_dir().join("current-state.json")
 }

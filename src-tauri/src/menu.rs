@@ -5,7 +5,8 @@
 //! The menu bar: the platform's default menus plus a Note menu with every action on the open
 //! note. A choice is sent to the window as a `menu` event carrying the item's id (src/noteMenu.ts
 //! acts on it); the note's items are enabled only while a note is open. Help gets Brainstead Help
-//! and Keyboard Shortcuts (src/help/HelpDrawer.tsx acts on those).
+//! and Keyboard Shortcuts (src/help/HelpDrawer.tsx acts on those). The app menu gets Brainstead's
+//! own About and Check for Updates… (src/updates.rs).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -96,6 +97,10 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
             about(app);
             return;
         }
+        if id == "app:updates" {
+            crate::updates::check_now(app);
+            return;
+        }
         if id.starts_with("note:") || id.starts_with("help:") {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.show();
@@ -127,7 +132,8 @@ pub fn set_about(app: &AppHandle, dark: bool) {
     }
 }
 
-/// Puts Brainstead's own About item first in the app menu, in place of the platform's.
+/// Puts Brainstead's own About item first in the app menu, in place of the platform's, with
+/// Check for Updates… under it.
 fn about_item(app: &AppHandle) -> tauri::Result<()> {
     let Some(menu) = app.menu() else { return Ok(()) };
     let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() else { return Ok(()) };
@@ -136,6 +142,7 @@ fn about_item(app: &AppHandle) -> tauri::Result<()> {
     }
     app_menu.remove_at(0)?;
     app_menu.insert(&MenuItemBuilder::with_id("app:about", "About Brainstead").build(app)?, 0)?;
+    app_menu.insert(&MenuItemBuilder::with_id("app:updates", "Check for Updates…").build(app)?, 1)?;
     Ok(())
 }
 

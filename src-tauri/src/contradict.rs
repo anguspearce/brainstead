@@ -49,6 +49,11 @@ pub fn clear_stale() {
     }
 }
 
+/// Whether a contradiction check is going.
+pub fn going() -> bool {
+    RUNNING.load(Ordering::SeqCst)
+}
+
 const STOPPED: &str = "Stopped.";
 
 /// What a run is doing now ("Reading pages: batch 3 of 17"), "" when none is.

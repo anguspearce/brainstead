@@ -25,7 +25,7 @@ The finished build plan is untracked in `archive/`. Decisions: `_sift/decisions.
 | `make evals` | Workflow evals with real models on a copy of the fixture vault (`EVALS="help --model …"` picks); writes `src-tauri/target/evals/report.md`. Not in `check` |
 | `make app` | Bump the version and build the .app, signed with `signing.local`'s identity if present |
 | `make install-app` | Build at the current version (no bump) and replace the copy in /Applications, quitting Brainstead first |
-| `make dmg` | Pack the app into `src-tauri/target/release/bundle/dmg/Brainstead.dmg` |
+| `make dmg` | Pack the app into `src-tauri/target/release/bundle/dmg/Brainstead.dmg`, with the updater's files beside it (`tools/update_files.py`) |
 | `make screenshots` | Retake `docs/images/` |
 | `make icons` | Redraw the icon artwork and regenerate the icon set |
 | `make sign-check` | Show the installed app's signer; fail unless it's `signing.local`'s identity |
@@ -36,7 +36,9 @@ The finished build plan is untracked in `archive/`. Decisions: `_sift/decisions.
 - Capture extensions: Vitest tests sit beside their pure functions (`extensions/**/*.test.js`), run by `make check`. Bump `manifest.json`'s version on any change; users reload via Settings › Capture extensions and `chrome://extensions`.
 - Evals default to cheap models (Haiku under test, Sonnet judging); ingest scenarios need and name Sonnet.
 
-Releasing: `make app`, `make dmg`, commit and push, then `gh release create v<version> src-tauri/target/release/bundle/dmg/Brainstead.dmg`. Keep the name `Brainstead.dmg`: the README links to it. `tools/dmg/make_dmg.py` renders the background from `tools/dmg/background.html` (WebKit) and has Finder lay out the icons, so the first run asks to let the terminal control Finder.
+Releasing: `make app`, `make dmg`, commit and push, then `gh release create v<version> src-tauri/target/release/bundle/dmg/Brainstead.dmg src-tauri/target/release/bundle/dmg/Brainstead.app.tar.gz src-tauri/target/release/bundle/dmg/latest.json`. Keep the name `Brainstead.dmg`: the README links to it.
+
+Updates: the app checks `releases/latest/download/latest.json` (`tauri.conf.json`, `plugins.updater`) 20 seconds after launch and then daily, in release builds only (`src-tauri/src/updates.rs`). `make dmg` runs `tools/update_files.py`, which packs the app as `Brainstead.app.tar.gz`, signs it with the private key in `~/.tauri/waynetd777-updater.key` (no password; `TAURI_SIGNING_PRIVATE_KEY_PATH` overrides) and writes `latest.json`; `--notes "…"` adds what's new to the prompt. Back the key up: installed copies accept only packages signed with it, so losing it means no installed copy can update again. Install and Restart goes through ⌘Q's road (the window asks about unsaved edits and saves settings, then `app_restart`), and waits while something is running (`busy` in `lib.rs`). `tools/dmg/make_dmg.py` renders the background from `tools/dmg/background.html` (WebKit) and has Finder lay out the icons, so the first run asks to let the terminal control Finder.
 
 ## Rules
 
@@ -78,6 +80,7 @@ In `~/Library/Application Support/Brainstead/`, or `BRAINSTEAD_DATA`.
 | Your tools that start Claude Code sessions, excluded from summaries (Settings › Jobs & schedule) | `summaries/automated.json` |
 | MCP actions waiting for the app | `bridge/` |
 | Logs | `logs/` |
+| When updates were last checked, and a skipped version | `updates.json` |
 
 ## The MCP server
 

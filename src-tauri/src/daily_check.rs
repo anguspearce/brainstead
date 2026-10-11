@@ -169,6 +169,11 @@ pub fn daily_check_run_now(app: AppHandle, unattended: Option<bool>) {
     std::thread::spawn(move || run(&app, trigger));
 }
 
+/// Whether the daily check is going.
+pub fn going() -> bool {
+    load().running
+}
+
 pub fn start_scheduler(app: &AppHandle) {
     // A run the app quit during isn't going any more.
     let st = load();

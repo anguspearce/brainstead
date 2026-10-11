@@ -135,7 +135,7 @@ impl WeekPrep {
         self.save();
     }
 
-    fn running(&self) -> bool {
+    pub fn running(&self) -> bool {
         crate::lock(&self.going).is_some()
     }
 }

@@ -980,6 +980,9 @@ export const api = {
   /** Quits (⌘Q, once unsaved edits have been dealt with). */
   appQuit: () => invoke<void>("app_quit"),
   onQuitRequested: (f: () => void): Promise<UnlistenFn> => listen("quit-requested", () => f()),
+  /** Restarts into an update just installed, once unsaved edits have been dealt with. */
+  appRestart: () => invoke<void>("app_restart"),
+  onRestartRequested: (f: () => void): Promise<UnlistenFn> => listen("restart-requested", () => f()),
   fixnamePlan: (req: FixNameRequest) => invoke<{ rightPage: string | null; rows: FixNameRow[] }>("fixname_plan", { req }),
   fixnameApply: (req: FixNameRequest, rows: FixNameRow[]) => invoke<string>("fixname_apply", { req, rows }),
   /** Changes, newest first; with page, only that page's. */

@@ -57,6 +57,7 @@ Settings (⌘,) has General, Notes, Vault, AI assistants, Jobs & schedule, Captu
 
 ## In the background
 
+- **Updates.** Brainstead checks for a new version 20 seconds after it opens and then once a day, and offers it the next time its window has the focus: **Install and Restart**, **Later** (asked again at the next day's check) or **Skip This Version**. Brainstead › Check for Updates… checks now. An update waits while something is running (Ask answering, an ingest, a summary, the daily check), and restarting asks about unsaved edits first, as quitting does.
 - **The index.** Brainstead indexes the vault in a database outside it, so search and lists are instant. It picks up changes from other apps as they happen.
 - **Safe writes.** Every save is all-or-nothing, keeps the file's line endings, and refuses if the file changed since it was read. Files that aren't UTF-8 open read-only.
 - **Drafts.** Unsaved text is kept as a draft a second after you stop typing, and offered back after a crash.

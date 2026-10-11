@@ -285,6 +285,12 @@ pub fn ingest_stop(app: AppHandle, id: String) {
 /// never change the same page at once (D-20261006-05).
 static QUEUE: Mutex<(Vec<Run>, bool)> = Mutex::new((Vec::new(), false));
 
+/// Whether an ingest or meeting note run is going or waiting.
+pub fn going() -> bool {
+    let q = crate::lock(&QUEUE);
+    q.1 || !q.0.is_empty()
+}
+
 /// The day a run's source is from, for the queue's order: from its name (a meeting note's own
 /// date), else the file's last change.
 fn run_day(app: &AppHandle, r: &Run) -> String {

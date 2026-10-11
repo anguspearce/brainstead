@@ -83,9 +83,10 @@ install-app: app
 	@ditto "$(APP)" "/Applications/Brainstead.app"
 	@echo "installed /Applications/Brainstead.app"
 
-## Pack the built app into the release DMG (src-tauri/target/release/bundle/dmg/), laid out like other Mac installers.
+## Pack the built app into the release DMG (src-tauri/target/release/bundle/dmg/), laid out like other Mac installers, and write the updater's files beside it (tools/update_files.py): Brainstead.app.tar.gz, its signature and latest.json.
 dmg:
 	@python3 tools/dmg/make_dmg.py
+	@python3 tools/update_files.py
 
 ## Redraw design/icon.png, then regenerate the Tauri icon set.
 icons:

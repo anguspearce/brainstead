@@ -26,6 +26,7 @@ mod settings;
 mod skills;
 mod speech;
 mod tray;
+mod updates;
 mod vault;
 mod weekly;
 mod weekprep;
@@ -495,6 +496,49 @@ fn app_quit(app: AppHandle) {
     app.exit(0);
 }
 
+/// Restarts into an update just installed (src-tauri/src/updates.rs) by ⌘Q's road: the window
+/// asks about unsaved edits and saves its settings, then calls app_restart. Choosing Stay there
+/// keeps this copy running; the update is already in place for the next start.
+pub(crate) fn restart_for_update(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+    let _ = tauri::Emitter::emit(app, "restart-requested", ());
+}
+
+/// Restarts, after the window has asked about unsaved edits. Through the event loop, so the
+/// quit's own work (the window's place, stopping what's running) is done as for ⌘Q.
+#[tauri::command]
+fn app_restart(app: AppHandle) {
+    QUIT_OK.store(true, std::sync::atomic::Ordering::SeqCst);
+    app.request_restart();
+}
+
+/// What would be cut short by restarting into an update now, or None.
+fn busy(app: &AppHandle) -> Option<String> {
+    let why = if app.state::<std::sync::Arc<ask::Running>>().any() {
+        "An assistant is answering."
+    } else if ingest::going() {
+        "An ingest run is going."
+    } else if daily_check::going() {
+        "The daily check is running."
+    } else if contradict::going() {
+        "A contradiction check is running."
+    } else if app.state::<reviews::Reviews>().running() {
+        "A summary is being written."
+    } else if app.state::<weekprep::WeekPrep>().running() {
+        "The weekly review's suggestions are being prepared."
+    } else if app.state::<find::Find>().running() {
+        "Find tasks and projects is running."
+    } else if currentstate::going() {
+        "Write Current state is running."
+    } else {
+        return None;
+    };
+    Some(why.into())
+}
+
 /// Screenshot mode (tools/screenshots.py): the scene to set up, as JSON, from BRAINSTEAD_SCENE.
 /// Settings aren't saved while it's set.
 #[tauri::command]
@@ -723,6 +767,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(capture::plugin())
         .manage(std::sync::Arc::new(ask::Running::default()))
         .manage(reviews::Reviews::load())
@@ -814,6 +859,7 @@ pub fn run() {
             knowledge::health_create_page,
             knowledge::health_link_ghost,
             app_quit,
+            app_restart,
             settings_read,
             settings_write,
             vault_status,
@@ -1012,6 +1058,8 @@ pub fn run() {
                         let _ = w2.hide();
                         tray::main_closed(w2.app_handle());
                     }
+                    // An update a background check found is offered once the window has the focus.
+                    tauri::WindowEvent::Focused(true) => updates::focused(w2.app_handle()),
                     // The system went light or dark: About follows when the app's theme is System.
                     tauri::WindowEvent::ThemeChanged(t) => {
                         let app = w2.app_handle();
@@ -1039,6 +1087,7 @@ pub fn run() {
                 reviews::start_scheduler(app.handle());
                 daily_check::start_scheduler(app.handle());
                 weekprep::start_scheduler(app.handle());
+                updates::start(app.handle(), busy);
             }
             Ok(())
         })

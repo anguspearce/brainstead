@@ -48,6 +48,10 @@ impl Running {
             platform::stop_group(*pid);
         }
     }
+    /// Whether any CLI is answering (an Ask chat, or a run's model call).
+    pub fn any(&self) -> bool {
+        !self.children.lock().unwrap().is_empty()
+    }
     /// On quit: nothing is left running once the app has gone.
     pub fn kill_all(&self) {
         for (_, pid) in self.children.lock().unwrap().iter() {
