@@ -16,7 +16,7 @@ SIGN_ID  := $(APPLE_SIGNING_IDENTITY)
 # "-" is an ad-hoc signature: an empty identity makes the bundler fail instead.
 export APPLE_SIGNING_IDENTITY := $(if $(SIGN_ID),$(SIGN_ID),-)
 
-.PHONY: check test lint fmt app install-app dmg dev icons sign-check screenshots evals help
+.PHONY: check test lint fmt app install-app dmg release dev icons sign-check screenshots evals help
 
 ## cargo test and Clippy, the TypeScript type-check and ESLint, Vitest, and the formatting and repo checks: side by side (tools/check.py), cargo in its own target folder so make dev doesn't hold it up.
 check:
@@ -91,10 +91,14 @@ install-app: app
 	@ditto "$(APP)" "/Applications/Brainstead.app"
 	@echo "installed /Applications/Brainstead.app"
 
-## Pack the built app into the release DMG (src-tauri/target/release/bundle/dmg/), laid out like other Mac installers, and write the updater's files beside it (tools/update_files.py): Brainstead.app.tar.gz, its signature and latest.json.
+## Pack the built app into the release DMG (src-tauri/target/release/bundle/dmg/), laid out like other Mac installers, and write the updater's files beside it (tools/update_files.py): Brainstead.app.tar.gz, its signature and latest.json, with NOTES="…" as what's new.
 dmg:
 	@python3 tools/dmg/make_dmg.py
-	@python3 tools/update_files.py
+	@python3 tools/update_files.py --notes "$$NOTES"
+
+## Publish a release: make release NOTES="What's new" bumps the version, builds the app and the DMG, commits the bump, pushes, creates the GitHub release and installs the app (not with INSTALL=0). DRY_RUN=1 prints the steps (tools/release.py).
+release:
+	@python3 tools/release.py
 
 ## Redraw design/icon.png, then regenerate the Tauri icon set.
 icons:
