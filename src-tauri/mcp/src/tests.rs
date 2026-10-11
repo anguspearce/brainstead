@@ -64,6 +64,7 @@ fn speaks_the_protocol() {
     let init = rpc(&f.ctx, 1, "initialize", json!({"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "t"}}));
     assert_eq!(init["result"]["protocolVersion"], "2025-03-26");
     assert_eq!(init["result"]["serverInfo"]["name"], "brainstead");
+    assert_eq!(init["result"]["capabilities"]["tools"]["listChanged"], true);
     // Unknown versions get the newest.
     let init = rpc(&f.ctx, 2, "initialize", json!({"protocolVersion": "1999-01-01"}));
     assert_eq!(init["result"]["protocolVersion"], VERSIONS[0]);
@@ -110,6 +111,27 @@ fn speaks_the_protocol() {
     let mut out = Vec::new();
     serve(&f.ctx, &input[..], &mut out).unwrap();
     assert_eq!(String::from_utf8(out).unwrap(), "{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{}}\n");
+}
+
+/// A new build takes over the session: the same session for Changes, still unattended, and the
+/// client told to fetch the tools again rather than initialize.
+#[cfg(unix)]
+#[test]
+fn hands_the_session_to_a_new_build() {
+    let f = fixture();
+    assert!(resumed(&f.ctx).is_none(), "nothing to tell before initialize");
+    rpc(&f.ctx, 1, "initialize", json!({"protocolVersion": "2025-03-26", "capabilities": {"roots": {}}, "clientInfo": {"name": "t"}}));
+    f.ctx.unattended.store(true, std::sync::atomic::Ordering::SeqCst);
+    let handed = serde_json::to_string(&reload::Resume::of(&f.ctx)).unwrap();
+
+    let mut next = fixture();
+    assert_ne!(next.ctx.session, f.ctx.session);
+    serde_json::from_str::<reload::Resume>(&handed).unwrap().apply(&mut next.ctx);
+    assert_eq!(next.ctx.session, f.ctx.session);
+    assert!(next.ctx.unattended.load(std::sync::atomic::Ordering::SeqCst));
+    let init = next.ctx.init.lock().unwrap().clone().unwrap();
+    assert_eq!((init["protocolVersion"].as_str(), init["clientInfo"]["name"].as_str()), (Some("2025-03-26"), Some("t")));
+    assert_eq!(resumed(&next.ctx).unwrap()["method"], "notifications/tools/list_changed");
 }
 
 #[test]

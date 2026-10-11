@@ -75,10 +75,18 @@ app:
 	    || { echo "WARNING: app is not signed with $(SIGN_ID)"; exit 1; }; \
 	else echo "note: no signing.local, so the app is signed ad hoc"; fi
 
-## Build and replace /Applications/Brainstead.app, keeping the version: only a release build (make app) bumps it.
+# The app's own processes: not the MCP servers (--mcp) or Chrome's capture host that run the same
+# program, which keep running and pick up the new build themselves.
+APP_PIDS = ps -axo pid=,args= | awk '$$2 ~ /\/Brainstead$$/ && !/ --mcp|chrome-extension:/ { print $$1 }'
+
+## Build and replace /Applications/Brainstead.app, keeping the version: only a release build (make app) bumps it. Quits the app first, as ⌘Q does, but not the MCP servers Claude sessions are using: they start the new build when it's in place.
 install-app: VERSION = $(shell python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
 install-app: app
-	@pkill -x Brainstead 2>/dev/null || true
+	@if [ -n "$$($(APP_PIDS))" ]; then \
+	  osascript -e 'quit app id "com.wayned.brainstead"' >/dev/null 2>&1 || true; \
+	  for _ in 1 2 3 4 5 6 7 8 9 10; do [ -n "$$($(APP_PIDS))" ] || break; sleep 0.5; done; \
+	  pids=$$($(APP_PIDS)); [ -z "$$pids" ] || kill $$pids; \
+	fi
 	@rm -rf "/Applications/Brainstead.app"
 	@ditto "$(APP)" "/Applications/Brainstead.app"
 	@echo "installed /Applications/Brainstead.app"

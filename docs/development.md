@@ -24,7 +24,7 @@ The finished build plan is untracked in `archive/`. Decisions: `_sift/decisions.
 | `make fmt` | Reformat everything; add missing licence headers |
 | `make evals` | Workflow evals with real models on a copy of the fixture vault (`EVALS="help --model …"` picks); writes `src-tauri/target/evals/report.md`. Not in `check` |
 | `make app` | Bump the version and build the .app, signed with `signing.local`'s identity if present |
-| `make install-app` | Build at the current version (no bump) and replace the copy in /Applications, quitting Brainstead first |
+| `make install-app` | Build at the current version (no bump) and replace the copy in /Applications, quitting Brainstead first (not its MCP servers, which pick up the new build) |
 | `make dmg` | Pack the app into `src-tauri/target/release/bundle/dmg/Brainstead.dmg`, with the updater's files beside it (`tools/update_files.py`) |
 | `make screenshots` | Retake `docs/images/` |
 | `make icons` | Redraw the icon artwork and regenerate the icon set |
@@ -93,6 +93,7 @@ claude mcp add -s user brainstead -- "/Applications/Brainstead.app/Contents/MacO
 - It reads the vault from disk and the index read-only, and writes nothing. A change (`edit_page`, `create_note`, a task, a rename…) is checked, then sent to the app as `change.submit`, which applies or holds it.
 - Other actions (ticking a task, clarifying the Inbox, starting a run, reverting) are request files in `bridge/`. The app hands them to the window, which runs the screens' own functions (`src/mcpActions.ts`), so undo, `log.md`, read-only and Templater behave as on screen.
 - It opens the app if it isn't running.
+- It picks up a new build (`mcp/src/reload.rs`, D-20261011-02). Every 3 seconds, idle or between requests, it compares the program file (device, inode, size, mtime) with the one it started from; once a new one is the same on two checks running (and a bundle has its `Info.plist`), and every request read has been answered, it `execv`s it with the same arguments and `BRAINSTEAD_MCP_RESUME` (the session id, `unattended`, what `initialize` agreed). It reads stdin unbuffered with `poll`, so the new process gets every unread byte. The new one sends `notifications/tools/list_changed` (initialize says `listChanged: true`) instead of waiting for an `initialize`. If the exec fails it logs to stderr and carries on, and doesn't try that file again. So `make install-app` and the updater leave the `--mcp` processes (and Chrome's capture host) running; the updater restarts only the app. Unix only.
 - Tools have titles and the four MCP hints. Reads are separate tools marked read-only (`list_changes` beside `changes`, `list_trash` beside `restore_from_trash`…), so clients can run them unasked. A read tool sends its change tool's app action, limited to the read actions in `acting`.
 - Unknown tool: JSON-RPC error. Bad arguments or an impossible action: tool error (`isError`) saying why, so the model can retry. 120 calls a minute.
 - Listing tools have an `outputSchema` and return rows as `structuredContent` too: the action returns `listed(...)`'s `{ text, structured }` and `act` passes both on. `search`, `list_projects`, `list_changes`, `activity` and `graph` give one line per row unless `detail`.

@@ -61,6 +61,8 @@ pub struct Ctx {
     pub session: String,
     /// A call in this session said nobody is watching: from then on it can't accept held changes.
     pub unattended: std::sync::atomic::AtomicBool,
+    /// What `initialize` agreed, handed on to a new build of the server (`reload`).
+    pub init: std::sync::Mutex<Option<Value>>,
 }
 
 impl Ctx {
@@ -94,6 +96,7 @@ impl Ctx {
             calls: Default::default(),
             session: format!("session-{}", proposals::new_id()),
             unattended: Default::default(),
+            init: Default::default(),
         })
     }
 
@@ -105,24 +108,72 @@ impl Ctx {
 /// Answers requests from `input`, one JSON message per line, until it closes.
 pub fn serve(ctx: &Ctx, input: impl BufRead, mut output: impl Write) -> std::io::Result<()> {
     for line in input.lines() {
-        let line = line?;
-        if line.trim().is_empty() {
-            continue;
-        }
-        let reply = match serde_json::from_str::<Value>(&line) {
-            Ok(Value::Array(batch)) => {
-                let out: Vec<Value> = batch.into_iter().filter_map(|m| handle(ctx, m)).collect();
-                (!out.is_empty()).then_some(Value::Array(out))
-            }
-            Ok(m) => handle(ctx, m),
-            Err(e) => Some(json!({"jsonrpc": "2.0", "id": null, "error": {"code": -32700, "message": format!("Parse error: {e}")}})),
-        };
-        if let Some(r) = reply {
-            writeln!(output, "{r}")?;
-            output.flush()?;
-        }
+        answer(ctx, &line?, &mut output)?;
     }
     Ok(())
+}
+
+/// Answers one line, if it needs an answer.
+fn answer(ctx: &Ctx, line: &str, output: &mut impl Write) -> std::io::Result<()> {
+    if line.trim().is_empty() {
+        return Ok(());
+    }
+    let reply = match serde_json::from_str::<Value>(line) {
+        Ok(Value::Array(batch)) => {
+            let out: Vec<Value> = batch.into_iter().filter_map(|m| handle(ctx, m)).collect();
+            (!out.is_empty()).then_some(Value::Array(out))
+        }
+        Ok(m) => handle(ctx, m),
+        Err(e) => Some(json!({"jsonrpc": "2.0", "id": null, "error": {"code": -32700, "message": format!("Parse error: {e}")}})),
+    };
+    if let Some(r) = reply {
+        writeln!(output, "{r}")?;
+        output.flush()?;
+    }
+    Ok(())
+}
+
+/// What a server started by a new build of itself tells the client first: the tools may have
+/// changed. Nothing when the client hadn't initialized.
+pub fn resumed(ctx: &Ctx) -> Option<Value> {
+    ctx.init.lock().unwrap().as_ref()?;
+    Some(json!({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}))
+}
+
+/// `serve` on stdin and stdout, reading stdin unbuffered so that, when a new build replaces the
+/// program, it can exec it between requests with nothing read and unanswered (`reload`).
+#[cfg(unix)]
+fn serve_stdio(ctx: &Ctx) -> std::io::Result<()> {
+    let mut output = std::io::stdout().lock();
+    if let Some(n) = resumed(ctx) {
+        writeln!(output, "{n}")?;
+        output.flush()?;
+    }
+    let mut watch = reload::Watch::new();
+    let mut buf = Vec::new();
+    let mut chunk = vec![0u8; 64 * 1024];
+    loop {
+        while let Some(end) = buf.iter().position(|b| *b == b'\n') {
+            let line: Vec<u8> = buf.drain(..=end).collect();
+            answer(ctx, String::from_utf8_lossy(&line[..end]).trim_end_matches('\r'), &mut output)?;
+        }
+        // Every request read is answered; part of the next one would be lost.
+        if buf.is_empty() {
+            if let Some(w) = watch.as_mut() {
+                if w.due() {
+                    w.exec(&reload::Resume::of(ctx));
+                }
+            }
+        }
+        if !reload::readable(reload::CHECK_EVERY)? {
+            continue;
+        }
+        let n = reload::read(&mut chunk)?;
+        if n == 0 {
+            return answer(ctx, &String::from_utf8_lossy(&buf), &mut output);
+        }
+        buf.extend_from_slice(&chunk[..n]);
+    }
 }
 
 /// One message; None for notifications, which get no answer.
@@ -134,9 +185,12 @@ pub fn handle(ctx: &Ctx, msg: Value) -> Option<Value> {
         "initialize" => {
             let asked = params.get("protocolVersion").and_then(Value::as_str).unwrap_or(VERSIONS[0]);
             let version = VERSIONS.iter().find(|v| **v == asked).copied().unwrap_or(VERSIONS[0]);
+            *ctx.init.lock().unwrap() = Some(
+                json!({"protocolVersion": version, "clientInfo": params.get("clientInfo"), "capabilities": params.get("capabilities")}),
+            );
             Ok(json!({
                 "protocolVersion": version,
-                "capabilities": {"tools": {"listChanged": false}},
+                "capabilities": {"tools": {"listChanged": true}},
                 "serverInfo": {"name": "brainstead", "version": env!("CARGO_PKG_VERSION")},
                 "instructions": INSTRUCTIONS,
             }))
@@ -2333,15 +2387,23 @@ fn create_task(ctx: &Ctx, a: TaskArgs) -> Result<String, String> {
 
 /// Runs the server on stdin and stdout; the process's exit code.
 pub fn main_with(args: &[String], default_data: PathBuf) -> i32 {
-    let ctx = match Ctx::from_args(args, default_data) {
+    let mut ctx = match Ctx::from_args(args, default_data) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("brainstead mcp: {e}");
             return 1;
         }
     };
-    let stdin = std::io::stdin();
-    match serve(&ctx, stdin.lock(), std::io::stdout().lock()) {
+    #[cfg(unix)]
+    let served = {
+        if let Some(r) = reload::Resume::take() {
+            r.apply(&mut ctx);
+        }
+        serve_stdio(&ctx)
+    };
+    #[cfg(not(unix))]
+    let served = serve(&ctx, std::io::stdin().lock(), std::io::stdout().lock());
+    match served {
         Ok(()) => 0,
         Err(e) => {
             eprintln!("brainstead mcp: {e}");
@@ -2350,5 +2412,7 @@ pub fn main_with(args: &[String], default_data: PathBuf) -> i32 {
     }
 }
 
+#[cfg(unix)]
+pub mod reload;
 #[cfg(test)]
 mod tests;
