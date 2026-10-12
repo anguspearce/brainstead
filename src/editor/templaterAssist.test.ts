@@ -62,6 +62,12 @@ describe("Templater help in a template", () => {
     expect(await labels(doc)).toContain("who");
   });
 
+  it("offers them in a long template too, past what the first parse covers", async () => {
+    const filler = `<%* const pad = [${"1, ".repeat(2000)}] %>\n`;
+    const doc = `<%* const who = await tp.system.prompt("Who?") %>\n${filler}Hello <% wh`;
+    expect(await labels(doc)).toContain("who");
+  });
+
   it("offers tp's modules, then their functions, and the user scripts", async () => {
     expect(await labels("<% tp.")).toEqual(expect.arrayContaining(["date", "file", "system", "user"]));
     expect(await labels("<% tp.date.")).toEqual(expect.arrayContaining(["now", "tomorrow", "weekday"]));
