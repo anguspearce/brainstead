@@ -72,6 +72,10 @@ describe("the Meeting notes card", () => {
     expect(cardFor(ok, {}, { progress: { label: "Writing note…", busy: true } })).toMatchObject({ tone: "busy", actions: [] });
     expect(cardFor(ok, {}, { sending: true }).actions).toEqual([]);
     expect(first(cardFor(ok, {}, { progress: { label: "Note held in Changes", busy: false } }))).toBe("openChanges");
+    expect(cardFor(ok, {}, { progress: { label: "Note reverted in Changes", busy: false } })).toMatchObject({
+      say: expect.stringMatching(/^Making the note was reverted in Changes/),
+      actions: ["make", "trash"],
+    });
     expect(cardFor(ok, {}, { progress: { label: "Note failed", busy: false, why: "No model" } })).toMatchObject({
       actions: ["make", "trash"],
     });

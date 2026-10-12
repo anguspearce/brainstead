@@ -30,6 +30,7 @@ import {
   FixNameRequest,
   InboxItem,
   IngestRun,
+  LintReport,
   LogEntry,
   NoteSpec,
   ProjectRow,
@@ -46,6 +47,7 @@ import {
 import { ACTION as FIX_ACTION, chosenRows, startUnticked } from "./FixName";
 import {
   areaProjects,
+  captureDone as markCaptureDone,
   contextName,
   moveInProjectOrder,
   orderedAreas,
@@ -60,7 +62,7 @@ import {
 import { askEdit } from "./notes/dialogs";
 import { captureStamp, prepareCapture } from "./Capture";
 import { bandOf, inboxRows, taskLine, unclarified } from "./Inbox";
-import { appendAsReference, inboxChoices, newReferenceNote, settleInboxItem, suggestKind } from "./inboxActions";
+import { appendAsReference, inboxChoices, newReferenceNote, settleInboxItem, suggestKind, trashCapture } from "./inboxActions";
 import {
   ADVISORY,
   byRun,
@@ -68,13 +70,18 @@ import {
   IGNORE_ALL,
   decisions,
   fixOf,
+  GhostHelp,
+  ghostHelps,
+  ghostPaths,
   makePage,
   originLabel,
   OWN_ACTIONS,
   pageName,
+  runChanges,
   safeFixes,
   trendLabels,
   trendShown,
+  trashByName,
 } from "./knowledge";
 import { localToday } from "./md/taskQuery";
 import { composeFilename } from "./notes/filename";
@@ -111,7 +118,7 @@ import { focusMode } from "./focus";
 import { DEFAULT_SCHEDULE, DEFAULT_WEEKLY_REVIEW } from "./Jobs";
 import { foundDetail, handedOver, INSTALL, languageName, SCREEN_NAME, scriptsFolder, terminalCommands, WEBSITE } from "./Settings";
 import { choice, prepStep, WEEKLY_STATE_CHANGED } from "./weeklyPrep";
-import { draftNotes, followThrough, isTranscriptPath, noteFile, specOf, specOk } from "./meetingFlow";
+import { draftNotes, followThrough, isTranscriptPath, keepNote, noteFile, specOf, specOk, trashTranscript } from "./meetingFlow";
 import { DONE as MEETING_DONE, needsDate, noteExists, TYPES as MEETING_TYPES } from "./Meeting";
 import { order as contradictionsOrder, reportMarkdown } from "./Contradictions";
 import { KINDS as GRAPH_KINDS, visible as graphVisible } from "./graphModel";
@@ -635,7 +642,8 @@ async function listInbox(a: Args): Promise<Listing> {
   const items = inboxRows(await api.inboxList());
   // A transcript's meeting note under way or failed, as its Inbox row says (meetingProgress).
   const allRuns = await api.ingestRuns().catch(() => [] as IngestRun[]);
-  const prog = (i: InboxItem) => (i.kind === "capture" && isTranscriptPath(i.path) ? meetingProgress(allRuns, i.path) : null);
+  const changeRows = await api.changesList().catch(() => null);
+  const prog = (i: InboxItem) => (i.kind === "capture" && isTranscriptPath(i.path) ? meetingProgress(allRuns, i.path, changeRows) : null);
   const where = (i: InboxItem) =>
     i.kind === "capture" ? `capture ${i.path}` : i.kind === "thought" ? `Scratchpad ${i.stamp ?? ""}` : "To Do list › Other";
   const line = (i: InboxItem) => {
@@ -736,9 +744,10 @@ async function clarify(a: Args, r: McpRequest): Promise<string> {
   }
   const { said, changes, after } = await clarifyChanges(i, a, r);
   if (!changes.length) {
-    await after?.();
+    // What it did, when it says (a transcript's move to the Trash, made or held).
+    const out = await after?.();
     told(`clarified “${i.text.slice(0, 60)}” as ${said}`);
-    return `Clarified as ${said}.`;
+    return `Clarified as ${said}.${typeof out === "string" ? ` ${out}` : ""}`;
   }
   const o = await submitAll(changes);
   if (o.applied) await after?.();
@@ -764,7 +773,7 @@ export async function clarifyChanges(
   const proj = str(a, "project") ? await projectPath(str(a, "project")!, true) : null;
   const fields = { text, project: proj, context: str(a, "context") ?? null, effort: str(a, "effort") ?? null, due: str(a, "due") ?? null };
   const short = i.text.replace(/\s+/g, " ").trim().slice(0, 60);
-  const captureDone = i.kind === "capture" ? () => api.inboxCaptureDone(i.path) : undefined;
+  const captureDone = i.kind === "capture" ? () => markCaptureDone(i.path) : undefined;
   // The item out of the Inbox: a task's line, a thought's block; a capture is marked done after.
   const takeOut = (): ChangeSubmit[] =>
     i.kind === "capture"
@@ -846,10 +855,20 @@ export async function clarifyChanges(
         changes: [],
         after: async () => {
           await api.ingestStart([i.path], originOf(a, r).trigger === "scheduled");
-          await api.inboxCaptureDone(i.path);
+          await markCaptureDone(i.path);
         },
       };
     case "delete":
+      // A transcript as the Inbox's Delete trashes it (trashCapture): its links pointed at its
+      // meeting note first, each write recorded as the assistant's.
+      if (i.kind === "capture" && isTranscriptPath(i.path))
+        return {
+          said: "deleted",
+          changes: [],
+          after: async () =>
+            (await trashTranscript(i.path, undefined, { origin: originOf(a, r), reason: str(a, "reason"), model: r.model })).outcome
+              ?.message,
+        };
       if (i.kind === "capture")
         return {
           said: "deleted",
@@ -892,13 +911,13 @@ export async function clarifyItem(i: InboxItem, a: Args): Promise<string> {
     }
     case "done":
       if (i.kind === "task") await toggleTaskEdit({ path: i.path, line: i.line, lineText: i.lineText }, true);
-      else if (i.kind === "capture") await api.inboxCaptureDone(i.path);
+      else if (i.kind === "capture") await markCaptureDone(i.path);
       else await api.inboxRemoveThought(i.line, i.block ?? i.lineText);
       said = "done";
       break;
     case "reference": {
       if (i.kind === "capture") {
-        await api.inboxCaptureDone(i.path);
+        await markCaptureDone(i.path);
         said = "kept in Sources";
         break;
       }
@@ -914,12 +933,12 @@ export async function clarifyItem(i: InboxItem, a: Args): Promise<string> {
     case "ingest":
       if (i.kind !== "capture") throw new Error("Only a capture (an email or Teams chat in Sources) can be ingested.");
       await api.ingestStart([i.path]);
-      await api.inboxCaptureDone(i.path);
+      await markCaptureDone(i.path);
       said = "ingesting; its changes are listed in Changes";
       break;
     case "delete":
       if (i.kind === "capture") {
-        await api.trashMove(i.path);
+        await trashCapture(i.path);
       } else await settleInboxItem(i, null);
       said = "deleted";
       break;
@@ -1028,7 +1047,13 @@ async function renameArea(a: Args, r: McpRequest): Promise<string> {
   const title = `Renamed the area ${area} to ${to}`;
   const o = await submitAll(ps.map((p) => sub(a, r, p.path, "edit", title, { op: "properties", set: [["area", to]] })));
   const n = `${ps.length} ${ps.length === 1 ? "project" : "projects"}`;
-  if (o.applied) renameInProjectOrder("areas", area, to);
+  if (o.applied)
+    renameInProjectOrder(
+      "areas",
+      area,
+      to,
+      all.map((p) => p.area ?? ""),
+    );
   told(o.applied ? `renamed the area ${area} to ${to}` : `held renaming the area ${area} for you in Changes`);
   return o.applied ? `Renamed the area ${area} to ${to} on ${n}. ${o.message}` : o.message;
 }
@@ -1295,17 +1320,27 @@ async function changesTool(a: Args): Promise<string | Listing> {
     throw new Error(
       "Nothing held can be accepted in a session nobody is watching: the user accepts held changes on Brainstead's Changes screen.",
     );
+  // A run's changes, only those query finds when given, as Accept all, Reject all and Revert all do
+  // with Changes' search on.
+  const inRun = async (group: string, status: ChangeRow["status"]) => {
+    const q = (str(a, "query") ?? "").trim();
+    const todo = runChanges(await api.changesList(), group, status, q);
+    if (q && !todo.length) throw new Error(`No ${status} change in that run matches “${q}”.`);
+    return { todo, ids: q ? todo.map((c) => c.id) : undefined };
+  };
   if (action === "accept_run" || action === "reject_run") {
     const group = str(a, "group");
     if (!group) throw new Error("Which run? Give its group from list_changes.");
-    // The run's held meeting notes, offered their follow-up once made, as the screen's Accept all does.
-    const meetings =
-      action === "accept_run"
-        ? (await api.changesList()).filter((c) => c.group === group && c.status === "held" && c.origin.kind === "meeting" && c.origin.chat)
-        : [];
-    const m = action === "accept_run" ? await api.changesAcceptAll(group, true) : await api.changesRejectAll(group);
+    const { todo, ids } = await inRun(group, "held");
+    const m = action === "accept_run" ? await api.changesAcceptAll(group, true, ids) : await api.changesRejectAll(group, ids);
     noted(`${action === "accept_run" ? "accepted" : "rejected"} ${m.done} held change${m.done === 1 ? "" : "s"}`);
-    const offered = m.failed.length ? [] : meetings.map((c) => followUpOf(c.to ?? c.page, c.origin.chat!));
+    // The run's meeting notes that were made, offered their follow-up, as the screen's Accept all does.
+    const made = action === "accept_run" ? new Set((await api.changesList()).filter((c) => c.status === "applied").map((c) => c.id)) : null;
+    const offered = made
+      ? todo
+          .filter((c) => c.origin.kind === "meeting" && c.origin.chat && made.has(c.id))
+          .map((c) => followUpOf(c.to ?? c.page, c.origin.chat!))
+      : [];
     return [
       `${action === "accept_run" ? "Accepted" : "Rejected"} ${m.done}.${m.failed.length ? ` Couldn't: ${m.failed.join("; ")}` : ""}`,
       ...offered,
@@ -1314,7 +1349,7 @@ async function changesTool(a: Args): Promise<string | Listing> {
   if (action === "revert_run") {
     const group = str(a, "group");
     if (!group) throw new Error("Which run? Give its group from list_changes.");
-    const m = await api.changesRevertAll(group);
+    const m = await api.changesRevertAll(group, (await inRun(group, "applied")).ids);
     noted(`reverted ${m.done} change${m.done === 1 ? "" : "s"} from a run`);
     return `Reverted ${m.done}.${m.failed.length ? ` Left as they are (edited since): ${m.failed.join("; ")}` : ""}`;
   }
@@ -1385,7 +1420,7 @@ const SUMMARY_RUNS: Record<string, "daily" | "weekly"> = {
   weekly_summary: "weekly",
 };
 
-async function startRun(a: Args): Promise<string> {
+async function startRun(a: Args, r: McpRequest): Promise<string> {
   const run = str(a, "run");
   const summary = run ? SUMMARY_RUNS[run] : undefined;
   // Nobody watching: every run's changes that fail a check are held, as a scheduled run's are.
@@ -1454,26 +1489,43 @@ async function startRun(a: Args): Promise<string> {
       if (type) edits.type = type;
       if (str(a, "name") !== undefined) edits.name = str(a, "name");
       if (str(a, "date") !== undefined) edits.date = str(a, "date");
-      if (needsDate(t, edits))
-        throw new Error(
-          `The date in ${t.path}'s name (${t.inferred.date}) is the day it was captured, which may not be the meeting's: ask the user for the meeting date and give it as date.`,
-        );
       const spec = specOf(t, edits);
-      // As Draft the note refuses: a name, and a date as YYYY-MM-DD.
-      if (!specOk(spec))
-        throw new Error(
-          `${t.path} needs a name and a date: give name (who the 1-1 was with, or the meeting's name) and date (YYYY-MM-DD) as the user confirms them.`,
-        );
-      // As the screen's Draft the note waits: not while one is being drafted, nor over a note there already.
+      // As the screen's card offers nothing while a note is being drafted.
       if (
         (await api.ingestRuns()).some(
           (r) => r.kind === "meeting" && r.source === t.path && (r.status === "running" || r.status === "queued"),
         )
       )
         throw new Error(`A note is being drafted from ${t.path} already; run_status shows how it's going.`);
+      // The card's Ingest the existing note: no new note, the one there kept, then ingested and the
+      // transcript moved to the Trash, as Settings › AI assistants' Meeting notes switches say (keepNote).
+      if (a.ingest_existing === true) {
+        if (!noteExists(t, edits))
+          throw new Error(
+            `There's no ${noteFile(spec)} to keep: give the name, type and date of the note that's there, or leave ingest_existing out to draft a new one.`,
+          );
+        // Recorded as the assistant's: the link rewrites and the move to the Trash, held when nobody's watching.
+        const origin = { ...originOf(a, r), ...(unattended ? { trigger: "scheduled" } : {}) };
+        const did = await keepNote(t.path, noteFile(spec), { origin, reason: str(a, "reason"), model: r.model });
+        noted(`kept ${pageName(noteFile(spec))} as the note from ${t.path}`);
+        const then = [did.ingested && "ingesting it (run_status shows how it's going)", did.trashed && "moved the transcript to the Trash"]
+          .filter(Boolean)
+          .join(" and ");
+        return `Kept ${noteFile(spec)} as it is${then ? `, ${then}` : "; ingesting and trashing are off in Settings › AI assistants, so nothing else was done"}.`;
+      }
+      if (needsDate(t, edits))
+        throw new Error(
+          `The date in ${t.path}'s name (${t.inferred.date}) is the day it was captured, which may not be the meeting's: ask the user for the meeting date and give it as date.`,
+        );
+      // As Draft the note refuses: a name, and a date as YYYY-MM-DD.
+      if (!specOk(spec))
+        throw new Error(
+          `${t.path} needs a name and a date: give name (who the 1-1 was with, or the meeting's name) and date (YYYY-MM-DD) as the user confirms them.`,
+        );
+      // As the screen's Draft the note waits: not over a note there already.
       if (noteExists(t, edits))
         throw new Error(
-          `${noteFile(spec)} exists already: the user can open it to fill it in, or give another name or date for a new note.`,
+          `${noteFile(spec)} exists already: the user can open it to fill it in, ingest it as it is (ingest_existing), or give another name or date for a new note.`,
         );
       await draftNotes([[t.path, spec]], unattended);
       noted(`started a meeting note from ${t.path}`);
@@ -2415,7 +2467,9 @@ async function compareDocs(a: Args, r: McpRequest): Promise<unknown> {
     saved && !saved.stale
       ? `(The comparison from ${saved.at.slice(0, 16).replace("T", " ")}: neither has changed since. fresh compares again.)\n\n`
       : "";
-  if (result.unrelated) return `${kept}${result.verdict}: ${result.summary} Nothing was compared.`;
+  // As the screen, which offers no Save as note for documents that aren't about the same thing.
+  if (result.unrelated)
+    return `${kept}${result.verdict}: ${result.summary} Nothing was compared${a.save === true ? ", so nothing was saved as a note" : ""}.`;
   const found = kept + compareMarkdown(an, bn, mode, result);
   if (a.save !== true) return found;
   const path = compareNote(an, bn);
@@ -2502,6 +2556,18 @@ async function draftReply(a: Args): Promise<string> {
   ].join("\n");
 }
 
+/** trash_note on a Teams transcript (the MCP server sends those here): its links pointed at its
+ *  meeting note first, as every way of trashing one does (trashTranscript), each write recorded in
+ *  Changes as the assistant's. */
+async function trashTranscriptTool(a: Args, r: McpRequest): Promise<string> {
+  const page = str(a, "page");
+  if (!page || !isTranscriptPath(page)) throw new Error("Which transcript? Give its path in sources/.");
+  const { outcome } = await trashTranscript(page, undefined, { origin: originOf(a, r), reason: str(a, "reason"), model: r.model });
+  if (outcome?.applied) told(`moved ${pageName(page)} to the Trash`);
+  else noted(`held moving ${pageName(page)} to the Trash for you in Changes`);
+  return outcome?.message ?? `Moved ${page} to the Trash.`;
+}
+
 /** Each action by name. */
 const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   "tasks.list": listTasks,
@@ -2537,6 +2603,7 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   "change.submit": submitChange,
   changes: changesTool,
   "run.start": startRun,
+  "note.trash_transcript": trashTranscriptTool,
   "run.status": runStatus,
   "run.stop": stopRun,
   "health.fix": healthFix,
@@ -2591,7 +2658,7 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
     const line = (t: Transcript) =>
       `- ${t.path} · ${t.done ? `done: ${MEETING_DONE[t.done]}` : `looks like ${t.inferred.type ?? "a meeting"} ${t.inferred.name ?? t.inferred.topic ?? ""} ${t.inferred.date ?? ""}${t.inferred.dateCheck ? " (the capture day: check the meeting date)" : ""}`}${
         exists(t)
-          ? ` · note exists: ${exists(t)}${t.noteIngested ? " (ingested already: only the transcript is left, trash_note it if the user agrees)" : ""}`
+          ? ` · note exists: ${exists(t)}${t.noteIngested ? " (ingested already: only the transcript is left, trash_note it if the user agrees)" : " (start_run meeting_note with ingest_existing ingests it as it is)"}`
           : ""
       }${drafting(t) ? " · being drafted" : drafted(t) ? " · a note was drafted (see Changes)" : ""}${(t.inferred.ask ?? []).map((q) => `\n  - ${q}`).join("")}`;
     return listed(a, rows, {
@@ -2642,6 +2709,23 @@ export async function startMcpBridge() {
 
 // ---- Knowledge health, as its screen shows it
 
+/** Each missing link's In the Trash and Did you mean, as Knowledge health's rows show them (ghostHelps). */
+async function ghostsOf(r: LintReport): Promise<Map<string, GhostHelp>> {
+  if (!r.checks.some((c) => (c.id === "missing-pages" || c.id === "broken-sources") && c.items.length)) return new Map();
+  const [files, trash] = await Promise.all([api.filesList(null), api.trashList()]);
+  return ghostHelps(r, ghostPaths(files), trashByName(trash));
+}
+
+/** A missing link's help in a line, as its row shows it: In the Trash since…, Did you mean…? */
+function ghostNote(g: GhostHelp | undefined): string {
+  if (!g) return "";
+  const trashed = g.inTrash
+    ? ` (in the Trash since ${g.inTrash.deletedAt.slice(0, 10)}: restore_from_trash with id ${g.inTrash.id} puts ${g.inTrash.originalRel} back)`
+    : "";
+  const near = g.near ? ` Did you mean ${pageName(g.near)}? (health_issue link_to with to: ${g.near})` : "";
+  return `${trashed}${near}`;
+}
+
 /** lint, while the app is open: the screen's report, ignored issues and dismissed pairs left out. */
 async function healthLint(a: Args): Promise<string> {
   const view = await api.healthReport(true);
@@ -2661,6 +2745,7 @@ async function healthLint(a: Args): Promise<string> {
   const summary = page ? "" : `Need a decision: ${need}; ${safe ? `${safe} more are safe to fix` : "nothing safe to fix"}.${trend}`;
   const out: string[] = [];
   const quiet: string[] = [];
+  const ghosts = await ghostsOf(r);
   for (const c of r.checks) {
     const items = page
       ? c.items.filter(
@@ -2671,7 +2756,8 @@ async function healthLint(a: Args): Promise<string> {
     if (!items.length) continue;
     const counted = ADVISORY.has(c.id) ? ", not counted: only worth a look" : "";
     out.push("", `${c.title} (${items.length}${counted}; check ${c.id}):`);
-    for (const i of items.slice(0, 40)) out.push(`- ${i.text}${i.safe && c.id !== "page-shape" ? " [safe fix]" : ""}`);
+    for (const i of items.slice(0, 40))
+      out.push(`- ${i.text}${i.safe && c.id !== "page-shape" ? " [safe fix]" : ""}${ghostNote(ghosts.get(`${c.id}:${i.text}`))}`);
     if (items.length > 40) out.push(`- …and ${items.length - 40} more`);
   }
   const ignored = quiet.length ? `Ignored, so not listed: ${quiet.join(", ")}. ignore_issue with show_again lists a check's again.` : "";
@@ -2704,6 +2790,10 @@ async function healthIssue(a: Args): Promise<string> {
   const i = c?.items.find((x) => x.text === text);
   if (!c || !i) return `That isn't an issue under ${c?.title ?? want}: give its text as lint gives it.`;
   if (action === "create") {
+    // A file in the Trash isn't a page to write: the screen offers Restore or Link to it instead of Create.
+    const g = (await ghostsOf(r)).get(`${c.id}:${i.text}`);
+    if (g?.inTrash)
+      return `${g.inTrash.originalRel} has been in the Trash since ${g.inTrash.deletedAt.slice(0, 10)}, so there's no Create: restore_from_trash with id ${g.inTrash.id} puts it back${g.near ? `, or health_issue link_to with to: ${g.near} points the links at the note it most likely became` : ", or health_issue link_to points the links at another page"}.`;
     // As the screen's Create: an entity page (a concept page is edit_page's, in wiki/concepts/).
     const p = await api.healthCreatePage(i.name!, "entities");
     told(`made the page ${pageName(p)}`);

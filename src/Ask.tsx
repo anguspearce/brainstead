@@ -8,12 +8,13 @@
 // `[[` and `#` from the index, ↑ for earlier messages, and the model picker. The state is in
 // src/askState.ts; History lists every chat, saved to the vault or kept in Brainstead's app data.
 
-import { askedFromInbox, StillInInbox } from "./StillInInbox";
+import { StillInInbox } from "./StillInInbox";
 import { HelpButton } from "./help/HelpDrawer";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChatSummary, CliInfo, Skill, api } from "./api";
 import {
   ask,
+  askedFromInbox,
   askWith,
   Chat,
   closeChat,
@@ -103,8 +104,10 @@ export function AskScreen() {
         </button>
         <HelpButton />
       </div>
-      {/* A capture the Inbox sent here to ask about: its Inbox choices, here. */}
-      {fromInbox && <StillInInbox path={fromInbox} onDone={() => askedFromInbox.set(null)} />}
+      {/* A capture the Inbox sent here to ask about: its Inbox choices, on the chat about it. */}
+      {fromInbox && fromInbox.chat === s.active && (
+        <StillInInbox key={fromInbox.path} path={fromInbox.path} onDone={() => askedFromInbox.set(null)} />
+      )}
       {c ? <ChatView key={c.id} c={c} found={found} /> : <div className="body" />}
       {history && <HistoryDialog onClose={() => setHistory(false)} />}
     </main>

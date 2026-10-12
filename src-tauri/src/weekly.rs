@@ -14,6 +14,9 @@
 use std::path::{Path, PathBuf};
 
 use brainstead_core::reviews::latest::block_of;
+// Whether an item of a kind (src/inboxActions.ts's suggestKind: thought, task, thread, capture or
+// file; a transcript is never asked about) can become an outcome, as the Inbox offers it.
+use brainstead_core::reviews::prep::fits;
 use brainstead_core::reviews::{self, note, target, Target};
 use brainstead_core::write;
 use chrono::{Local, NaiveDateTime};
@@ -50,16 +53,6 @@ pub struct Suggestion {
 }
 
 const BECOMES: [&str; 9] = ["next", "project", "waiting", "done", "someday", "reference", "delete", "ingest", "reply"];
-
-/// Whether an item of `kind` can become `becomes`: ingest is for a capture, reply for a captured
-/// email or chat thread (kind "thread", which is a capture too). A transcript is never asked about.
-fn fits(kind: &str, becomes: &str) -> bool {
-    match becomes {
-        "ingest" => kind == "capture" || kind == "thread",
-        "reply" => kind == "thread",
-        _ => true,
-    }
-}
 
 /// The suggestions in a model's answer: the JSON array in it, each checked; unknown ids and
 /// outcomes are dropped. The model is given the items numbered from 1 (`ids` in that order), not
@@ -128,7 +121,7 @@ pub async fn clarify_suggest(app: AppHandle, items: Vec<ClarifyItem>, projects: 
             "Clarify these GTD inbox items, as David Allen's clarify step does: for each, decide what it becomes.\n\
 Today is {today}. The active projects are: {}.\n\n\
 Outcomes: \"next\" (a next action: write it as a clear task starting with a verb), \"project\" (needs more than one step: give the project's name), \"waiting\" (someone else must act: the task names who and what), \"done\" (takes under two minutes: do it now), \"someday\" (maybe later), \"reference\" (no action, worth keeping: name the note to file it in), \"delete\" (no longer needed).\n\
-A capture (an email, chat or document captured into the vault's sources) can also be \"ingest\" (worth reading into the wiki: facts, decisions, people) and a thread (an email or chat thread) \"reply\" (it asks the user something to answer); \"ingest\" and \"reply\" are only for those.\n\
+A capture (a document captured into the vault's sources) or a thread (an email or chat thread) can also be \"ingest\" (worth reading into the wiki: facts, decisions, people), and a thread \"reply\" (it asks the user something to answer); a file (one that can't be read) can't be ingested. A capture, thread or file is never \"done\", and only a thread, thought or task is \"waiting\".\n\
 You may look up related notes in the vault to decide (who a person is, which project it belongs to), but keep it quick.\n\
 Answer with only a JSON array, one object per item: {{\"id\": the item's number, \"becomes\": \"next|project|waiting|done|someday|reference|delete|ingest|reply\", \"text\": \"…\", \"project\": \"an active project's name or null\", \"context\": \"calls|computer|errands|office|home|… or null\", \"effort\": \"15m|30m|1h|… or null\", \"due\": \"YYYY-MM-DD or null\", \"why\": \"one short sentence\"}}.\n\n\
 Items:\n{list}",
@@ -362,6 +355,9 @@ mod tests {
         assert!(fits("capture", "ingest") && fits("thread", "ingest") && fits("thread", "reply"));
         assert!(!fits("capture", "reply") && !fits("task", "ingest") && !fits("thought", "reply"));
         assert!(fits("task", "next") && fits("thread", "delete"));
+        // As the Inbox offers them (tests/fixtures/inbox-choices.json): a capture isn't done now or
+        // waited on, and a file ingest can't read isn't ingested.
+        assert!(!fits("capture", "done") && !fits("capture", "waiting") && !fits("thread", "done") && !fits("file", "ingest"));
     }
 
     #[test]

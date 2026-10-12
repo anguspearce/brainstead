@@ -210,11 +210,15 @@ async function capture(tabId) {
   const data = await sendToBrainstead({ type: "teams", ...extraction });
   const atTopSuffix = extraction.atTop === false ? " — didn't reach top of chat" : "";
   const containerSuffix = extraction.scrollContainerDesc ? ` [scroll container: ${extraction.scrollContainerDesc}]` : "";
-  // A capture that came out as a chat on a page with more than one frame (a recap, where the
-  // transcript should have won) says what each frame gave, in the popup: the console isn't
-  // always to hand. Each frame by id (and its parent's), its host, and what it returned.
+  // A transcript capture that came out as a chat (a recap page, where the transcript should have
+  // won: a recap frame, a frame that read as a transcript, or a recap header's meeting date) says
+  // what each frame gave, in the popup: the console isn't always to hand. Each frame by id (and its
+  // parent's), its host, and what it returned. An ordinary chat on a page with other frames doesn't.
+  const recap =
+    (frames ?? []).some((f) => RECAP_FRAME_RE.test(f.url ?? "")) ||
+    results.some((r) => r.result?.kind === "transcript" || r.result?.meetingDate);
   const frameNote =
-    extraction.kind !== "transcript" && (frames ?? []).length > 1
+    extraction.kind !== "transcript" && recap && (frames ?? []).length > 1
       ? ` — frames: ${frames
           .map((f) => {
             const r = results.find((x) => x.frameId === f.frameId);

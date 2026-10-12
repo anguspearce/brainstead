@@ -7,7 +7,7 @@
 // amber. The open one shows its outcome, next actions, waiting-fors and the notes that link it.
 
 import { FoundProjects } from "./Found";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ProjectRow, TaskRow } from "./api";
 import { askAboutNote } from "./Ask";
 import { prepareCapture } from "./Capture";
@@ -52,7 +52,11 @@ export function ProjectsScreen() {
   // The areas folded shut, by name ("" is No area); kept across visits and restarts.
   const [folded, setFolded] = useViewState<string[]>("projects:folded", []);
   const fold = (area: string) => setFolded((f) => (f.includes(area) ? f.filter((a) => a !== area) : [...f, area]));
-  const renamed = (from: string, to: string) => setFolded((f) => (f.includes(from) ? [...f.filter((a) => a !== from && a !== to), to] : f));
+  // A renamed area keeps its place, folded or not and in the order dragged.
+  const renamed = (from: string, to: string) => {
+    renameInProjectOrder("areas", from, to, [...new Set((projects ?? []).map((p) => p.area ?? ""))]);
+    setFolded((f) => (f.includes(from) ? [...f.filter((a) => a !== from && a !== to), to] : f));
+  };
   const asked = useStore(newProjectAsked);
   const [creating, setCreatingState] = useState(false);
   const setCreating = (v: boolean) => {
@@ -66,6 +70,9 @@ export function ProjectsScreen() {
   // Areas and their projects in the order dragged (kept in settings, D-20261012-01), the rest A–Z.
   const order = useStore(settings).projectOrder;
   const [drag, setDrag] = useState<{ kind: "areas" | "projects"; key: string; keys: string[] } | null>(null);
+  // The drag under way's listeners, let go if the screen closes mid-drag (nothing saved).
+  const dragging = useRef<(() => void) | null>(null);
+  useEffect(() => () => dragging.current?.(), []);
   const areas = useMemo(() => {
     const m = new Map<string, ProjectRow[]>();
     for (const p of orderedProjects(shown, order)) m.set(p.area ?? "", [...(m.get(p.area ?? "") ?? []), p]);
@@ -102,15 +109,28 @@ export function ProjectsScreen() {
       cur = [...others.slice(0, at), key, ...others.slice(at)];
       setDrag({ kind, key, keys: cur });
     };
-    const up = () => {
+    const stop = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
+      dragging.current = null;
+    };
+    const up = () => {
+      stop();
       const i = cur.indexOf(key);
       if (moved && i !== keys.indexOf(key)) moveInProjectOrder(projects ?? [], kind, key, cur[i - 1] ?? null, cur[i + 1] ?? null);
       setDrag(null);
     };
+    // Cancelled (the system took the pointer, say): back as it was, nothing saved.
+    const cancel = () => {
+      stop();
+      setDrag(null);
+    };
+    dragging.current?.();
+    dragging.current = stop;
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
   };
   const areaKeys = areas.map(([a]) => a).filter(Boolean);
   const open = projects?.find((p) => p.path === sel) ?? null;
@@ -310,7 +330,6 @@ function AreaBand({
     api
       .projectsSetArea(paths, area, to)
       .then((undo) => {
-        renameInProjectOrder("areas", area, to);
         onRenamed(to);
         toast(undo, undefined, "ok");
       })

@@ -69,13 +69,31 @@ fn kept_path() -> PathBuf {
 }
 
 fn kept() -> Kept {
-    std::fs::read(kept_path()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    kept_at(&kept_path())
 }
 
-fn save_kept(k: &Kept) {
-    if let Ok(j) = serde_json::to_vec_pretty(k) {
-        let _ = write::write_atomic(&kept_path(), &j, false);
+fn kept_at(path: &Path) -> Kept {
+    std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+}
+
+/// Held for every read-modify-write of `health.json`, so a run of the checks saving it and an
+/// Ignore or a Not duplicates made meanwhile never write over each other.
+static KEPT: Mutex<()> = Mutex::new(());
+
+/// Runs `f` on `health.json` as it is now and saves what it leaves, nothing else changing the
+/// file in between.
+fn with_kept<T>(f: impl FnOnce(&mut Kept) -> T) -> T {
+    with_kept_at(&kept_path(), f)
+}
+
+fn with_kept_at<T>(path: &Path, f: impl FnOnce(&mut Kept) -> T) -> T {
+    let _one = crate::lock(&KEPT);
+    let mut k = kept_at(path);
+    let out = f(&mut k);
+    if let Ok(j) = serde_json::to_vec_pretty(&k) {
+        let _ = write::write_atomic(path, &j, false);
     }
+    out
 }
 
 /// The last report, and the index's state it was made from.
@@ -110,21 +128,37 @@ pub(crate) fn run_lint(app: &AppHandle) -> Option<Report> {
     let h = app.state::<Health>();
     let _one = h.running.lock().unwrap();
     let root = app.state::<VaultService>().root()?;
-    let k = kept();
-    let dismissed: HashSet<String> = k.dismissed.iter().cloned().collect();
+    let dismissed: HashSet<String> = kept().dismissed.into_iter().collect();
     let mut r = lint::run(&root, today(), &dismissed);
     // Claims with no citation, from the contradiction check's cached claims (none until it runs).
     r.checks.push(crate::contradict::uncited_check(&root));
-    let mut k = kept();
-    r.checks.push(callout_check(&root, &mut k.callouts));
-    lint::without_ignored(&mut r, &mut k.ignored, &|p| page_version(&root, p), &|p| read_opt(&root.join(p)));
+    // Finished with `health.json` as it is once the checks are done, not as it was when they
+    // started, so an Ignore made meanwhile isn't lost; the report is kept while it's still held.
+    with_kept(|k| {
+        finish(&root, k, &mut r);
+        *h.report.lock().unwrap() = Some(r.clone());
+    });
+    let _ = app.emit("health-changed", Counts { decisions: r.needs_decision(), total: r.total() });
+    Some(r)
+}
+
+/// A run's report finished with what `health.json` keeps (`k`), and that brought up to date: the
+/// system notes' headers checked, pairs marked not duplicates and ignored issues left out (an
+/// ignore whose issue has gone, or whose page has changed, dropped), and today's counts.
+fn finish(root: &Path, k: &mut Kept, r: &mut Report) {
+    r.checks.push(callout_check(root, &mut k.callouts));
+    if let Some(c) = r.checks.iter_mut().find(|c| c.id == "duplicates") {
+        c.items.retain(|i| !pair_of(i).is_some_and(|p| k.dismissed.contains(&p)));
+    }
+    lint::without_ignored(r, &mut k.ignored, &|p| page_version(root, p), &|p| read_opt(&root.join(p)));
     k.history.insert(today().to_string(), Day { total: r.total(), decisions: r.needs_decision() });
     let cutoff = (today() - chrono::Duration::days(56)).to_string();
     k.history.retain(|d, _| *d >= cutoff);
-    save_kept(&k);
-    *app.state::<Health>().report.lock().unwrap() = Some(r.clone());
-    let _ = app.emit("health-changed", Counts { decisions: r.needs_decision(), total: r.total() });
-    Some(r)
+}
+
+/// A possible duplicate's pair, as `health.json` keeps it.
+fn pair_of(i: &lint::Item) -> Option<String> {
+    i.page.as_deref().zip(i.pages.first()).map(|(x, y)| lint::pair_key(x, y))
 }
 
 /// System notes (the To Do list, the summaries' notes and the rest, by name) whose system-note
@@ -393,9 +427,7 @@ fn health_ignore_now(app: AppHandle, check: String, text: String) -> Res<()> {
         .cloned()
         .ok_or_else(|| invalid("That issue isn't in Knowledge health any more."))?;
     let version = item.page.as_deref().and_then(|p| page_version(&root, p)).unwrap_or_default();
-    let mut k = kept();
-    k.ignored.insert(lint::ignore_key(&check, &text), version);
-    save_kept(&k);
+    with_kept(|k| k.ignored.insert(lint::ignore_key(&check, &text), version));
     // Taken out of the last report at once: running every check again takes seconds.
     let h = app.state::<Health>();
     let counts = {
@@ -427,12 +459,12 @@ fn health_ignore_all_now(app: AppHandle, check: String) -> Res<usize> {
     let root = root(&app)?;
     let items =
         app.state::<Health>().report.lock().unwrap().as_ref().and_then(|r| r.check(&check)).map(|c| c.items.clone()).unwrap_or_default();
-    let mut k = kept();
-    for i in &items {
-        let version = i.page.as_deref().and_then(|p| page_version(&root, p)).unwrap_or_default();
-        k.ignored.insert(lint::ignore_key(&check, &i.text), version);
-    }
-    save_kept(&k);
+    with_kept(|k| {
+        for i in &items {
+            let version = i.page.as_deref().and_then(|p| page_version(&root, p)).unwrap_or_default();
+            k.ignored.insert(lint::ignore_key(&check, &i.text), version);
+        }
+    });
     let h = app.state::<Health>();
     let counts = {
         let mut report = h.report.lock().unwrap();
@@ -455,29 +487,27 @@ pub const IGNORE_ALL: [&str; 2] = ["stale-pages", "uncited-claims"];
 
 /// Shows a check's ignored issues again (every check's when None).
 fn health_unignore_now(app: AppHandle, check: Option<String>) -> Res<usize> {
-    let mut k = kept();
-    let before = k.ignored.len();
-    match &check {
-        Some(c) => k.ignored.retain(|key, _| !key.starts_with(&format!("{c}|"))),
-        None => k.ignored.clear(),
-    }
-    let n = before - k.ignored.len();
-    save_kept(&k);
+    let n = with_kept(|k| {
+        let before = k.ignored.len();
+        match &check {
+            Some(c) => k.ignored.retain(|key, _| !key.starts_with(&format!("{c}|"))),
+            None => k.ignored.clear(),
+        }
+        before - k.ignored.len()
+    });
     relint(&app);
     Ok(n)
 }
 
 /// Marks two pages as not duplicates.
 fn health_dismiss_now(app: AppHandle, a: String, b: String) -> Res<()> {
-    let mut k = kept();
     let key = lint::pair_key(&a, &b);
-    if !k.dismissed.contains(&key) {
-        k.dismissed.push(key.clone());
-    }
-    save_kept(&k);
-    settled(&app, |check, i| {
-        check == "duplicates" && i.page.as_deref().zip(i.pages.first()).is_some_and(|(x, y)| lint::pair_key(x, y) == key)
+    with_kept(|k| {
+        if !k.dismissed.contains(&key) {
+            k.dismissed.push(key.clone());
+        }
     });
+    settled(&app, |check, i| check == "duplicates" && pair_of(i).as_ref() == Some(&key));
     Ok(())
 }
 
@@ -531,10 +561,13 @@ fn push_undo(app: &AppHandle, root: &Path, label: String, changes: &[FileChange]
 }
 
 /// Points a missing page's links at a page that exists: one change per page linking it,
-/// `[[Ghost]]` becoming `[[Page|Ghost]]`, applied at once.
+/// `[[Ghost]]` becoming `[[Page|Ghost]]`, applied at once. `to` is the page's path or a name
+/// that resolves to it.
 fn health_link_ghost_now(app: AppHandle, target: String, to: String, pages: Vec<String>, unattended: bool) -> Res<usize> {
     let root = root(&app)?;
+    let to = real_path(&app, &root, to.trim())?;
     let to_name = brainstead_core::filename::stem(&to).to_string();
+    let from = format!("{target}.md");
     let mut n = 0;
     for page in pages {
         brainstead_core::trash::safe_rel(&page).map_err(EditError::from)?;
@@ -550,7 +583,7 @@ fn health_link_ghost_now(app: AppHandle, target: String, to: String, pages: Vec<
             ..Default::default()
         };
         let title = format!("Link [[{target}]] to {to_name}");
-        let s = crate::changes::Submit::new(
+        let mut s = crate::changes::Submit::new(
             &page,
             Kind::Edit,
             &title,
@@ -558,19 +591,33 @@ fn health_link_ghost_now(app: AppHandle, target: String, to: String, pages: Vec<
             origin,
             brainstead_core::changes::from_texts(Some(&before), &after),
         );
+        // Claims on the page made from a file of the missing name (renamed since, their source left
+        // behind) name the page it's pointed at now, so a later ingest doesn't link the old name
+        // again: written with the change, and put back by its Revert.
+        let claims = brainstead_core::claims::path(&page).and_then(|c| read_opt(&root.join(c)));
+        if claims.is_some_and(|t| brainstead_core::claims::renamed(&t, &from, &to).is_some()) {
+            s.claims = Some(brainstead_core::claims::Update { source: to.clone(), from: Some(from.clone()), ..Default::default() });
+        }
         crate::changes::submit(&app, s)?;
         n += 1;
-    }
-    // Claims made from a file of the missing name (renamed since, their source left behind) name
-    // the page it's pointed at now, so a later ingest doesn't link the old name again.
-    if let Err(e) = brainstead_core::claims::rename_source(&root, &format!("{target}.md"), &to) {
-        crate::applog!("claims for {target}: {e}");
     }
     // As every fix does, so the missing page leaves the list once the links point elsewhere.
     if n > 0 {
         settled(&app, |check, i| check == "missing-pages" && i.name.as_deref() == Some(target.as_str()));
     }
     Ok(n)
+}
+
+/// A page to link to, as its vault path: `to` when it's a file in the vault, else what a link to
+/// `to` resolves to.
+fn real_path(app: &AppHandle, root: &Path, to: &str) -> Res<String> {
+    if brainstead_core::trash::safe_rel(to).is_ok() && root.join(to).is_file() {
+        return Ok(to.to_string());
+    }
+    let found = app
+        .state::<VaultService>()
+        .with_index(|ix, _| Ok(ix.resolve(&[to.to_string()]).ok().and_then(|v| v.into_iter().next().flatten())))?;
+    found.ok_or_else(|| invalid(format!("There's no page called {to} to link to.")))
 }
 
 /// `[[target]]`, `[[target|x]]` and `[[target#h]]` pointed at `to`, keeping what they show.
@@ -684,6 +731,34 @@ mod tests {
         std::fs::write(&todo, "- [ ] a\n").unwrap();
         let c = callout_check(t.path(), &mut known);
         assert_eq!((c.items.len(), c.items[0].safe, c.items[0].page.as_deref()), (1, true, Some("Me. To Do List.md")));
+    }
+
+    #[test]
+    fn an_ignore_made_while_the_checks_run_is_kept() {
+        let t = tempfile::tempdir().unwrap();
+        let (root, path) = (t.path(), t.path().join("health.json"));
+        let items = (0..20).map(|n| lint::Item { text: format!("Page {n}"), ..Default::default() }).collect();
+        let check = lint::Check { id: "orphans", title: "Orphans", classic: false, ignored: 0, items };
+        let report = Report { checks: vec![check], wiki_pages: 0, sources: 0, ms: 0 };
+        // A run has its report when an Ignore is saved: finishing it keeps the ignore and leaves the
+        // issue out.
+        let mut r = report.clone();
+        with_kept_at(&path, |k| k.ignored.insert(lint::ignore_key("orphans", "Page 0"), String::new()));
+        with_kept_at(&path, |k| finish(root, k, &mut r));
+        assert!(kept_at(&path).ignored.contains_key(&lint::ignore_key("orphans", "Page 0")));
+        assert_eq!((r.checks[0].items.len(), r.checks[0].ignored), (19, 1));
+        // Ignores and runs at the same time: none lost.
+        std::thread::scope(|s| {
+            for n in 1..20 {
+                let path = &path;
+                s.spawn(move || with_kept_at(path, |k| k.ignored.insert(lint::ignore_key("orphans", &format!("Page {n}")), String::new())));
+            }
+            for _ in 0..10 {
+                let (path, report) = (&path, &report);
+                s.spawn(move || with_kept_at(path, |k| finish(root, k, &mut report.clone())));
+            }
+        });
+        assert_eq!(kept_at(&path).ignored.len(), 20);
     }
 
     #[test]

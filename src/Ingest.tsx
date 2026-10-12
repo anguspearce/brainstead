@@ -17,7 +17,8 @@ import { Dialog, SearchBox, useDebounced } from "./ui";
 import { reportEditError } from "./taskModel";
 import { toast } from "./Toast";
 import { DocButton, useIsGone } from "./docButton";
-import { ingestRunEnded, meetingRunEnded } from "./meetingFlow";
+import { ingestRunEnded, isActive, meetingNoteMade, meetingRunEnded, resumeMeetingNotes, runNote, trashTranscript } from "./meetingFlow";
+import { captureDone } from "./gtd";
 
 export const runs = new Store<IngestRun[] | null>(null);
 let started = false;
@@ -29,7 +30,8 @@ export function startRuns() {
   void api
     .ingestRuns()
     .then((r) => runs.set(r))
-    .catch(() => runs.set([]));
+    .catch(() => runs.set([]))
+    .then(() => resumeMeetingNotes(runs.get() ?? []));
   api
     .onIngestChanged((r) => {
       const was = (runs.get() ?? []).find((x) => x.id === r.id);
@@ -42,7 +44,7 @@ export function startRuns() {
         const made = r.status === "done" && meetingNoteMade(r);
         if (!meetingRunEnded(r, made) && made)
           offerFollowUp({ note: `${r.note.type.trim()}. ${r.note.name.trim()} - ${r.note.date.trim()}.md`, transcript: r.source });
-      } else ingestRunEnded(r);
+      } else void ingestRunEnded(r, runs.get() ?? []);
     })
     .catch(() => {});
 }
@@ -56,27 +58,37 @@ export function merge(list: IngestRun[], r: IngestRun): IngestRun[] {
   return n;
 }
 
-/** Whether a finished meeting run made its note, rather than holding it in Changes (its last step says which). */
-export function meetingNoteMade(r: IngestRun): boolean {
-  const last = r.steps[r.steps.length - 1];
-  return !!last && last.status === "done" && !/held in changes/i.test(last.detail ?? "");
-}
-
-export const isActive = (r: IngestRun) => r.status === "running" || r.status === "queued";
+export { isActive, meetingNoteMade };
 
 /** Where a transcript's meeting note is, from the runs (the Ingest runs pane's): being written,
  *  its note being ingested, failed at either, or held in Changes; null when nothing is under way or
- *  it all went through (the transcript then leaves for the Trash). `busy` while it's under way. */
-export function meetingProgress(all: IngestRun[], transcript: string): { label: string; busy: boolean; why?: string } | null {
+ *  it all went through (the transcript then leaves for the Trash). `busy` while it's under way.
+ *  With Changes' rows (`changeRows`), a held note decided there since isn't called held: accepted,
+ *  it's made; rejected or reverted, it can be made again. */
+export function meetingProgress(
+  all: IngestRun[],
+  transcript: string,
+  changeRows?: ChangeRow[] | null,
+): { label: string; busy: boolean; why?: string } | null {
   // The newest meeting run for it (the list is newest first).
   const m = all.find((r) => r.kind === "meeting" && r.source === transcript);
   if (!m) return null;
   if (isActive(m)) return { label: m.status === "queued" ? "Waiting to write its note…" : "Writing note…", busy: true };
   if (m.status !== "done")
     return { label: m.status === "stopped" ? "Note stopped" : "Note failed", busy: false, why: m.error ?? undefined };
-  if (!meetingNoteMade(m)) return { label: "Note held in Changes", busy: false, why: "Accept it in Changes to go on" };
+  // The run's own change (its origin's run), as Changes has it now: rejected or reverted there, the
+  // note can be made again; accepted (or long since decided, and gone from Changes' history), it's made.
+  const c = changeRows?.find((x) => x.origin.kind === "meeting" && x.origin.run === m.id);
+  if (c && (c.status === "rejected" || c.status === "reverted"))
+    return {
+      label: c.status === "reverted" ? "Note reverted in Changes" : "Note rejected in Changes",
+      busy: false,
+      why: "Make it again, or let the transcript go",
+    };
+  if (!meetingNoteMade(m) && (!changeRows || c?.status === "held"))
+    return { label: "Note held in Changes", busy: false, why: "Accept it in Changes to go on" };
   // The note's own ingest, started after it's made, by the note's file name.
-  const note = m.note ? `${m.note.type.trim()}. ${m.note.name.trim()} - ${m.note.date.trim()}.md` : null;
+  const note = runNote(m);
   const ing = note ? all.find((r) => r.kind !== "meeting" && r.source.split("/").pop() === note && r.started >= m.started) : undefined;
   if (!ing) return null;
   if (isActive(ing)) return { label: "Ingesting…", busy: true };
@@ -299,6 +311,9 @@ export const followUp = new Store<FollowUpOffer[]>([]);
 /** Queues the offer for a note just made; a note already waiting isn't offered twice. */
 export function offerFollowUp(f: FollowUpOffer) {
   followUp.set(queueOffer(followUp.get(), f));
+  // The note is made (accepted in Changes, or made with both of Settings' switches off): its
+  // transcript leaves the Inbox now, however the offer is answered or if it's never seen.
+  void captureDone(f.transcript).catch(() => {});
 }
 
 /** The queue with `f` at the end, unless its note is already in it. */
@@ -321,8 +336,7 @@ function FollowUpDialog({ f }: { f: FollowUpOffer }) {
     close();
     if (ing) ingest([f.note]);
     if (trash)
-      await api
-        .trashMove(f.transcript)
+      await trashTranscript(f.transcript, f.note)
         .then(() => toast("Transcript moved to the Trash", { label: "Open Trash", run: () => nav.go("trash") }))
         .catch(reportEditError);
   };

@@ -12,7 +12,7 @@ A project is a note named `Project. <name>.md`. Its properties hold its status, 
 
 To put areas or projects in your own order, point at a row and drag it by the grip on its left: an area among the areas, a project among its area's projects. **No area** stays last, and areas and projects you haven't moved come after the ones you have, A to Z. The order is kept in Brainstead's settings on this Mac, not in your notes.
 
-To rename an area, point at its band and click the pencil, type the new name and press `↩`. It changes the area on every project under it, whatever its status, undone together with **Undo** in the toast; a name already in use merges the two.
+To rename an area, point at its band and click the pencil, type the new name and press `↩`. It changes the area on every project under it, whatever its status, undone together with **Undo** in the toast. The area keeps its place in your order, and undoing the rename puts the old name back where it was. A name already in use merges the two, where that area was.
 
 An active project is flagged **Stuck** (red) with no next action, and **Quiet** (amber) when nothing has changed for two weeks; an assistant sees the same flags. The sidebar counts active projects, in a blue badge when any has no next action.
 

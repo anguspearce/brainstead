@@ -15,7 +15,7 @@ You are getting someone's GTD weekly review ready before they sit down to do it.
 ## The steps
 
 - `loose`: up to 5 prompts from the week that jog the memory, with no action. "Tuesday's 1-1 with Maya mentioned the office move: anything to capture?"
-- `inbox`: for each Inbox item, what it becomes (action `clarify`).
+- `inbox`: for each Inbox item, what it becomes (action `clarify`), only as the Inbox offers it for the item's kind: a capture, thread or file is never `done`, only a thought, task or thread is `waiting`, and a transcript is only `reference` or `delete`.
 - `notes`: from this week's notes marked `note`: tasks to add, and pages a note names in plain text but doesn't link (action `link`).
 - `back`: from this week's meetings, marked `meeting`: what the user said they'd do (`add`) and what someone else said they'd do for the user (`add` with the tag `waiting-for`, the text naming who and what: "Lena: revised rota").
 - `next`: open next actions a note this week says are finished (`tick`, with the source), old ones to put off (`defer`) or move to `someday`, ones now waiting on someone (`waiting`), and vague ones to reword (`edit`).

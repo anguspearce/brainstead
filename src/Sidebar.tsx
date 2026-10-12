@@ -50,8 +50,8 @@ export const LIBRARY: Item[] = [
   { screen: "graph", label: "Graph", icon: "graph" },
 ];
 
-/** The screens that do one job with the AI, found otherwise only from ⌘K or another screen. ⌘K lists
- *  them under Do, so they aren't in ALL_ITEMS (which ⌘K lists under Go to). */
+/** The screens that do one job with the AI: the sidebar's Tools section. ⌘K lists them under Go to
+ *  with the other screens, found by what they do too (Palette's TOOL_WORDS); they aren't in ALL_ITEMS. */
 export const TOOLS: Item[] = [
   { screen: "reply", label: "Draft reply", icon: "send", tip: "draft a reply to an email or Teams thread, captured or pasted" },
   { screen: "meeting", label: "Meeting notes", icon: "note", tip: "make meeting and 1-1 notes from Teams transcripts" },

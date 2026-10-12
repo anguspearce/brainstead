@@ -302,7 +302,7 @@ fn apply(app: &AppHandle, root: &Path, mut c: Change, base: Option<String>) -> R
             c.after = Some(st.put_text(&written_text)?);
             let mut files = vec![FileUndo { path: c.page.clone(), before: current, version }];
             let mut paths = vec![abs, root.join("log.md")];
-            match write_claims(root, &mut c) {
+            match write_claims(&st, root, &mut c) {
                 Ok(Some(f)) => {
                     paths.push(root.join(&f.path));
                     files.push(f);
@@ -333,51 +333,38 @@ fn apply(app: &AppHandle, root: &Path, mut c: Change, base: Option<String>) -> R
     Ok(Outcome { id: c.id.clone(), applied: true, page: c.to.clone().unwrap_or(c.page.clone()), flags: c.flags.clone(), message })
 }
 
-/// Writes the change's claims into its page's claims file, recording the file before and after.
-/// Returns the file's ⌘Z entry when it changed and is still there.
-fn write_claims(root: &Path, c: &mut Change) -> Res<Option<FileUndo>> {
+/// Writes the change's claims into its page's claims file (an ingest's set, or a source renamed),
+/// recording the file before and after. Returns the file's ⌘Z entry when it changed and is still there.
+fn write_claims(st: &Store, root: &Path, c: &mut Change) -> Res<Option<FileUndo>> {
     let page = c.page.clone();
     let (Some(u), Some(rel)) = (c.claims.as_mut(), brainstead_core::claims::path(&page)) else { return Ok(None) };
     let abs = root.join(&rel);
     let current = read_opt(&abs);
-    let next = brainstead_core::claims::with_source(current.as_deref(), &page, &u.source, &u.claims);
+    let next = brainstead_core::claims::updated(current.as_deref(), &page, u);
     if next == current {
         return Ok(None);
     }
-    let st = store();
     u.before = current.as_deref().map(|t| st.put_text(t)).transpose()?;
     u.after = next.as_deref().map(|t| st.put_text(t)).transpose()?;
-    set_claims(&abs, next.as_deref())?;
+    brainstead_core::claims::put(&abs, next.as_deref()).map_err(|e| e.to_string())?;
     Ok(next.map(|t| FileUndo { path: rel, before: current, version: write::version(t.as_bytes()) }))
 }
 
-/// A claims file written, or taken away when there's nothing left in it.
-fn set_claims(abs: &Path, text: Option<&str>) -> Res<()> {
-    match text {
-        Some(t) => {
-            if let Some(d) = abs.parent() {
-                std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
-            }
-            Ok(write::write_atomic(abs, t.as_bytes(), false)?)
-        }
-        None if abs.exists() => std::fs::remove_file(abs).map_err(|e| e.to_string().into()),
-        None => Ok(()),
-    }
-}
-
-/// A reverted change's claims: its source's claims on the page put back as they were before it,
-/// whatever other sources have added since.
-fn revert_claims(root: &Path, c: &Change) {
+/// A reverted change's claims: each source it touched has its claims on the page put back as they
+/// were before it, whatever other sources have added since, following a source renamed since.
+/// Nothing when it didn't change the claims file.
+fn revert_claims(st: &Store, root: &Path, c: &Change) {
     let (Some(u), Some(rel)) = (c.claims.as_ref(), brainstead_core::claims::path(&c.page)) else { return };
-    let st = store();
+    if u.before.is_none() && u.after.is_none() {
+        return;
+    }
     let before = u.before.as_deref().and_then(|h| st.text(h));
-    let was = brainstead_core::claims::of_source(before.as_deref(), &u.source);
     let abs = root.join(&rel);
     let current = read_opt(&abs);
-    let next = brainstead_core::claims::with_source(current.as_deref(), &c.page, &u.source, &was);
+    let next = brainstead_core::claims::reverted(before.as_deref(), current.as_deref(), &c.page, u);
     if next != current {
-        if let Err(e) = set_claims(&abs, next.as_deref()) {
-            crate::applog!("claims for {} not reverted: {}", c.page, e.message());
+        if let Err(e) = brainstead_core::claims::put(&abs, next.as_deref()) {
+            crate::applog!("claims for {} not reverted: {e}", c.page);
         }
     }
 }
@@ -597,6 +584,11 @@ pub struct Reverted {
 
 /// Undoes an applied change on the page as it is now: its lines put back, wherever they are. When
 /// they've been edited since, it says so and gives the page as it was before the change.
+/// The transcript a meeting run's new note was made from, when this change is that note.
+fn meeting_transcript(c: &Change) -> Option<&str> {
+    (c.origin.kind == "meeting" && c.kind == Kind::New).then_some(c.origin.chat.as_deref()).flatten()
+}
+
 fn revert_one(app: &AppHandle, id: &str) -> Res<Reverted> {
     writable(&app.state::<AppState>())?;
     let _one = crate::lock(&DECIDING);
@@ -658,7 +650,7 @@ fn revert_one(app: &AppHandle, id: &str) -> Res<Reverted> {
                     brainstead_core::trash::undo_created(&root, &c.page, "note").map_err(EditError::from)?;
                 }
             }
-            revert_claims(&root, &c);
+            revert_claims(&st, &root, &c);
             written(app, &[abs]);
             format!("Reverted {name}: {}", c.title)
         }
@@ -669,6 +661,11 @@ fn revert_one(app: &AppHandle, id: &str) -> Res<Reverted> {
     // A summary's block reverted here is its run undone, as Recent runs' Undo leaves it.
     if let Some(run) = c.origin.run.as_deref().filter(|r| c.origin.kind == "review" && r.starts_with("summary-")) {
         crate::reviews::reverted_in_changes(app, run);
+    }
+    // A meeting note reverted: its transcript, if it wasn't trashed, is back in the Inbox to make
+    // the note again (src/meetingFlow.ts took it out once the note was made).
+    if let Some(t) = meeting_transcript(&c).filter(|t| root.join(t).is_file()) {
+        crate::gtd::forget_clarified(t);
     }
     emit_changed(app);
     Ok(Reverted { ok: true, message, before: None })
@@ -785,14 +782,25 @@ pub async fn change_reject(app: AppHandle, id: String) -> Res<()> {
     blocking(move || reject_one(&app, &id)).await
 }
 
-/// Accepts every held change in a run (`group`), or every held change when None.
+/// Of these changes, only those `ids` names when it names any: a run's Accept all, Reject all or
+/// Revert all while Changes' search is on acts on the changes the search shows, no others.
+fn only(todo: Vec<Change>, ids: &Option<Vec<String>>) -> Vec<Change> {
+    match ids {
+        Some(ids) => todo.into_iter().filter(|c| ids.contains(&c.id)).collect(),
+        None => todo,
+    }
+}
+
+/// Accepts every held change in a run (`group`), or every held change when None; only those in
+/// `ids` when given.
 #[tauri::command]
-pub async fn changes_accept_all(app: AppHandle, group: Option<String>, assistant: Option<bool>) -> Res<Many> {
+pub async fn changes_accept_all(app: AppHandle, group: Option<String>, assistant: Option<bool>, ids: Option<Vec<String>>) -> Res<Many> {
     blocking(move || {
         let todo: Vec<Change> = match &group {
             Some(g) => held_in(g),
             None => store().list().into_iter().rev().filter(|c| c.status == Status::Held).collect(),
         };
+        let todo = only(todo, &ids);
         let mut m = Many { done: 0, failed: vec![] };
         for c in todo {
             match accept_one(&app, &c.id, assistant == Some(true)) {
@@ -806,12 +814,13 @@ pub async fn changes_accept_all(app: AppHandle, group: Option<String>, assistant
 }
 
 #[tauri::command]
-pub async fn changes_reject_all(app: AppHandle, group: Option<String>) -> Res<Many> {
+pub async fn changes_reject_all(app: AppHandle, group: Option<String>, ids: Option<Vec<String>>) -> Res<Many> {
     blocking(move || {
         let todo: Vec<Change> = match &group {
             Some(g) => held_in(g),
             None => store().list().into_iter().filter(|c| c.status == Status::Held).collect(),
         };
+        let todo = only(todo, &ids);
         let mut m = Many { done: 0, failed: vec![] };
         for c in todo {
             reject_one(&app, &c.id)?;
@@ -822,10 +831,10 @@ pub async fn changes_reject_all(app: AppHandle, group: Option<String>) -> Res<Ma
     .await
 }
 
-/// Reverts every change a run made, newest first; those whose lines have been edited since are
-/// listed in `failed`, the rest still reverted.
-pub fn revert_run(app: &AppHandle, group: &str) -> Res<Many> {
-    let todo: Vec<Change> = store().list().into_iter().filter(|c| c.status == Status::Applied && c.group() == group).collect();
+/// Reverts every change a run made (only those in `ids` when given), newest first; those whose
+/// lines have been edited since are listed in `failed`, the rest still reverted.
+pub fn revert_run(app: &AppHandle, group: &str, ids: &Option<Vec<String>>) -> Res<Many> {
+    let todo = only(store().list().into_iter().filter(|c| c.status == Status::Applied && c.group() == group).collect(), ids);
     if todo.is_empty() {
         return Err(invalid("Nothing that run made is left to revert."));
     }
@@ -841,8 +850,8 @@ pub fn revert_run(app: &AppHandle, group: &str) -> Res<Many> {
 }
 
 #[tauri::command]
-pub async fn changes_revert_all(app: AppHandle, group: String) -> Res<Many> {
-    blocking(move || revert_run(&app, &group)).await
+pub async fn changes_revert_all(app: AppHandle, group: String, ids: Option<Vec<String>>) -> Res<Many> {
+    blocking(move || revert_run(&app, &group, &ids)).await
 }
 
 #[tauri::command]
@@ -959,4 +968,83 @@ pub fn change_project_note(name: String, status: String, area: Option<String>, o
         path: format!("{}{n}.md", projects::PREFIX),
         content: projects::project_note(status, area.as_deref(), outcome.as_deref()),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use brainstead_core::claims::{self, Kept, Update};
+
+    fn kept(value: &str, source: &str) -> Kept {
+        Kept { subject: "Orbit App".into(), attribute: "owner".into(), value: value.into(), source: source.into(), ..Default::default() }
+    }
+
+    #[test]
+    fn a_reverted_meeting_note_names_its_transcript() {
+        let t = "sources/Teams. Transcript. Steerco - 2026-10-02.md";
+        let origin = Origin { kind: "meeting".into(), chat: Some(t.into()), ..Default::default() };
+        let note =
+            Change::new("Meeting. Steerco - 2026-10-02.md", Kind::New, "t", "", origin.clone(), None, changes::from_texts(None, "x\n"));
+        assert_eq!(meeting_transcript(&note), Some(t));
+        // Not an edit a meeting run made, nor another run's new page.
+        let edit = Change::new("wiki/x.md", Kind::Edit, "t", "", origin, None, changes::from_texts(Some("a\n"), "b\n"));
+        assert_eq!(meeting_transcript(&edit), None);
+        let other = Change::new("x.md", Kind::New, "t", "", Origin::default(), None, changes::from_texts(None, "x\n"));
+        assert_eq!(meeting_transcript(&other), None);
+    }
+
+    /// A change to `page` carrying `u`, as `submit` records it.
+    fn change(page: &str, u: Update) -> Change {
+        let mut c = Change::new(page, Kind::Edit, "t", "", Origin::default(), None, changes::from_texts(Some("a\n"), "b\n"));
+        c.claims = Some(u);
+        c
+    }
+
+    #[test]
+    fn a_source_renamed_by_a_change_is_recorded_and_reverted_with_it() {
+        let (d, t) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let (st, root) = (Store::new(d.path()), t.path());
+        let page = "wiki/entities/Orbit App.md";
+        let abs = root.join(claims::path(page).unwrap());
+        let before = claims::with_source(None, page, "sources/Steerco.md", &[kept("Maya", "sources/Steerco.md")]).unwrap();
+        claims::put(&abs, Some(&before)).unwrap();
+        let u = Update { source: "wiki/entities/Steerco.md".into(), from: Some("Steerco.md".into()), ..Default::default() };
+        let mut c = change(page, u);
+        let undo = write_claims(&st, root, &mut c).unwrap().unwrap();
+        assert_eq!(undo.before.as_deref(), Some(before.as_str()));
+        let now = std::fs::read_to_string(&abs).unwrap();
+        assert_eq!(claims::parse(&now).claims[0].source, "wiki/entities/Steerco.md");
+        // Kept with the change: the file before and after.
+        let u = c.claims.as_ref().unwrap();
+        assert_eq!((st.text(u.before.as_deref().unwrap()), st.text(u.after.as_deref().unwrap())), (Some(before.clone()), Some(now)));
+        revert_claims(&st, root, &c);
+        assert_eq!(std::fs::read_to_string(&abs).unwrap(), before);
+    }
+
+    #[test]
+    fn reverting_an_ingest_after_its_source_was_renamed() {
+        let (d, t) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let (st, root) = (Store::new(d.path()), t.path());
+        let page = "wiki/entities/Orbit App.md";
+        let abs = root.join(claims::path(page).unwrap());
+        let a = "sources/Steerco.md";
+        let mut c = change(page, Update { source: a.into(), claims: vec![kept("Maya", a)], ..Default::default() });
+        write_claims(&st, root, &mut c).unwrap();
+        // The source renamed since (a rename's claims step).
+        let to = "sources/Steerco notes.md";
+        for (p, _, after) in claims::on_rename(root, a, to) {
+            claims::put(&p, after.as_deref()).unwrap();
+        }
+        assert_eq!(claims::parse(&std::fs::read_to_string(&abs).unwrap()).claims[0].source, to);
+        // Its revert takes them out under the new name: nothing left, the file goes.
+        revert_claims(&st, root, &c);
+        assert!(!abs.exists());
+        // A change that didn't touch the claims file leaves it alone when reverted.
+        let other = claims::with_source(None, page, "b.md", &[kept("Lena", "b.md")]).unwrap();
+        claims::put(&abs, Some(&other)).unwrap();
+        let mut c = change(page, Update { source: "b.md".into(), claims: vec![kept("Lena", "b.md")], ..Default::default() });
+        assert!(write_claims(&st, root, &mut c).unwrap().is_none());
+        revert_claims(&st, root, &c);
+        assert_eq!(std::fs::read_to_string(&abs).unwrap(), other);
+    }
 }

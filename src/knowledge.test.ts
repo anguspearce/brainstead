@@ -4,11 +4,13 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import type { ChangeRow, LintReport } from "./api";
+import type { ChangeRow, LintReport, TrashEntry } from "./api";
 import { filedPage } from "./Ask";
 import {
   byRun,
   changeMatches,
+  fileSetChanged,
+  ghostHelps,
   nearName,
   noteFromTranscript,
   IGNORE_ALL,
@@ -18,11 +20,13 @@ import {
   held,
   originLabel,
   pageName,
+  runChanges,
   runLabel,
   safeFixes,
   trendLabels,
   trendPoints,
   trendShown,
+  trashByName,
 } from "./knowledge";
 
 const row = (p: Partial<ChangeRow>): ChangeRow => ({
@@ -200,6 +204,68 @@ describe("nearName", () => {
     // Two as close: no guess.
     expect(nearName("1-1. Lena - 2026-10-0", paths)).toBeNull();
   });
+  it("reads a link written with a folder or .md as the note's name", () => {
+    expect(nearName("Meeting. Orbit Steerco meting - 2026-10-02.md", paths)).toBe("Meeting. Orbit Steerco meeting - 2026-10-02.md");
+    expect(nearName("notes/Meeting. Orbit Steerco meting - 2026-10-02", paths)).toBe("Meeting. Orbit Steerco meeting - 2026-10-02.md");
+    expect(nearName("wiki/entities/Mayaa.md", ["wiki/entities/Maya.md", "wiki/entities/Acme Ltd.md"])).toBe("wiki/entities/Maya.md");
+    // The note itself, by its path: not a slip.
+    expect(nearName("wiki/entities/Maya.md", ["wiki/entities/Maya.md"])).toBeNull();
+  });
+});
+
+describe("ghostHelps", () => {
+  const trash: TrashEntry = {
+    id: "t1",
+    originalRel: "sources/Teams. Transcript. Orbit Steerco - 2026-07-30.md",
+    basename: "Teams. Transcript. Orbit Steerco - 2026-07-30.md",
+    layer: "source",
+    deletedAt: "2026-08-01T09:00",
+    sizeBytes: 10,
+  };
+  const r = {
+    wikiPages: 1,
+    sources: 0,
+    checks: [
+      {
+        id: "broken-sources",
+        title: "Broken sources",
+        classic: true,
+        items: [
+          {
+            text: "Orbit: sources/Teams. Transcript. Orbit Steerco - 2026-07-30.md not found",
+            page: "wiki/entities/Orbit.md",
+            name: "sources/Teams. Transcript. Orbit Steerco - 2026-07-30.md",
+            safe: false,
+          },
+        ],
+      },
+      { id: "missing-pages", title: "Missing pages", classic: true, items: [{ text: "[[Northwind]]", name: "Northwind", safe: false }] },
+      { id: "orphans", title: "Orphan pages", classic: true, items: [{ text: "Lena", page: "wiki/entities/Lena.md", safe: false }] },
+    ],
+  } as unknown as LintReport;
+  it("gives each missing link its In the Trash and Did you mean, by check and text", () => {
+    const g = ghostHelps(r, ["Meeting. Orbit Steerco - 2026-07-30.md"], trashByName([trash]));
+    expect([...g.keys()]).toEqual([
+      "broken-sources:Orbit: sources/Teams. Transcript. Orbit Steerco - 2026-07-30.md not found",
+      "missing-pages:[[Northwind]]",
+    ]);
+    const src = g.get("broken-sources:Orbit: sources/Teams. Transcript. Orbit Steerco - 2026-07-30.md not found")!;
+    expect(src.inTrash?.id).toBe("t1");
+    expect(src.near).toBe("Meeting. Orbit Steerco - 2026-07-30.md");
+    expect(g.get("missing-pages:[[Northwind]]")).toEqual({ name: "Northwind", inTrash: null, near: null });
+  });
+});
+
+describe("fileSetChanged", () => {
+  const known = new Set(["Me. To Do List.md", "wiki/entities/Maya.md"]);
+  it("is true only when a file can have come or gone, not for an autosave", () => {
+    expect(fileSetChanged(known, { changed: ["Me. To Do List.md"], removed: [] })).toBe(false);
+    expect(fileSetChanged(known, { changed: ["Idea. New.md"], removed: [] })).toBe(true);
+    expect(fileSetChanged(known, { changed: ["wiki/entities/Maya Lee.md"], removed: ["wiki/entities/Maya.md"] })).toBe(true);
+    // A reindex, or nothing read yet.
+    expect(fileSetChanged(known, null)).toBe(true);
+    expect(fileSetChanged(null, { changed: [], removed: [] })).toBe(true);
+  });
 });
 
 describe("noteFromTranscript", () => {
@@ -214,5 +280,22 @@ describe("noteFromTranscript", () => {
     expect(noteFromTranscript("Teams. Transcript. Orbit Funding Portfolio - 2026-07-31", paths)).toBe(paths[1]);
     expect(noteFromTranscript("Teams. Transcript. Orbit Funding Portfolio - 2026-08-01", paths)).toBeNull();
     expect(noteFromTranscript("Meeting. Orbit Funding Portfolio - 2026-07-31", paths)).toBeNull();
+  });
+});
+
+describe("a run's Accept all, Reject all and Revert all", () => {
+  const c = (id: string, title: string, status: ChangeRow["status"], group = "daily-check-1") =>
+    ({ id, title, page: `wiki/${title}.md`, status, group, origin: { kind: "run" } }) as ChangeRow;
+  const rows = [
+    c("a", "Orbit App", "held"),
+    c("b", "Lena", "held"),
+    c("c", "Orbit App launch", "applied"),
+    c("d", "Orbit", "held", "ask-1"),
+  ];
+  it("act on the whole run with no search, and with one only on what it shows", () => {
+    expect(runChanges(rows, "daily-check-1", "held").map((x) => x.id)).toEqual(["a", "b"]);
+    expect(runChanges(rows, "daily-check-1", "held", "orbit").map((x) => x.id)).toEqual(["a"]);
+    expect(runChanges(rows, "daily-check-1", "applied", "orbit").map((x) => x.id)).toEqual(["c"]);
+    expect(runChanges(rows, "daily-check-1", "held", "maya")).toEqual([]);
   });
 });

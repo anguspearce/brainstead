@@ -236,8 +236,8 @@ pub fn plan(root: &Path, from: &str, to: &str, linkers: &[String], resolves: &dy
 
 /// Carries out a plan the user saw: works it out again and refuses (stale) if anything differs,
 /// checks every file it touches and the destination before writing any, rewrites the links
-/// (keeping each file's modification time: a rename isn't an edit), then moves the file. When a
-/// write or the move fails, the files already rewritten are put back.
+/// (keeping each file's modification time: a rename isn't an edit) and the claims files that name
+/// it, then moves the file. When a write or the move fails, the files already rewritten are put back.
 pub fn commit(root: &Path, shown: &RenamePlan, linkers: &[String], resolves: &dyn Fn(&str) -> bool) -> Result<()> {
     let now = plan(root, &shown.from, &shown.to, linkers, resolves)?;
     if now != *shown {
@@ -282,25 +282,43 @@ pub fn commit(root: &Path, shown: &RenamePlan, linkers: &[String], resolves: &dy
     if let Some(d) = dst.parent() {
         fs::create_dir_all(d).map_err(io)?;
     }
+    // A wiki page's claims go with it (D-20261006-08), and the claims made from it, wherever they
+    // are, name it by its new name: worked out now, written before the move, put back with the rest.
+    let claims = crate::claims::on_rename(root, &now.from, &now.to);
 
     let mut written: Vec<&(std::path::PathBuf, String, String)> = Vec::new();
-    let undo = |written: &[&(std::path::PathBuf, String, String)], e: WriteError| -> WriteError {
-        let failed: Vec<String> = written
-            .iter()
-            .filter(|(abs, before, _)| write_atomic(abs, before.as_bytes(), true).is_err())
-            .map(|(abs, _, _)| abs.strip_prefix(root).unwrap_or(abs).display().to_string())
-            .collect();
-        if failed.is_empty() {
-            e
-        } else {
-            WriteError::Io(format!("{e}; and putting back {} failed too, so some links point at the new name.", failed.join(", ")))
-        }
-    };
+    let mut claims_written: Vec<&crate::claims::Rewrite> = Vec::new();
+    let undo =
+        |written: &[&(std::path::PathBuf, String, String)], claims_written: &[&crate::claims::Rewrite], e: WriteError| -> WriteError {
+            let rel = |abs: &Path| abs.strip_prefix(root).unwrap_or(abs).display().to_string();
+            let mut failed: Vec<String> = claims_written
+                .iter()
+                .filter(|(abs, before, _)| crate::claims::put(abs, before.as_deref()).is_err())
+                .map(|(abs, _, _)| rel(abs))
+                .collect();
+            failed.extend(
+                written.iter().filter(|(abs, before, _)| write_atomic(abs, before.as_bytes(), true).is_err()).map(|(abs, _, _)| rel(abs)),
+            );
+            if failed.is_empty() {
+                e
+            } else {
+                WriteError::Io(format!(
+                    "{e}; and putting back {} failed too, so some links or claims point at the new name.",
+                    failed.join(", ")
+                ))
+            }
+        };
     for w in &writes {
         if let Err(e) = write_atomic(&w.0, w.2.as_bytes(), true) {
-            return Err(undo(&written, e));
+            return Err(undo(&written, &claims_written, e));
         }
         written.push(w);
+    }
+    for c in &claims {
+        if let Err(e) = crate::claims::put(&c.0, c.2.as_deref()) {
+            return Err(undo(&written, &claims_written, io(e)));
+        }
+        claims_written.push(c);
     }
     let moved = if case_only {
         // A change of case only: on a case-insensitive disk a direct rename does nothing. If the
@@ -316,11 +334,7 @@ pub fn commit(root: &Path, shown: &RenamePlan, linkers: &[String], resolves: &dy
     };
     // The note itself may have been rewritten (links to its own headings); a failed move leaves
     // it at `src`, where `undo` puts it back.
-    moved.map_err(|e| undo(&written, io(e)))?;
-    // A wiki page's claims go with it (D-20261006-08), and the claims made from it, wherever they
-    // are, name it by its new name.
-    crate::claims::carry(root, &now.from, &now.to).map_err(io)?;
-    crate::claims::rename_source(root, &now.from, &now.to).map(|_| ()).map_err(io)
+    moved.map_err(|e| undo(&written, &claims_written, io(e)))
 }
 
 #[cfg(test)]
@@ -509,6 +523,51 @@ mod tests {
             assert!(matches!(r, Err(WriteError::Io(_))), "{r:?}");
             assert_eq!(snapshot(root), before);
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_claims_write_puts_everything_back() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = fixture();
+        let root = d.path();
+        let from = "wiki/entities/Orbit App.md";
+        let to = "wiki/entities/Orbit Platform.md";
+        let linkers = vec!["Meeting. Orbit App Steerco - 2026-09-30.md".to_string()];
+        let resolves = |t: &str| key(t) == "orbit app";
+        fs::remove_file(root.join("Meeting. Orbit App Steerco - 2026-09-30 2.md")).unwrap();
+        // The page's own claims, and a claim on another page made from it.
+        let k = |source: &str| crate::claims::Kept {
+            subject: "Orbit App".into(),
+            attribute: "owner".into(),
+            value: "Maya".into(),
+            source: source.into(),
+            ..Default::default()
+        };
+        let own = crate::claims::with_source(None, from, "a.md", &[k("a.md")]).unwrap();
+        let other = crate::claims::with_source(None, "wiki/people/Maya.md", from, &[k(from)]).unwrap();
+        for (page, text) in [(from, &own), ("wiki/people/Maya.md", &other)] {
+            let p = root.join(crate::claims::path(page).unwrap());
+            fs::create_dir_all(p.parent().unwrap()).unwrap();
+            fs::write(p, text).unwrap();
+        }
+        let before = snapshot(root);
+        // The other page's claims can't be written (its folder is locked): the page's own claims,
+        // already carried, and the links go back, and the note stays where it was.
+        let people = root.join("wiki/.claims/people");
+        fs::set_permissions(&people, fs::Permissions::from_mode(0o555)).unwrap();
+        let p = plan(root, from, to, &linkers, &resolves).unwrap();
+        assert!(!p.changes.is_empty());
+        let r = commit(root, &p, &linkers, &resolves);
+        fs::set_permissions(&people, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(matches!(r, Err(WriteError::Io(_))), "{r:?}");
+        assert_eq!(snapshot(root), before);
+        // Once it can be written, all of it moves together.
+        commit(root, &p, &linkers, &resolves).unwrap();
+        assert!(root.join(to).exists() && !root.join(from).exists());
+        assert!(root.join("wiki/.claims/entities/Orbit Platform.json").exists());
+        let maya = fs::read_to_string(people.join("Maya.json")).unwrap();
+        assert_eq!(crate::claims::parse(&maya).claims[0].source, to);
     }
 
     #[test]

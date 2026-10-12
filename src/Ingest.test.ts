@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, it } from "vitest";
-import type { IngestRun, SourceRow } from "./api";
-import { isActive, meetingNoteMade, meetingProgress, merge, queueOffer } from "./Ingest";
+import type { ChangeRow, IngestRun, SourceRow } from "./api";
+import { isActive, meetingNoteMade, meetingProgress, merge, queueOffer, runMatches } from "./Ingest";
 import { ingestable, sourceStatus } from "./Lists";
 
 const run = (id: string, status = "running"): IngestRun => ({
@@ -31,6 +31,21 @@ describe("ingest runs", () => {
     expect(merge(l, run("c"))[0].id).toBe("c");
     expect(isActive(run("q", "queued"))).toBe(true);
     expect(isActive(run("d", "failed"))).toBe(false);
+  });
+
+  it("matches the pane's search on every word of what its card shows", () => {
+    const r = { ...run("a", "done"), source: "sources/Orbit App plan.pdf", model: "claude:haiku" };
+    expect(runMatches(r, "")).toBe(true);
+    expect(runMatches(r, "orbit DONE")).toBe(true);
+    expect(runMatches(r, "haiku 2026-10-02")).toBe(true);
+    expect(runMatches(r, "orbit failed")).toBe(false);
+    const m = {
+      ...run("m", "failed"),
+      kind: "meeting",
+      source: "sources/Teams. Transcript. Steerco.md",
+      note: { type: "Meeting", name: "Steerco", date: "2026-10-02" },
+    };
+    expect(runMatches(m as IngestRun, "steerco failed")).toBe(true);
   });
 
   it("source status: changed beats ingested", () => {
@@ -110,6 +125,23 @@ describe("meetingProgress", () => {
       steps: [{ name: "Note", status: "done", detail: "Held in Changes", ms: 1 }],
     } as Partial<IngestRun>);
     expect(meetingProgress([held], t)?.label).toBe("Note held in Changes");
+    // As Changes has the run's note now: still held; accepted (made); rejected; gone from its history.
+    const change = (status: string) => [{ id: "c", status, origin: { kind: "meeting", chat: t, run: "r" } }] as ChangeRow[];
+    expect(meetingProgress([held], t, change("held"))?.label).toBe("Note held in Changes");
+    expect(meetingProgress([held], t, change("applied"))).toBeNull();
+    expect(
+      meetingProgress(
+        [run({ source: "Meeting. Steerco - 2026-10-02.md", status: "running", started: "2026-10-12T10:01:00" }), held],
+        t,
+        change("applied"),
+      ),
+    ).toEqual({ label: "Ingesting…", busy: true });
+    expect(meetingProgress([held], t, change("rejected"))).toMatchObject({ label: "Note rejected in Changes", busy: false });
+    expect(meetingProgress([held], t, [])).toBeNull();
+    // A note made at once and reverted since: the transcript can be chosen again.
+    const madeRun = run({ kind: "meeting", source: t, note, ...made });
+    expect(meetingProgress([madeRun], t, change("reverted"))).toMatchObject({ label: "Note reverted in Changes", busy: false });
+    expect(meetingProgress([madeRun], t, change("applied"))).toBeNull();
     const done = run({ kind: "meeting", source: t, note, ...made });
     expect(
       meetingProgress([run({ source: "Meeting. Steerco - 2026-10-02.md", status: "failed", started: "2026-10-12T10:01:00" }), done], t),

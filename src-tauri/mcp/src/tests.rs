@@ -941,3 +941,12 @@ fn a_notes_own_look_goes_to_the_app_with_its_action() {
     assert!(refused(&f.ctx, "list_note_looks", json!({"action": "set"})).contains("list_note_looks does list"));
     assert!(refused(&f.ctx, "note_look", json!({"page": "Orbit App"})).contains("Give action"));
 }
+
+#[test]
+fn trash_note_sends_a_transcript_to_the_app() {
+    // So its links are pointed at its meeting note first (src/meetingFlow.ts's trashTranscript).
+    assert!(is_transcript_page("sources/Teams. Transcript. Steerco - 2026-10-02.md"));
+    assert!(is_transcript_page("sources/meetings/Teams. Transcript. Steerco - 2026-10-02.md"));
+    assert!(!is_transcript_page("sources/Teams. Chat. Standup - 2026-10-03.md"));
+    assert!(!is_transcript_page("notes/Teams. Transcript. Steerco.md"));
+}

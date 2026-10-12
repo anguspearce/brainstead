@@ -18,7 +18,7 @@ import { toast } from "../Toast";
 import { TopBar } from "../TopBar";
 import { ago, SearchPick, Seg } from "../ui";
 import { ASSISTANT_FRONTMATTER } from "../md/scripts";
-import { docChecks, docChecksUnseen, seenDocChecks, startDocChecks } from "../docChecks";
+import { docChecks, docChecksUnseen, mergeRun, seenDocChecks, startDocChecks } from "../docChecks";
 import { CheckProgress } from "./DocCheck";
 import { CompareTabs } from "./CompareTabs";
 
@@ -146,7 +146,7 @@ export function CompareScreen() {
     setError("");
     try {
       const x = await api.docCheckStart(a, b, mode);
-      docChecks.set([x, ...docChecks.get().filter((y) => y.id !== x.id)]);
+      docChecks.set(mergeRun(docChecks.get(), x));
     } catch (e) {
       setError(String(e));
     }

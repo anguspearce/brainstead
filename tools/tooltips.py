@@ -8,7 +8,9 @@
 
 A <button> passes when its opening tag has a `title=`, or when it sits straight inside a
 <span title=…> (a disabled button gets no pointer events in WebKit, so its tooltip goes on a
-wrapper). Tests are skipped.
+wrapper). A component that draws a <button> with its title from one of its props (Health's
+BusyButton: `title={title}`) is a button too: each place that uses it must give that prop.
+Tests are skipped.
 """
 
 import pathlib
@@ -43,15 +45,35 @@ def wrapped(s: str, start: int) -> bool:
     return lt >= 0 and "title=" in open_tag(before, lt) and len(open_tag(before, lt)) == len(before) - lt
 
 
+def wrappers(s: str) -> dict[str, str]:
+    """Components in `s` that draw a <button> titled by one of their props: name to that prop."""
+    out = {}
+    for m in re.finditer(r"^(?:export )?function ([A-Z]\w*)\(\s*\{([^}]*)\}", s, re.M):
+        props = set(re.findall(r"\b(\w+)\b(?=\s*[,=}]|\s*$)", m.group(2)))
+        end = s.find("\n}\n", m.end())
+        body = s[m.end() : end if end >= 0 else len(s)]
+        for b in re.finditer(r"<button\b", body):
+            t = re.search(r"\btitle=\{(\w+)\}", open_tag(body, b.start()))
+            if t and t.group(1) in props:
+                out[m.group(1)] = t.group(1)
+    return out
+
+
 def main() -> int:
     missing = []
-    for f in sorted((ROOT / "src").rglob("*.tsx")):
-        if ".test." in f.name:
-            continue
-        s = f.read_text()
+    files = [f for f in sorted((ROOT / "src").rglob("*.tsx")) if ".test." not in f.name]
+    texts = {f: f.read_text() for f in files}
+    comps = {}
+    for s in texts.values():
+        comps.update(wrappers(s))
+    for f, s in texts.items():
         for m in re.finditer(r"<button\b", s):
             if "title=" not in open_tag(s, m.start()) and not wrapped(s, m.start()):
                 missing.append(f"{f.relative_to(ROOT)}:{s.count(chr(10), 0, m.start()) + 1}")
+        for name, prop in comps.items():
+            for m in re.finditer(rf"<{name}\b", s):
+                if not re.search(rf"\b{prop}=", open_tag(s, m.start())):
+                    missing.append(f"{f.relative_to(ROOT)}:{s.count(chr(10), 0, m.start()) + 1}")
     for x in missing:
         print(f"{x}: a button without a tooltip (title=)")
     if missing:

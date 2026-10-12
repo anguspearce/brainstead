@@ -45,9 +45,9 @@ The Inbox (⌥⌘2) lists what you've captured but not decided: emails and Teams
 | `R` | File as reference in a note |
 | `⌫` | Delete |
 
-Tick several items (a section's header box ticks them all) to act on them together: make meeting notes, ingest, keep in Sources, mark done, move to Someday / maybe or delete. Next action, Waiting for and New project stay one at a time.
+Tick several items (a section's header box ticks them all) to act on them together: make meeting notes, ingest, keep in Sources, mark done, move to Someday / maybe or delete. One that fails doesn't stop the rest: it stays ticked and the message says why. Next action, Waiting for and New project stay one at a time.
 
-An email or chat can also be ingested into the wiki (`I`), made into a meeting note (`M`) or answered with a drafted reply (`D`). **Suggest for all** suggests a choice for the first 20 items; ↩ accepts one. ⌘Z undoes each choice.
+An email or chat can also be ingested into the wiki (`I`), made into a meeting note (`M`) or answered with a drafted reply (`D`). A transcript stays in the Inbox until its meeting note is made and ingested; if either fails it stays, to be chosen again. Suggest only suggests what the Inbox offers for that kind of item. **Suggest for all** suggests a choice for the first 20 items; ↩ accepts one. ⌘Z undoes each choice.
 
 ## Tasks
 
@@ -72,7 +72,7 @@ A project is a note named `Project. <name>.md`, with its status, area and outcom
 
 An active project is **Stuck** (red) with no next action, and **Quiet** (amber) when nothing has moved for two weeks. Add next actions, edit the outcome, area and status, and draft nudges for waiting-fors. **New project** writes the note with its headings.
 
-- Click an area to fold its projects away; what's folded is remembered. Its pencil renames the area on every project under it.
+- Click an area to fold its projects away; what's folded is remembered. Its pencil renames the area on every project under it; it keeps its place in the order, and undoing the rename (the toast's Undo, ⌘Z, Revert in Changes) puts it back where it was.
 - Drag an area, or a project within its area, by its grip to put them in order. The order is a Brainstead setting, not written to your notes; ones never moved come after, A to Z.
 - Click the project's name on its page to rename it; its note is renamed and links to it follow.
 - The pencil on a project's row, or **Edit** on its page, opens the project note in Edit.

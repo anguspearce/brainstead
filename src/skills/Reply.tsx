@@ -7,14 +7,14 @@
 // tone you pick, to copy into Outlook or Teams. Brainstead never sends anything.
 
 import { keepInSources, StillInInbox, useInInbox } from "../StillInInbox";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, FileSummary, Reply } from "../api";
 import { captureStamp } from "../Capture";
 import { Icon } from "../icons";
 import { fmtShortDate } from "../md/dates";
 import { Markdown } from "../md/Markdown";
 import { nav, openDoc, place, useViewState } from "../nav";
-import { useVaultVersion } from "../state";
+import { useVaultVersion, vaultVersion } from "../state";
 import { settings, useStore } from "../store";
 import { reportEditError } from "../taskModel";
 import { toast } from "../Toast";
@@ -75,7 +75,22 @@ export function ReplyScreen() {
       .then((f) => setThreads(f.filter((x) => isThread(x.path)).sort((a, b) => b.mtime - a.mtime)))
       .catch(() => {});
   }, [vv]);
+  // Each draft or change asked for is numbered; an answer that comes back after another thread was
+  // chosen (or a newer ask) is dropped rather than shown against the wrong thread.
+  const ask = useRef(0);
+  // The thread is read, and the draft, asked changes and Undo start over, when another thread is
+  // chosen or the thread's own file changes, not when anything else in the vault does.
+  const [read, setRead] = useState(0);
+  const seen = useRef(vv);
   useEffect(() => {
+    if (seen.current === vv) return;
+    seen.current = vv;
+    const c = vaultVersion.get().changes;
+    if (chosen && (!c || c.changed.includes(chosen) || c.removed.includes(chosen))) setRead((n) => n + 1);
+  }, [vv]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    ask.current++;
+    setBusy(false);
     setR(null);
     setAsked([]);
     setBefore([]);
@@ -91,39 +106,43 @@ export function ReplyScreen() {
         if (at.screen === "reply" && at.path === chosen) nav.replace({ ...at, path: undefined });
         toast(`${chosen.split("/").pop()} isn't there any more: choose another thread or paste one`, undefined, "bad");
       });
-  }, [chosen, vv]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [chosen, read]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const run = async (t: Tone = tone) => {
+    const n = ++ask.current;
     setBusy(true);
     setError("");
     try {
       const out = await api.draftReply(chosen, chosen ? null : pasted, t);
+      if (ask.current !== n) return;
       setR(out);
       setDraft(out.draft);
       setAsked([]);
       setBefore([]);
     } catch (e) {
-      setError(String(e));
+      if (ask.current === n) setError(String(e));
     } finally {
-      setBusy(false);
+      if (ask.current === n) setBusy(false);
     }
   };
   const revise = async () => {
-    const ask = change.trim();
-    if (!ask || !r || busy) return;
+    const want = change.trim();
+    if (!want || !r || busy) return;
+    const n = ++ask.current;
     setBusy(true);
     setError("");
     try {
-      const out = await api.draftReply(chosen, chosen ? null : pasted, tone, draft, ask);
+      const out = await api.draftReply(chosen, chosen ? null : pasted, tone, draft, want);
+      if (ask.current !== n) return;
       setBefore((b) => [...b, { r, draft }]);
-      setAsked((a) => [...a, ask]);
+      setAsked((a) => [...a, want]);
       setR(out);
       setDraft(out.draft);
       setChange("");
     } catch (e) {
-      setError(String(e));
+      if (ask.current === n) setError(String(e));
     } finally {
-      setBusy(false);
+      if (ask.current === n) setBusy(false);
     }
   };
   const undo = () => {
@@ -360,7 +379,7 @@ export function ReplyScreen() {
                 )}
               </div>
               <p className="faint small">Paste into Outlook or Teams: Brainstead never sends anything.</p>
-              {chosen && <StillInInbox path={chosen} />}
+              {chosen && <StillInInbox key={chosen} path={chosen} />}
             </>
           )}
         </section>

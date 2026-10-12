@@ -15,6 +15,7 @@ import { useVaultVersion } from "../state";
 import { reportEditError, undoLast } from "../taskModel";
 import { toast } from "../Toast";
 import { noteDialog } from "./dialogs";
+import { isTranscriptPath, trashTranscript } from "../meetingFlow";
 
 /** An error from Rust as one line for a person. */
 export const errText = (e: unknown) => (typeof e === "object" && e && "message" in e ? String((e as EditError).message) : String(e));
@@ -60,10 +61,13 @@ export function openRename(path: string): void {
   noteDialog.set({ kind: "rename", path });
 }
 
-/** Moves a file to the vault's `.trash/`, with Undo. Leaves the document if it was open. */
+/** Moves a file to the vault's `.trash/`, with Undo. Leaves the document if it was open. A Teams
+ *  transcript's links point at its meeting note first (trashTranscript). */
 export async function trashFile(path: string): Promise<void> {
   try {
-    const entry = await withDraftHandedOver(path, () => api.trashMove(path));
+    const entry = await withDraftHandedOver(path, async () =>
+      isTranscriptPath(path) ? (await trashTranscript(path)).entry! : api.trashMove(path),
+    );
     const here = place.get().place;
     if (here.screen === "doc" && here.path === path) {
       if (place.get().canBack) nav.back();

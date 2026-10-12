@@ -1,0 +1,40 @@
+{
+  "about": "What each kind of Inbox item can become, in the order the Inbox's buttons show. src/inboxActions.ts's inboxChoices and suggestKind, and brainstead_core::reviews::prep's inbox_kind and fits (used by the Inbox's Suggest, list_inbox's suggest and the weekly review's preparation), are each checked against this table.",
+  "kinds": [
+    {
+      "kind": "thought",
+      "item": { "kind": "thought", "path": "Me. Scratchpad.md" },
+      "choices": ["next", "project", "waiting", "done", "someday", "reference", "delete"]
+    },
+    {
+      "kind": "task",
+      "item": { "kind": "task", "path": "Me. To Do List.md" },
+      "choices": ["next", "project", "waiting", "done", "someday", "reference", "delete"]
+    },
+    {
+      "kind": "transcript",
+      "item": { "kind": "capture", "path": "sources/meetings/Teams. Transcript. Orbit App steerco - 2026-10-02.md" },
+      "choices": ["meeting", "ingest", "ask", "reference", "delete"]
+    },
+    {
+      "kind": "thread",
+      "item": { "kind": "capture", "path": "sources/Email. Thread. Re Orbit App launch - 2026-10-02.md" },
+      "choices": ["reply", "ingest", "ask", "next", "project", "waiting", "someday", "reference", "delete"]
+    },
+    {
+      "kind": "thread",
+      "item": { "kind": "capture", "path": "sources/Teams. Chat. Standup - 2026-10-03.md" },
+      "choices": ["reply", "ingest", "ask", "next", "project", "waiting", "someday", "reference", "delete"]
+    },
+    {
+      "kind": "capture",
+      "item": { "kind": "capture", "path": "sources/Orbit App plan.pdf" },
+      "choices": ["ingest", "ask", "next", "project", "someday", "reference", "delete"]
+    },
+    {
+      "kind": "file",
+      "item": { "kind": "capture", "path": "sources/Orbit App data.zip" },
+      "choices": ["next", "project", "someday", "reference", "delete"]
+    }
+  ]
+}

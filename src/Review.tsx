@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ChangeRow, ChangeView, Hunk } from "./api";
 import { Icon } from "./icons";
 import { fieldIcon, fieldTip, splitTaskFields } from "./taskFields";
-import { byRun, changeMatches, changes, held, originLabel, pageName, reloadChanges, startKnowledge } from "./knowledge";
+import { byRun, changeMatches, changes, held, originLabel, pageName, reloadChanges, runChanges, startKnowledge } from "./knowledge";
 import { nav, openDoc, useViewState } from "./nav";
 import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
@@ -145,21 +145,23 @@ export function revert(c: ChangeRow) {
 /** The run whose held changes are being accepted now, if any: Accept all and ⌘↩ wait for it. */
 export const acceptingRun = new Store<string | null>(null);
 
-/** Accepts every held change in a run, one run at a time; a meeting note made by it gets its follow-up offer. */
-export function acceptRun(group: string, rows: ChangeRow[]) {
+/** Accepts every held change in a run (only those the search `q` shows, when there is one), one
+ *  run at a time; each meeting note it made gets its follow-up offer. */
+export function acceptRun(group: string, rows: ChangeRow[], q = "") {
   if (acceptingRun.get()) return Promise.resolve();
   acceptingRun.set(group);
-  const meetings = rows.filter((c) => c.group === group && c.status === "held" && c.origin.kind === "meeting" && c.origin.chat);
+  const todo = runChanges(rows, group, "held", q);
+  const meetings = todo.filter((c) => c.origin.kind === "meeting" && c.origin.chat);
   return api
-    .changesAcceptAll(group)
-    .then((m) => {
+    .changesAcceptAll(group, false, q ? todo.map((c) => c.id) : undefined)
+    .then(async (m) => {
       if (m.failed.length) toast(`Accepted ${m.done}; ${m.failed.length} couldn't be made: ${m.failed[0]}`, undefined, "bad");
-      else {
-        toast(`Accepted ${plural(m.done, "change")}`, undefined, "ok");
-        for (const c of meetings) offerFollowUp({ note: c.to ?? c.page, transcript: c.origin.chat ?? "" });
-      }
+      else toast(`Accepted ${plural(m.done, "change")}`, undefined, "ok");
+      await reloadChanges();
+      // Only the notes that were made: one that couldn't be is still held.
+      const made = new Set((changes.get() ?? []).filter((c) => c.status === "applied").map((c) => c.id));
+      for (const c of meetings) if (made.has(c.id)) offerFollowUp({ note: c.to ?? c.page, transcript: c.origin.chat ?? "" });
     })
-    .then(reloadChanges)
     .catch(reportEditError)
     .finally(() => acceptingRun.set(null));
 }
@@ -208,15 +210,19 @@ export function ReviewScreen() {
   const readOnly = useStore(settings).readOnly;
   const [confirm, setConfirm] = useState<{ group: string; label: string; n: number; revert?: boolean } | null>(null);
   const accepting = useStore(acceptingRun);
+  // With a search on, a run's Reject all and Revert all act only on the changes it shows, as their
+  // confirmations count (Accept all too).
+  const runIds = (group: string, status: ChangeRow["status"]) =>
+    dq ? runChanges(all ?? [], group, status, dq).map((c) => c.id) : undefined;
   const rejectRun = (group: string) =>
     api
-      .changesRejectAll(group)
+      .changesRejectAll(group, runIds(group, "held"))
       .then((m) => toast(`Rejected ${plural(m.done, "change")}`))
       .then(reloadChanges)
       .catch(reportEditError);
   const revertRun = (group: string) =>
     api
-      .changesRevertAll(group)
+      .changesRevertAll(group, runIds(group, "applied"))
       .then((m) =>
         m.failed.length
           ? toast(
@@ -277,7 +283,9 @@ export function ReviewScreen() {
           <div className="confirm">
             <h2 className="h2">Revert {plural(confirm.n, "change")}?</h2>
             <p className="muted">
-              From {confirm.label}. Each page goes back as it was before; a page edited since keeps those edits and is listed.
+              From {confirm.label}
+              {dq ? ", only those the search shows" : ""}. Each page goes back as it was before; a page edited since keeps those edits and
+              is listed.
             </p>
             <div className="row">
               <span className="grow" />
@@ -303,7 +311,10 @@ export function ReviewScreen() {
         <Dialog onClose={() => setConfirm(null)} width={440} label="Reject the run's changes">
           <div className="confirm">
             <h2 className="h2">Reject {plural(confirm.n, "held change")}?</h2>
-            <p className="muted">From {confirm.label}. Nothing in the vault changes, and they can't be brought back.</p>
+            <p className="muted">
+              From {confirm.label}
+              {dq ? ", only those the search shows" : ""}. Nothing in the vault changes, and they can't be brought back.
+            </p>
             <div className="row">
               <span className="grow" />
               <button type="button" className="btn lg" title="Keep them held" onClick={() => setConfirm(null)}>
@@ -355,14 +366,16 @@ export function ReviewScreen() {
                           ? "Read-only is on (Settings › Vault)"
                           : accepting
                             ? "Accepting a run's changes…"
-                            : "Make every held change in this run, oldest first (⌘↩)"
+                            : dq
+                              ? "Make every held change in this run that the search shows, oldest first (⌘↩)"
+                              : "Make every held change in this run, oldest first (⌘↩)"
                       }
                     >
                       <button
                         type="button"
                         className="btn sm"
                         disabled={readOnly || !!accepting}
-                        onClick={() => void acceptRun(g.group, rows ?? [])}
+                        onClick={() => void acceptRun(g.group, all ?? [], dq)}
                       >
                         {accepting === g.group ? "Accepting…" : "Accept all"}
                       </button>
@@ -370,7 +383,9 @@ export function ReviewScreen() {
                     <button
                       type="button"
                       className="btn sm ghost"
-                      title="Turn down every held change in this run"
+                      title={
+                        dq ? "Turn down every held change in this run that the search shows" : "Turn down every held change in this run"
+                      }
                       disabled={accepting === g.group}
                       onClick={() => setConfirm({ group: g.group, label: g.label, n: g.rows.length })}
                     >
@@ -395,7 +410,15 @@ export function ReviewScreen() {
               {g.rows.filter((c) => c.status === "applied").length > 1 && (
                 <div className="qrunhead">
                   <span className="grow" />
-                  <span title={readOnly ? "Read-only is on (Settings › Vault)" : "Put back every page this run changed"}>
+                  <span
+                    title={
+                      readOnly
+                        ? "Read-only is on (Settings › Vault)"
+                        : dq
+                          ? "Put back every page this run changed that the search shows"
+                          : "Put back every page this run changed"
+                    }
+                  >
                     <button
                       type="button"
                       className="btn sm ghost"
@@ -422,7 +445,7 @@ export function ReviewScreen() {
           {rows !== null && !rows.length && <p className="faint pad">{dq ? `No changes match “${dq}”.` : "No changes yet."}</p>}
         </div>
         {cur ? (
-          <Detail key={cur.id} row={cur} onMove={move} />
+          <Detail key={cur.id} row={cur} q={dq} onMove={move} />
         ) : (
           <div className="iopen">
             <div className="soon">
@@ -477,7 +500,7 @@ function Row({ c, sel, gone, onSel }: { c: ChangeRow; sel: boolean; gone?: boole
   );
 }
 
-function Detail({ row, onMove }: { row: ChangeRow; onMove: (d: number) => void }) {
+function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: number) => void }) {
   const [v, setV] = useState<ChangeView | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tries, setTries] = useState(0);
@@ -536,7 +559,7 @@ function Detail({ row, onMove }: { row: ChangeRow; onMove: (d: number) => void }
       if (e.defaultPrevented || keyIsElsewhere(e)) return;
       if (e.metaKey && e.key === "Enter") {
         if (e.repeat || !isHeld || readOnly || accepting || !v || v.problem) return;
-        void acceptRun(row.group, all ?? []);
+        void acceptRun(row.group, all ?? [], q);
       } else if (e.repeat && (e.key === "a" || e.key === "r")) return;
       else if (e.metaKey || e.ctrlKey || e.altKey) return;
       else if (e.key === "j") onMove(1);

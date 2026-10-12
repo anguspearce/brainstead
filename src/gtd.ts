@@ -11,7 +11,7 @@
 import { useEffect, useState } from "react";
 import { api, InboxItem, ProjectRow, TaskRow } from "./api";
 import { useVaultVersion } from "./state";
-import { settings } from "./store";
+import { settings, Store, useStore } from "./store";
 
 export const PROJECT_PREFIX = "Project. ";
 export type ProjectStatus = "active" | "on-hold" | "someday" | "done";
@@ -101,7 +101,7 @@ export function contextsInUse(all: TaskRow[]): string[] {
   return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([c]) => c);
 }
 
-function useLoaded<T>(load: () => Promise<T>): T | null {
+function useLoaded<T>(load: () => Promise<T>, also = 0): T | null {
   const [v, setV] = useState<T | null>(null);
   const ver = useVaultVersion();
   useEffect(() => {
@@ -113,7 +113,7 @@ function useLoaded<T>(load: () => Promise<T>): T | null {
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ver]);
+  }, [ver, also]);
   return v;
 }
 
@@ -197,17 +197,35 @@ export function moveInProjectOrder(
 }
 
 /** A renamed area or project note keeps its place; renamed onto one that's there, the two merge
- *  where that one was. */
-export function renameInProjectOrder(kind: "areas" | "projects", from: string, to: string) {
+ *  where that one was. An area's old name keeps its place too, just after the new one, so undoing
+ *  the rename (⌘Z, the toast's Undo or Revert in Changes, none of which tells the screens) finds
+ *  it where it was; a project note's undo is a rename back, which `fileMoved` follows. `areas` are
+ *  the areas there before the rename: a new name that's only left over from an earlier rename is
+ *  no area to merge with. Names no area has any more go at the next drag (`moveInProjectOrder`). */
+export function renameInProjectOrder(kind: "areas" | "projects", from: string, to: string, areas: string[] = []) {
   const order = settings.get().projectOrder;
   const list = order?.[kind];
-  if (!list?.includes(from)) return;
-  const next = list.includes(to) ? list.filter((k) => k !== from) : list.map((k) => (k === from ? to : k));
+  if (!list?.includes(from) || from === to) return;
+  if (kind === "areas" && areas.includes(to)) return;
+  const next =
+    kind === "areas"
+      ? list.filter((k) => k !== to).flatMap((k) => (k === from ? [to, from] : [k]))
+      : list.includes(to)
+        ? list.filter((k) => k !== from)
+        : list.map((k) => (k === from ? to : k));
   settings.update({ projectOrder: { ...order, [kind]: next } });
 }
 
 /** The Inbox: Scratchpad blocks and the To Do list's `#### Other` tasks. */
-export const useInbox = () => useLoaded<InboxItem[]>(() => api.inboxList());
+/** Counts captures marked done: that's kept in Brainstead's app data, not the vault, so no vault
+ *  change reloads the Inbox for it. */
+const capturesDone = new Store(0);
+
+/** The Inbox, reloaded when the vault changes or a capture is marked done. */
+export const useInbox = () => useLoaded<InboxItem[]>(() => api.inboxList(), useStore(capturesDone));
+
+/** Takes a capture out of the Inbox, its file kept in Sources; every Inbox shown reloads. */
+export const captureDone = (path: string) => api.inboxCaptureDone(path).then(() => capturesDone.set(capturesDone.get() + 1));
 
 /** An Inbox item still to clarify. A To Do `#### Other` task is, while it's open and has no
  *  project, context or GTD tag; Next actions leaves those out too (`inboxTaskKeys`). */

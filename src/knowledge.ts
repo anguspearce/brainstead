@@ -6,7 +6,7 @@
 // report, loaded once and reloaded when Rust says they changed: changes arrive from the MCP server
 // and from runs in the background, and the checks rerun after the index changes.
 
-import { api, ChangeOrigin, ChangeRow, HealthFix, HealthView, LintItem, LintReport } from "./api";
+import { api, ChangeOrigin, ChangeRow, FileSummary, HealthFix, HealthView, LintItem, LintReport, TrashEntry, VaultChanges } from "./api";
 import { Store } from "./store";
 
 export const changes = new Store<ChangeRow[] | null>(null);
@@ -64,6 +64,12 @@ export function changeMatches(c: ChangeRow, q: string): boolean {
     .every((w) => text.includes(w));
 }
 
+/** A run's changes in one state that a search shows (all of them with no search): what Changes'
+ *  Accept all, Reject all and Revert all act on, and the changes tool's runs given a query. */
+export function runChanges(rows: ChangeRow[], group: string, status: ChangeRow["status"], q = ""): ChangeRow[] {
+  return rows.filter((c) => c.group === group && c.status === status && changeMatches(c, q));
+}
+
 /** A run's name in Changes: "Daily check", "Ingest of Steerco", "Ask", "Terminal session". */
 export function runLabel(c: ChangeRow): string {
   if (c.origin.run?.startsWith("daily-check-")) return "Daily check";
@@ -103,7 +109,7 @@ export const ADVISORY = new Set(["stale-pages", "uncited-claims", "no-current-st
  *  ("meting" for "meeting"), as when a note was renamed after the link was written. Null when
  *  none is that close, or two are. */
 export function nearName(name: string, paths: string[]): string | null {
-  const want = name.toLowerCase().trim();
+  const want = linkStem(name).toLowerCase();
   if (want.length < 4) return null;
   const most = Math.min(3, Math.max(1, Math.floor(want.length * 0.08)));
   let best: string | null = null;
@@ -126,7 +132,7 @@ export function nearName(name: string, paths: string[]): string | null {
  *  "Part 1" or "Part 2" counting as the one meeting, as Make a meeting note names it (Meeting, 1-1,
  *  Workshop or Interview). Null when it isn't a transcript's name or there's no such note. */
 export function noteFromTranscript(name: string, paths: string[]): string | null {
-  const m = /^Teams\. Transcript\. (.+?)(?: - Part \d+)? - (\d{4}-\d{2}-\d{2})(?:\.md)?$/i.exec(name.trim());
+  const m = /^Teams\. Transcript\. (.+?)(?: - Part \d+)? - (\d{4}-\d{2}-\d{2})$/i.exec(linkStem(name));
   if (!m) return null;
   const [, title, date] = m;
   const want = title.toLowerCase();
@@ -135,6 +141,47 @@ export function noteFromTranscript(name: string, paths: string[]): string | null
     return !!n && n[2] === date && (n[1].toLowerCase() === want || distance(n[1].toLowerCase(), want, 2) <= 2);
   });
   return hits.length === 1 ? hits[0] : null;
+}
+
+/** A link's note name: its folder and `.md` dropped, as a link written `[[wiki/entities/Maya.md]]` names Maya. */
+const linkStem = (name: string) => (name.trim().split("/").pop() ?? "").replace(/\.md$/i, "");
+
+/** The Trash's files by name (lower case, no `.md`), for a missing link that names one. */
+export const trashByName = (entries: TrashEntry[]) => new Map(entries.map((e) => [linkStem(e.basename).toLowerCase(), e]));
+
+/** What Knowledge health offers for a missing link (a missing page, or a source a page cites that
+ *  isn't there): the file it names if that's in the Trash, and Did you mean, the note it most likely
+ *  meant (the meeting note a trashed transcript became, else one a slip away). The screen's rows and
+ *  lint and health_issue all use this. */
+export type GhostHelp = { name: string; inTrash: TrashEntry | null; near: string | null };
+export function ghostHelp(check: string, i: LintItem, paths: string[], trashed: Map<string, TrashEntry>): GhostHelp | null {
+  if ((check !== "missing-pages" && check !== "broken-sources") || !i.name) return null;
+  return {
+    name: i.name,
+    inTrash: trashed.get(linkStem(i.name).toLowerCase()) ?? null,
+    near: noteFromTranscript(i.name, paths) ?? nearName(i.name, paths),
+  };
+}
+
+/** The files a missing link may have meant: every note and page, templates left out. */
+export const ghostPaths = (files: FileSummary[]) => files.filter((x) => x.layer !== "template").map((x) => x.path);
+
+/** Every missing link's help in a report, by check and item text (`missing-pages:…`): worked out
+ *  once per report and file list rather than per row on every render. */
+export function ghostHelps(r: LintReport | null, paths: string[], trashed: Map<string, TrashEntry>): Map<string, GhostHelp> {
+  const out = new Map<string, GhostHelp>();
+  for (const c of r?.checks ?? [])
+    for (const i of c.items) {
+      const g = ghostHelp(c.id, i, paths, trashed);
+      if (g) out.set(`${c.id}:${i.text}`, g);
+    }
+  return out;
+}
+
+/** Whether a vault change can have changed which files there are (one added, removed or renamed, or
+ *  a reindex), rather than only what's in them, as an autosave does: `known` is the file list last read. */
+export function fileSetChanged(known: ReadonlySet<string> | null, c: VaultChanges | null): boolean {
+  return !known || !c || c.removed.length > 0 || c.changed.some((p) => !known.has(p));
 }
 
 /** Edit distance, given up past `most` (a quick no). */

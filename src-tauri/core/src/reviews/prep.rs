@@ -49,6 +49,44 @@ pub const STEPS: [&str; 10] = ["loose", "inbox", "notes", "back", "next", "ahead
 /// What a clarified Inbox item can become, as the Inbox's own suggestions have it.
 pub const BECOMES: [&str; 7] = ["next", "project", "waiting", "done", "someday", "reference", "delete"];
 
+/// What kind of Inbox item this is, for what it can become: a thought, a task, or a capture by its
+/// file: a Teams transcript, an email or chat thread, another capture ingest can read, or a file it
+/// can't. src/inboxActions.ts's suggestKind is the same rule, for the window.
+pub fn inbox_kind(kind: &str, path: &str) -> &'static str {
+    match kind {
+        "thought" => return "thought",
+        "task" => return "task",
+        _ => {}
+    }
+    let name = path.rsplit('/').next().unwrap_or(path);
+    let source = path.starts_with("sources/");
+    if source && name.starts_with("Teams. Transcript.") {
+        "transcript"
+    } else if source && (name.starts_with("Email. ") || name.starts_with("Teams. Chat. ")) {
+        "thread"
+    } else if crate::extract::ingestable(path) && !path.starts_with("wiki/") && !path.starts_with("Templates/") {
+        "capture"
+    } else {
+        "file"
+    }
+}
+
+/// Whether an Inbox item of this kind (`inbox_kind`) can become `becomes`, as the Inbox offers it
+/// (src/inboxActions.ts's inboxChoices; both are checked against tests/fixtures/inbox-choices.json).
+/// A capture isn't "done now" (Keep in Sources takes it out), only a thread is waited on or
+/// answered, ingest is for a file ingest can read, and a transcript is a meeting note, kept or
+/// trashed.
+pub fn fits(kind: &str, becomes: &str) -> bool {
+    match kind {
+        "thought" | "task" => matches!(becomes, "next" | "project" | "waiting" | "done" | "someday" | "reference" | "delete"),
+        "transcript" => matches!(becomes, "meeting" | "ingest" | "ask" | "reference" | "delete"),
+        "thread" => matches!(becomes, "reply" | "ingest" | "ask" | "next" | "project" | "waiting" | "someday" | "reference" | "delete"),
+        "capture" => matches!(becomes, "ingest" | "ask" | "next" | "project" | "someday" | "reference" | "delete"),
+        "file" => matches!(becomes, "next" | "project" | "someday" | "reference" | "delete"),
+        _ => false,
+    }
+}
+
 /// The most suggestions a step keeps.
 fn cap(step: &str) -> usize {
     match step {
@@ -404,7 +442,7 @@ pub fn render_inputs(i: &Inputs) -> String {
     s.push_str("## Inbox\n\n");
     none(&mut s, i.inbox.is_empty());
     for x in &i.inbox {
-        s.push_str(&format!("- {} ({}): {}\n", x.r#ref, x.item.kind, x.item.text.trim().replace('\n', " / ")));
+        s.push_str(&format!("- {} ({}): {}\n", x.r#ref, inbox_kind(&x.item.kind, &x.item.path), x.item.text.trim().replace('\n', " / ")));
     }
     for (list, head) in [
         ("next", "Open next actions".to_string()),
@@ -847,6 +885,9 @@ fn check_action(a: &serde_json::Value, i: &Inputs, refs: &Refs) -> Result<Action
             if !BECOMES.contains(&becomes.as_str()) {
                 return Err(format!("an Inbox item can't become {becomes:?}"));
             }
+            if !fits(inbox_kind(&x.item.kind, &x.item.path), &becomes) {
+                return Err(format!("the Inbox doesn't offer {becomes:?} for {r}"));
+            }
             let text = if matches!(becomes.as_str(), "next" | "waiting" | "someday") { Some(new_task("text")?) } else { get(a, "text") };
             Action::Clarify { item: x.item.clone(), becomes, text, project: project(a, i), context: context(a), due: date(a, "due") }
         }
@@ -966,6 +1007,22 @@ mod tests {
         assert_eq!(with_link("the app launch", "app", "Orbit App").unwrap(), "the [[Orbit App|app]] launch");
         assert!(with_link("nothing here", "Orbit", "Orbit App").is_none());
         assert!(with_link("[[Orbit App]]", "Orbit", "Orbit").is_none());
+    }
+
+    #[test]
+    fn inbox_choices_as_the_inbox_offers_them() {
+        // The same table src/inboxActions.test.ts checks inboxChoices and suggestKind against.
+        let table: serde_json::Value = serde_json::from_str(include_str!("../../../../tests/fixtures/inbox-choices.json")).unwrap();
+        let every = ["next", "project", "waiting", "done", "someday", "reference", "delete", "meeting", "reply", "ingest", "ask"];
+        for k in table["kinds"].as_array().unwrap() {
+            let kind = k["kind"].as_str().unwrap();
+            let item = &k["item"];
+            assert_eq!(inbox_kind(item["kind"].as_str().unwrap(), item["path"].as_str().unwrap()), kind, "{item}");
+            let choices: Vec<&str> = k["choices"].as_array().unwrap().iter().map(|c| c.as_str().unwrap()).collect();
+            for b in every {
+                assert_eq!(fits(kind, b), choices.contains(&b), "{kind} {b}");
+            }
+        }
     }
 
     #[test]

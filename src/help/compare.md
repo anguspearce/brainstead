@@ -16,14 +16,14 @@ Pick **A** and **B** by typing part of their names, or **Choose a file…** for 
 Click **Compare**.
 
 ## Apples and pears
-Before comparing anything, Compare reads only the opening of each document and asks whether they're about the same thing. If they aren't, it stops there and says so, so two unrelated documents cost a quick look rather than a full comparison. Doc check does the same.
+Before comparing anything, Compare reads only the opening of each document and asks whether they're about the same thing. If they aren't, it stops there and says so, so two unrelated documents cost a quick look rather than a full comparison. If that answer can't be read, it goes on and compares them, and the comparison can still say they're unrelated. Doc check does the same.
 
 ## While it runs
-A comparison runs in the background, its steps ticked off as it goes (reading each document, the first look, comparing them) with a clock on the one going. **Stop** ends it and keeps nothing. You can leave the page: the sidebar shows a spinner beside **Compare**, then a badge when it's done, and a message offers **Open**.
+A comparison runs in the background, its steps ticked off as it goes (reading each document, the first look, comparing them) with a clock on the one going. **Stop** ends it at once: nothing more is asked of the AI and nothing is kept. You can leave the page: the sidebar shows a spinner beside **Compare**, then a badge when it's done, and a message offers **Open**, which comes back to it with both documents and the choice.
 
 ## The findings
 Each finding is **Differs**, **Only in A**, **Only in B** or **Agrees** (or **Changed**, **Added**, **Removed**), with what each document says, quoted, and where. One that changes a decision, number, date, owner, scope or commitment is marked **Material**. **Copy findings** copies them as markdown; **Save as note** makes a note, `Compare. A vs B - YYYY-MM-DD.md`.
 
 Every finished comparison is kept on this computer (not in your vault). Choosing the same two documents and the same choice again shows it at once; while neither has changed it still stands, and if either has, it says so and **Compare again** gets findings that match them.
 
-An assistant can compare two documents too (`compare_docs`), and is given a kept comparison while it still stands.
+An assistant can compare two documents too (`compare_docs`), and is given a kept comparison while it still stands. Two documents that aren't about the same thing aren't saved as a note, as the page offers no **Save as note** for them.

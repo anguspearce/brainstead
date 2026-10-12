@@ -8,16 +8,17 @@
 // project, a context or a waiting-for or someday tag, is done, or is moved). ⌘Z undoes. A
 // suggestion from the model is only shown until you accept it.
 
-import { askedFromInbox } from "./StillInInbox";
+import { ask as askChats, askedFromInbox } from "./askState";
 import { nav, openDoc, useViewState } from "./nav";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ClarifySuggestion, InboxItem, ProjectRow } from "./api";
 import { prepareCapture } from "./Capture";
-import { contextName, fmtEffort, effortMinutes, projectLink, projectName, unclarified, useInbox, useProjects } from "./gtd";
+import { captureDone, contextName, fmtEffort, effortMinutes, projectLink, projectName, unclarified, useInbox, useProjects } from "./gtd";
 import { Icon } from "./icons";
 import { fmtShortDate, resolveDateWord } from "./md/dates";
 import { localToday } from "./md/taskQuery";
 import { ingest, meetingProgress, runs, startRuns } from "./Ingest";
+import { changes, startKnowledge } from "./knowledge";
 import { NewProject } from "./Projects";
 import { askAboutNote } from "./Ask";
 import { meetingTip, SOURCE_ACTION } from "./sourceActions";
@@ -35,12 +36,15 @@ import { TaskText } from "./TaskList";
 import {
   appendAsReference,
   doneNow,
+  eachItem,
+  eachSaid,
   inboxChoices,
   inboxItemKind,
   leadChoice,
   newReferenceNote,
   settleInboxItem,
   suggestKind,
+  trashCapture,
 } from "./inboxActions";
 
 export { unclarified } from "./gtd";
@@ -140,6 +144,25 @@ const BULK_LABEL: Record<string, (n: number, caps: boolean) => [string, string, 
       : "Delete them from the Inbox (captures go to the Trash); ⌘Z undoes one at a time",
   ],
 };
+/** Choices for several ticked items at once, as [key, choice, label, tip]: those every one of them
+ *  has (inboxChoices) and that need no form each (Next action, Waiting for and New project are one
+ *  at a time); Keep in Sources only when all are captures (filing a thought needs a note picked). */
+export function bulkChoices(ps: InboxItem[]) {
+  const caps = ps.every((i) => i.kind === "capture");
+  const common = BULK.filter((b) => ps.every((i) => inboxChoices(i).includes(b)) && (b !== "reference" || caps));
+  return common.map((b) => {
+    const [k, label, tip] = BULK_LABEL[b](ps.length, caps);
+    return [k, b, label, tip] as const;
+  });
+}
+/** What a choice made for several items says, once done. */
+const DONE_ALL: Record<string, string> = {
+  ingest: "Ingesting: their changes are listed in Changes",
+  done: "Done, and out of the Inbox",
+  someday: "Moved to Someday / maybe",
+  reference: "Kept in Sources",
+  delete: "Deleted",
+};
 /** What a capture becomes as a task, by default: a follow-up linking the file. */
 const startText = (i: InboxItem) => (i.kind === "capture" ? `Follow up on [[${i.text}]]` : itemText(i));
 
@@ -206,8 +229,10 @@ export function InboxScreen() {
   // A transcript whose meeting note is under way (or failed): its row says so, and while it's
   // under way it can't be ticked or chosen, so it isn't made twice.
   useEffect(startRuns, []);
+  useEffect(startKnowledge, []);
   const runList = useStore(runs);
-  const progress = (i: InboxItem) => (isTranscript(i) ? meetingProgress(runList ?? [], i.path) : null);
+  const changeRows = useStore(changes);
+  const progress = (i: InboxItem) => (isTranscript(i) ? meetingProgress(runList ?? [], i.path, changeRows) : null);
   const busy = (i: InboxItem) => !!progress(i)?.busy;
   // What's ticked and still in the Inbox; with more than one, the pane acts on them together.
   const picked = items.filter((i) => checked.includes(key(i)) && !busy(i));
@@ -253,74 +278,66 @@ export function InboxScreen() {
       case "reply":
         return nav.go({ screen: "reply", path: i.path });
       case "ask":
-        askedFromInbox.set(i.path);
-        return askAboutNote(i.path);
+        // Its strip shows on the chat about it, and goes with a new chat (that clears it).
+        askAboutNote(i.path);
+        return askedFromInbox.set({ path: i.path, chat: askChats.get().active ?? "" });
       case "ingest":
         if (inFlight.current) return;
         ingest([i.path]);
-        return act(() => api.inboxCaptureDone(i.path), "Ingesting: its changes are listed in Changes");
+        return act(() => captureDone(i.path), "Ingesting: its changes are listed in Changes");
       case "done":
         return act(() => doneNow(i), "Done, and out of the Inbox");
       case "someday":
         return act(() => settle(i, taskLine({ ...full, tag: "someday-maybe" }), proj, "Next actions"), "Moved to Someday / maybe");
       case "reference":
-        if (i.kind === "capture") return act(() => api.inboxCaptureDone(i.path), "Kept in Sources");
+        if (i.kind === "capture") return act(() => captureDone(i.path), "Kept in Sources");
         return setFiling(true);
       case "delete":
         if (i.kind === "capture")
           // Not marked clarified: the file leaving sources/ takes it out, and restored (from the
-          // Trash, ⌘Z or Changes) it's back in the Inbox.
-          return act(() => api.trashMove(i.path), "Moved to the Trash");
+          // Trash, ⌘Z or Changes) it's back in the Inbox. A transcript's links point at its note first.
+          return act(() => trashCapture(i.path), "Moved to the Trash");
         return act(() => settle(i, null), "Deleted");
     }
   };
 
-  // Several ticked: what can be done to all of them at once, as [key, choice, label, tip]. The
-  // choices that need a form per item (next action, waiting for, project) are left to one at a time.
+  // Several ticked: what can be done to all of them at once (bulkChoices).
   const n = picked.length;
-  // Choices for several at once: those every ticked item has (inboxChoices) and that need no form
-  // each; Keep in Sources only when all are captures (filing a thought needs a note picked).
-  const bulkChoices = (ps: InboxItem[]) => {
-    const caps = ps.every((i) => i.kind === "capture");
-    const common = BULK.filter((b) => ps.every((i) => inboxChoices(i).includes(b)) && (b !== "reference" || caps));
-    return common.map((b) => {
-      const [k, label, tip] = BULK_LABEL[b](n, caps);
-      return [k, b, label, tip] as const;
-    });
-  };
-  const DONE_ALL: Record<string, string> = {
-    ingest: "Ingesting: their changes are listed in Changes",
-    done: "Done, and out of the Inbox",
-    someday: "Moved to Someday / maybe",
-    reference: "Kept in Sources",
-    delete: "Deleted",
-  };
   const actAll = (ps: InboxItem[], b: string) => {
     if (inFlight.current || !ps.length) return;
     if (b === "meeting") {
+      // Each transcript stays (its row says how its note is getting on) until the note is made and
+      // ingested; pressed again meanwhile, nothing more starts (makeMeetingNotes).
       setChecked([]);
       return void makeMeetingNotes(ps.map((i) => i.path));
     }
     if (b === "ingest") ingest(ps.map((i) => i.path));
-    const one = async (i: InboxItem) => {
-      if (b === "ingest" || b === "reference") return api.inboxCaptureDone(i.path);
+    const one = (i: InboxItem): Promise<unknown> => {
+      if (b === "ingest" || b === "reference") return captureDone(i.path);
       if (b === "done") return doneNow(i);
       if (b === "someday") return settle(i, taskLine({ text: startText(i), project: null, tag: "someday-maybe" }), null, "Next actions");
-      if (i.kind === "capture") return api.trashMove(i.path);
+      if (i.kind === "capture") return trashCapture(i.path);
       return settle(i, null);
     };
-    // Bottom up within a note, so taking a line out doesn't move the lines still to do.
+    // Bottom up within a note, so taking a line out doesn't move the lines still to do. One that
+    // fails doesn't stop the rest: it stays ticked, and the toast says why.
     const order = [...ps].sort((x, y) => x.path.localeCompare(y.path) || y.line - x.line);
     inFlight.current = true;
-    (async () => {
-      for (const i of order) await one(i);
-    })()
-      .then(() => {
-        setDone((d) => d + ps.length);
-        setChecked([]);
-        toast(`${DONE_ALL[b]} (${ps.length})`, undefined, "ok");
+    eachItem(order, one)
+      .then(({ ok, failed }) => {
+        const gone = new Set(ok.map(key));
+        setDone((d) => d + ok.length);
+        setChecked((c) => c.filter((k) => !gone.has(k)));
+        toast(
+          eachSaid(
+            DONE_ALL[b],
+            ok.length,
+            failed.map(([i, why]) => `${i.kind === "capture" ? captureTitle(i.text) : itemText(i).split("\n")[0]}: ${why}`),
+          ),
+          undefined,
+          failed.length ? "bad" : "ok",
+        );
       })
-      .catch(reportEditError)
       .finally(() => {
         inFlight.current = false;
       });

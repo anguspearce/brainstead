@@ -1071,12 +1071,16 @@ export const api = {
   changeProjectNote: (name: string, status: string, area: string | null, outcome: string | null) =>
     invoke<{ path: string; content: string }>("change_project_note", { name, status, area, outcome }),
   changeReject: (id: string) => invoke<void>("change_reject", { id }),
-  /** Every held change in a run (or every one when group is null), oldest first. */
-  changesAcceptAll: (group: string | null, assistant = false) =>
-    invoke<{ done: number; failed: string[] }>("changes_accept_all", { group, assistant }),
-  changesRejectAll: (group: string | null) => invoke<{ done: number; failed: string[] }>("changes_reject_all", { group }),
+  /** Every held change in a run (or every one when group is null), oldest first; only those in ids
+   *  when given (a search on Changes). */
+  changesAcceptAll: (group: string | null, assistant = false, ids?: string[]) =>
+    invoke<{ done: number; failed: string[] }>("changes_accept_all", { group, assistant, ids: ids ?? null }),
+  changesRejectAll: (group: string | null, ids?: string[]) =>
+    invoke<{ done: number; failed: string[] }>("changes_reject_all", { group, ids: ids ?? null }),
+  /** Undoes every applied change in a run (only those in ids when given) on the pages as they are now. */
+  changesRevertAll: (group: string, ids?: string[]) =>
+    invoke<{ done: number; failed: string[] }>("changes_revert_all", { group, ids: ids ?? null }),
   /** Undoes an applied change on the page as it is now; when its lines were edited since, says so with the page as it was before. */
-  changesRevertAll: (group: string) => invoke<{ done: number; failed: string[] }>("changes_revert_all", { group }),
   changeRevert: (id: string) => invoke<{ ok: boolean; message: string; before: string | null }>("change_revert", { id }),
   /** The page with the held change made, as its draft for the editor; returns the page. */
   changeForEditing: (id: string) => invoke<string>("change_for_editing", { id }),

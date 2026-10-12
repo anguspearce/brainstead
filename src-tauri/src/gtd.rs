@@ -77,7 +77,39 @@ fn captures_done_file() -> PathBuf {
 }
 
 fn captures_done() -> Vec<String> {
-    std::fs::read(captures_done_file()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    read_done(&captures_done_file())
+}
+
+fn read_done(file: &Path) -> Vec<String> {
+    std::fs::read(file).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+}
+
+/// Held while the clarified-captures file is read, changed and written, so a capture marked done
+/// and one restored from the Trash at the same moment don't lose each other's edit. Its own lock,
+/// not the vault writes' (`writing`): a restore already holds that one when it gets here.
+static CAPTURES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Changes the clarified-captures file under `CAPTURES`; written only when `f` says it changed.
+fn edit_done(file: &Path, f: impl FnOnce(&mut Vec<String>) -> bool) -> Result<(), EditError> {
+    let _one = crate::lock(&CAPTURES);
+    let mut done = read_done(file);
+    if !f(&mut done) {
+        return Ok(());
+    }
+    let b = serde_json::to_vec_pretty(&done).map_err(|e| EditError::from(e.to_string()))?;
+    write::write_atomic(file, &b, false)?;
+    Ok(())
+}
+
+/// Marks `path` clarified, newest first, keeping the last 1000.
+fn mark_done(file: &Path, path: &str) -> Result<(), EditError> {
+    edit_done(file, |done| {
+        if !done.iter().any(|p| p == path) {
+            done.insert(0, path.to_string());
+            done.truncate(1000);
+        }
+        true
+    })
 }
 
 /// A capture is in the Inbox while its file is there, no wiki page cites it, and it hasn't been
@@ -147,30 +179,21 @@ fn what_file(path: &str) -> &'static str {
 
 /// A source restored from the Trash is in the Inbox again, whatever was done with it before.
 pub fn forget_clarified(path: &str) {
-    let mut done = captures_done();
-    let n = done.len();
-    done.retain(|p| p != path);
-    if done.len() != n {
-        if let Ok(b) = serde_json::to_vec_pretty(&done) {
-            let _ = write::write_atomic(&captures_done_file(), &b, false);
-        }
-    }
+    let _ = forget_done(&captures_done_file(), path);
+}
+
+fn forget_done(file: &Path, path: &str) -> Result<(), EditError> {
+    edit_done(file, |done| {
+        let n = done.len();
+        done.retain(|p| p != path);
+        done.len() != n
+    })
 }
 
 /// A capture clarified in the Inbox (made a task, ingested or kept): it leaves the Inbox.
 #[tauri::command]
 pub async fn inbox_capture_done(path: String) -> Res<()> {
-    writing(move || {
-        let mut done = captures_done();
-        if !done.contains(&path) {
-            done.insert(0, path);
-            done.truncate(1000);
-        }
-        let b = serde_json::to_vec_pretty(&done).map_err(|e| EditError::from(e.to_string()))?;
-        write::write_atomic(&captures_done_file(), &b, false)?;
-        Ok(())
-    })
-    .await
+    writing(move || mark_done(&captures_done_file(), &path)).await
 }
 
 /// Sets a task's `#context/…` tags (none clears them).
@@ -411,4 +434,34 @@ pub async fn inbox_move_task(
         Ok(Edited { line: i, line_text: new_line, undo: Some(undo) })
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn marking_done_and_forgetting_at_once_lose_neither() {
+        let t = tempfile::tempdir().unwrap();
+        let file = t.path().join("inbox-captures.json");
+        mark_done(&file, "sources/restored.md").unwrap();
+        let marks: Vec<_> = (0..16)
+            .map(|n| {
+                let file = file.clone();
+                std::thread::spawn(move || mark_done(&file, &format!("sources/{n}.md")).unwrap())
+            })
+            .collect();
+        let forgets: Vec<_> = (0..16)
+            .map(|_| {
+                let file = file.clone();
+                std::thread::spawn(move || forget_done(&file, "sources/restored.md").unwrap())
+            })
+            .collect();
+        for h in marks.into_iter().chain(forgets) {
+            h.join().unwrap();
+        }
+        let done = read_done(&file);
+        assert!((0..16).all(|n| done.contains(&format!("sources/{n}.md"))), "{done:?}");
+        assert!(!done.contains(&"sources/restored.md".to_string()));
+    }
 }

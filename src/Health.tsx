@@ -8,7 +8,7 @@
 // (cross-links, `updated:` dates, log lines, system notes' headers) apply straight away and can be undone; anything that
 // needs judgement goes to Ask, whose changes are listed in Changes.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, CurrentStateRun, FileSummary, LintCheck, LintItem, LintReport, TrashEntry } from "./api";
 import { fmtShortDate } from "./md/dates";
 import { linkMatches } from "./Capture";
@@ -24,17 +24,20 @@ import {
   OWN_ACTIONS,
   fixOf,
   fixWithAskPrompt,
+  fileSetChanged,
+  GhostHelp,
+  ghostHelps,
+  ghostPaths,
   health,
   pageName,
   IGNORE_ALL,
-  nearName,
-  noteFromTranscript,
   reloadHealth,
   safeFixes,
   startKnowledge,
   trendLabels,
   trendPoints,
   trendShown,
+  trashByName,
 } from "./knowledge";
 import { nav, openDoc, useViewState } from "./nav";
 import { reportEditError, undoLast } from "./taskModel";
@@ -42,7 +45,7 @@ import { toast } from "./Toast";
 import { TopBar } from "./TopBar";
 import { Dialog } from "./ui";
 import { Store, useStore } from "./store";
-import { useVaultVersion } from "./state";
+import { vaultVersion } from "./state";
 
 const undo = { label: "Undo", kbd: "⌘Z", run: () => void undoLast() };
 
@@ -128,20 +131,27 @@ export function HealthScreen() {
   const [linking, setLinking] = useState<LintItem | null>(null);
   const [reshaping, setReshaping] = useState<number | null>(null);
   const fixes = safeFixes(r);
-  // The vault's files, for Missing pages' Did you mean; read again as the vault changes.
+  // The vault's files and the Trash, for a missing link's Did you mean and In the Trash: read again
+  // when a file is added, removed or renamed (or the vault reindexed), not on every autosave.
   const [paths, setPaths] = useState<string[]>([]);
   const [trashed, setTrashed] = useState<Map<string, TrashEntry>>(new Map());
-  const vv = useVaultVersion();
+  const known = useRef<Set<string> | null>(null);
+  const vv = useStore(vaultVersion);
   useEffect(() => {
+    if (!fileSetChanged(known.current, vv.changes)) return;
     void api
       .filesList(null)
-      .then((f) => setPaths(f.filter((x) => x.layer !== "template").map((x) => x.path)))
+      .then((f) => {
+        known.current = new Set(f.map((x) => x.path));
+        setPaths(ghostPaths(f));
+      })
       .catch(() => {});
     void api
       .trashList()
-      .then((t) => setTrashed(new Map(t.map((e) => [e.basename.replace(/\.md$/i, "").toLowerCase(), e]))))
+      .then((t) => setTrashed(trashByName(t)))
       .catch(() => {});
   }, [vv]);
+  const ghosts = useMemo(() => ghostHelps(r, paths, trashed), [r, paths, trashed]);
   const need = decisions(r);
 
   const recheck = () =>
@@ -178,13 +188,14 @@ export function HealthScreen() {
           <Icon name="info" size={14} />
           Contradictions
         </button>
-        <BusyButton id="recheck" icon="refresh" className="btn" onClick={recheck}>
+        <BusyButton id="recheck" icon="refresh" className="btn" title="Run the checks again now" onClick={recheck}>
           Check now
         </BusyButton>
         <BusyButton
           id="fix-all"
           icon="check"
           className="btn"
+          title="Fix every issue that's safe to fix; ⌘Z undoes it"
           disabled={!fixes.length}
           onClick={() => act("fix-all", () => api.healthFix(fixes), fixed)}
         >
@@ -224,22 +235,10 @@ export function HealthScreen() {
             ) : null}
           </div>
           {r && (
-            <Group
-              title="Wiki checks"
-              checks={classic}
-              open={open}
-              setOpen={setOpen}
-              on={{ setTrash, setLinking, setReshaping, paths, trashed }}
-            />
+            <Group title="Wiki checks" checks={classic} open={open} setOpen={setOpen} on={{ setTrash, setLinking, setReshaping, ghosts }} />
           )}
           {r && (
-            <Group
-              title="More checks"
-              checks={ours}
-              open={open}
-              setOpen={setOpen}
-              on={{ setTrash, setLinking, setReshaping, paths, trashed }}
-            />
+            <Group title="More checks" checks={ours} open={open} setOpen={setOpen} on={{ setTrash, setLinking, setReshaping, ghosts }} />
           )}
         </div>
         <aside className="hside">{r && <SideCards r={r} />}</aside>
@@ -332,10 +331,8 @@ type Handlers = {
   setTrash: (p: string) => void;
   setLinking: (i: LintItem) => void;
   setReshaping: (n: number) => void;
-  /** Every note and page, for a missing link's Did you mean (nearName). */
-  paths: string[];
-  /** What's in the Trash, by file name: a missing link may name one. */
-  trashed: Map<string, TrashEntry>;
+  /** Each missing link's In the Trash and Did you mean, by check and item text (ghostHelps). */
+  ghosts: Map<string, GhostHelp>;
 };
 
 function Group({
@@ -403,13 +400,13 @@ function Group({
 /** One issue, with what can be done about it. */
 function Row({ check, i, on }: { check: string; i: LintItem; on: Handlers }) {
   const page = i.page;
-  // A missing link that's a slip away from a note there (renamed after the link was written).
-  // In the Trash (a transcript trashed after its meeting note, say): the note it became, if any.
-  // A missing page, or a source a page cites that isn't there: the same help either way.
-  const ghost = (check === "missing-pages" || check === "broken-sources") && i.name ? i.name : null;
+  // A missing page, or a source a page cites that isn't there: the same help either way, In the
+  // Trash and Did you mean (ghostHelp).
+  const help = on.ghosts.get(`${check}:${i.text}`) ?? null;
+  const ghost = help?.name ?? null;
   const linking = check === "broken-sources" && page ? [page] : (i.pages ?? []);
-  const inTrash = ghost ? (on.trashed.get(ghost.toLowerCase()) ?? null) : null;
-  const near = ghost ? (noteFromTranscript(ghost, on.paths) ?? nearName(ghost, on.paths)) : null;
+  const inTrash = help?.inTrash ?? null;
+  const near = help?.near ?? null;
   const open = page && !page.startsWith("images/") ? () => openDoc(page) : undefined;
   const label = (() => {
     switch (check) {
@@ -443,7 +440,11 @@ function Row({ check, i, on }: { check: string; i: LintItem; on: Handlers }) {
       {check === "duplicates" && i.detail && <span className="faint small">{i.detail}</span>}
       {check === "page-shape" && page && <ReshapeOne page={page} i={i} />}
       {i.safe && page && check !== "page-shape" && (
-        <BusyButton id={`fix:${i.text}`} onClick={() => act(`fix:${i.text}`, () => api.healthFix([fixOf(check, i)]), fixed)}>
+        <BusyButton
+          id={`fix:${i.text}`}
+          title="Fix this issue; ⌘Z undoes it"
+          onClick={() => act(`fix:${i.text}`, () => api.healthFix([fixOf(check, i)]), fixed)}
+        >
           Fix
         </BusyButton>
       )}
@@ -513,6 +514,7 @@ function Row({ check, i, on }: { check: string; i: LintItem; on: Handlers }) {
             {check === "missing-pages" && !inTrash && (
               <BusyButton
                 id={`create:${i.name}`}
+                title={`Make an entity page called ${pageName(ghost)} in wiki/entities and open it; ⌘Z undoes it`}
                 onClick={() =>
                   act(
                     `create:${i.name}`,
@@ -568,6 +570,7 @@ function Row({ check, i, on }: { check: string; i: LintItem; on: Handlers }) {
           <BusyButton
             id={`dismiss:${i.text}`}
             className="btn sm ghost"
+            title="They're about different things: stop listing them as possible duplicates"
             onClick={() =>
               act(
                 `dismiss:${i.text}`,
@@ -581,7 +584,7 @@ function Row({ check, i, on }: { check: string; i: LintItem; on: Handlers }) {
         </>
       )}
       {check === "unreferenced-images" && page && (
-        <BusyButton id={`trash:${page}`} onClick={() => on.setTrash(page)}>
+        <BusyButton id={`trash:${page}`} title="Move this image to the Trash, after you confirm" onClick={() => on.setTrash(page)}>
           Move to the Trash
         </BusyButton>
       )}

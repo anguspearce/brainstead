@@ -63,13 +63,17 @@ pub struct File {
     pub claims: Vec<Kept>,
 }
 
-/// What a change does to its page's claims: `source`'s set becomes `claims`. Kept in the change
-/// with the claims file before and after it (by hash in the change store), for Revert.
+/// What a change does to its page's claims: `source`'s set becomes `claims`, or, with `from`, the
+/// claims from `from` (as `is_from` matches it) say `source` instead. Kept in the change with the
+/// claims file before and after it (by hash in the change store), for Revert.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Update {
     pub source: String,
     pub claims: Vec<Kept>,
+    /// A source renamed (Link to… on a missing page): `claims` is unused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub before: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -111,6 +115,76 @@ pub fn of_source(text: Option<&str>, source: &str) -> Vec<Kept> {
     text.map(parse).map(|f| f.claims.into_iter().filter(|c| c.source == source).collect()).unwrap_or_default()
 }
 
+/// The claims file once `u` is made on it.
+pub fn updated(current: Option<&str>, page: &str, u: &Update) -> Option<String> {
+    match &u.from {
+        Some(from) => current.map(|t| renamed(t, from, &u.source).unwrap_or_else(|| t.to_string())),
+        None => with_source(current, page, &u.source, &u.claims),
+    }
+}
+
+/// The claims file with `u` undone (`before` is the file before it). An ingest's: its source's
+/// claims as they were before it, whatever other sources have added since; a source renamed since
+/// is followed, the claims `u` wrote, found under another source, being that source's now. A
+/// source renamed (`from`): only the claims it renamed, still as they were, take their old source
+/// back; claims written under the new name since (a later ingest) stay.
+pub fn reverted(before: Option<&str>, current: Option<&str>, page: &str, u: &Update) -> Option<String> {
+    let Some(from) = &u.from else {
+        let now = current_name(current, &u.source, &u.claims);
+        let was: Vec<Kept> = of_source(before, &u.source).into_iter().map(|c| Kept { source: now.clone(), ..c }).collect();
+        return with_source(current, page, &now, &was);
+    };
+    let text = current?;
+    let mut left: Vec<Kept> = before.map(parse).unwrap_or_default().claims.into_iter().filter(|c| is_from(&c.source, from)).collect();
+    let mut f = parse(text);
+    let mut back = 0;
+    for c in f.claims.iter_mut().filter(|c| c.source == u.source) {
+        if let Some(i) = left.iter().position(|w| Kept { source: u.source.clone(), ..w.clone() } == *c) {
+            c.source = left.remove(i).source;
+            back += 1;
+        }
+    }
+    if back == 0 {
+        return Some(text.to_string());
+    }
+    Some(format!("{}\n", serde_json::to_string_pretty(&f).unwrap_or_default()))
+}
+
+/// What `source` is called in the claims file now: itself while it has claims there, else the
+/// source whose claims are `wrote` (the claims made from it, renamed since), else itself.
+fn current_name(text: Option<&str>, source: &str, wrote: &[Kept]) -> String {
+    let f = text.map(parse).unwrap_or_default();
+    if wrote.is_empty() || f.claims.iter().any(|c| c.source == source) {
+        return source.to_string();
+    }
+    let bare = |cs: Vec<&Kept>| cs.into_iter().map(|c| Kept { source: String::new(), ..c.clone() }).collect::<Vec<_>>();
+    let wrote = bare(wrote.iter().collect());
+    let mut names: Vec<&str> = f.claims.iter().map(|c| c.source.as_str()).collect();
+    names.dedup();
+    names.into_iter().find(|n| bare(f.claims.iter().filter(|c| c.source == *n).collect()) == wrote).unwrap_or(source).to_string()
+}
+
+/// Whether a claim's `source` is `from`: the same path, or, `from` having no folder (a link's
+/// name, `Teams. Transcript. X.md`), a file of that name in any folder.
+pub fn is_from(source: &str, from: &str) -> bool {
+    source == from || (!from.contains('/') && source.rsplit('/').next() == Some(from))
+}
+
+/// A claims file's text with every claim from `from` (`is_from`) saying `to` instead; None when
+/// none was.
+pub fn renamed(text: &str, from: &str, to: &str) -> Option<String> {
+    if !text.contains(from) {
+        return None;
+    }
+    let mut f = parse(text);
+    let mut here = 0;
+    for c in f.claims.iter_mut().filter(|c| is_from(&c.source, from)) {
+        c.source = to.to_string();
+        here += 1;
+    }
+    (here > 0).then(|| format!("{}\n", serde_json::to_string_pretty(&f).unwrap_or_default()))
+}
+
 /// Every claims file in the vault, by page.
 pub fn all(root: &std::path::Path) -> Vec<File> {
     fn walk(d: &std::path::Path, out: &mut Vec<File>) {
@@ -133,52 +207,49 @@ pub fn all(root: &std::path::Path) -> Vec<File> {
     out
 }
 
-/// A page's claims file follows it when it's renamed or moved: to `to`'s claims file, saying the
-/// new page; gone when `to` isn't a wiki page. Nothing when it had none.
-pub fn carry(root: &std::path::Path, from: &str, to: &str) -> std::io::Result<()> {
-    let Some(old) = path(from).map(|p| root.join(p)) else { return Ok(()) };
-    let Ok(text) = std::fs::read_to_string(&old) else { return Ok(()) };
-    std::fs::remove_file(&old)?;
-    let Some(new) = path(to).map(|p| root.join(p)) else { return Ok(()) };
-    let mut f = parse(&text);
-    f.page = to.to_string();
-    let put = |p: &std::path::Path, t: &[u8]| {
-        p.parent().map_or(Ok(()), std::fs::create_dir_all)?;
-        crate::write::write_atomic(p, t, false).map_err(|e| std::io::Error::other(e.to_string()))
-    };
-    let out = format!("{}\n", serde_json::to_string_pretty(&f).unwrap_or_default());
-    put(&new, out.as_bytes()).inspect_err(|_| {
-        let _ = put(&old, text.as_bytes());
-    })
+/// A claims file as it is before a write and as the write leaves it (None: no file).
+pub type Rewrite = (std::path::PathBuf, Option<String>, Option<String>);
+
+/// What a note's rename or move from `from` to `to` does to the claims files, worked out before
+/// anything is written: a wiki page's claims file follows it (to `to`'s, saying the new page; gone
+/// when `to` isn't a wiki page), and every claim made from it, wherever it is, names it by `to`,
+/// so a later ingest doesn't write links to the old name. Only the files it changes.
+pub fn on_rename(root: &std::path::Path, from: &str, to: &str) -> Vec<Rewrite> {
+    let mut out: Vec<Rewrite> = Vec::new();
+    if let Some((old, text)) = path(from).map(|p| root.join(p)).and_then(|p| std::fs::read_to_string(&p).ok().map(|t| (p, t))) {
+        // The old file goes before the new one is written: after a change of case only, on a disk
+        // that ignores case, they're the same file.
+        out.push((old, Some(text.clone()), None));
+        if let Some(new) = path(to).map(|p| root.join(p)) {
+            let mut f = parse(&text);
+            f.page = to.to_string();
+            let moved = format!("{}\n", serde_json::to_string_pretty(&f).unwrap_or_default());
+            let moved = renamed(&moved, from, to).unwrap_or(moved);
+            out.push((new.clone(), std::fs::read_to_string(&new).ok(), Some(moved)));
+        }
+    }
+    for e in walkdir::WalkDir::new(root.join(DIR)).into_iter().flatten().filter(|e| e.path().extension().is_some_and(|x| x == "json")) {
+        if out.iter().any(|w| w.0 == e.path()) {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(e.path()) else { continue };
+        if let Some(next) = renamed(&text, from, to) {
+            out.push((e.path().to_path_buf(), Some(text), Some(next)));
+        }
+    }
+    out
 }
 
-/// Every claim whose source is `from` says `to` instead, in every claims file: what a source's
-/// rename (or a missing name pointed at a real note, Link to…) means for the claims made from it,
-/// so a later ingest doesn't write links to the old name. `from` without a folder (a link's name,
-/// `Teams. Transcript. X.md`) matches a source of that name in any folder. How many claims changed.
-pub fn rename_source(root: &std::path::Path, from: &str, to: &str) -> std::io::Result<usize> {
-    let dir = root.join(DIR);
-    let mut n = 0;
-    for e in walkdir::WalkDir::new(&dir).into_iter().flatten().filter(|e| e.path().extension().is_some_and(|x| x == "json")) {
-        let Ok(text) = std::fs::read_to_string(e.path()) else { continue };
-        if !text.contains(from) {
-            continue;
+/// A claims file written, or taken away when `text` is None.
+pub fn put(abs: &std::path::Path, text: Option<&str>) -> std::io::Result<()> {
+    match text {
+        Some(t) => {
+            abs.parent().map_or(Ok(()), std::fs::create_dir_all)?;
+            crate::write::write_atomic(abs, t.as_bytes(), false).map_err(|e| std::io::Error::other(e.to_string()))
         }
-        let mut f = parse(&text);
-        let mut here = 0;
-        let bare = !from.contains('/');
-        for c in f.claims.iter_mut().filter(|c| c.source == from || (bare && c.source.rsplit('/').next() == Some(from))) {
-            c.source = to.to_string();
-            here += 1;
-        }
-        if here == 0 {
-            continue;
-        }
-        let out = format!("{}\n", serde_json::to_string_pretty(&f).unwrap_or_default());
-        crate::write::write_atomic(e.path(), out.as_bytes(), false).map_err(|e| std::io::Error::other(e.to_string()))?;
-        n += here;
+        None if abs.exists() => std::fs::remove_file(abs),
+        None => Ok(()),
     }
-    Ok(n)
 }
 
 /// One subject and attribute: the latest value, and the ones it superseded, newest first.
@@ -266,6 +337,15 @@ mod tests {
         assert_eq!(with_source(Some(&gone), "wiki/entities/Orbit App.md", "b.md", &[]), None);
     }
 
+    /// A rename's claims rewrites, written.
+    fn rename(root: &std::path::Path, from: &str, to: &str) -> usize {
+        let all = on_rename(root, from, to);
+        for (abs, _, after) in &all {
+            put(abs, after.as_deref()).unwrap();
+        }
+        all.len()
+    }
+
     #[test]
     fn claims_follow_a_rename_and_the_trash() {
         let d = tempfile::tempdir().unwrap();
@@ -280,7 +360,10 @@ mod tests {
 
         let to = "wiki/entities/Orbit Platform.md";
         std::fs::rename(root.join(page), root.join(to)).unwrap();
-        carry(root, page, to).unwrap();
+        // Worked out first, nothing written.
+        assert_eq!(on_rename(root, page, to).len(), 2);
+        assert!(claims.exists());
+        rename(root, page, to);
         assert!(!claims.exists());
         let moved = root.join(path(to).unwrap());
         let f = parse(&std::fs::read_to_string(&moved).unwrap());
@@ -291,7 +374,7 @@ mod tests {
         crate::trash::restore(root, &e.id, None).unwrap();
         assert_eq!(parse(&std::fs::read_to_string(&moved).unwrap()).claims.len(), 1);
         // Out of the wiki, a page has no claims file.
-        carry(root, to, "Notes/Orbit Platform.md").unwrap();
+        rename(root, to, "Notes/Orbit Platform.md");
         assert!(!moved.exists());
     }
 
@@ -306,16 +389,83 @@ mod tests {
         std::fs::create_dir_all(claims.parent().unwrap()).unwrap();
         std::fs::write(&claims, &text).unwrap();
         let to = "Meeting. Orbit Steerco meeting - 2026-10-02.md";
-        assert_eq!(rename_source(root, from, to).unwrap(), 1);
+        assert_eq!(rename(root, from, to), 1);
         let f = parse(&std::fs::read_to_string(&claims).unwrap());
         assert_eq!(f.claims.iter().map(|c| c.source.as_str()).collect::<Vec<_>>(), [to, "b.md"]);
         // A link's name finds a source of that name in a folder.
         let t = "sources/Teams. Transcript. Steerco - 2026-10-02.md";
         let text = with_source(None, page, t, &[k("owner", "Theo", None, t)]).unwrap();
-        std::fs::write(&claims, &text).unwrap();
-        assert_eq!(rename_source(root, "Teams. Transcript. Steerco - 2026-10-02.md", to).unwrap(), 1);
+        assert!(renamed(&text, "Teams. Transcript. Steerco - 2026-10-02.md", to).is_some());
+        assert!(renamed(&text, "Steerco - 2026-10-02.md", to).is_none(), "a name matches a whole file name");
         // Nothing named it: nothing changes.
-        assert_eq!(rename_source(root, "other.md", "x.md").unwrap(), 0);
+        assert_eq!(rename(root, "other.md", "x.md"), 0);
+    }
+
+    #[test]
+    fn a_source_renamed_by_a_change_is_put_back_by_its_revert() {
+        let page = "wiki/entities/Orbit App.md";
+        let ghost = "sources/Steerco.md";
+        let before = with_source(None, page, ghost, &[k("owner", "Maya", None, ghost)]).unwrap();
+        let before = with_source(Some(&before), page, "b.md", &[k("owner", "Lena", None, "b.md")]).unwrap();
+        let u = Update { source: "sources/Steerco notes.md".into(), from: Some("Steerco.md".into()), ..Default::default() };
+        let after = updated(Some(&before), page, &u).unwrap();
+        let f = parse(&after);
+        assert_eq!(f.claims.iter().map(|c| c.source.as_str()).collect::<Vec<_>>(), ["sources/Steerco notes.md", "b.md"]);
+        // Another source added since stays; the renamed claims go back to their old name.
+        let later = with_source(Some(&after), page, "c.md", &[k("owner", "Theo", None, "c.md")]).unwrap();
+        let back = parse(&reverted(Some(&before), Some(&later), page, &u).unwrap());
+        let mut names: Vec<&str> = back.claims.iter().map(|c| c.source.as_str()).collect();
+        names.sort();
+        assert_eq!(names, ["b.md", "c.md", ghost]);
+        // Nothing of it in the file: nothing to do.
+        assert_eq!(updated(Some(&later), page, &Update { from: Some("other.md".into()), ..u.clone() }).as_deref(), Some(later.as_str()));
+    }
+
+    #[test]
+    fn reverting_a_link_keeps_claims_a_later_ingest_wrote() {
+        let page = "wiki/entities/Orbit App.md";
+        let (ghost, to) = ("sources/Steerco.md", "sources/Steerco notes.md");
+        let before = with_source(None, page, ghost, &[k("owner", "Maya", None, ghost), k("go_live_date", "14 Oct", None, ghost)]).unwrap();
+        let u = Update { source: to.into(), from: Some("Steerco.md".into()), ..Default::default() };
+        let linked = updated(Some(&before), page, &u).unwrap();
+        // The note ingested again: its set under the new name now one claim kept, one new.
+        let again = [k("owner", "Maya", None, to), k("go_live_date", "28 Nov", None, to)];
+        let ingested = with_source(Some(&linked), page, to, &again).unwrap();
+        let back = parse(&reverted(Some(&before), Some(&ingested), page, &u).unwrap());
+        let got: Vec<(&str, &str)> = back.claims.iter().map(|c| (c.value.as_str(), c.source.as_str())).collect();
+        // Only the claim the link renamed, unchanged since, takes the old name back.
+        assert_eq!(got, [("Maya", ghost), ("28 Nov", to)]);
+    }
+
+    #[test]
+    fn a_change_of_case_keeps_the_claims_file() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path();
+        let (from, to) = ("wiki/entities/Orbit App.md", "wiki/entities/orbit app.md");
+        let text = with_source(None, from, "a.md", &[k("owner", "Maya", None, "a.md")]).unwrap();
+        put(&root.join(path(from).unwrap()), Some(&text)).unwrap();
+        // On a disk that ignores case the old and new files are one: it goes, then is written.
+        let all = on_rename(root, from, to);
+        assert_eq!((all[0].2.is_none(), all[1].2.is_some()), (true, true));
+        rename(root, from, to);
+        let f = parse(&std::fs::read_to_string(root.join(path(to).unwrap())).unwrap());
+        assert_eq!((f.page.as_str(), f.claims.len()), (to, 1));
+    }
+
+    #[test]
+    fn reverting_an_ingest_follows_its_source_renamed_since() {
+        let page = "wiki/entities/Orbit App.md";
+        let a = "sources/Steerco.md";
+        let before = with_source(None, page, "b.md", &[k("owner", "Lena", None, "b.md")]).unwrap();
+        let wrote = [k("go_live_date", "14 Oct", Some("2026-09-01"), a), k("owner", "Maya", None, a)];
+        let u = Update { source: a.into(), claims: wrote.to_vec(), ..Default::default() };
+        let after = updated(Some(&before), page, &u).unwrap();
+        // The source renamed since: its claims name it by its new name.
+        let now = renamed(&after, a, "sources/Steerco notes.md").unwrap();
+        let back = reverted(Some(&before), Some(&now), page, &u).unwrap();
+        assert_eq!(parse(&back).claims.iter().map(|c| c.source.as_str()).collect::<Vec<_>>(), ["b.md"]);
+        // Not renamed: as before.
+        assert_eq!(parse(&reverted(Some(&before), Some(&after), page, &u).unwrap()), parse(&before));
     }
 
     #[test]

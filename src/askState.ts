@@ -187,7 +187,12 @@ function remember() {
 
 const seeing = (id: string) => place.get().place.screen === "ask" && ask.get().active === id && document.visibilityState !== "hidden";
 
+/** The capture the Inbox sent to Ask about it, and the chat that's about it, for Ask's Still in the
+ *  Inbox strip. Any new chat (⌘T, or asking about something else) clears it. */
+export const askedFromInbox = new Store<{ path: string; chat: string } | null>(null);
+
 export function newChat(model = settings.get().askModel ?? DEFAULT_MODEL): string {
+  askedFromInbox.set(null);
   // An empty new tab is reused rather than stacked.
   const empty = ask.get().chats.find((c) => !c.filename && !c.transcript.length && !c.busy && !c.review);
   if (empty) {

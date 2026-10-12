@@ -12,7 +12,8 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 
 import type { InboxItem } from "./api";
-import { doneNow, inboxChoices, inboxItemKind, leadChoice, suggestKind } from "./inboxActions";
+import { doneNow, eachItem, eachSaid, inboxChoices, inboxItemKind, leadChoice, suggestKind } from "./inboxActions";
+import table from "../tests/fixtures/inbox-choices.json";
 
 const item = (lineText: string): InboxItem =>
   ({ kind: "task", path: "Me. To Do List.md", line: 4, lineText, text: lineText.replace(/^- \[ \] /, "") }) as InboxItem;
@@ -63,6 +64,12 @@ describe("each kind of Inbox item's choices", () => {
     expect(suggestKind(cap("sources/teams/Teams. Chat. Standup - 2026-10-03.md"))).toBe("thread");
     expect(suggestKind(cap("notes/Email. Draft.md"))).toBe("capture");
   });
+  it("offers what the shared table says, as Suggest's Rust check does (tests/fixtures/inbox-choices.json)", () => {
+    for (const k of table.kinds) {
+      const i = { ...cap(k.item.path), kind: k.item.kind } as InboxItem;
+      expect([suggestKind(i), inboxChoices(i)]).toEqual([k.kind, k.choices]);
+    }
+  });
   it("draws each kind of item with its own icon", () => {
     const icon = (path: string) => inboxItemKind(cap(path)).icon;
     expect(icon("sources/Teams. Transcript. Steerco - 2026-10-02.md")).toBe("mic");
@@ -73,5 +80,19 @@ describe("each kind of Inbox item's choices", () => {
     ).toEqual(["file-word", "file-pdf", "slides", "sheet", "image", "note", "source"]);
     expect(inboxItemKind({ ...cap("Scratchpad.md"), kind: "thought" }).icon).toBe("bulb");
     expect(inboxItemKind({ ...cap("To Do.md"), kind: "task" }).icon).toBe("tasks");
+  });
+});
+
+describe("a choice for several ticked items", () => {
+  it("carries on past one that fails, and says which went through", async () => {
+    const r = await eachItem(["a", "b", "c"], async (x) => {
+      if (x === "b") throw { code: "changed", message: "the file changed since it was read" };
+    });
+    expect(r.ok).toEqual(["a", "c"]);
+    expect(r.failed).toEqual([["b", "the file changed since it was read"]]);
+    expect(eachSaid("Kept in Sources", 2, [])).toBe("Kept in Sources (2)");
+    expect(eachSaid("Kept in Sources", 2, ["Plan: the file changed since it was read"])).toBe(
+      "2 done, 1 failed: Plan: the file changed since it was read",
+    );
   });
 });

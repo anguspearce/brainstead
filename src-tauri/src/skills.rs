@@ -330,18 +330,24 @@ pub struct CheckResult {
 /// At most this much of each document goes to the model.
 const MAX_CHARS: usize = 150_000;
 
-fn read_any(path: &Path) -> Result<String, String> {
+/// A document's text for the model, and the version of the file it was read from (kept with the
+/// result, so a later change to the file shows it stale). A PDF or Office file's version is taken
+/// before its text is extracted: a change while it's read shows stale rather than passing unseen.
+fn read_any(path: &Path) -> Result<(String, String), String> {
     let rel = path.to_string_lossy();
+    let bytes = std::fs::read(path).map_err(|e| format!("Couldn't read {}: {e}", path.display()))?;
+    let version = brainstead_core::write::version(&bytes);
     let text = if brainstead_core::extract::kind_of(&rel).is_some() {
         brainstead_core::extract::extract(path, Some(crate::platform::pdf_text), Some(crate::platform::image_text))?.text()
     } else {
-        std::fs::read_to_string(path).map_err(|e| format!("Couldn't read {}: {e}", path.display()))?
+        String::from_utf8(bytes).map_err(|_| format!("Couldn't read {}: it isn't text", path.display()))?
     };
-    Ok(if text.chars().count() > MAX_CHARS {
+    let text = if text.chars().count() > MAX_CHARS {
         format!("{}\n\n[… cut at {MAX_CHARS} characters]", text.chars().take(MAX_CHARS).collect::<String>())
     } else {
         text
-    })
+    };
+    Ok((text, version))
 }
 
 /// What a check is of: the document, the governing document (its key in the register) and the mode.
@@ -403,9 +409,8 @@ fn checks_dir() -> PathBuf {
     crate::platform::data_dir().join("doc-checks")
 }
 
-fn saved_file(of: &CheckOf) -> PathBuf {
-    checks_dir()
-        .join(format!("{}.json", brainstead_core::write::version(format!("{}\u{1f}{}\u{1f}{}", of.candidate, of.doc, of.mode).as_bytes())))
+fn saved_file(dir: &Path, of: &CheckOf) -> PathBuf {
+    dir.join(format!("{}.json", brainstead_core::write::version(format!("{}\u{1f}{}\u{1f}{}", of.candidate, of.doc, of.mode).as_bytes())))
 }
 
 fn file_version(path: &Path) -> Option<String> {
@@ -414,18 +419,16 @@ fn file_version(path: &Path) -> Option<String> {
 
 /// The two documents' paths for a check: the one checked, and the version in force (none for
 /// feedback mode, or when the register doesn't settle it).
-fn check_paths(app: &AppHandle, of: &CheckOf) -> Result<(PathBuf, Option<PathBuf>), String> {
-    let root = root(app)?;
-    let home = dirs::home_dir().unwrap_or_default();
-    let cand = canonical::resolve_path(&root, &of.candidate, &home);
+fn check_paths(root: &Path, home: &Path, of: &CheckOf) -> (PathBuf, Option<PathBuf>) {
+    let cand = canonical::resolve_path(root, &of.candidate, home);
     if of.mode == "callouts" {
-        return Ok((cand, None));
+        return (cand, None);
     }
     if is_compare(&of.mode) {
-        return Ok((cand, Some(canonical::resolve_path(&root, &of.doc, &home))));
+        return (cand, Some(canonical::resolve_path(root, &of.doc, home)));
     }
-    let reg = std::fs::read_to_string(root.join(canonical::REGISTER)).map(|t| canonical::parse(&t, &root, &home)).unwrap_or_default();
-    Ok((cand, canonical::resolve(&reg.entries, &of.doc).canonical.map(|c| PathBuf::from(c.resolved_path))))
+    let reg = std::fs::read_to_string(root.join(canonical::REGISTER)).map(|t| canonical::parse(&t, root, home)).unwrap_or_default();
+    (cand, canonical::resolve(&reg.entries, &of.doc).canonical.map(|c| PathBuf::from(c.resolved_path)))
 }
 
 /// Compare's modes (two documents, A and B), as against Doc check's (a document and the register).
@@ -438,8 +441,9 @@ const LOOK_CHARS: usize = 4_000;
 
 /// The first look, before anything is compared: the opening of each document, and whether they're
 /// about the same thing. A pair that isn't (an apple and a pear) stops here, for the cost of their
-/// first pages rather than both whole documents. Some(why) when they aren't.
-fn not_alike(app: &AppHandle, chat: &str, a_name: &str, a: &str, b_name: &str, b: &str) -> Result<Option<String>, String> {
+/// first pages rather than both whole documents. Some(why) when they aren't; an answer that can't be
+/// read is taken as alike, so the full comparison (which can still say unrelated) decides.
+fn not_alike(env: &mut CheckEnv, a_name: &str, a: &str, b_name: &str, b: &str) -> Result<Option<String>, String> {
     let head = |t: &str| t.chars().take(LOOK_CHARS).collect::<String>();
     let prompt = format!(
         "Before anything is compared: are these two documents about the same thing (the same subject, programme, policy or document in another version), so that comparing them clause by clause makes sense? \
@@ -455,8 +459,8 @@ The opening of \"{a_name}\":\n\n{}\n\n---\n\nThe opening of \"{b_name}\":\n\n{}"
         #[serde(default)]
         why: String,
     }
-    let look: Look = json_in(&answer_as(app, chat, &prompt)?, '{', '}')?;
-    Ok((!look.same).then_some(look.why))
+    let look = json_in::<Look>(&env.ask(&prompt)?, '{', '}');
+    Ok(look.ok().and_then(|l| (!l.same).then_some(l.why)))
 }
 
 /// What a check gives when the two documents aren't about the same thing.
@@ -470,24 +474,70 @@ const STOP_IF_UNRELATED: &str = "If, read in full, the two turn out not to be ab
 /// The kept result for a check, marked stale when either document changed since.
 #[tauri::command]
 pub fn doc_check_saved(app: AppHandle, candidate: String, doc: String, mode: String) -> Result<Option<SavedCheck>, String> {
-    let of = CheckOf { candidate, doc, mode };
-    let Some(mut saved) = std::fs::read(saved_file(&of)).ok().and_then(|b| serde_json::from_slice::<SavedCheck>(&b).ok()) else {
-        return Ok(None);
-    };
-    let (cand, canon) = check_paths(&app, &of)?;
-    saved.stale = file_version(&cand).as_deref() != Some(saved.candidate_version.as_str())
-        || canon.as_deref().and_then(file_version) != saved.canonical_version;
-    Ok(Some(saved))
+    Ok(saved_in(&checks_dir(), &root(&app)?, &dirs::home_dir().unwrap_or_default(), &CheckOf { candidate, doc, mode }))
 }
 
-/// Runs a check, saying each step as it goes (`step(name)` starts one), and keeps its result.
-fn check_now(app: &AppHandle, of: &CheckOf, chat: &str, step: &mut dyn FnMut(&str)) -> Result<CheckResult, String> {
+fn saved_in(dir: &Path, root: &Path, home: &Path, of: &CheckOf) -> Option<SavedCheck> {
+    let mut saved = std::fs::read(saved_file(dir, of)).ok().and_then(|b| serde_json::from_slice::<SavedCheck>(&b).ok())?;
+    let (cand, canon) = check_paths(root, home, of);
+    saved.stale = file_version(&cand).as_deref() != Some(saved.candidate_version.as_str())
+        || canon.as_deref().and_then(file_version) != saved.canonical_version;
+    Some(saved)
+}
+
+/// What a check needs from the app, so it runs (and is tested) without one.
+struct CheckEnv<'a> {
+    root: PathBuf,
+    home: PathBuf,
+    /// The model's answer to a prompt.
+    answer: &'a mut dyn FnMut(&str) -> Result<String, String>,
+    /// Starts a step, as the screen ticks them off.
+    step: &'a mut dyn FnMut(&str),
+    /// The check's been stopped (doc_check_stop).
+    stopped: &'a dyn Fn() -> bool,
+}
+
+/// What a stopped check ends with: it's said as stopped, not as this error.
+const STOPPED: &str = "Stopped.";
+
+impl CheckEnv<'_> {
+    /// Starts the next step, unless the check's been stopped: then nothing more starts.
+    fn step(&mut self, name: &str) -> Result<(), String> {
+        if (self.stopped)() {
+            return Err(STOPPED.into());
+        }
+        (self.step)(name);
+        Ok(())
+    }
+    /// The model's answer, unless the check's been stopped (before the call, or during it).
+    fn ask(&mut self, prompt: &str) -> Result<String, String> {
+        if (self.stopped)() {
+            return Err(STOPPED.into());
+        }
+        let out = (self.answer)(prompt);
+        if (self.stopped)() {
+            return Err(STOPPED.into());
+        }
+        out
+    }
+}
+
+/// A finished check, with the versions of the two documents as it read them, to keep.
+struct Checked {
+    result: CheckResult,
+    candidate_version: String,
+    canonical_version: Option<String>,
+}
+
+/// Runs a check, saying each step as it goes. Nothing is kept here: the caller keeps it (keep),
+/// unless it's been stopped.
+fn check_in(env: &mut CheckEnv, of: &CheckOf) -> Result<Checked, String> {
     let (candidate, doc, mode) = (of.candidate.clone(), of.doc.clone(), of.mode.clone());
-    step("Read the document");
-    let root = root(app)?;
-    let home = dirs::home_dir().unwrap_or_default();
+    env.step("Read the document")?;
+    let (root, home) = (env.root.clone(), env.home.clone());
     let cand_path = canonical::resolve_path(&root, &candidate, &home);
-    let cand = read_any(&cand_path)?;
+    let (cand, candidate_version) = read_any(&cand_path)?;
+    let mut canonical_version = None;
     let name = cand_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or(candidate.clone());
     let reg = std::fs::read_to_string(root.join(canonical::REGISTER)).map(|t| canonical::parse(&t, &root, &home)).unwrap_or_default();
     let prompt;
@@ -506,11 +556,12 @@ The revision:\n\n{cand}"
         // Compare: A (the one picked first) and B, any two documents.
         let b_path = canonical::resolve_path(&root, &doc, &home);
         let b_name = b_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or(doc.clone());
-        step(&format!("Read {b_name}"));
-        let b = read_any(&b_path)?;
-        step("Check they're about the same thing");
-        if let Some(why) = not_alike(app, chat, &name, &cand, &b_name, &b)? {
-            return keep(app, of, unrelated(why));
+        env.step(&format!("Read {b_name}"))?;
+        let (b, b_version) = read_any(&b_path)?;
+        canonical_version = Some(b_version);
+        env.step("Check they're about the same thing")?;
+        if let Some(why) = not_alike(env, &name, &cand, &b_name, &b)? {
+            return Ok(Checked { result: unrelated(why), candidate_version, canonical_version });
         }
         prompt = if mode == "changes" {
             format!(
@@ -542,13 +593,14 @@ A:\n\n{cand}\n\n---\n\nB:\n\n{b}"
         if !c.exists {
             return Err(format!("{} lists {} {} at {}, and that file isn't there.", canonical::REGISTER, c.title, c.version, c.path));
         }
-        step(&format!("Read {} {}, the version in force", c.title, c.version));
-        let canon = read_any(Path::new(&c.resolved_path))?;
-        step("Check they're about the same thing");
-        if let Some(why) = not_alike(app, chat, &name, &cand, &format!("{} {}", c.title, c.version), &canon)? {
-            let mut out = unrelated(why);
-            out.against = Some(c);
-            return keep(app, of, out);
+        env.step(&format!("Read {} {}, the version in force", c.title, c.version))?;
+        let (canon, canon_version) = read_any(Path::new(&c.resolved_path))?;
+        canonical_version = Some(canon_version);
+        env.step("Check they're about the same thing")?;
+        if let Some(why) = not_alike(env, &name, &cand, &format!("{} {}", c.title, c.version), &canon)? {
+            let mut result = unrelated(why);
+            result.against = Some(c);
+            return Ok(Checked { result, candidate_version, canonical_version });
         }
         let drafts: Vec<String> = r.drafts.iter().map(|e| format!("{} {}", e.title, e.version)).collect();
         let gone: Vec<String> = r.superseded.iter().map(|e| format!("{} {}", e.title, e.version)).collect();
@@ -569,34 +621,40 @@ The document to check:\n\n{cand}\n\n---\n\nThe version in force, {} {}:\n\n{cano
         excluded = r.drafts.into_iter().chain(r.superseded).collect();
         against = Some(c);
     }
-    step(if mode == "callouts" { "Find your earlier feedback and check it" } else { "Compare them, clause by clause" });
-    let text = answer_as(app, chat, &prompt)?;
-    let mut out: CheckResult = json_in(&text, '{', '}')?;
-    out.against = against;
-    out.excluded = excluded;
-    if out.unrelated {
-        out.findings.clear();
+    env.step(if mode == "callouts" { "Find your earlier feedback and check it" } else { "Compare them, clause by clause" })?;
+    let text = env.ask(&prompt)?;
+    let mut result: CheckResult = json_in(&text, '{', '}')?;
+    result.against = against;
+    result.excluded = excluded;
+    if result.unrelated {
+        result.findings.clear();
     }
-    keep(app, of, out)
+    Ok(Checked { result, candidate_version, canonical_version })
 }
 
-/// Keeps a finished check, with the versions of what it read, for the screen (and doc_check) to show
-/// again until either document changes; gives it back.
-fn keep(app: &AppHandle, of: &CheckOf, out: CheckResult) -> Result<CheckResult, String> {
-    let (cand, canon) = check_paths(app, of)?;
+/// Runs a check in the app (its vault, its model under `chat`, so doc_check_stop can end the call).
+fn check_now(app: &AppHandle, of: &CheckOf, chat: &str, step: &mut dyn FnMut(&str), stopped: &dyn Fn() -> bool) -> Result<Checked, String> {
+    let mut answer = |prompt: &str| answer_as(app, chat, prompt);
+    let mut env = CheckEnv { root: root(app)?, home: dirs::home_dir().unwrap_or_default(), answer: &mut answer, step, stopped };
+    check_in(&mut env, of)
+}
+
+/// Keeps a finished check, with the versions of the documents as it read them, for the screen (and
+/// doc_check) to show again until either changes; gives its result back.
+fn keep(dir: &Path, of: &CheckOf, done: Checked) -> CheckResult {
     let saved = SavedCheck {
         of: of.clone(),
         at: proposals_now(),
-        candidate_version: file_version(&cand).unwrap_or_default(),
-        canonical_version: canon.as_deref().and_then(file_version),
-        result: out.clone(),
+        candidate_version: done.candidate_version,
+        canonical_version: done.canonical_version,
+        result: done.result,
         stale: false,
     };
-    let _ = std::fs::create_dir_all(checks_dir());
+    let _ = std::fs::create_dir_all(dir);
     if let Ok(b) = serde_json::to_vec_pretty(&saved) {
-        let _ = brainstead_core::write::write_atomic(&saved_file(of), &b, false);
+        let _ = brainstead_core::write::write_atomic(&saved_file(dir, of), &b, false);
     }
-    Ok(out)
+    saved.result
 }
 
 fn proposals_now() -> String {
@@ -620,7 +678,8 @@ fn answer_as(app: &AppHandle, id: &str, prompt: &str) -> Result<String, String> 
 pub async fn doc_check(app: AppHandle, candidate: String, doc: String, mode: String) -> Result<CheckResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let chat = format!("doccheck-{}", Local::now().format("%H%M%S%3f"));
-        check_now(&app, &CheckOf { candidate, doc, mode }, &chat, &mut |_| {})
+        let of = CheckOf { candidate, doc, mode };
+        check_now(&app, &of, &chat, &mut |_| {}, &|| false).map(|done| keep(&checks_dir(), &of, done))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -633,26 +692,24 @@ fn emit_run(app: &AppHandle, r: &CheckRun) {
 
 /// Starts a check in the background and gives its run; its steps and result arrive as
 /// `doccheck-changed`. One already going for the same document, governing document and mode is
-/// given back instead of a second.
+/// given back instead of a second. The run is listed and said as running before its thread starts,
+/// so no step of it can arrive ahead of that.
 #[tauri::command]
 pub fn doc_check_start(app: AppHandle, candidate: String, doc: String, mode: String) -> Result<CheckRun, String> {
     let of = CheckOf { candidate, doc, mode };
-    let runs = app.state::<CheckRuns>();
-    if let Some(r) = runs.0.lock().unwrap().iter().find(|r| r.of == of && r.status == "running") {
-        return Ok(r.clone());
-    }
     let id = format!("doccheck-{}", Local::now().format("%H%M%S%3f"));
-    let run = CheckRun {
-        id: id.clone(),
-        of: of.clone(),
-        status: "running".into(),
-        started: proposals_now(),
-        steps: vec![],
-        error: None,
-        result: None,
+    let runs = app.state::<CheckRuns>();
+    let (run, new) = {
+        let mut list = runs.0.lock().unwrap();
+        let (run, new) = start_run(&mut list, &of, &id, &proposals_now());
+        if new {
+            emit_run(&app, &run);
+        }
+        (run, new)
     };
-    runs.0.lock().unwrap().insert(0, run.clone());
-    runs.0.lock().unwrap().truncate(20);
+    if !new {
+        return Ok(run);
+    }
     let app2 = app.clone();
     std::thread::spawn(move || {
         let update = |f: &mut dyn FnMut(&mut CheckRun)| {
@@ -663,43 +720,86 @@ pub fn doc_check_start(app: AppHandle, candidate: String, doc: String, mode: Str
                 emit_run(&app2, r);
             }
         };
+        let stopped = || app2.state::<CheckRuns>().0.lock().unwrap().iter().any(|r| r.id == id && r.status == "stopped");
         let mut t0 = std::time::Instant::now();
         let mut step = |name: &str| {
             let ms = t0.elapsed().as_millis() as u64;
             t0 = std::time::Instant::now();
-            update(&mut |r| {
-                if let Some(last) = r.steps.last_mut() {
-                    last.status = "done".into();
-                    last.ms = ms;
-                }
-                r.steps.push(CheckStep { name: name.into(), status: "running".into(), ms: 0 });
-            });
+            update(&mut |r| r.next_step(name, ms));
         };
-        let out = check_now(&app2, &of, &id, &mut step);
+        let out = check_now(&app2, &of, &id, &mut step, &stopped);
         let ms = t0.elapsed().as_millis() as u64;
+        // Kept under the list's lock, so a Stop can't land between seeing it isn't stopped and keeping it.
+        let mut out = Some(out);
         update(&mut |r| {
-            let stopped = r.status == "stopped";
-            if let Some(last) = r.steps.last_mut() {
-                last.status = if out.is_ok() { "done" } else { "failed" }.into();
-                last.ms = ms;
-            }
-            if stopped {
-                return;
-            }
-            match &out {
-                Ok(res) => {
-                    r.status = "done".into();
-                    r.result = Some(res.clone());
-                }
-                Err(e) => {
-                    r.status = "failed".into();
-                    r.error = Some(e.clone());
-                }
+            if let Some(out) = out.take() {
+                let out = if r.status == "stopped" { Err(STOPPED.into()) } else { out.map(|done| keep(&checks_dir(), &of, done)) };
+                r.finish(out, ms);
             }
         });
     });
-    emit_run(&app, &run);
     Ok(run)
+}
+
+/// Lists a new run as running, newest first, unless one for the same check is going: that one is
+/// given back instead (and false).
+fn start_run(list: &mut Vec<CheckRun>, of: &CheckOf, id: &str, started: &str) -> (CheckRun, bool) {
+    if let Some(r) = list.iter().find(|r| r.of == *of && r.status == "running") {
+        return (r.clone(), false);
+    }
+    let run = CheckRun {
+        id: id.into(),
+        of: of.clone(),
+        status: "running".into(),
+        started: started.into(),
+        steps: vec![],
+        error: None,
+        result: None,
+    };
+    list.insert(0, run.clone());
+    list.truncate(20);
+    (run, true)
+}
+
+/// Marks a run that's going as stopped; gives it back, to say so.
+fn stop_run(list: &mut [CheckRun], id: &str) -> Option<CheckRun> {
+    let r = list.iter_mut().find(|r| r.id == id && r.status == "running")?;
+    r.status = "stopped".into();
+    Some(r.clone())
+}
+
+impl CheckRun {
+    /// The step going is done (in `ms`), and `name` starts.
+    fn next_step(&mut self, name: &str, ms: u64) {
+        if let Some(last) = self.steps.last_mut() {
+            last.status = "done".into();
+            last.ms = ms;
+        }
+        self.steps.push(CheckStep { name: name.into(), status: "running".into(), ms: 0 });
+    }
+
+    /// The check ended: done with its result, or failed. A stopped run stays stopped, with no result:
+    /// its last step is marked failed, since it didn't finish.
+    fn finish(&mut self, out: Result<CheckResult, String>, ms: u64) {
+        let stopped = self.status == "stopped";
+        if let Some(last) = self.steps.last_mut() {
+            last.status = if out.is_ok() && !stopped { "done" } else { "failed" }.into();
+            last.ms = ms;
+        }
+        if stopped {
+            return;
+        }
+        match out {
+            Ok(res) => {
+                self.status = "done".into();
+                self.result = Some(res);
+            }
+            Err(e) => {
+                self.status = "failed".into();
+                self.error = Some(e);
+            }
+        }
+    }
 }
 
 /// The checks this session, newest first (the screen picks up one still going when it opens).
@@ -708,16 +808,14 @@ pub fn doc_check_runs(app: AppHandle) -> Vec<CheckRun> {
     app.state::<CheckRuns>().0.lock().unwrap().clone()
 }
 
-/// Stops a check that's going: its model call is ended, and nothing is kept from it.
+/// Stops a check that's going: its model call is ended, no step after it starts, and nothing is
+/// kept from it.
 #[tauri::command]
 pub fn doc_check_stop(app: AppHandle, id: String) {
     let runs = app.state::<CheckRuns>();
-    let mut list = runs.0.lock().unwrap();
-    if let Some(r) = list.iter_mut().find(|r| r.id == id && r.status == "running") {
-        r.status = "stopped".into();
-        emit_run(&app, r);
+    if let Some(r) = stop_run(&mut runs.0.lock().unwrap(), &id) {
+        emit_run(&app, &r);
     }
-    drop(list);
     app.state::<std::sync::Arc<ask::Running>>().cancel(&id);
 }
 
@@ -733,5 +831,126 @@ mod tests {
         let r: Reply = json_in("{\"draft\": \"Hi Maya, yes.\", \"answered\": \"partly\"}", '{', '}').unwrap();
         assert_eq!((r.draft.as_str(), r.answered.as_str(), r.callouts.len()), ("Hi Maya, yes.", "partly", 0));
         assert!(json_in::<Reply>("no json here", '{', '}').is_err());
+    }
+
+    const FINDINGS: &str =
+        r#"{"verdict": "Mostly aligned", "summary": "Two differences.", "findings": [{"kind": "differs", "title": "Launch date"}]}"#;
+
+    /// A vault with two plans to compare, and Compare's check of them.
+    fn plans() -> (tempfile::TempDir, CheckOf) {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("Orbit plan v2.md"), "# Orbit plan v2\n\nLaunch in May.\n").unwrap();
+        std::fs::write(d.path().join("Orbit plan v1.md"), "# Orbit plan v1\n\nLaunch in April.\n").unwrap();
+        (d, CheckOf { candidate: "Orbit plan v2.md".into(), doc: "Orbit plan v1.md".into(), mode: "differences".into() })
+    }
+
+    /// Runs a check over `root` with the model answering through `answer`; gives the outcome and the
+    /// steps it started.
+    fn check(
+        root: &Path,
+        of: &CheckOf,
+        answer: &mut dyn FnMut(&str) -> Result<String, String>,
+        stopped: &dyn Fn() -> bool,
+    ) -> (Result<Checked, String>, Vec<String>) {
+        let mut steps = vec![];
+        let mut step = |n: &str| steps.push(n.to_string());
+        let mut env = CheckEnv { root: root.into(), home: root.into(), answer, step: &mut step, stopped };
+        let out = check_in(&mut env, of);
+        (out, steps)
+    }
+
+    #[test]
+    fn a_first_look_that_cant_be_read_goes_on_to_the_full_comparison() {
+        let (d, of) = plans();
+        let mut asked = 0;
+        let mut answer = |_: &str| {
+            asked += 1;
+            Ok(if asked == 1 { "They look like the same plan.".into() } else { FINDINGS.into() })
+        };
+        let (out, _) = check(d.path(), &of, &mut answer, &|| false);
+        assert_eq!(asked, 2);
+        let done = out.unwrap();
+        assert_eq!((done.result.verdict.as_str(), done.result.findings.len()), ("Mostly aligned", 1));
+        // And a first look that says they're unrelated stops there.
+        let mut answer = |_: &str| Ok(r#"{"same": false, "why": "A plan and a recipe."}"#.to_string());
+        let done = check(d.path(), &of, &mut answer, &|| false).0.unwrap();
+        assert!(done.result.unrelated);
+        assert_eq!(done.result.summary, "A plan and a recipe.");
+    }
+
+    #[test]
+    fn a_stopped_check_starts_nothing_more() {
+        let (d, of) = plans();
+        let stop = std::cell::Cell::new(false);
+        // Stopped during the first look: no full comparison is asked for, and nothing comes back to keep.
+        let mut asked = 0;
+        let mut answer = |_: &str| {
+            asked += 1;
+            stop.set(true);
+            Ok(r#"{"same": true}"#.to_string())
+        };
+        let (out, steps) = check(d.path(), &of, &mut answer, &|| stop.get());
+        assert_eq!(out.err().as_deref(), Some(STOPPED));
+        assert_eq!(asked, 1);
+        assert_eq!(steps.last().map(String::as_str), Some("Check they're about the same thing"));
+        // Stopped before it starts: nothing is read and the model isn't asked.
+        let mut answer = |_: &str| -> Result<String, String> { panic!("asked after a stop") };
+        let (out, steps) = check(d.path(), &of, &mut answer, &|| true);
+        assert_eq!(out.err().as_deref(), Some(STOPPED));
+        assert!(steps.is_empty());
+    }
+
+    #[test]
+    fn a_kept_check_holds_the_versions_it_read_and_goes_stale_when_either_changes() {
+        let (d, of) = plans();
+        let kept = tempfile::tempdir().unwrap();
+        let mut answer = |_: &str| Ok(FINDINGS.to_string());
+        let done = check(d.path(), &of, &mut answer, &|| false).0.unwrap();
+        assert_eq!(keep(kept.path(), &of, done).verdict, "Mostly aligned");
+        let saved = saved_in(kept.path(), d.path(), d.path(), &of).unwrap();
+        assert!(!saved.stale);
+        assert_eq!(saved.result.findings.len(), 1);
+        // Another mode of the same two is a check of its own, not kept yet.
+        assert!(saved_in(kept.path(), d.path(), d.path(), &CheckOf { mode: "changes".into(), ..of.clone() }).is_none());
+        std::fs::write(d.path().join("Orbit plan v1.md"), "# Orbit plan v1\n\nLaunch in June.\n").unwrap();
+        assert!(saved_in(kept.path(), d.path(), d.path(), &of).unwrap().stale);
+
+        // A document edited while the model reads it: the kept check is of what was read, so stale at once.
+        let (d, of) = plans();
+        let mut answer = |_: &str| {
+            std::fs::write(d.path().join("Orbit plan v2.md"), "# Orbit plan v2\n\nLaunch in July.\n").unwrap();
+            Ok(FINDINGS.to_string())
+        };
+        let done = check(d.path(), &of, &mut answer, &|| false).0.unwrap();
+        keep(kept.path(), &of, done);
+        assert!(saved_in(kept.path(), d.path(), d.path(), &of).unwrap().stale);
+    }
+
+    #[test]
+    fn runs_start_once_and_a_stopped_run_stays_stopped() {
+        let of = CheckOf { candidate: "Orbit plan v2.md".into(), doc: "Orbit plan v1.md".into(), mode: "differences".into() };
+        let mut list = vec![];
+        let (run, new) = start_run(&mut list, &of, "doccheck-1", "2026-10-12T09:00:00+02:00");
+        assert!(new && run.status == "running");
+        // The same check again while it's going gives that one back.
+        let (again, new) = start_run(&mut list, &of, "doccheck-2", "2026-10-12T09:00:01+02:00");
+        assert!(!new);
+        assert_eq!((again.id.as_str(), list.len()), ("doccheck-1", 1));
+
+        list[0].next_step("Read the document", 0);
+        list[0].next_step("Read Orbit plan v1.md", 12);
+        assert_eq!(list[0].steps.iter().map(|s| s.status.as_str()).collect::<Vec<_>>(), ["done", "running"]);
+        assert_eq!(stop_run(&mut list, "doccheck-1").map(|r| r.status).as_deref(), Some("stopped"));
+        assert!(stop_run(&mut list, "doccheck-1").is_none());
+        // Its thread ending afterwards, even with a result, doesn't bring it back.
+        list[0].finish(Ok(CheckResult { verdict: "Mostly aligned".into(), ..Default::default() }), 40);
+        assert_eq!(list[0].status, "stopped");
+        assert!(list[0].result.is_none());
+        assert_eq!(list[0].steps[1].status, "failed");
+        // A stopped check can be started afresh.
+        assert!(start_run(&mut list, &of, "doccheck-3", "2026-10-12T09:01:00+02:00").1);
+
+        list[0].finish(Err("The model didn't answer.".into()), 5);
+        assert_eq!((list[0].status.as_str(), list[0].error.as_deref()), ("failed", Some("The model didn't answer.")));
     }
 }

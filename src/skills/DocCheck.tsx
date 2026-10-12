@@ -13,7 +13,7 @@ import { api, CanonicalEntry, CanonicalRegister, CheckResult, CheckRun, FileSumm
 import { Icon } from "../icons";
 import { openDoc, place, useViewState } from "../nav";
 import { useStore } from "../store";
-import { docChecks, docChecksUnseen, seenDocChecks, startDocChecks } from "../docChecks";
+import { docChecks, docChecksUnseen, mergeRun, seenDocChecks, startDocChecks } from "../docChecks";
 import { reportEditError } from "../taskModel";
 import { toast } from "../Toast";
 import { TopBar } from "../TopBar";
@@ -161,7 +161,7 @@ export function DocCheckScreen() {
     setError("");
     try {
       const x = await api.docCheckStart(candidate, docKey, mode);
-      setRuns((l) => [x, ...l.filter((y) => y.id !== x.id)]);
+      setRuns((l) => mergeRun(l, x));
     } catch (e) {
       setError(String(e));
     }

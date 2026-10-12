@@ -184,6 +184,28 @@ describe("MCP actions", () => {
     expect(out).toContain("renumbered, 3 lines");
   });
 
+  it("deletes a transcript from the Inbox as the screen's Delete does, its links pointed at its note first", async () => {
+    const path = "sources/Teams. Transcript. Offsite - 2026-10-06.md";
+    answers.inbox_list = () => [
+      { kind: "capture", path, line: 0, text: "Teams. Transcript. Offsite - 2026-10-06", lineText: "", stamp: null },
+    ];
+    answers.meeting_transcripts = () => [
+      { path, done: null, inferred: { type: "Meeting", name: "Offsite", date: "2026-10-06", exists: true, dateCheck: false, ask: [] } },
+    ];
+    answers.doc_read = () => ({ content: "", meta: { backlinks: [{ path: "wiki/entities/Offsite.md" }] } });
+    answers.health_link_ghost = () => 1;
+    answers.change_submit = () => ({ id: "c9", applied: true, page: path, flags: [], message: "Moved it to the Trash." });
+    calls.length = 0;
+    const origin = { kind: "chat", run: "s1", trigger: "scheduled" };
+    expect(await run("inbox.clarify", { item: "capture:1", becomes: "delete", origin })).toBe(
+      "Clarified as deleted. Moved it to the Trash.",
+    );
+    expect(calls.find(([c]) => c === "health_link_ghost")![1]).toMatchObject({ to: "Meeting. Offsite - 2026-10-06.md", unattended: true });
+    expect(calls.find(([c]) => c === "change_submit")![1]).toMatchObject({ change: { page: path, kind: "trash", origin } });
+    // Not marked done, and no plain trash: restored, it's back in the Inbox.
+    expect(calls.some(([c]) => c === "trash_move" || c === "inbox_capture_done" || c === "changes_submit_many")).toBe(false);
+  });
+
   it("clarifies an Inbox item through Changes, its edits held together", async () => {
     const task: InboxItem = {
       kind: "task",
@@ -315,11 +337,15 @@ describe("MCP actions", () => {
       { name: "Garden", path: "Project. Garden.md", status: "active", area: "Personal" },
     ];
     answers.changes_submit_many = outcomes(true);
+    settings.update({ projectOrder: { areas: ["Personal", "Work"] } });
     await run("project.rename_area", { area: "Work", to: "Acme" });
     // Whatever their status, and one change each, made together.
     expect(submitted().map((c) => c.page)).toEqual(["Project. Orbit App launch.md", "Project. Orbit App beta.md"]);
     expect(submitted()[0].instruction).toEqual({ op: "properties", set: [["area", "Acme"]] });
     expect(calls.some(([c]) => c === "projects_set_area")).toBe(false);
+    // Its place in the order, and Work's kept for a Revert in Changes.
+    expect(settings.get().projectOrder?.areas).toEqual(["Personal", "Acme", "Work"]);
+    settings.update({ projectOrder: undefined });
     await expect(run("project.rename_area", { area: "Hobbies", to: "Acme" })).rejects.toThrow(/Personal, Work/);
   });
 
@@ -349,7 +375,7 @@ describe("MCP actions", () => {
     expect(await run("changes", { action: "revert", id: "c1" })).toMatch(/edited since/);
     answers.changes_accept_all = () => ({ done: 2, failed: [] });
     expect(await run("changes", { action: "accept_run", group: "daily-check-1" })).toBe("Accepted 2.");
-    expect(calls.find(([c]) => c === "changes_accept_all")![1]).toEqual({ group: "daily-check-1", assistant: true });
+    expect(calls.find(([c]) => c === "changes_accept_all")![1]).toEqual({ group: "daily-check-1", assistant: true, ids: null });
     await expect(run("changes", { action: "accept" })).rejects.toThrow(/Which change/);
     // Nobody watching: nothing is accepted.
     calls.length = 0;
@@ -371,15 +397,47 @@ describe("MCP actions", () => {
     followUp.set([]);
     const out = (await run("changes", { action: "accept", id: "m1" })) as string;
     expect(followUp.get()).toEqual([{ note: held.page, transcript: held.origin.chat }]);
+    // Accepted, the note is made: its transcript leaves the Inbox however the offer is answered.
+    expect(calls.find(([c]) => c === "inbox_capture_done")![1]).toEqual({ path: held.origin.chat });
     expect(out).toMatch(
       /^Made it\. Meeting\. Orbit App Steerco - 2026-10-01 is a meeting note: Brainstead now asks the user whether to ingest it/,
     );
-    // A run's: offered too, when every change in it was made.
+    // A run's: offered for each note that was made, and not for one that couldn't be.
     followUp.set([]);
-    answers.changes_accept_all = () => ({ done: 1, failed: [] });
+    let accepted = false;
+    answers.changes_list = () => [{ ...held, status: accepted ? "applied" : "held" }];
+    answers.changes_accept_all = () => ((accepted = true), { done: 1, failed: [] });
     expect(await run("changes", { action: "accept_run", group: "meeting-1" })).toMatch(/^Accepted 1\. .* is a meeting note/);
     expect(followUp.get()).toHaveLength(1);
     followUp.set([]);
+    accepted = false;
+    answers.changes_accept_all = () => ({ done: 0, failed: ["Meeting: the page changed"] });
+    expect(await run("changes", { action: "accept_run", group: "meeting-1" })).toBe("Accepted 0. Couldn't: Meeting: the page changed");
+    expect(followUp.get()).toEqual([]);
+  });
+
+  it("does a run's changes the query finds, as Changes' run buttons do with its search on", async () => {
+    const row = (id: string, title: string, status: string) => ({
+      id,
+      group: "daily-check-1",
+      title,
+      page: `wiki/${title}.md`,
+      status,
+      origin: { kind: "run", run: "daily-check-1" },
+      flags: [],
+    });
+    answers.changes_list = () => [row("a", "Orbit App", "held"), row("b", "Lena", "held"), row("c", "Orbit App launch", "applied")];
+    answers.changes_accept_all = () => ({ done: 1, failed: [] });
+    answers.changes_reject_all = () => ({ done: 1, failed: [] });
+    answers.changes_revert_all = () => ({ done: 1, failed: [] });
+    calls.length = 0;
+    await run("changes", { action: "accept_run", group: "daily-check-1", query: "orbit" });
+    expect(calls.find(([c]) => c === "changes_accept_all")![1]).toEqual({ group: "daily-check-1", assistant: true, ids: ["a"] });
+    await run("changes", { action: "reject_run", group: "daily-check-1", query: "lena" });
+    expect(calls.find(([c]) => c === "changes_reject_all")![1]).toEqual({ group: "daily-check-1", ids: ["b"] });
+    await run("changes", { action: "revert_run", group: "daily-check-1", query: "orbit" });
+    expect(calls.find(([c]) => c === "changes_revert_all")![1]).toEqual({ group: "daily-check-1", ids: ["c"] });
+    await expect(run("changes", { action: "reject_run", group: "daily-check-1", query: "maya" })).rejects.toThrow(/No held change/);
   });
 
   it("reads and sets how long Changes keeps its history", async () => {
@@ -587,6 +645,8 @@ describe("MCP actions", () => {
     };
     beforeEach(() => {
       answers.health_report = () => ({ report, history: [], ranAt: null });
+      answers.files_list = () => [];
+      answers.trash_list = () => [];
     });
 
     it("lint gives the screen's report: counted or not, safe fixes and ignored issues", async () => {
@@ -596,6 +656,33 @@ describe("MCP actions", () => {
       expect(out).toMatch(/Stale pages \(1, not counted/);
       expect(out).toMatch(/Acme: updated is old \[safe fix\]/);
       expect(await run("health.lint", { page: "Lena" })).toMatch(/^Knowledge health for Lena:\n\nOrphan pages \(1; check orphans\)/);
+    });
+
+    it("gives a missing link's Did you mean and In the Trash as its row does, and no Create for a page in the Trash", async () => {
+      answers.files_list = () => [
+        { path: "wiki/entities/Northwnd.md", layer: "wiki" },
+        { path: "Templates/Northwind.md", layer: "template" },
+      ];
+      expect(await run("health.lint")).toContain(
+        "- [[Northwind]] Did you mean Northwnd? (health_issue link_to with to: wiki/entities/Northwnd.md)",
+      );
+      answers.trash_list = () => [
+        {
+          id: "t1",
+          originalRel: "wiki/entities/Northwind.md",
+          basename: "Northwind.md",
+          layer: "wiki",
+          deletedAt: "2026-10-02T09:00",
+          sizeBytes: 10,
+        },
+      ];
+      expect(await run("health.lint")).toContain(
+        "- [[Northwind]] (in the Trash since 2026-10-02: restore_from_trash with id t1 puts wiki/entities/Northwind.md back) Did you mean Northwnd?",
+      );
+      expect(await run("health.issue", { action: "create", item: "[[Northwind]]" })).toMatch(
+        /^wiki\/entities\/Northwind\.md has been in the Trash since 2026-10-02, so there's no Create: restore_from_trash with id t1 puts it back, or health_issue link_to with to: wiki\/entities\/Northwnd\.md/,
+      );
+      expect(calls.some(([c]) => c === "health_create_page")).toBe(false);
     });
 
     it("does an issue's own buttons, and Ignore only where the screen has it", async () => {
@@ -1307,7 +1394,8 @@ describe("MCP actions", () => {
       });
       const [first] = (await data("inbox.list", { suggest: true })).items as Record<string, Record<string, unknown>>[];
       expect(first.suggestion).toMatchObject({ becomes: "next", project: "Orbit App launch", context: "calls" });
-      expect(calls.some(([c]) => c.startsWith("change"))).toBe(false);
+      // Changes is only read (a transcript's held note, as its row says it).
+      expect(calls.some(([c]) => c.startsWith("change") && c !== "changes_list")).toBe(false);
     });
 
     it("lists the Inbox in the screen's bands, so Suggest asks about the same first 20", async () => {
@@ -1787,6 +1875,9 @@ describe("MCP actions", () => {
       expect(await raw("compare.run", { document_a: "sources/Orbit plan.pdf", document_b: "sources/Lunch menu.pdf" })).toMatch(
         /Nothing was compared\.$/,
       );
+      expect(await raw("compare.run", { document_a: "sources/Orbit plan.pdf", document_b: "sources/Lunch menu.pdf", save: true })).toMatch(
+        /Nothing was compared, so nothing was saved as a note\.$/,
+      );
       const cmp = await raw("compare.run", {
         document_a: "sources/Orbit plan v2.pdf",
         document_b: "sources/Orbit plan.pdf",
@@ -1980,7 +2071,7 @@ describe("MCP actions", () => {
       const start = { run: "meeting_note", transcript: t.path };
       await expect(run("run.start", start)).rejects.toThrow(/Meeting\. Offsite - 2026-10-06\.md exists already/);
       expect(await run("meeting.transcripts")).toBe(
-        "1 transcript to write up:\n- sources/Teams. Transcript. Offsite.vtt · looks like Meeting Offsite 2026-10-06 · note exists: Meeting. Offsite - 2026-10-06.md\n  - Was this the Orbit App offsite?",
+        "1 transcript to write up:\n- sources/Teams. Transcript. Offsite.vtt · looks like Meeting Offsite 2026-10-06 · note exists: Meeting. Offsite - 2026-10-06.md (start_run meeting_note with ingest_existing ingests it as it is)\n  - Was this the Orbit App offsite?",
       );
       answers.ingest_runs = () => [{ id: "m1", kind: "meeting", status: "queued", source: t.path }];
       await expect(run("run.start", { ...start, date: "2026-10-07" })).rejects.toThrow(/being drafted from .* already/);
@@ -1992,6 +2083,71 @@ describe("MCP actions", () => {
       answers.ingest_runs = () => [{ id: "m1", kind: "meeting", status: "done", source: t.path }];
       expect(await run("meeting.transcripts")).toContain(" · a note was drafted (see Changes)");
       expect(calls.some(([c]) => c === "ingest_queue" || c === "meeting_draft")).toBe(false);
+    });
+
+    it("ingests the note that's there as the card's Ingest the existing note does, then trashes the transcript", async () => {
+      const t = {
+        path: "sources/Teams. Transcript. Offsite - 2026-10-06.md",
+        done: null,
+        inferred: { type: "Meeting", name: "Offsite", date: "2026-10-06", exists: true, dateCheck: true, ask: [] },
+      };
+      answers.meeting_transcripts = () => [t];
+      answers.ingest_runs = () => [];
+      answers.ingest_start = () => ["r1"];
+      answers.doc_read = () => ({ content: "", meta: { backlinks: [{ path: "wiki/entities/Offsite.md" }] } });
+      answers.health_link_ghost = () => 1;
+      answers.change_submit = () => ({ id: "c9", applied: true, page: t.path, flags: [], message: "Moved it to the Trash." });
+      settings.update({ meetingIngest: true, meetingTrash: true });
+      const start = { run: "meeting_note", transcript: t.path, ingest_existing: true };
+      // The capture day's date is no bar: the card offers it whatever the date says.
+      expect(await run("run.start", { ...start, unattended: true })).toBe(
+        "Kept Meeting. Offsite - 2026-10-06.md as it is, ingesting it (run_status shows how it's going) and moved the transcript to the Trash.",
+      );
+      expect(calls.find(([c]) => c === "ingest_start")![1]).toEqual({ paths: ["Meeting. Offsite - 2026-10-06.md"], unattended: true });
+      // Its links pointed at the note first, as every trashing of a transcript does (trashTranscript),
+      // and every write recorded as the assistant's, unattended: nobody is watching.
+      expect(calls.find(([c]) => c === "health_link_ghost")![1]).toMatchObject({
+        target: "Teams. Transcript. Offsite - 2026-10-06",
+        to: "Meeting. Offsite - 2026-10-06.md",
+        unattended: true,
+      });
+      expect(calls.find(([c]) => c === "change_submit")![1]).toMatchObject({
+        change: { page: t.path, kind: "trash", instruction: { op: "trash" }, origin: { kind: "chat", trigger: "scheduled" } },
+      });
+      expect(calls.some(([c]) => c === "trash_move")).toBe(false);
+      // It leaves the Inbox, its note being there.
+      expect(calls.find(([c]) => c === "inbox_capture_done")![1]).toEqual({ path: t.path });
+      expect(calls.some(([c]) => c === "meeting_draft")).toBe(false);
+      // No note at the name given: nothing to keep.
+      calls.length = 0;
+      await expect(run("run.start", { ...start, name: "Retro" })).rejects.toThrow(/There's no Meeting\. Retro - 2026-10-06\.md to keep/);
+      // With both of Settings' switches off, it's only kept.
+      settings.update({ meetingIngest: false, meetingTrash: false });
+      expect(await run("run.start", start)).toMatch(/^Kept Meeting\. Offsite - 2026-10-06\.md as it is; ingesting and trashing are off/);
+      expect(calls.some(([c]) => c === "ingest_start" || c === "trash_move" || c === "change_submit")).toBe(false);
+      settings.update({ meetingIngest: undefined, meetingTrash: undefined });
+    });
+
+    it("trashes a transcript for trash_note with its links pointed at its note first, as the assistant's changes", async () => {
+      const path = "sources/Teams. Transcript. Offsite - 2026-10-06.md";
+      answers.meeting_transcripts = () => [
+        { path, done: null, inferred: { type: "Meeting", name: "Offsite", date: "2026-10-06", exists: true, dateCheck: false, ask: [] } },
+      ];
+      answers.doc_read = () => ({ content: "", meta: { backlinks: [{ path: "wiki/entities/Offsite.md" }] } });
+      answers.health_link_ghost = () => 1;
+      answers.change_submit = () => ({ id: "c9", applied: true, page: path, flags: [], message: "Moved it to the Trash." });
+      calls.length = 0;
+      const origin = { kind: "chat", run: "s1" };
+      expect(await run("note.trash_transcript", { page: path, reason: "done with it", origin })).toBe("Moved it to the Trash.");
+      expect(calls.find(([c]) => c === "health_link_ghost")![1]).toMatchObject({
+        to: "Meeting. Offsite - 2026-10-06.md",
+        unattended: false,
+      });
+      expect(calls.find(([c]) => c === "change_submit")![1]).toMatchObject({
+        change: { page: path, kind: "trash", reason: "done with it", origin },
+      });
+      expect(calls.some(([c]) => c === "trash_move")).toBe(false);
+      await expect(run("note.trash_transcript", { page: "notes/Plan.md" })).rejects.toThrow(/Which transcript/);
     });
 
     it("makes a template's other notes beside it, and takes several choices for one question", async () => {

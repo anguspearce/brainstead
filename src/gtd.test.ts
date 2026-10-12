@@ -14,16 +14,19 @@ import {
   contextName,
   effortMinutes,
   fmtEffort,
+  moveInProjectOrder,
   movedTo,
   orderedAreas,
   orderedProjects,
   projectFlag,
   projectName,
   projectTasks,
+  renameInProjectOrder,
 } from "./gtd";
 import { taskLine, unclarified } from "./Inbox";
 import { taskLabel } from "./md/TaskBlock";
 import { isoWeek, reviewBody, STEPS } from "./Weekly";
+import { settings } from "./store";
 
 const proj = (o: Partial<ProjectRow> = {}): ProjectRow => ({
   path: "Project. Orbit App launch.md",
@@ -145,5 +148,46 @@ describe("the Projects screen's order", () => {
   it("moves an item before one, or after one when there's none after it", () => {
     expect(movedTo(["a", "b", "c", "d"], "d", null, "b")).toEqual(["a", "d", "b", "c"]);
     expect(movedTo(["a", "b", "c", "d"], "a", "c", null)).toEqual(["b", "c", "a", "d"]);
+  });
+
+  const order = () => settings.get().projectOrder;
+  const p = (name: string, status: ProjectRow["status"] = "active") => proj({ name, path: `Project. ${name}.md`, status });
+
+  it("keeps the projects another status tab hides where they were when one is dragged past them", () => {
+    const all = [p("A"), p("H", "on-hold"), p("B"), p("C")];
+    settings.update({ projectOrder: { projects: all.map((x) => x.path) } });
+    // Active shows A, B, C: C dropped between A and B, with H hidden between them.
+    moveInProjectOrder(all, "projects", "Project. C.md", "Project. A.md", "Project. B.md");
+    expect(order()?.projects).toEqual(["Project. A.md", "Project. H.md", "Project. C.md", "Project. B.md"]);
+    // A dropped after the last one shown.
+    moveInProjectOrder(all, "projects", "Project. A.md", "Project. B.md", null);
+    expect(order()?.projects).toEqual(["Project. H.md", "Project. C.md", "Project. B.md", "Project. A.md"]);
+  });
+
+  it("follows a renamed project note, and merges one renamed onto another where that one was", () => {
+    settings.update({ projectOrder: { projects: ["Project. A.md", "Project. B.md", "Project. C.md"] } });
+    renameInProjectOrder("projects", "Project. A.md", "Project. Alpha.md");
+    expect(order()?.projects).toEqual(["Project. Alpha.md", "Project. B.md", "Project. C.md"]);
+    renameInProjectOrder("projects", "Project. C.md", "Project. B.md");
+    expect(order()?.projects).toEqual(["Project. Alpha.md", "Project. B.md"]);
+  });
+
+  it("keeps a renamed area's place, and its old place for an undo", () => {
+    settings.update({ projectOrder: { areas: ["Home", "Work", "Acme"] } });
+    renameInProjectOrder("areas", "Work", "Jobs", ["Home", "Work", "Acme"]);
+    expect(orderedAreas(["Home", "Jobs", "Acme"], order()?.areas)).toEqual(["Home", "Jobs", "Acme"]);
+    // Undone (⌘Z, the toast's Undo, Revert in Changes): Work is back where it was.
+    expect(orderedAreas(["Home", "Work", "Acme"], order()?.areas)).toEqual(["Home", "Work", "Acme"]);
+    // Jobs, left over, is no area to merge with: Acme renamed to it keeps Acme's place.
+    renameInProjectOrder("areas", "Acme", "Jobs", ["Home", "Work", "Acme"]);
+    expect(orderedAreas(["Home", "Work", "Jobs"], order()?.areas)).toEqual(["Home", "Work", "Jobs"]);
+    // Renamed onto an area that's there: merged where that one was.
+    settings.update({ projectOrder: { areas: ["Home", "Work", "Acme"] } });
+    renameInProjectOrder("areas", "Acme", "Home", ["Home", "Work", "Acme"]);
+    expect(orderedAreas(["Home", "Work"], order()?.areas)).toEqual(["Home", "Work"]);
+    expect(orderedAreas(["Home", "Work", "Acme"], order()?.areas)).toEqual(["Home", "Work", "Acme"]);
+    // The next drag keeps only the areas there are.
+    moveInProjectOrder([proj({ area: "Work" }), proj({ area: "Home", path: "Project. G.md" })], "areas", "Work", null, "Home");
+    expect(order()?.areas).toEqual(["Work", "Home"]);
   });
 });

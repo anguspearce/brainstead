@@ -11,9 +11,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, NoteSpec, Transcript } from "./api";
 import { Icon } from "./icons";
-import { ingest, isActive, meetingProgress, runs, RunsPane, startRuns } from "./Ingest";
+import { isActive, meetingProgress, runs, RunsPane, startRuns } from "./Ingest";
 import { settings, useStore } from "./store";
-import { pageName } from "./knowledge";
+import { changes, pageName, startKnowledge } from "./knowledge";
 import { Markdown } from "./md/Markdown";
 import { reportEditError } from "./taskModel";
 import { toast } from "./Toast";
@@ -21,7 +21,7 @@ import { TopBar } from "./TopBar";
 import { useVaultVersion } from "./state";
 import { nav, openDoc, place, useViewState } from "./nav";
 import { Dialog, Seg } from "./ui";
-import { draftNotes, followThrough, noteFile, specOf, specOk } from "./meetingFlow";
+import { draftNotes, followThrough, keepNote, noteFile, specOf, specOk, trashTranscript } from "./meetingFlow";
 
 export { noteFile, specOf, specOk };
 
@@ -68,6 +68,12 @@ export function cardFor(
   if (p && /^Note (failed|stopped)/.test(p.label))
     return {
       say: `${p.label === "Note stopped" ? "Making the note was stopped" : "Making the note failed"}${p.why ? `: ${p.why}` : ""}. Try again, or let the transcript go.`,
+      tone: "warn",
+      actions: ["make", "trash"],
+    };
+  if (p && /^Note (rejected|reverted) in Changes/.test(p.label))
+    return {
+      say: `Making the note was ${p.label.includes("reverted") ? "reverted" : "rejected"} in Changes, so it isn't in the vault. Make it again, or let the transcript go.`,
       tone: "warn",
       actions: ["make", "trash"],
     };
@@ -134,12 +140,15 @@ function keepNoteTip(): string {
     : "No new note: keep the one that's there as it is (ingesting and trashing are off in Settings)";
 }
 
-async function keepNote(transcript: string, note: string) {
-  const f = followThrough();
+async function ingestExisting(transcript: string, note: string) {
   try {
-    if (f.ingest) ingest([note]);
-    if (f.trash) await api.trashMove(transcript);
-    toast(f.ingest ? `Ingesting ${note.replace(/\.md$/, "")}` : "Kept as it is", undefined, "ok");
+    const r = await keepNote(transcript, note);
+    if (r.ingested) startRuns();
+    toast(
+      r.ingested ? `Ingesting ${pageName(note)}` : "Kept as it is",
+      r.ingested ? { label: "Sources", run: () => nav.go("sources") } : undefined,
+      "ok",
+    );
   } catch (e) {
     reportEditError(e);
   }
@@ -182,7 +191,9 @@ export function MeetingScreen() {
   const set = (p: Partial<NoteSpec>) => cur && setEdits((e) => ({ ...e, [cur.path]: { ...e[cur.path], ...p } }));
   // Transcripts with a note being drafted (or sent to be): their buttons wait.
   useEffect(startRuns, []);
+  useEffect(startKnowledge, []);
   const allRuns = useStore(runs);
+  const changeRows = useStore(changes);
   const [sending, setSending] = useState<Set<string>>(new Set());
   const drafting = useMemo(
     () => new Set([...sending, ...(allRuns ?? []).filter((r) => r.kind === "meeting" && isActive(r)).map((r) => r.source)]),
@@ -231,7 +242,7 @@ export function MeetingScreen() {
     ? cardFor(cur, edits[cur.path], {
         readOnly,
         sending: sending.has(cur.path),
-        progress: meetingProgress(allRuns ?? [], cur.path),
+        progress: meetingProgress(allRuns ?? [], cur.path, changeRows),
         ingest: ingestOn,
       })
     : { actions: [] as CardAction[] };
@@ -274,10 +285,10 @@ export function MeetingScreen() {
       setEdits(ed);
       return draft([cur], ed);
     }
-    if (a === "ingestNote") return void keepNote(cur.path, noteFile(spec));
+    if (a === "ingestNote") return void ingestExisting(cur.path, noteFile(spec));
     if (a === "trash")
-      return void api
-        .trashMove(cur.path)
+      // Its links point at its note first, when it has one (the one shown here, if it's there).
+      return void trashTranscript(cur.path, noteExists(cur, edits[cur.path]) ? noteFile(spec) : undefined)
         .then(() => toast("Transcript moved to the Trash", undefined, "ok"))
         .catch(reportEditError);
     if (a === "openNote") return openDoc(noteFile(spec));
