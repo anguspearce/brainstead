@@ -11,6 +11,7 @@
 import { api } from "./api";
 import { moveDocLook } from "./docLook";
 import { openSession } from "./editor/session";
+import { renameInProjectOrder } from "./gtd";
 import { nav, place } from "./nav";
 import { Recent, recentDocs } from "./recent";
 import { settings } from "./store";
@@ -33,7 +34,10 @@ export async function fileMoved(m: { from: string; to: string | null; draft: str
       : recent.filter((r) => r.path !== m.from);
     settings.update({ recent: next });
   }
-  if (m.to) moveDocLook(m.from, m.to);
+  if (m.to) {
+    moveDocLook(m.from, m.to);
+    renameInProjectOrder("projects", m.from, m.to);
+  }
   const { place: here, canBack } = place.get();
   if (here.screen !== "doc" || here.path !== m.from) return;
   if (m.to) nav.replace({ ...here, path: m.to });

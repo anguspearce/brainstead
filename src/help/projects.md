@@ -10,12 +10,14 @@ A project is a note named `Project. <name>.md`. Its properties hold its status, 
 ## Find a project
 **Active**, **On hold**, **Someday** and **Completed** in the top bar switch by status, each with its count. The table groups projects by area (no area last) and shows **Next** (open next actions), **Waiting**, and **Last change** (when the note or any of its tasks last changed). Click an area's name to fold its projects away or show them again; what's folded is remembered.
 
+To put areas or projects in your own order, point at a row and drag it by the grip on its left: an area among the areas, a project among its area's projects. **No area** stays last, and areas and projects you haven't moved come after the ones you have, A to Z. The order is kept in Brainstead's settings on this Mac, not in your notes.
+
 To rename an area, point at its band and click the pencil, type the new name and press `↩`. It changes the area on every project under it, whatever its status, undone together with **Undo** in the toast; a name already in use merges the two.
 
 An active project is flagged **Stuck** (red) with no next action, and **Quiet** (amber) when nothing has changed for two weeks; an assistant sees the same flags. The sidebar counts active projects, in a blue badge when any has no next action.
 
 ## Work on a project
-Click a project to open it. Edit **Done looks like** (the outcome) and **Area** in place: click, type and press `↩`. To change anything else in the note, click the pencil on the project's row, or **Edit** under its tasks: the project note opens in Edit.
+Click a project to open it. Edit its name, **Done looks like** (the outcome) and **Area** in place (each has a pencil): click, type and press `↩`. Renaming the project renames its note, as **Rename** in the file menu does: links to it follow, and **Undo** in the toast (or ⌘Z) puts the old name back. To change anything else in the note, click the pencil on the project's row, or **Edit** under its tasks: the project note opens in Edit.
 
 **Next actions** lists its open tasks. Tick them, drag them into order (an assistant can too), use each task's ⋯ menu or the task-list keys. Type in **Add a next action** and press `↩` to add one under the note's `## Next actions` heading; `@calls`, `effort:15m` and `due:fri` work as in capture.
 

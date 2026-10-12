@@ -253,6 +253,7 @@ pub(crate) fn panic_text(p: &(dyn std::any::Any + Send)) -> String {
 
 fn changed(app: &AppHandle, index: &Arc<Mutex<Index>>, ch: Changes) {
     let _ = app.emit("vault-changed", &ch);
+    crate::knowledge::vault_changed(app);
     let svc = app.state::<VaultService>();
     let stats = crate::lock(index).stats().unwrap_or_default();
     let mut s = crate::lock(&svc.status);

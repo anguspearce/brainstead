@@ -21,6 +21,9 @@ export interface Settings {
   readSize?: number;
   /** Back/forward history and where in it the window is, kept across restarts (src/nav.ts). */
   places?: { stack: import("./nav").Place[]; i: number };
+  /** The Projects screen's order, dragged by hand: areas by name, projects by path. What isn't in
+   *  it goes after, A–Z (D-20261012-01). */
+  projectOrder?: { areas?: string[]; projects?: string[] };
   /** Each list's search results order (by the list's plural noun): best match or latest first. */
   searchOrder?: Record<string, "ranked" | "latest">;
   /** Jobs & schedule: ingest a new source as it arrives (a capture, a file dropped or imported);
@@ -1043,6 +1046,8 @@ export const api = {
   healthDismiss: (a: string, b: string) => invoke<void>("health_dismiss", { a, b }),
   /** Ignores an issue (its check and its line) until its page changes. */
   healthIgnore: (check: string, text: string) => invoke<void>("health_ignore", { check, text }),
+  /** Ignore all, on stale pages and claims with no citation: how many were ignored. */
+  healthIgnoreAll: (check: string) => invoke<number>("health_ignore_all", { check }),
   /** Shows a check's ignored issues again (every check's with null); returns how many. */
   healthUnignore: (check: string | null) => invoke<number>("health_unignore", { check }),
   healthTrashImage: (path: string) => invoke<string>("health_trash_image", { path }),

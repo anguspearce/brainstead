@@ -48,7 +48,7 @@ The changes are made at once, with a line in `log.md`, and listed in [Changes](a
 To ingest new sources as soon as they arrive, turn on **Ingest new sources as they arrive** in [Settings › AI assistants](app:settings/assistants).
 
 ## Follow an ingest run
-The **Ingest runs** pane on the right shows each run's steps, with **Stop** while it runs or waits. An assistant can stop one too. When it's done, **See N changes** (or **Review N held changes**) opens Changes, and "left out by the checks" lists what was dropped and why.
+The **Ingest runs** pane on the right shows each run's steps, with **Stop** while it runs or waits. An assistant can stop one too. When it's done, **See N changes** (or **Review N held changes**) opens Changes at the run's first change, and "left out by the checks" lists what was dropped and why. The pane shows the latest runs; scroll down for older ones. **Search runs** at its top finds runs by the source or meeting note's name, state (Done, Failed, Stopped), model or day; `↓` and `↑` step through what it found, and `Esc` or ✕ clears it.
 
 ## Preview a source
 Open a source to read it.

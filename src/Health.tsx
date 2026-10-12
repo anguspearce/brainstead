@@ -25,6 +25,7 @@ import {
   fixWithAskPrompt,
   health,
   pageName,
+  IGNORE_ALL,
   reloadHealth,
   safeFixes,
   startKnowledge,
@@ -339,6 +340,7 @@ function Group({
               <div className="ckitems">
                 {c.id === "page-shape" && <ReshapeAll items={c.items} on={on} />}
                 {c.id === "no-current-state" && <WriteCurrentState n={c.items.length} />}
+                {IGNORE_ALL.has(c.id) && n > 0 && <IgnoreAll check={c.id} n={n} />}
                 {c.id === "uncited-claims"
                   ? claimsByPage(c.items)
                       .slice(0, 200)
@@ -505,6 +507,34 @@ function ClaimsRow({ page, items }: { page: string; items: LintItem[] }) {
         }
       >
         Ignore
+      </BusyButton>
+    </div>
+  );
+}
+
+/** Ignore all: every issue the check lists, each until its page (or a claim's line) changes. */
+function IgnoreAll({ check, n }: { check: string; n: number }) {
+  const id = `ignore-all:${check}`;
+  const what = check === "uncited-claims" ? (n === 1 ? "this claim" : `these ${n} claims`) : n === 1 ? "this page" : `these ${n} pages`;
+  return (
+    <div className="ckitem">
+      <span className="grow faint small">
+        {check === "uncited-claims" ? "Each comes back when its line changes." : "Each comes back when its page changes."}
+      </span>
+      <BusyButton
+        id={id}
+        className="btn sm ghost"
+        title={`Stop listing ${what} until ${check === "uncited-claims" ? "their lines" : "they"} change; Show again lists them`}
+        onClick={() =>
+          act(
+            id,
+            () => api.healthIgnoreAll(check),
+            (k) => toast(`Ignored ${k === 1 ? "1 issue" : `${k} issues`}`, undefined, "ok"),
+            false,
+          )
+        }
+      >
+        Ignore all
       </BusyButton>
     </div>
   );

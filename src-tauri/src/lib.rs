@@ -853,6 +853,7 @@ pub fn run() {
             knowledge::health_report,
             knowledge::health_fix,
             knowledge::health_ignore,
+            knowledge::health_ignore_all,
             knowledge::health_unignore,
             knowledge::health_reshape,
             currentstate::current_state_start,

@@ -35,6 +35,39 @@ export function byFile(plan: RenamePlan): [string, RenamePlan["changes"]][] {
 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
+/** Makes a planned rename, the note shown (or the project chosen) following it, with Undo; gives the
+ *  new path. The Rename box and the name on a project's page both rename through this. */
+export async function commitRename(path: string, plan: RenamePlan): Promise<string> {
+  const now = await withDraftHandedOver(
+    path,
+    () => api.renameCommit(plan),
+    (p) => p,
+  );
+  moveDocLook(path, now);
+  const follow = (from: string, to: string) => {
+    const at = place.get().place;
+    if ((at.screen === "doc" || at.screen === "projects") && at.path === from) nav.replace({ ...at, path: to });
+  };
+  follow(path, now);
+  // Undo is the app's undo (⌘Z does the same), back to the old name and the note shown under it.
+  const name = (p: string) => p.split("/").pop() ?? p;
+  toast(`Renamed to “${name(now)}”`, {
+    label: "Undo",
+    kbd: "⌘Z",
+    run: () =>
+      void api
+        .undo()
+        .then((r) => {
+          toast(r ?? "Nothing to undo.");
+          if (!r) return;
+          moveDocLook(now, path);
+          follow(now, path);
+        })
+        .catch(reportEditError),
+  });
+  return now;
+}
+
 export function RenameDialog({ path, title }: { path: string; title?: string }) {
   const isNote = /\.(md|txt)$/i.test(path);
   const start = useMemo(() => {
@@ -68,32 +101,8 @@ export function RenameDialog({ path, title }: { path: string; title?: string }) 
     if (!ready || busy) return;
     setBusy(true);
     try {
-      const now = await withDraftHandedOver(
-        path,
-        () => api.renameCommit(ready),
-        (p) => p,
-      );
-      moveDocLook(path, now);
+      await commitRename(path, ready);
       closeNoteDialog();
-      const here = place.get().place;
-      if (here.screen === "doc" && here.path === path) nav.replace({ ...here, path: now });
-      // Undo is the app's undo (⌘Z does the same), back to the old name and the note shown under it.
-      const name = (p: string) => p.split("/").pop() ?? p;
-      toast(`Renamed to “${name(now)}”`, {
-        label: "Undo",
-        kbd: "⌘Z",
-        run: () =>
-          void api
-            .undo()
-            .then((r) => {
-              toast(r ?? "Nothing to undo.");
-              if (!r) return;
-              moveDocLook(now, path);
-              const at = place.get().place;
-              if (at.screen === "doc" && at.path === now) nav.replace({ ...at, path });
-            })
-            .catch(reportEditError),
-      });
     } catch (e) {
       reportEditError(e);
       setBusy(false);

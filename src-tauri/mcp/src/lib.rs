@@ -437,7 +437,7 @@ pub fn tools() -> Vec<Value> {
                 "reason": reason
             }), &["kind", "text"])),
         tool("list_projects", "List projects", Read,
-            "Every project, as the Projects screen lists them (needs the app): its name, status and count of next actions, flagged as the screen flags an active one (Stuck: no next action; Quiet: nothing has happened for two weeks), with its note's path. detail adds the area, what done looks like and the waiting, someday and done counts. Statuses are the screen's tabs: active, on-hold, someday, completed. Use the name with list_tasks' project, create_task or update_project.",
+            "Every project, as the Projects screen lists them (needs the app), in its order (by area, as dragged there or with move_project, then A to Z): its name, status and count of next actions, flagged as the screen flags an active one (Stuck: no next action; Quiet: nothing has happened for two weeks), with its note's path. detail adds the area, what done looks like and the waiting, someday and done counts. Statuses are the screen's tabs: active, on-hold, someday, completed. Use the name with list_tasks' project, create_task or update_project.",
             schema(json!({"detail": detail}), &[])),
         tool("create_project", "Create a project", Change,
             "Makes a project note, as the Projects screen does (needs the app). It's named and laid out as the vault's other projects are, and recorded in Changes, where the user can revert it. Add its first tasks with create_task and the project's name.",
@@ -448,13 +448,21 @@ pub fn tools() -> Vec<Value> {
                 "done_looks_like": {"type": "string", "description": "What done looks like, one sentence."}
             }), &["name"])),
         tool("update_project", "Change a project", Change,
-            "Sets a project's status, area or what done looks like (needs the app), as its page on the Projects screen does. Give only what changes; null clears area or done_looks_like. Recorded in Changes, where the user can revert it.",
+            "Sets a project's status, area or what done looks like (needs the app), as its page on the Projects screen does. Give only what changes; null clears area or done_looks_like. Recorded in Changes, where the user can revert it. To rename a project, as clicking its name on its page does, use rename_note on its note with type Project.",
             schema(json!({
                 "project": {"type": "string", "description": "The project's name."},
                 "status": {"type": "string", "enum": ["active", "on-hold", "someday", "completed"], "description": "The Projects screen's tabs; completed is its Mark complete (the Completed tab)."},
                 "area": {"type": ["string", "null"], "description": "The area of responsibility; null clears it."},
                 "done_looks_like": {"type": ["string", "null"], "description": "What done looks like, one sentence; null clears it."}
             }), &["project"])),
+        tool("move_project", "Reorder a project or an area", Change,
+            "Puts a project in order among its area's projects, or an area among the areas, on the Projects screen (needs the app), as dragging it there does. Give project or area, and after or before: another project in the same area, or another area. The order is Brainstead's own setting, not written to any note, so it isn't in Changes; move it again to undo. Projects and areas never moved come after, A to Z, and No area stays last; list_projects lists them in this order.",
+            schema(json!({
+                "project": {"type": "string", "description": "The project's name, to move it among its area's projects."},
+                "area": {"type": "string", "description": "An area, to move it among the areas."},
+                "after": {"type": "string", "description": "The project (or area) it should come after."},
+                "before": {"type": "string", "description": "The project (or area) it should come before."}
+            }), &[])),
         tool("rename_area", "Rename an area", Change,
             "Renames an area of responsibility on every project under it, whatever its status (needs the app), as the pencil on the area's band on the Projects screen does; the projects' notes are changed together. Giving an area that exists merges the two. To move one project to another area, use update_project. Recorded in Changes, where the user can revert it.",
             schema(json!({
@@ -545,8 +553,8 @@ pub fn tools() -> Vec<Value> {
                 "date": {"type": "string", "pattern": DATE, "description": "For meeting_note: the meeting's day, YYYY-MM-DD; needed when list_transcripts says the date is only the capture day (ask the user). For daily_summary: the day to summarise (default yesterday); for weekly_summary: a day in a week that has ended (default the week just ended, as Run now; this week is refused)."}
             }), &["run"])),
         tool("run_status", "How runs are going", Read,
-            "How Brainstead's runs are going (needs the app): ingests running and lately done, the daily check, the daily and weekly summaries, the weekly review's preparation, Find tasks and projects, the contradictions check, meeting notes being written and Write Current state. Each says whether it's running, done or failed, with its progress; ingests and meeting notes give their ids, for stop_run, the meeting notes lately finished or failed are listed with the note made, and an ingest or meeting note says what the checks left out of it and why. Then the last eight summary runs, as Settings › Jobs & schedule's Recent runs lists them: kind, day, when, how it was started, its status and its note, and the id of its change in Changes (changes revert with that id undoes it, as Recent runs' Undo does). A summary run and the weekly review's last preparation give their chat with the model (Jobs' Open), which list_chats with action read and that chat reads. Use it after start_run, rather than starting a run again; stop_run stops one.",
-            schema(json!({}), &[])),
+            "How Brainstead's runs are going (needs the app): ingests running and lately done, the daily check, the daily and weekly summaries, the weekly review's preparation, Find tasks and projects, the contradictions check, meeting notes being written and Write Current state. Each says whether it's running, done or failed, with its progress; ingests and meeting notes give their ids, for stop_run, the meeting notes lately finished or failed are listed with the note made, and an ingest or meeting note says what the checks left out of it and why. Then the last eight summary runs, as Settings › Jobs & schedule's Recent runs lists them: kind, day, when, how it was started, its status and its note, and the id of its change in Changes (changes revert with that id undoes it, as Recent runs' Undo does). A summary run and the weekly review's last preparation give their chat with the model (Jobs' Open), which list_chats with action read and that chat reads. With query, the ingests listed are those the Sources screen's Ingest runs search finds (every word in the source or meeting note's name, its state, model or day), up to 20. Use it after start_run, rather than starting a run again; stop_run stops one.",
+            schema(json!({"query": {"type": "string", "description": "Words to find ingest runs by, as the Ingest runs pane's search box: Steerco failed."}}), &[])),
         tool("stop_run", "Stop a run", Destroy,
             "Stops a run that's going, or an ingest or meeting note waiting its turn (needs the app), as its Stop button does. What it already changed stays, listed in Changes; the part not yet done is dropped, so start it again with start_run to finish. Stopping a run that isn't going does nothing. Only when the user asks.",
             schema(json!({"run": {"type": "string", "enum": ["ingest", "daily_check", "daily_summary", "weekly_summary", "weekly_prep", "find_tasks", "contradictions", "meeting_note", "write_current_state"], "description": "Which run, as run_status names it."}, "id": {"type": "string", "description": "For ingest or meeting_note: the run's id from run_status, running or waiting; else the one running, or when none is, the next waiting."}}), &["run"])),
@@ -602,11 +610,12 @@ pub fn tools() -> Vec<Value> {
             "Applies Knowledge health's safe fixes (needs the app): missing cross-links, stale updated: dates, unlogged writes' log lines and system notes' lost headers; all of them, or the items named (their text as lint gives it). Undoable. Page shape items are reshape_pages'. Issues that need judgement aren't safe fixes: make those with edit_page.",
             schema(json!({"items": {"type": "array", "items": {"type": "string"}, "description": "Only these issues, by their text as lint gives it; every safe fix when left out."}}), &[])),
         tool("ignore_issue", "Ignore a Knowledge health issue", Change,
-            "Knowledge health's Ignore (needs the app): stops listing an issue that has no fix (its text as lint gives it) until its page changes, or for a claim with no citation until its line changes; only when the user asked, and not for missing pages, duplicates, unused images, sources not yet ingested or page shape, which have buttons of their own (health_issue, start_run ingest, reshape_pages). With show_again, Show again: the ignored issues listed again, of one check (its id) or all. Ignored issues are left out of the app's count and of lint while the app is open.",
+            "Knowledge health's Ignore (needs the app): stops listing an issue that has no fix (its text as lint gives it) until its page changes, or for a claim with no citation until its line changes; only when the user asked, and not for missing pages, duplicates, unused images, sources not yet ingested or page shape, which have buttons of their own (health_issue, start_run ingest, reshape_pages). With all and check (stale-pages or uncited-claims), Ignore all: every issue that check lists, as its Ignore all button does. With show_again, Show again: the ignored issues listed again, of one check (its id) or all. Ignored issues are left out of the app's count and of lint while the app is open.",
             schema(json!({
                 "item": {"type": "string", "description": "The issue's text, as lint gives it."},
                 "show_again": {"type": "boolean", "description": "List ignored issues again instead."},
-                "check": {"type": "string", "description": "With show_again: the check's id (orphans, stale-pages…); every check when left out."}
+                "all": {"type": "boolean", "description": "Ignore every issue of check (stale-pages or uncited-claims), as Ignore all does."},
+                "check": {"type": "string", "description": "With all: stale-pages or uncited-claims. With show_again: the check's id (orphans, stale-pages…); every check when left out."}
             }), &[])),
         tool("health_issue", "A Knowledge health issue's button", Destroy,
             "Does what an issue's own button on Knowledge health does (needs the app), the issue named by its text as lint gives it. create (Create, on a missing page): writes the page as a new entity page, as Create does (a concept page is edit_page's, in wiki/concepts/); link_to (Link to…, on a missing page): points every link to the missing page at an existing page, given as to; not_duplicates (Not duplicates, on a possible duplicate): the pair isn't listed again; move_to_trash (Move to the Trash, on an image nothing uses; restore_from_trash puts it back). A page made is undone with ⌘Z in the app; each relinked page is a change in Changes, with Revert. Only as the user asked.",
@@ -828,7 +837,7 @@ const PAGED: [&str; 20] = [
 ];
 
 /// Tools that change something but do the same the second time: setting a value, stopping a run.
-const IDEMPOTENT: [&str; 4] = ["settings", "stop_run", "update_project", "task_lists"];
+const IDEMPOTENT: [&str; 5] = ["settings", "stop_run", "update_project", "task_lists", "move_project"];
 
 /// A page of rows as data: how many there are, how many match `query`, where this page starts and
 /// the next one, and the rows (src/mcpActions.ts's listing gives the same).
@@ -1085,6 +1094,7 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
         "create_project" => act("project.create", obj),
         "update_project" => act("project.update", obj),
         "rename_area" => act("project.rename_area", obj),
+        "move_project" => act("project.move", obj),
         // The read tools and the change tools beside them share the app's action, each held to its
         // own actions, so a read tool never changes anything.
         "list_trash" => act("trash", acting(obj, name, &["list"], "list", &[])?),

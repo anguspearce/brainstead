@@ -9,7 +9,18 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 
 import type { InboxItem, ProjectRow, TaskRow } from "./api";
 import { prepareCapture } from "./Capture";
-import { applyGtdShorthand, contextName, effortMinutes, fmtEffort, projectFlag, projectName, projectTasks } from "./gtd";
+import {
+  applyGtdShorthand,
+  contextName,
+  effortMinutes,
+  fmtEffort,
+  movedTo,
+  orderedAreas,
+  orderedProjects,
+  projectFlag,
+  projectName,
+  projectTasks,
+} from "./gtd";
 import { taskLine, unclarified } from "./Inbox";
 import { taskLabel } from "./md/TaskBlock";
 import { isoWeek, reviewBody, STEPS } from "./Weekly";
@@ -115,5 +126,24 @@ describe("a project's next actions", () => {
     const t = (text: string, rank: number | null) => ({ text, rank, project: "P.md", done: false, tags: [] }) as unknown as TaskRow;
     const next = projectTasks([t("c", null), t("b", 2048), t("a", 1024), t("d", null)], "P.md").next.map((x) => x.text);
     expect(next).toEqual(["a", "b", "c", "d"]);
+  });
+});
+
+describe("the Projects screen's order", () => {
+  it("puts the dragged ones first, the rest A–Z, No area last", () => {
+    expect(orderedAreas(["", "Work", "Home", "Acme"], ["Work"])).toEqual(["Work", "Acme", "Home", ""]);
+    const p = (name: string, area: string | null) => ({ name, path: `Project. ${name}.md`, area }) as ProjectRow;
+    const ps = [p("Zed", "Work"), p("Alpha", "Work"), p("Loose", null), p("Garden", "Home")];
+    expect(orderedProjects(ps, { areas: ["Work"], projects: ["Project. Zed.md"] }).map((x) => x.name)).toEqual([
+      "Zed",
+      "Alpha",
+      "Garden",
+      "Loose",
+    ]);
+  });
+
+  it("moves an item before one, or after one when there's none after it", () => {
+    expect(movedTo(["a", "b", "c", "d"], "d", null, "b")).toEqual(["a", "d", "b", "c"]);
+    expect(movedTo(["a", "b", "c", "d"], "a", "c", null)).toEqual(["b", "c", "a", "d"]);
   });
 });

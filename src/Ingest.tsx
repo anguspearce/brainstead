@@ -7,13 +7,13 @@
 // draft, check the quotes, make the changes), can be stopped, and ends with its changes made and
 // listed in Changes (a run from the daily check holds the ones that fail a check).
 
-import { useEffect, useState } from "react";
-import { api, IngestRun } from "./api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { api, ChangeRow, IngestRun } from "./api";
 import { Icon } from "./icons";
 import { changes, pageName, startKnowledge } from "./knowledge";
-import { nav } from "./nav";
+import { nav, useViewState } from "./nav";
 import { Store, useStore } from "./store";
-import { Dialog } from "./ui";
+import { Dialog, SearchBox, useDebounced } from "./ui";
 import { reportEditError } from "./taskModel";
 import { toast } from "./Toast";
 import { DocButton, useIsGone } from "./docButton";
@@ -81,7 +81,33 @@ export function ingest(paths: string[]) {
 
 const STEP_ICON: Record<string, string> = { done: "check", failed: "x", skipped: "minus", running: "refresh", waiting: "" };
 
-export function RunCard({ r }: { r: IngestRun }) {
+/** A finished run's state as its card shows it: Done, Failed, Stopped. */
+const runLabel = (r: IngestRun) =>
+  r.status === "done"
+    ? "Done"
+    : r.status === "failed"
+      ? "Failed"
+      : r.status === "stopped"
+        ? "Stopped"
+        : r.status === "queued"
+          ? "Waiting"
+          : "Running";
+
+/** Has every word of `q` in what its card shows: the source (or meeting note), state, model and
+ *  day. The pane's search box and run_status' query both match on this. */
+export function runMatches(r: IngestRun, q: string): boolean {
+  const text = [pageName(r.source), r.source, r.note?.name, runLabel(r), r.model, r.started.slice(0, 10)]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return q
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((w) => text.includes(w));
+}
+
+export function RunCard({ r, on }: { r: IngestRun; on?: boolean }) {
   const gone = useIsGone(r.source);
   useEffect(startKnowledge, []);
   // The run's changes: made, or held for you.
@@ -90,7 +116,7 @@ export function RunCard({ r }: { r: IngestRun }) {
   const mine = rows?.filter((c) => ids.has(c.id)) ?? [];
   const queued = mine.filter((c) => c.status === "held").length;
   return (
-    <div className={`card run ${r.status}`}>
+    <div className={`card run ${r.status} ${on ? "on" : ""}`} data-run={r.id}>
       <div className="row">
         <span className="lb source" />
         <DocButton path={r.source} gone={gone} className="blink grow ell">
@@ -107,9 +133,7 @@ export function RunCard({ r }: { r: IngestRun }) {
             Stop
           </button>
         ) : (
-          <span className={`chip sm ${r.status === "done" ? "green" : r.status === "failed" ? "amber" : ""}`}>
-            {r.status === "done" ? "Done" : r.status === "failed" ? "Failed" : r.status === "stopped" ? "Stopped" : r.status}
-          </span>
+          <span className={`chip sm ${r.status === "done" ? "green" : r.status === "failed" ? "amber" : ""}`}>{runLabel(r)}</span>
         )}
       </div>
       <div className="runsteps">
@@ -149,7 +173,7 @@ export function RunCard({ r }: { r: IngestRun }) {
               ? "Open Changes to accept or reject the changes held from this run"
               : "Open Changes to see what this run changed, with Revert"
           }
-          onClick={() => nav.go("review")}
+          onClick={() => showRunInChanges(mine)}
         >
           <Icon name="review" size={12} />
           {queued ? `Review ${queued} held change${queued === 1 ? "" : "s"}` : `See ${mine.length} change${mine.length === 1 ? "" : "s"}`}
@@ -162,17 +186,83 @@ export function RunCard({ r }: { r: IngestRun }) {
   );
 }
 
-/** The side pane: the runs going now, then the last few. */
+/** Changes, with the run's first change chosen and scrolled to: its first held one (held changes
+ *  are listed first), else its newest, as Changes lists them. The search is cleared so it shows. */
+function showRunInChanges(mine: ChangeRow[]) {
+  const first = mine.find((c) => c.status === "held") ?? mine[0];
+  nav.go({ screen: "review", view: { "review:sel": first.id, "review:q": "" } });
+}
+
+/** Runs drawn at a time in the pane; more as its end comes into view. */
+const RUNS_PAGE = 12;
+
+/** The side pane: the runs going now, then the last ones, RUNS_PAGE at a time. */
 export function RunsPane() {
   useEffect(startRuns, []);
-  const list = useStore(runs) ?? [];
+  const stored = useStore(runs);
+  const all = useMemo(() => stored ?? [], [stored]);
+  // The search narrows the runs; ↑↓ in the box step through them, Esc or ✕ clears it.
+  const [q, setQ] = useViewState("runs:q", "");
+  const dq = useDebounced(q).trim();
+  const list = useMemo(() => (dq ? all.filter((r) => runMatches(r, dq)) : all), [all, dq]);
+  const [active, setActive] = useState(0);
+  useEffect(() => setActive(0), [dq]);
+  const idx = Math.min(active, Math.max(0, list.length - 1));
+  const step = (to: number) => {
+    setActive(to);
+    setShown((n) => Math.max(n, to + 1));
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLElement>(`.runs [data-run="${CSS.escape(list[to].id)}"]`)?.scrollIntoView({ block: "nearest" }),
+    );
+  };
+  const key = (e: React.KeyboardEvent) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === "Escape") {
+      if (q) setQ("");
+      else return;
+    } else if (!dq || !list.length) return;
+    else if (e.key === "ArrowDown") step((idx + 1) % list.length);
+    else if (e.key === "ArrowUp") step((idx - 1 + list.length) % list.length);
+    else return;
+    e.preventDefault();
+  };
+  const [shown, setShown] = useState(RUNS_PAGE);
+  const end = useRef<HTMLDivElement>(null);
+  const more = shown < list.length;
+  useEffect(() => {
+    const el = end.current;
+    if (!el || !more) return;
+    const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && setShown((n) => n + RUNS_PAGE), {
+      rootMargin: "300px",
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [more, shown]);
   return (
     <aside className="runs">
-      <div className="eyebrow">Ingest runs</div>
-      {!list.length && <p className="faint small">Ingest a source to see its run here: each step, then its changes in Changes.</p>}
-      {list.slice(0, 12).map((r) => (
-        <RunCard key={r.id} r={r} />
+      <div className="runshead">
+        <div className="eyebrow">Ingest runs</div>
+        {all.length > 0 && (
+          <SearchBox value={q} onChange={setQ} onKeyDown={key} placeholder="Search runs" className="runsq">
+            {dq && (
+              <span className="faint nav">
+                {list.length ? `${idx + 1}/${list.length}` : "0"}
+                <span className="kbd">↑↓</span>
+              </span>
+            )}
+          </SearchBox>
+        )}
+      </div>
+      {!all.length && <p className="faint small">Ingest a source to see its run here: each step, then its changes in Changes.</p>}
+      {all.length > 0 && !list.length && <p className="faint small">No runs match “{dq}”.</p>}
+      {list.slice(0, shown).map((r, i) => (
+        <RunCard key={r.id} r={r} on={!!dq && i === idx} />
       ))}
+      {more && (
+        <div ref={end} className="faint small">
+          Loading older runs…
+        </div>
+      )}
     </aside>
   );
 }

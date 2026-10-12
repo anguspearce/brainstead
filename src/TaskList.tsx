@@ -16,7 +16,18 @@ import { taskLabel } from "./md/TaskBlock";
 import { daysUntil, localToday } from "./md/taskQuery";
 import { contextName, contextsInUse, effortMinutes, fmtEffort, projectName, useProjects } from "./gtd";
 import { nav, openDoc } from "./nav";
-import { changeTask, moveTask, retryTasks, setTaskDate, setTaskGtd, tasksFailed, toggleTask, useAllTasks } from "./taskModel";
+import {
+  changeTask,
+  moveTask,
+  retitled,
+  retitleTask,
+  retryTasks,
+  setTaskDate,
+  setTaskGtd,
+  tasksFailed,
+  toggleTask,
+  useAllTasks,
+} from "./taskModel";
 import { fieldIcon, fieldTip, fieldValue, TASK_FIELDS, taskFieldsOf } from "./taskFields";
 import { parseTask, PriorityName } from "./tasksq/fields";
 import { urgency } from "./tasksq/task";
@@ -193,6 +204,11 @@ const priorityOf = (t: TaskRow) => parseTask(t.lineText)?.priority ?? "none";
 
 function TaskMenu({ t, at, onClose }: { t: TaskRow; at: DOMRect; onClose: () => void }) {
   const [pick, setPick] = useState<TaskDateKind | null>(null);
+  // Renaming: its words in a box at the top of the menu, ↩ to keep them, Esc to go back. Only where
+  // the words are on the line once, so its dates and tags stay as they are (as the task pane does).
+  const [renaming, setRenaming] = useState(false);
+  const words = taskLabel(t.text);
+  const canRename = !!retitled(t.lineText, words, words || "x");
   // Start and created are folded away unless it has a start date (nearly every task has a created
   // date, stamped on capture, so that alone doesn't open them).
   const [more, setMore] = useState(!!t.start);
@@ -249,6 +265,31 @@ function TaskMenu({ t, at, onClose }: { t: TaskRow; at: DOMRect; onClose: () => 
       <div className={`menu tmenu${wide ? " wide" : ""}`} role="menu">
         {pick ? (
           <DatePicker value={valueOf(t, pick)} label={HEAD[pick][1]} onPick={(d) => set(pick, d)} onCancel={() => setPick(null)} />
+        ) : renaming ? (
+          <div className="mrename">
+            <div className="mlabel">
+              <Icon name="pencil" size={14} />
+              Rename task
+            </div>
+            <input
+              className="pin"
+              autoFocus
+              defaultValue={words}
+              aria-label="The task's words"
+              onFocus={(e) => e.currentTarget.select()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const to = e.currentTarget.value;
+                  onClose();
+                  void retitleTask(t, words, to);
+                } else if (e.key === "Escape") {
+                  e.stopPropagation();
+                  setRenaming(false);
+                }
+              }}
+            />
+            <span className="faint small">↩ to rename; its dates and tags stay as they are.</span>
+          </div>
         ) : (
           <>
             {/* Two columns where the window has room: dates, then the task's fields; its actions below. */}
@@ -300,9 +341,20 @@ function TaskMenu({ t, at, onClose }: { t: TaskRow; at: DOMRect; onClose: () => 
                 <GtdMenu t={t} onClose={onClose} />
               </div>
             </div>
-            {/* Its state; a done task has none of these, so no empty group. */}
-            {(!t.done || t.status === "-") && <div className="sep" />}
+            {/* Its words and state; a done task it can't rename has none of these, so no empty group. */}
+            {(canRename || !t.done || t.status === "-") && <div className="sep" />}
             <div className="tmacts">
+              {canRename && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  title="Change the task's words (its dates and tags stay)"
+                  onClick={() => setRenaming(true)}
+                >
+                  <Icon name="pencil" size={14} />
+                  Rename…
+                </button>
+              )}
               {t.status !== "/" && !t.done && (
                 <button
                   type="button"

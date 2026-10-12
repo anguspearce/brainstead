@@ -35,7 +35,7 @@ In short, an assistant can do whatever the screens do. The help tool, and the in
 
 - change tasks: tick, rename, dates, priority, contexts, effort, project, waiting for, follow-up, cancel, reorder, add and delete;
 - capture to the Inbox or the Scratchpad, and clarify Inbox items;
-- create projects, change their status, area and **Done looks like**, and rename an area on all its projects;
+- create projects, change their status, area and **Done looks like**, rename an area on all its projects, and put areas and projects in order;
 - edit any page, make notes (from your templates too) and wiki pages, rename, and move notes to or from the Trash;
 - add the example notes, save a Doc check or start its register, save a Contradictions report, and use Knowledge health's **Reshape pages** and **Link to…**.
 

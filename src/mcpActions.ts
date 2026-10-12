@@ -42,7 +42,19 @@ import {
   WeekPrepSuggestion,
 } from "./api";
 import { ACTION as FIX_ACTION, chosenRows, startUnticked } from "./FixName";
-import { areaProjects, contextName, projectFlag, projectName, ProjectStatus, projectTasks, STATUS_LABEL } from "./gtd";
+import {
+  areaProjects,
+  contextName,
+  moveInProjectOrder,
+  orderedAreas,
+  orderedProjects,
+  projectFlag,
+  projectName,
+  ProjectStatus,
+  projectTasks,
+  renameInProjectOrder,
+  STATUS_LABEL,
+} from "./gtd";
 import { askEdit } from "./notes/dialogs";
 import { captureStamp, prepareCapture } from "./Capture";
 import { bandOf, inboxRows, taskLine, unclarified } from "./Inbox";
@@ -50,6 +62,8 @@ import { appendAsReference, newReferenceNote, settleInboxItem } from "./inboxAct
 import {
   ADVISORY,
   byRun,
+  changeText,
+  IGNORE_ALL,
   decisions,
   fixOf,
   makePage,
@@ -104,7 +118,7 @@ import { canIngest, ingestable } from "./Lists";
 import { LAYERS as SEARCH_LAYERS } from "./Search";
 import { fmtDay } from "./FileList";
 import { passageText, PASSAGES_SHOWN } from "./Provenance";
-import { offerFollowUp } from "./Ingest";
+import { offerFollowUp, runMatches } from "./Ingest";
 import { findingsMarkdown, findingsNote, governingDocs, REGISTER, REGISTER_STUB, STATUS as REGISTER_STATUS } from "./skills/DocCheck";
 import { LABEL as TRIAGE } from "./skills/Triage";
 import { ANSWERED, replyTask } from "./skills/Reply";
@@ -994,8 +1008,51 @@ async function renameArea(a: Args, r: McpRequest): Promise<string> {
   const title = `Renamed the area ${area} to ${to}`;
   const o = await submitAll(ps.map((p) => sub(a, r, p.path, "edit", title, { op: "properties", set: [["area", to]] })));
   const n = `${ps.length} ${ps.length === 1 ? "project" : "projects"}`;
+  if (o.applied) renameInProjectOrder("areas", area, to);
   told(o.applied ? `renamed the area ${area} to ${to}` : `held renaming the area ${area} for you in Changes`);
   return o.applied ? `Renamed the area ${area} to ${to} on ${n}. ${o.message}` : o.message;
+}
+
+/** move_project: dragging a project among its area's, or an area among the areas, on the Projects
+ *  screen; the same setting (`moveInProjectOrder`, D-20261012-01). */
+async function moveProject(a: Args): Promise<string> {
+  const after = str(a, "after") ?? null;
+  const before = str(a, "before") ?? null;
+  if (!after === !before) throw new Error("Give after or before (one of them).");
+  const all = await api.projectsList();
+  const where = after ? `after ${after}` : `before ${before}`;
+  const area = str(a, "area");
+  if (area) {
+    const areas = orderedAreas(all.map((p) => p.area ?? "")).filter(Boolean);
+    const find = (x: string) => {
+      const hit = areas.find((y) => y.toLowerCase() === x.toLowerCase());
+      if (!hit) throw new Error(`There's no area called ${x}. The areas are: ${areas.join(", ") || "none"}.`);
+      return hit;
+    };
+    const it = find(area);
+    const other = find((after ?? before)!);
+    if (other === it) throw new Error("Give another area to put it next to.");
+    moveInProjectOrder(all, "areas", it, after && other, before && other);
+    told(`moved the area ${it} ${where}`);
+    return `Moved the area ${it} ${where}. The areas are now: ${orderedAreas(all.map((p) => p.area ?? ""))
+      .map((x) => x || "No area")
+      .join(", ")}.`;
+  }
+  const project = str(a, "project");
+  if (!project) throw new Error("Give project or area.");
+  const path = await projectPath(project);
+  const otherPath = await projectPath((after ?? before)!);
+  const p = all.find((x) => x.path === path)!;
+  const o = all.find((x) => x.path === otherPath)!;
+  if (path === otherPath) throw new Error("Give another project to put it next to.");
+  if ((p.area ?? "") !== (o.area ?? ""))
+    throw new Error(
+      `${o.name} is in ${o.area || "No area"}, not ${p.area || "No area"}: a project is ordered among its own area's. update_project changes its area.`,
+    );
+  moveInProjectOrder(all, "projects", path, after && otherPath, before && otherPath);
+  const now = orderedProjects(all).filter((x) => (x.area ?? "") === (p.area ?? ""));
+  told(`moved ${p.name} ${where}`);
+  return `Moved ${p.name} ${where}. ${p.area || "No area"} is now: ${now.map((x) => x.name).join(", ")}.`;
 }
 
 async function createProject(a: Args, r: McpRequest): Promise<string> {
@@ -1154,7 +1211,7 @@ async function changesTool(a: Args): Promise<string | Listing> {
     const rows = await api.changesList(str(a, "page"));
     const empty = { total: 0, matching: 0, offset: 0, next_offset: null, items: [] };
     if (!rows.length) return { text: "No changes yet.", structured: { held: empty, made: empty } };
-    const text = (c: (typeof rows)[number]) => `${c.title} ${c.page} ${originLabel(c)}`;
+    const text = changeText;
     // Short: what, where, its state and flags; detail adds its kind, who made it and why.
     const line = (c: (typeof rows)[number]) =>
       a.detail === true
@@ -1447,7 +1504,7 @@ export function summaryRunLine(r: ReviewRun, changes: ChangeRow[]): string {
   return `- ${name} · ${how} · ${when} · ${state}${change}${r.chat ? ` · chat ${r.chat}` : ""}`;
 }
 
-async function runStatus(): Promise<string> {
+async function runStatus(a: Args = {}): Promise<string> {
   const [runs, check, reviews, prep, find, contra, cs, changes] = await Promise.all([
     api.ingestRuns(),
     api.dailyCheckStatus(),
@@ -1468,7 +1525,9 @@ async function runStatus(): Promise<string> {
   const meetings = runs.filter((r) => r.kind === "meeting");
   const active = ingests.filter(going);
   const writing = meetings.filter(going);
-  const recent = ingests.slice(0, 5);
+  // With query, the ingests the runs pane's search finds (runMatches), up to 20; else the last five.
+  const query = str(a, "query");
+  const recent = query ? ingests.filter((r) => runMatches(r, query)).slice(0, 20) : ingests.slice(0, 5);
   // Finished and failed meeting notes, as the runs pane lists them.
   const written = meetings.filter((r) => !going(r)).slice(0, 5);
   // What the checks left out of a run, as the runs pane's "left out by the checks" lists it.
@@ -1476,7 +1535,7 @@ async function runStatus(): Promise<string> {
     r.dropped.length ? `; left out by the checks: ${r.dropped.map((d) => `${d.page} (${d.reason})`).join(", ")}` : "";
   return [
     active.length ? `Ingest running: ${active.map((r) => `${r.source} (${r.status}, id ${r.id})`).join("; ")}` : "No ingest running.",
-    `Recent ingests: ${recent.map((r) => `${r.source} — ${r.status}${r.error ? ` (${r.error})` : ""}, ${r.proposals.length} change${r.proposals.length === 1 ? "" : "s"}${left(r)} (id ${r.id})`).join("; ") || "none"}`,
+    `${query ? `Ingests matching “${query}”` : "Recent ingests"}: ${recent.map((r) => `${r.source} — ${r.status}${r.error ? ` (${r.error})` : ""}, ${r.proposals.length} change${r.proposals.length === 1 ? "" : "s"}${left(r)} (id ${r.id})`).join("; ") || "none"}`,
     writing.length
       ? `Meeting notes being written: ${writing.map((r) => `${r.source} (${r.status}, id ${r.id})`).join("; ")}`
       : "No meeting note being written.",
@@ -1744,6 +1803,15 @@ async function healthIgnore(a: Args): Promise<string> {
     const n = await api.healthUnignore(check);
     told(`showed ${n} ignored Knowledge health issue${n === 1 ? "" : "s"} again`);
     return n ? `${n} ignored issue${n === 1 ? " is" : "s are"} listed again.` : "Nothing was ignored.";
+  }
+  if (a.all === true) {
+    const check = typeof a.check === "string" ? a.check : "";
+    if (!IGNORE_ALL.has(check)) throw new Error(`Ignore all is for ${[...IGNORE_ALL].join(" and ")}: give one as check.`);
+    const n = await api.healthIgnoreAll(check);
+    told(`ignored ${n} Knowledge health issue${n === 1 ? "" : "s"}`);
+    return n
+      ? `Ignored ${n} issue${n === 1 ? "" : "s"}, each until its ${check === "uncited-claims" ? "line" : "page"} changes. show_again lists them again.`
+      : "Nothing to ignore.";
   }
   const text = String(a.item ?? "");
   const c = r.checks.find((c) => c.items.some((i) => i.text === text));
@@ -2377,7 +2445,7 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   "inbox.clarify": clarify,
   "inbox.capture": captureTool,
   "projects.list": async (a) =>
-    listed(a, await api.projectsList(), {
+    listed(a, orderedProjects(await api.projectsList()), {
       text: (p) => projectOut(p),
       noun: ["project", "projects"],
       line: (p) => projectOut(p, a.detail === true),
@@ -2398,6 +2466,7 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   "project.create": createProject,
   "project.update": updateProject,
   "project.rename_area": renameArea,
+  "project.move": moveProject,
   "note.from_template": (a, r) => noteFromTemplate(a, r.chat ?? null),
   "change.submit": submitChange,
   changes: changesTool,

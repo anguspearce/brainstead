@@ -85,6 +85,16 @@ pub struct Health {
     seen: Mutex<i64>,
     /// Held while the checks run, so two runs never overlap.
     running: Mutex<()>,
+    /// When the index last changed (`vault_changed`), until the checks have run since.
+    changed_at: Mutex<Option<std::time::Instant>>,
+}
+
+/// The checks rerun once the vault has been quiet this long after a change.
+const QUIET: Duration = Duration::from_millis(400);
+
+/// The index changed (vault.rs): the checks rerun once it's quiet for `QUIET`.
+pub fn vault_changed(app: &AppHandle) {
+    *app.state::<Health>().changed_at.lock().unwrap() = Some(std::time::Instant::now());
 }
 
 #[derive(Serialize)]
@@ -151,18 +161,28 @@ struct Counts {
     total: usize,
 }
 
-/// Reruns the checks a few seconds after the index changes, and at start.
+/// Reruns the checks once the vault is quiet after a change (`vault_changed`), so an edit made
+/// anywhere (Changes, Ask, another editor) shows within a second; and at start, and whenever the
+/// index's stamp moves without a change being heard, looked at every 5 seconds.
 pub fn watch_health(app: &AppHandle) {
     let app = app.clone();
-    std::thread::spawn(move || loop {
-        let stamp = app.state::<VaultService>().with_index(|ix, _| Ok(ix.stats().map(|s| s.updated_at).unwrap_or(0))).unwrap_or(0);
-        let h = app.state::<Health>();
-        let changed = stamp != 0 && *h.seen.lock().unwrap() != stamp;
-        if changed {
-            *h.seen.lock().unwrap() = stamp;
-            run_lint(&app);
+    std::thread::spawn(move || {
+        let mut looked = std::time::Instant::now() - Duration::from_secs(5);
+        loop {
+            let h = app.state::<Health>();
+            let heard = h.changed_at.lock().unwrap().is_some_and(|t| t.elapsed() >= QUIET);
+            if heard || looked.elapsed() >= Duration::from_secs(5) {
+                looked = std::time::Instant::now();
+                let stamp = app.state::<VaultService>().with_index(|ix, _| Ok(ix.stats().map(|s| s.updated_at).unwrap_or(0))).unwrap_or(0);
+                let moved = stamp != 0 && *h.seen.lock().unwrap() != stamp;
+                if heard || moved {
+                    *h.changed_at.lock().unwrap() = None;
+                    *h.seen.lock().unwrap() = stamp;
+                    run_lint(&app);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(150));
         }
-        std::thread::sleep(Duration::from_secs(5));
     });
 }
 
@@ -257,7 +277,9 @@ fn health_fix_now(app: AppHandle, fixes: Vec<Fix>) -> Res<String> {
     };
     push_undo(&app, &root, label.clone(), &changes);
     written(&app, &changes.iter().map(|c| c.path.clone()).collect::<Vec<_>>());
-    relint(&app);
+    settled(&app, |check, i| {
+        fixes.iter().any(|f| f.check == check && i.page.as_deref() == Some(f.page.as_str()) && i.name == f.name && i.detail == f.detail)
+    });
     Ok(label)
 }
 
@@ -345,7 +367,12 @@ fn health_reshape_now(app: AppHandle, pages: Option<Vec<String>>, unattended: bo
         }
         written(&app, &[root.join(LOG)]);
     }
-    relint(&app);
+    // Every page it was asked for reshaped: they leave the list at once.
+    if done.failed.is_empty() && done.left == 0 {
+        settled(&app, |check, i| check == "page-shape" && i.page.as_deref().is_none_or(|p| named(p).unwrap_or(true)));
+    } else {
+        relint(&app);
+    }
     Ok(done)
 }
 
@@ -391,6 +418,41 @@ fn health_ignore_now(app: AppHandle, check: String, text: String) -> Res<()> {
     Ok(())
 }
 
+/// Knowledge health's Ignore all, on the checks that offer it (`IGNORE_ALL`): every issue it lists
+/// ignored, each until its page (or a claim's line) changes, as Ignore does one. How many.
+fn health_ignore_all_now(app: AppHandle, check: String) -> Res<usize> {
+    if !IGNORE_ALL.contains(&check.as_str()) {
+        return Err(invalid("Ignore all is for stale pages and claims with no citation."));
+    }
+    let root = root(&app)?;
+    let items =
+        app.state::<Health>().report.lock().unwrap().as_ref().and_then(|r| r.check(&check)).map(|c| c.items.clone()).unwrap_or_default();
+    let mut k = kept();
+    for i in &items {
+        let version = i.page.as_deref().and_then(|p| page_version(&root, p)).unwrap_or_default();
+        k.ignored.insert(lint::ignore_key(&check, &i.text), version);
+    }
+    save_kept(&k);
+    let h = app.state::<Health>();
+    let counts = {
+        let mut report = h.report.lock().unwrap();
+        report.as_mut().map(|r| {
+            if let Some(c) = r.checks.iter_mut().find(|c| c.id == check) {
+                c.ignored += c.items.len();
+                c.items.clear();
+            }
+            Counts { decisions: r.needs_decision(), total: r.total() }
+        })
+    };
+    if let Some(c) = counts {
+        let _ = app.emit("health-changed", c);
+    }
+    Ok(items.len())
+}
+
+/// The checks with Ignore all: advisory, with no fix of their own.
+pub const IGNORE_ALL: [&str; 2] = ["stale-pages", "uncited-claims"];
+
 /// Shows a check's ignored issues again (every check's when None).
 fn health_unignore_now(app: AppHandle, check: Option<String>) -> Res<usize> {
     let mut k = kept();
@@ -410,10 +472,12 @@ fn health_dismiss_now(app: AppHandle, a: String, b: String) -> Res<()> {
     let mut k = kept();
     let key = lint::pair_key(&a, &b);
     if !k.dismissed.contains(&key) {
-        k.dismissed.push(key);
+        k.dismissed.push(key.clone());
     }
     save_kept(&k);
-    relint(&app);
+    settled(&app, |check, i| {
+        check == "duplicates" && i.page.as_deref().zip(i.pages.first()).is_some_and(|(x, y)| lint::pair_key(x, y) == key)
+    });
     Ok(())
 }
 
@@ -426,7 +490,7 @@ fn health_trash_image_now(app: AppHandle, path: String) -> Res<String> {
     let root = root(&app)?;
     let e = brainstead_core::trash::move_to_trash(&root, &path, "image")?;
     written(&app, &[root.join(&path)]);
-    relint(&app);
+    settled(&app, |check, i| check == "unreferenced-images" && i.page.as_deref() == Some(path.as_str()));
     Ok(e.id)
 }
 
@@ -450,7 +514,7 @@ fn health_create_page_now(app: AppHandle, name: String, folder: String) -> Res<S
     let v = write::create_file(&abs, &text)?;
     push_undo(&app, &root, format!("Created {name}"), &[FileChange { path: abs.clone(), before: None, version: v }]);
     written(&app, &[abs]);
-    relint(&app);
+    settled(&app, |check, i| check == "missing-pages" && i.name.as_deref() == Some(name.as_str()));
     Ok(rel)
 }
 
@@ -499,7 +563,7 @@ fn health_link_ghost_now(app: AppHandle, target: String, to: String, pages: Vec<
     }
     // As every fix does, so the missing page leaves the list once the links point elsewhere.
     if n > 0 {
-        relint(&app);
+        settled(&app, |check, i| check == "missing-pages" && i.name.as_deref() == Some(target.as_str()));
     }
     Ok(n)
 }
@@ -530,6 +594,27 @@ fn relint(app: &AppHandle) {
     });
 }
 
+/// After an action: what it settled (`gone`, by check and item) taken out of the last report at
+/// once and the window told, as Ignore does, since running every check again takes a second or
+/// so; then the checks rerun to be sure.
+fn settled(app: &AppHandle, gone: impl Fn(&str, &lint::Item) -> bool) {
+    let h = app.state::<Health>();
+    let counts = {
+        let mut report = h.report.lock().unwrap();
+        report.as_mut().map(|r| {
+            for c in &mut r.checks {
+                let id = c.id;
+                c.items.retain(|i| !gone(id, i));
+            }
+            Counts { decisions: r.needs_decision(), total: r.total() }
+        })
+    };
+    if let Some(c) = counts {
+        let _ = app.emit("health-changed", c);
+    }
+    relint(app);
+}
+
 // The window's commands, each running its `_now` on a blocking thread.
 #[tauri::command]
 pub async fn health_fix(app: AppHandle, fixes: Vec<Fix>) -> Res<String> {
@@ -549,6 +634,11 @@ pub async fn health_dismiss(app: AppHandle, a: String, b: String) -> Res<()> {
 #[tauri::command]
 pub async fn health_ignore(app: AppHandle, check: String, text: String) -> Res<()> {
     blocking(move || health_ignore_now(app, check, text)).await
+}
+
+#[tauri::command]
+pub async fn health_ignore_all(app: AppHandle, check: String) -> Res<usize> {
+    blocking(move || health_ignore_all_now(app, check)).await
 }
 
 #[tauri::command]

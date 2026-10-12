@@ -54,7 +54,7 @@ An email or chat can also be ingested into the wiki (`I`), made into a meeting n
 Tasks (⌥⌘3) has the GTD lists: **Next actions**, **Follow-ups**, **Waiting for**, **Deferred**, **Someday / maybe**, and **Done this week** and **last week**. Next actions leaves out deferred tasks until their day, and Inbox tasks until you clarify them.
 
 - Tick to finish a task; a recurring one gets its next occurrence. ⌘Z undoes.
-- The ⋯ menu, a right-click or the pane on the right sets dates, priority, context, effort and project, marks a task in progress or waiting for, cancels, deletes or opens its note.
+- The ⋯ menu, a right-click or the pane on the right renames a task, sets dates, priority, context, effort and project, marks a task in progress or waiting for, cancels, deletes or opens its note.
 - Drag rows into your own order, kept in the file as `^rank-N`.
 - Keys: `↑` `↓` choose, `↩` opens, `Space` ticks, `⌫` deletes (⌘Z puts it back), `/` searches. They work on Today, Projects and the weekly review too.
 - **Search tasks** narrows every list to tasks matching all its words.
@@ -71,6 +71,8 @@ A project is a note named `Project. <name>.md`, with its status, area and outcom
 An active project is **Stuck** (red) with no next action, and **Quiet** (amber) when nothing has moved for two weeks. Add next actions, edit the outcome, area and status, and draft nudges for waiting-fors. **New project** writes the note with its headings.
 
 - Click an area to fold its projects away; what's folded is remembered. Its pencil renames the area on every project under it.
+- Drag an area, or a project within its area, by its grip to put them in order. The order is a Brainstead setting, not written to your notes; ones never moved come after, A to Z.
+- Click the project's name on its page to rename it; its note is renamed and links to it follow.
 - The pencil on a project's row, or **Edit** on its page, opens the project note in Edit.
 
 In the daily and weekly summaries, area Personal goes under **Personal** and any other area under **Work done** ([Day to day](day-to-day.md)).

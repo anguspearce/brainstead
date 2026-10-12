@@ -7,17 +7,17 @@
 // by hand) are made at once; a scheduled run's change that fails a check is held at the top, with
 // why, for you to accept or reject. Reading the feed is optional: only held changes are counted.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ChangeRow, ChangeView, Hunk } from "./api";
 import { Icon } from "./icons";
 import { fieldIcon, fieldTip, splitTaskFields } from "./taskFields";
-import { byRun, changes, held, originLabel, pageName, reloadChanges, startKnowledge } from "./knowledge";
+import { byRun, changeMatches, changes, held, originLabel, pageName, reloadChanges, startKnowledge } from "./knowledge";
 import { nav, openDoc, useViewState } from "./nav";
 import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
 import { askLink, askQuote, TopBar } from "./TopBar";
 import { settings, Store, useStore } from "./store";
-import { Dialog, TableBand } from "./ui";
+import { Dialog, SearchBox, TableBand, useDebounced } from "./ui";
 import { offerFollowUp } from "./Ingest";
 import { DocButton, useGone } from "./docButton";
 
@@ -174,7 +174,12 @@ const RUNS_SHOWN = 30;
 
 export function ReviewScreen() {
   useEffect(startKnowledge, []);
-  const rows = useStore(changes);
+  const all = useStore(changes);
+  // The search narrows held changes and the feed alike; ↑↓ in the box move through what it found.
+  const [q, setQ] = useViewState("review:q", "");
+  const dq = useDebounced(q).trim();
+  const rows = useMemo(() => (all && dq ? all.filter((c) => changeMatches(c, dq)) : all), [all, dq]);
+  const heldAll = useMemo(() => held(all ?? []).length, [all]);
   const waiting = useMemo(() => held(rows ?? []), [rows]);
   const heldRuns = useMemo(() => byRun(waiting), [waiting]);
   const [more, setMore] = useState(1);
@@ -188,6 +193,17 @@ export function ReviewScreen() {
   const move = (d: number) => {
     const next = order[Math.min(order.length - 1, Math.max(0, idx + d))];
     if (next) setSel(next.id);
+  };
+  const key = (e: React.KeyboardEvent) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === "Escape") {
+      if (q) setQ("");
+      else return;
+    } else if (!order.length) return;
+    else if (e.key === "ArrowDown") setSel(order[(idx + 1) % order.length].id);
+    else if (e.key === "ArrowUp") setSel(order[(idx - 1 + order.length) % order.length].id);
+    else return;
+    e.preventDefault();
   };
   const readOnly = useStore(settings).readOnly;
   const [confirm, setConfirm] = useState<{ group: string; label: string; n: number; revert?: boolean } | null>(null);
@@ -213,13 +229,41 @@ export function ReviewScreen() {
       .then(reloadChanges)
       .catch(reportEditError);
 
+  // The chosen change stays in sight: older runs are drawn until it's among them (when another
+  // screen, such as an ingest run's See changes, chose it), and the list scrolls to its row.
+  useEffect(() => {
+    if (!sel) return;
+    const at = feedRuns.findIndex((g) => g.rows.some((c) => c.id === sel));
+    if (at >= RUNS_SHOWN * more) setMore(Math.floor(at / RUNS_SHOWN) + 1);
+  }, [sel, feedRuns, more]);
+  // Arriving (from See N changes, say), the change is brought to the middle of the list; after
+  // that J / K only scroll as far as keeps it in sight.
+  const arrived = useRef(false);
+  useEffect(() => {
+    // Not yet the change asked for: its run is older than those drawn, and is being drawn now.
+    if (!cur || (sel && cur.id !== sel && rows?.some((c) => c.id === sel))) return;
+    requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(`.qrow[data-id="${CSS.escape(cur.id)}"]`);
+      const list = el?.closest<HTMLElement>(".ilist");
+      if (!el || !list) return;
+      if (arrived.current) el.scrollIntoView({ block: "nearest" });
+      else {
+        // To the middle of the list (or as near as its ends allow).
+        const r = el.getBoundingClientRect();
+        const lr = list.getBoundingClientRect();
+        list.scrollTop += r.top - lr.top - (lr.height - r.height) / 2;
+      }
+      arrived.current = true;
+    });
+  }, [cur?.id, shownRuns.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const gone = useGone(shownRuns.flatMap((g) => g.rows.map((r) => r.to ?? r.page)));
 
   return (
     <main className="main">
       <TopBar
         title="Changes"
-        sub={waiting.length ? `${plural(waiting.length, "change")} held for you` : "Nothing held"}
+        sub={heldAll ? `${plural(heldAll, "change")} held for you` : "Nothing held"}
         ask={
           cur
             ? { about: `the change ${askQuote(cur.title)}`, prompt: `About the change “${cur.title}” to ${askLink(cur.page)}: ` }
@@ -282,6 +326,16 @@ export function ReviewScreen() {
       )}
       <div className="body queue">
         <div className="ilist tb" role="table" aria-label="Changes">
+          <div className="qsearch">
+            <SearchBox value={q} onChange={setQ} onKeyDown={key} placeholder="Search changes">
+              {dq && (
+                <span className="faint nav">
+                  {order.length ? `${idx + 1}/${order.length}` : "0"}
+                  <span className="kbd">↑↓</span>
+                </span>
+              )}
+            </SearchBox>
+          </div>
           {rows === null && <p className="faint pad">Loading…</p>}
           {heldRuns.length > 0 && (
             <div className="tb-group held" role="rowgroup">
@@ -365,7 +419,7 @@ export function ReviewScreen() {
               Show older changes
             </button>
           )}
-          {rows !== null && !rows.length && <p className="faint pad">No changes yet.</p>}
+          {rows !== null && !rows.length && <p className="faint pad">{dq ? `No changes match “${dq}”.` : "No changes yet."}</p>}
         </div>
         {cur ? (
           <Detail key={cur.id} row={cur} onMove={move} />
@@ -373,10 +427,16 @@ export function ReviewScreen() {
           <div className="iopen">
             <div className="soon">
               <Icon name="review" size={28} />
-              <h1 className="h2">No changes yet</h1>
-              <p className="muted">
-                What an assistant in Ask or a terminal changes, and what Brainstead's runs change, shows here, each with Revert.
-              </p>
+              {dq ? (
+                <h1 className="h2">No changes match</h1>
+              ) : (
+                <>
+                  <h1 className="h2">No changes yet</h1>
+                  <p className="muted">
+                    What an assistant in Ask or a terminal changes, and what Brainstead's runs change, shows here, each with Revert.
+                  </p>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -390,6 +450,7 @@ function Row({ c, sel, gone, onSel }: { c: ChangeRow; sel: boolean; gone?: boole
     <button
       type="button"
       role="row"
+      data-id={c.id}
       className={`qrow tb-row ${sel ? "sel" : ""} ${c.status === "reverted" || c.status === "rejected" ? "done" : ""}`}
       title="Show this change (J / K)"
       onClick={onSel}

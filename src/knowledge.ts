@@ -50,6 +50,20 @@ export function originLabel(c: ChangeRow): string {
   return c.origin.chat ? "Ask" : "An assistant";
 }
 
+/** What searching Changes looks in: its title, page (and where it moved to), origin and model. The
+ *  screen's search box and list_changes' query both match on this. */
+export const changeText = (c: ChangeRow) => [c.title, c.page, c.to, originLabel(c), c.model].filter(Boolean).join(" ");
+
+/** Has every word of `q` in its search text (an empty query matches everything). */
+export function changeMatches(c: ChangeRow, q: string): boolean {
+  const text = changeText(c).toLowerCase();
+  return q
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((w) => text.includes(w));
+}
+
 /** A run's name in Changes: "Daily check", "Ingest of Steerco", "Ask", "Terminal session". */
 export function runLabel(c: ChangeRow): string {
   if (c.origin.run?.startsWith("daily-check-")) return "Daily check";
@@ -84,6 +98,9 @@ export const pageName = (path: string) => (path.split("/").pop() ?? path).replac
 export const OWN_ACTIONS = new Set(["missing-pages", "duplicates", "unreferenced-images", "uningested-sources", "page-shape"]);
 
 export const ADVISORY = new Set(["stale-pages", "uncited-claims", "no-current-state"]);
+
+/** The checks with Ignore all (knowledge.rs IGNORE_ALL, kept the same): advisory, with no fix of their own. */
+export const IGNORE_ALL = new Set(["stale-pages", "uncited-claims"]);
 
 /** Issues that need you: everything Brainstead can't fix on its own. */
 export function decisions(r: LintReport | null | undefined): number {

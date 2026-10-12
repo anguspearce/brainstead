@@ -283,6 +283,31 @@ describe("MCP actions", () => {
     await expect(run("project.update", { project: "Orbit App launch", status: "done" })).rejects.toThrow(/completed/);
   });
 
+  it("orders projects and areas as dragging on the Projects screen does, and lists them so", async () => {
+    settings.update({ projectOrder: undefined });
+    answers.projects_list = () => [
+      { name: "Orbit App launch", path: "Project. Orbit App launch.md", status: "active", area: "Work" },
+      { name: "Acme review", path: "Project. Acme review.md", status: "active", area: "Work" },
+      { name: "Garden", path: "Project. Garden.md", status: "active", area: "Personal" },
+      { name: "Loose end", path: "Project. Loose end.md", status: "active", area: null },
+    ];
+    expect(await run("project.move", { project: "Orbit App launch", before: "Acme review" })).toMatch(
+      /Work is now: Orbit App launch, Acme review/,
+    );
+    expect(await run("project.move", { area: "work", before: "Personal" })).toMatch(/now: Work, Personal, No area/);
+    expect(settings.get().projectOrder).toEqual({
+      // Every project, so the order holds across tabs; only the order within an area matters.
+      projects: ["Project. Garden.md", "Project. Orbit App launch.md", "Project. Acme review.md", "Project. Loose end.md"],
+      areas: ["Work", "Personal"],
+    });
+    const listed = String(await run("projects.list", {}));
+    expect(listed.indexOf("Orbit App launch")).toBeLessThan(listed.indexOf("Acme review"));
+    expect(listed.indexOf("Acme review")).toBeLessThan(listed.indexOf("Garden"));
+    await expect(run("project.move", { project: "Garden", after: "Acme review" })).rejects.toThrow(/own area/);
+    await expect(run("project.move", { project: "Garden" })).rejects.toThrow(/after or before/);
+    settings.update({ projectOrder: undefined });
+  });
+
   it("renames an area on every project under it, as the area's pencil does", async () => {
     answers.projects_list = () => [
       { name: "Orbit App launch", path: "Project. Orbit App launch.md", status: "active", area: "Work" },
@@ -957,6 +982,30 @@ describe("MCP actions", () => {
       expect(out).toContain("Meeting notes being written: sources/Standup transcript.vtt (running, id r2)");
       expect(out).not.toMatch(/Ingest running:.*Standup/);
       expect(out).toMatch(/Recent ingests: sources\/Plan\.pdf — running, 0 changes \(id r1\)$/m);
+    });
+
+    it("finds ingest runs as the Ingest runs pane's search does", async () => {
+      const r = (id: string, source: string, status: string) => ({
+        id,
+        kind: "ingest",
+        source,
+        status,
+        model: "claude:haiku",
+        started: "2026-10-05T09:00:00",
+        proposals: [],
+        error: null,
+        dropped: [],
+      });
+      answers.ingest_runs = () => [
+        r("r1", "sources/Steerco notes.md", "failed"),
+        r("r2", "sources/Steerco deck.pdf", "done"),
+        r("r3", "sources/Plan.pdf", "failed"),
+      ];
+      answers.daily_check_status = () => ({ running: false, progress: 0 });
+      answers.reviews_status = () => ({ running: [], next: {} });
+      answers.weekprep_job = () => ({ running: null, last: null, next: null });
+      const out = (await run("run.status", { query: "steerco FAILED" })) as string;
+      expect(out).toMatch(/Ingests matching “steerco FAILED”: sources\/Steerco notes\.md — failed, 0 changes \(id r1\)$/m);
     });
 
     it("gives finished and failed meeting notes, what the checks left out, and the runs' chats", async () => {
@@ -1794,7 +1843,7 @@ describe("MCP actions", () => {
       const out = (await run("projects.list")) as string;
       expect(out).toContain("- Orbit · active · 0 next · Stuck: it has no next action  (Project. Orbit.md)");
       expect(out).toContain("- Hub · active · 2 next · Quiet: nothing has happened for two weeks  (Project. Hub.md)");
-      expect(((await data("projects.list")).items as { flag: string | null }[]).map((x) => x.flag)).toEqual(["stuck", "quiet", null]);
+      expect(((await data("projects.list")).items as { flag: string | null }[]).map((x) => x.flag)).toEqual(["quiet", null, "stuck"]);
     });
 
     it("gives the judge's fix and whether it's waiting in Changes", async () => {

@@ -15,6 +15,7 @@ Sources (⌥⌘0) are the files in `sources/`: emails, Teams chats and transcrip
 - Drag files onto Sources, or click **Import**, to copy them in.
 - The **Outlook** and **Teams** Chrome extensions capture a thread, chat or meeting transcript into `sources/` with one click. Set them up in Settings › Capture extensions. Each capture also waits in the Inbox.
 - Each source is **New**, **Changed** (since the pages citing it were written) or **Ingested**.
+- The **Ingest runs** pane lists each run's steps, the latest first and older ones as you scroll. **Search runs** finds them by name, state, model or day, and **See N changes** opens Changes at the run's first change.
 - PDFs open with page navigation, zoom and find. Word, PowerPoint and Excel files show their text; **Quick Look** (`Space`) shows how they look. Images show the text read from them, which search uses too.
 
 <a href="images/index.md#the-wiki-and-sources"><picture><source media="(prefers-color-scheme: dark)" srcset="images/source-provenance-dark.png"><img alt="A source's provenance: when it was ingested and by which model, and the wiki pages that cite it with the passages they cite" src="images/source-provenance-light.png"></picture></a>
@@ -42,7 +43,7 @@ An ingest you start makes its changes at once. One the daily check starts holds 
 
 <a href="images/index.md#the-wiki-and-sources"><picture><source media="(prefers-color-scheme: dark)" srcset="images/review-dark.png"><img alt="Changes: what assistants and runs changed, grouped by run, one open with its diff and the quotes it rests on" src="images/review-light.png"></picture></a>
 
-Changes (⌥⌘5) lists every change assistants and runs made to the vault, newest first, grouped by run ("Daily check, 5 Oct: 6 changes to 4 pages"). Each has its diff, why, who made it, the quotes it rests on and **Revert**.
+Changes (⌥⌘5) lists every change assistants and runs made to the vault, newest first, grouped by run ("Daily check, 5 Oct: 6 changes to 4 pages"). Each has its diff, why, who made it, the quotes it rests on and **Revert**. **Search changes** narrows the list by title, page, source or model; `↑` `↓` step through what it found and `Esc` clears it.
 
 - A change you started (Ask, a terminal, a run started by hand) is made at once, and flagged if a check fails.
 - A scheduled run's change (the daily check and its ingests, the scheduled summaries) is made only when it passes every check, and held otherwise: a quote not found or read from an image, text rewritten or removed in one of your own notes, unsaved edits to the page, an open contradiction on it, or properties that wouldn't read.
@@ -73,7 +74,8 @@ Knowledge health checks the wiki whenever the vault changes: missing pages and l
 
 - Pie charts show the pages by type and by tag; a slice opens the Wiki filtered to it.
 - **Fix safe issues** fixes the ones with one right answer (a missing link, a date, a `log.md` line, a system note's lost header), undoably.
-- **Ignore** hides an issue until its page changes; **Show again** brings a check's ignored issues back. Checks only worth a look (stale pages, claims with no citation, pages with no Current state) have a grey icon, not amber.
+- **Ignore** hides an issue until its page changes; **Show again** brings a check's ignored issues back. Stale pages and claims with no citation also have **Ignore all**.
+- A fixed issue leaves the list at once, and the checks rerun within a second of any change to the vault. Checks only worth a look (stale pages, claims with no citation, pages with no Current state) have a grey icon, not amber.
 - Missing pages can be created, or linked to an existing page with **Link to…**. Duplicates can be compared or dismissed.
 - **Pages not in the page shape** lists pages laid out another way. **Reshape pages** fixes the ones it can, without the AI, and checks that nothing is lost before it saves. Each page is one change in Changes, and you can revert the whole run at once. A page it can't fix says why; fix it, or **Reshape anyway**. The screen's help lists exactly what it changes.
 - **Pages with no Current state** lists pages with a Timeline but no Current state. **Write 5** and **Write all** have a cheap model write one from the page's opening and newest Timeline entries. Each page is a change in one run in Changes.

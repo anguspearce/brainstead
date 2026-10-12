@@ -2,11 +2,14 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { ChangeRow, LintReport } from "./api";
 import { filedPage } from "./Ask";
 import {
   byRun,
+  changeMatches,
+  IGNORE_ALL,
   claimsByPage,
   decisions,
   fixWithAskPrompt,
@@ -161,5 +164,22 @@ describe("knowledge health", () => {
     expect(filedPage("Launch readiness", "concept", "  Ready by November.\n")).toBe(
       "---\ntype: concept\nname: Launch readiness\ndescription: \nsources: []\n---\n\n## Current state\n\nReady by November.\n",
     );
+  });
+});
+
+describe("changeMatches", () => {
+  it("needs every word, in the title, page, origin or model, any case", () => {
+    const c = row({ to: "wiki/entities/Orbit Launch.md" });
+    expect(changeMatches(c, "")).toBe(true);
+    expect(changeMatches(c, "launch orbit")).toBe(true);
+    expect(changeMatches(c, "ASK sonnet")).toBe(true);
+    expect(changeMatches(c, "orbit maya")).toBe(false);
+  });
+});
+
+describe("Ignore all", () => {
+  it("is on the same checks as knowledge.rs offers it on", () => {
+    const rs = readFileSync("src-tauri/src/knowledge.rs", "utf8").match(/IGNORE_ALL: \[&str; \d+\] = \[([^\]]*)\]/)![1];
+    expect([...rs.matchAll(/"([^"]+)"/g)].map((m) => m[1])).toEqual([...IGNORE_ALL]);
   });
 });

@@ -32,7 +32,9 @@ Click **Fix** on one issue, or **Fix safe issues** in the top bar for all of the
 ## Deal with the rest
 - **Missing pages**: **Create** makes the page in `wiki/entities/` (from `Templates/Wiki page.md` if there is one) and opens it. **Link to…** points the link at an existing page instead, everywhere it's used: type part of a page name and pick it. It's listed in Changes, with Revert.
 - **Possible duplicates**: **Open the other** compares them; **Not duplicates** stops the pair being flagged.
-- **Anything else** (an orphan page, a stale page, a broken source…): **Ignore** hides it until its page (or, for a claim, its line) changes; **Show again** lists ignored ones again.
+- **Anything else** (an orphan page, a stale page, a broken source…): **Ignore** hides it until its page (or, for a claim, its line) changes; **Show again** lists ignored ones again. Stale pages and claims with no citation also have **Ignore all**, at the top of their list.
+
+A fixed issue leaves the list as soon as its fix is made, and the checks rerun within a second of any change to the vault, wherever it was made (Changes, Ask, another editor).
 - **Images nothing uses**: **Move to the Trash**, after asking; you can restore them.
 - **Sources not yet ingested**: **Ingest** starts the same ingest as [Sources](app:sources); its page changes are listed in [Changes](app:review). A source that can't be ingested, such as an SVG or a zip file, shows **Can't ingest**.
 

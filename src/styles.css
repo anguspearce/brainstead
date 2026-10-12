@@ -6083,6 +6083,46 @@ select.sel {
   font-size: 12px;
 }
 
+/* The grips (drag an area or a project into order) sit in the row's left padding, shown on hover. */
+
+/* The rows hold their grip; the header and bands are sticky, which holds it already (relative
+   would undo their sticking). */
+.ptable .prow.tb-row {
+  position: relative;
+}
+.ptable .prow {
+  padding-left: 44px;
+}
+.ptable .pband {
+  padding-left: 28px;
+}
+
+/* An area's grip clear of the edge; a project's under its area's chevron, indented, as it moves
+   only within the area. */
+.ptable .pgrip {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  color: var(--ink3);
+  cursor: grab;
+  opacity: 0;
+  touch-action: none;
+}
+.ptable .prow .pgrip {
+  left: 28px;
+}
+.pband:hover .pgrip,
+.prow:hover .pgrip {
+  opacity: 1;
+}
+.ptable .dragging > .pband,
+.ptable .prow.dragging {
+  opacity: 0.6;
+  background: var(--accent-soft);
+}
+
 /* The pencils (rename an area, edit a project) show on hover, on the selected row and on focus. */
 .ptable .pedit {
   width: 22px;
@@ -6174,6 +6214,48 @@ select.sel {
   cursor: text;
   color: var(--ink);
   font: inherit;
+}
+.phead .pname {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  border-radius: 6px;
+  margin: -2px -6px;
+  padding: 2px 6px;
+  cursor: text;
+}
+.phead .pname:hover {
+  background: var(--hover);
+}
+.phead .pname:focus-visible {
+  outline: 2px solid var(--accent);
+}
+.phead .pname-in {
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  margin: -3px -7px;
+  padding: 2px 6px;
+  min-width: 0;
+  width: 100%;
+  outline: 0;
+}
+.phead .pedit {
+  margin-left: 6px;
+  color: var(--ink3);
+  opacity: 0.7;
+  vertical-align: -1px;
+}
+.phead .pname .pedit {
+  vertical-align: 0;
+}
+.phead .pval:hover .pedit,
+.phead .pname:hover .pedit {
+  color: var(--accent);
+  opacity: 1;
 }
 .pval:hover {
   background: var(--hover);
@@ -6550,6 +6632,33 @@ select.sel {
   font-size: 11px;
   margin-left: 8px;
 }
+
+/* Pinned at the top of the list; the bands stick under it, and a row scrolled to stays clear of both. */
+.qsearch {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 53px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--ground);
+}
+.body.queue .ilist {
+  --tb-head: 53px;
+}
+.body.queue .qrow {
+  scroll-margin-top: calc(var(--tb-head) + 30px);
+}
+.qsearch .searchbox {
+  width: 100%;
+}
+.qsearch .nav {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
 .body.queue {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
@@ -6568,14 +6677,10 @@ select.sel {
   font-size: 13px;
   cursor: pointer;
 }
-.qrow.done {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 10px;
-  cursor: default;
-}
-.qrow.done:hover {
-  background: none;
+
+/* A reverted or rejected change: laid out as the others, its title muted. */
+.qrow.done .tt {
+  color: var(--ink2);
 }
 
 .qrow > span {
@@ -7234,6 +7339,41 @@ select.sel {
   flex-direction: column;
   overflow-y: auto;
   background: var(--side);
+}
+
+/* The label and search, pinned at the top of the pane on its own colour, so runs scroll out of
+   sight under them. */
+.runs .runshead {
+  position: sticky;
+  top: -14px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 10px;
+  margin: -14px -14px 0;
+  padding: 14px 14px 10px;
+  background: var(--side);
+}
+.runs .runsq {
+  width: 100%;
+
+  /* The pane is a scrolling column: without this, a long list squeezes the box below its height. */
+  flex-shrink: 0;
+}
+.runsq .nav {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.runs .card.run {
+  scroll-margin-top: 80px;
+}
+.runs .card.run.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 .mside .runs {
   border-left: 0;
@@ -9195,6 +9335,15 @@ html.tray-view body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+.tmenu .mrename {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 8px;
+}
+.tmenu .mrename .pin {
+  width: 100%;
 }
 .tmenu.wide .tmacts {
   display: grid;

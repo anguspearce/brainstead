@@ -38,6 +38,7 @@ Right-click a row, or click its ⋯ button, for the task's menu:
 - **Pick…** for a calendar, **Clear** to remove.
 - **More dates…** shows the start and created dates. A start date doesn't hide the task; it only makes it less urgent until then.
 - Priority, context, effort and project, with quick chips and **Find…** or **Other…**.
+- **Rename…** changes the task's words in the menu (`↩` keeps, `Esc` goes back); its dates and tags stay.
 - **Mark in progress** (its box shows a dot) and **Back to to-do**.
 - **Waiting for someone**, **Cancel task** and **Reopen** on a cancelled task.
 - **Open** with the note's name, and **Delete task**, which ⌘Z puts back.

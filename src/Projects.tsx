@@ -11,11 +11,23 @@ import { useEffect, useMemo, useState } from "react";
 import { api, ProjectRow, TaskRow } from "./api";
 import { askAboutNote } from "./Ask";
 import { prepareCapture } from "./Capture";
-import { areaProjects, projectFlag, projectTasks, ProjectStatus, STATUS_LABEL, useProjects } from "./gtd";
+import {
+  areaProjects,
+  moveInProjectOrder,
+  orderedProjects,
+  projectFlag,
+  projectTasks,
+  ProjectStatus,
+  renameInProjectOrder,
+  STATUS_LABEL,
+  useProjects,
+} from "./gtd";
 import { Icon } from "./icons";
 import { editDoc, nav, openDoc, place, useViewState } from "./nav";
-import { Store, useStore } from "./store";
+import { settings, Store, useStore } from "./store";
 import { trashFile } from "./notes/actions";
+import { parseName } from "./notes/filename";
+import { commitRename, renamedPath } from "./notes/Rename";
 import { DraftNudge, GtdChips, TaskList } from "./TaskList";
 import { useVaultVersion } from "./state";
 import { reportEditError, undoLast, useAllTasks } from "./taskModel";
@@ -51,11 +63,56 @@ export function ProjectsScreen() {
   const sel = here.path ?? null;
   const counts = useMemo(() => new Map(TABS.map((s) => [s, (projects ?? []).filter((p) => p.status === s).length])), [projects]);
   const shown = (projects ?? []).filter((p) => p.status === tab);
+  // Areas and their projects in the order dragged (kept in settings, D-20261012-01), the rest A–Z.
+  const order = useStore(settings).projectOrder;
+  const [drag, setDrag] = useState<{ kind: "areas" | "projects"; key: string; keys: string[] } | null>(null);
   const areas = useMemo(() => {
     const m = new Map<string, ProjectRow[]>();
-    for (const p of shown) m.set(p.area ?? "", [...(m.get(p.area ?? "") ?? []), p]);
-    return [...m].sort((a, b) => (a[0] ? (b[0] ? a[0].localeCompare(b[0]) : -1) : 1));
-  }, [shown]);
+    for (const p of orderedProjects(shown, order)) m.set(p.area ?? "", [...(m.get(p.area ?? "") ?? []), p]);
+    return [...m];
+  }, [shown, order]);
+  // While dragging, the list in its new order; it's saved on letting go.
+  const asDragged = <T,>(kind: "areas" | "projects", items: T[], key: (t: T) => string): T[] => {
+    if (drag?.kind !== kind || !items.some((t) => key(t) === drag.key)) return items;
+    const at = new Map(drag.keys.map((k, i) => [k, i]));
+    return [...items].sort((a, b) => (at.get(key(a)) ?? 1e9) - (at.get(key(b)) ?? 1e9));
+  };
+  // Drag by the grip: an area among the areas, a project among its area's; No area stays last.
+  const startDrag = (e: React.PointerEvent, kind: "areas" | "projects", group: string, key: string, keys: string[]) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startY = e.clientY;
+    let moved = false;
+    let cur = keys;
+    const move = (m: PointerEvent) => {
+      if (!moved && Math.abs(m.clientY - startY) < 4) return;
+      moved = true;
+      const others = keys.filter((k) => k !== key);
+      const els = [...document.querySelectorAll<HTMLElement>(`[data-drag="${CSS.escape(group)}"]`)].filter((el) => el.dataset.key !== key);
+      let at = others.length;
+      for (let i = 0; i < els.length; i++) {
+        const r = els[i].getBoundingClientRect();
+        if (m.clientY < r.top + r.height / 2) {
+          at = others.indexOf(els[i].dataset.key ?? "");
+          break;
+        }
+      }
+      if (at < 0) at = others.length;
+      cur = [...others.slice(0, at), key, ...others.slice(at)];
+      setDrag({ kind, key, keys: cur });
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      const i = cur.indexOf(key);
+      if (moved && i !== keys.indexOf(key)) moveInProjectOrder(projects ?? [], kind, key, cur[i - 1] ?? null, cur[i + 1] ?? null);
+      setDrag(null);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  const areaKeys = areas.map(([a]) => a).filter(Boolean);
   const open = projects?.find((p) => p.path === sel) ?? null;
   const pick = (p: ProjectRow) => nav.replace({ screen: "projects", path: p.path });
 
@@ -116,10 +173,17 @@ export function ProjectsScreen() {
                 <span role="columnheader">Waiting</span>
                 <span role="columnheader">Last change</span>
               </div>
-              {areas.map(([area, ps]) => (
-                <div key={area} className="tb-group" role="rowgroup">
+              {asDragged("areas", areas, ([a]) => a).map(([area, ps]) => (
+                <div
+                  key={area}
+                  className={`tb-group ${drag?.kind === "areas" && drag.key === area ? "dragging" : ""}`}
+                  role="rowgroup"
+                  data-drag={area ? "areas" : undefined}
+                  data-key={area}
+                >
                   <AreaBand
                     area={area}
+                    onGrip={area ? (e) => startDrag(e, "areas", "areas", area, areaKeys) : undefined}
                     n={ps.length}
                     folded={folded.includes(area)}
                     onFold={() => fold(area)}
@@ -127,62 +191,79 @@ export function ProjectsScreen() {
                     onRenamed={(to) => renamed(area, to)}
                   />
                   {!folded.includes(area) &&
-                    ps
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((p) => {
-                        const flag = projectFlag(p);
-                        return (
-                          <div
-                            key={p.path}
-                            role="row"
-                            tabIndex={0}
-                            className={`prow tb-row ${p.path === sel ? "sel" : ""}`}
-                            title={`Show ${p.name}: its tasks, notes and activity`}
-                            onClick={() => pick(p)}
-                            onKeyDown={(e) => {
-                              if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
-                              e.preventDefault();
-                              pick(p);
-                            }}
-                          >
-                            <span className="nm" role="cell">
-                              <span className="flag">
-                                {flag && <Icon name="alert" size={13} style={{ color: flag === "none" ? "var(--red)" : "var(--amber)" }} />}
-                              </span>
-                              <span className="ell">{p.name}</span>
-                              {flag && (
-                                <span
-                                  className={`pflag ${flag === "none" ? "red" : "amber"}`}
-                                  title={flag === "none" ? "Stuck: it has no next action" : "Quiet: nothing has happened for two weeks"}
-                                >
-                                  {flag === "none" ? "Stuck" : "Quiet"}
-                                </span>
-                              )}
-                              <button
-                                type="button"
-                                className="ibtn sm pedit"
-                                title={`Edit ${p.name}: open its note in Edit`}
-                                aria-label={`Edit ${p.name}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  editDoc(p.path);
-                                }}
+                    asDragged("projects", ps, (p) => p.path).map((p) => {
+                      const flag = projectFlag(p);
+                      return (
+                        <div
+                          key={p.path}
+                          role="row"
+                          tabIndex={0}
+                          className={`prow tb-row ${p.path === sel ? "sel" : ""} ${drag?.key === p.path ? "dragging" : ""}`}
+                          data-drag={`projects:${area}`}
+                          data-key={p.path}
+                          title={`Show ${p.name}: its tasks, notes and activity`}
+                          onClick={() => pick(p)}
+                          onKeyDown={(e) => {
+                            if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+                            e.preventDefault();
+                            pick(p);
+                          }}
+                        >
+                          <span className="nm" role="cell">
+                            <span
+                              className="pgrip"
+                              title="Drag to put it in order"
+                              aria-hidden="true"
+                              onPointerDown={(e) =>
+                                startDrag(
+                                  e,
+                                  "projects",
+                                  `projects:${area}`,
+                                  p.path,
+                                  ps.map((x) => x.path),
+                                )
+                              }
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Icon name="grip" size={12} />
+                            </span>
+                            <span className="flag">
+                              {flag && <Icon name="alert" size={13} style={{ color: flag === "none" ? "var(--red)" : "var(--amber)" }} />}
+                            </span>
+                            <span className="ell">{p.name}</span>
+                            {flag && (
+                              <span
+                                className={`pflag ${flag === "none" ? "red" : "amber"}`}
+                                title={flag === "none" ? "Stuck: it has no next action" : "Quiet: nothing has happened for two weeks"}
                               >
-                                <Icon name="pencil" size={13} />
-                              </button>
-                            </span>
-                            <span role="cell" className={`m ${p.status === "active" && !p.next ? "red" : ""}`}>
-                              {p.next || (p.status === "active" ? "None" : "–")}
-                            </span>
-                            <span role="cell" className="m">
-                              {p.waiting || "–"}
-                            </span>
-                            <span role="cell" className={`m ${flag === "quiet" ? "amber" : ""}`}>
-                              {ago(p.lastTouched)}
-                            </span>
-                          </div>
-                        );
-                      })}
+                                {flag === "none" ? "Stuck" : "Quiet"}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              className="ibtn sm pedit"
+                              title={`Edit ${p.name}: open its note in Edit`}
+                              aria-label={`Edit ${p.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                editDoc(p.path);
+                              }}
+                            >
+                              <Icon name="pencil" size={13} />
+                            </button>
+                          </span>
+                          <span role="cell" className={`m ${p.status === "active" && !p.next ? "red" : ""}`}>
+                            {p.next || (p.status === "active" ? "None" : "–")}
+                          </span>
+                          <span role="cell" className="m">
+                            {p.waiting || "–"}
+                          </span>
+                          <span role="cell" className={`m ${flag === "quiet" ? "amber" : ""}`}>
+                            {ago(p.lastTouched)}
+                          </span>
+                        </div>
+                      );
+                    })}
                 </div>
               ))}
             </div>
@@ -210,6 +291,7 @@ function AreaBand({
   onFold,
   paths,
   onRenamed,
+  onGrip,
 }: {
   area: string;
   n: number;
@@ -217,6 +299,8 @@ function AreaBand({
   onFold: () => void;
   paths: string[];
   onRenamed: (to: string) => void;
+  /** Starts dragging the area into a new place; absent for No area, which stays last. */
+  onGrip?: (e: React.PointerEvent) => void;
 }) {
   const [renaming, setRenaming] = useState(false);
   const label = area || "No area";
@@ -226,6 +310,7 @@ function AreaBand({
     api
       .projectsSetArea(paths, area, to)
       .then((undo) => {
+        renameInProjectOrder("areas", area, to);
         onRenamed(to);
         toast(undo, undefined, "ok");
       })
@@ -251,6 +336,11 @@ function AreaBand({
           />
         ) : (
           <>
+            {onGrip && (
+              <span className="pgrip" title="Drag to put the area in order" aria-hidden="true" onPointerDown={onGrip}>
+                <Icon name="grip" size={12} />
+              </span>
+            )}
             <button
               type="button"
               className="pfold"
@@ -286,7 +376,7 @@ function AreaBand({
 function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAllTasks> }) {
   const t = useMemo(() => projectTasks(all ?? [], p.path), [all, p.path]);
   const [adding, setAdding] = useState("");
-  const [editing, setEditing] = useState<"outcome" | "area" | null>(null);
+  const [editing, setEditing] = useState<"name" | "outcome" | "area" | null>(null);
   const [deleting, setDeleting] = useState(false);
   const set = (key: "status" | "area" | "outcome", value: string | null, done?: string) =>
     api
@@ -300,6 +390,16 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
     api
       .projectAddTask(p.path, prepareCapture("task", text))
       .then((r) => r.undo && toast(r.undo, undefined, "ok"))
+      .catch(reportEditError);
+  };
+  // The name is the note's title: renamed as the file menu's Rename does, links to it rewritten.
+  const rename = (to: string) => {
+    const n = parseName(p.path);
+    const dest = to ? renamedPath(p.path, { type: n.type ?? "", title: to, date: n.date ?? "" }) : "";
+    if (!dest || dest === p.path) return;
+    api
+      .renamePreview(p.path, dest)
+      .then((plan) => commitRename(p.path, plan))
       .catch(reportEditError);
   };
   const field = (key: "outcome" | "area", label: string, value: string | null) =>
@@ -323,6 +423,7 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
     ) : (
       <button type="button" className="pval" onClick={() => setEditing(key)} title={`Change the ${label.toLowerCase()}`}>
         {value || <span className="faint">Add {label.toLowerCase()}…</span>}
+        <Icon name="pencil" size={12} className="pedit" />
       </button>
     );
 
@@ -334,7 +435,37 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
             <span className={`chip ${p.status === "active" ? "green" : ""}`}>{STATUS_LABEL[p.status]}</span>
             <span className="faint small">{p.path}</span>
           </div>
-          <h1 className="h1">{p.name}</h1>
+          {editing === "name" ? (
+            <input
+              className="h1 pname-in"
+              autoFocus
+              defaultValue={p.name}
+              aria-label="Project name"
+              onFocus={(e) => e.currentTarget.select()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  setEditing(null);
+                  rename(e.currentTarget.value.trim());
+                } else if (e.key === "Escape") {
+                  e.stopPropagation();
+                  setEditing(null);
+                }
+              }}
+              onBlur={() => setEditing(null)}
+            />
+          ) : (
+            <h1 className="h1">
+              <button
+                type="button"
+                className="pname"
+                onClick={() => setEditing("name")}
+                title="Rename the project; links to its note follow"
+              >
+                {p.name}
+                <Icon name="pencil" size={16} className="pedit" />
+              </button>
+            </h1>
+          )}
           <div className="pkv">
             <span className="faint">Done looks like</span>
             {field("outcome", "Outcome", p.outcome)}

@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import { api, InboxItem, ProjectRow, TaskRow } from "./api";
 import { useVaultVersion } from "./state";
+import { settings } from "./store";
 
 export const PROJECT_PREFIX = "Project. ";
 export type ProjectStatus = "active" | "on-hold" | "someday" | "done";
@@ -122,6 +123,88 @@ export const useProjects = () => useLoaded<ProjectRow[]>(() => api.projectsList(
 /** The projects under an area, whatever their status: what renaming the area changes, on the
  *  Projects screen and in rename_area. Areas match as the screen groups them, exactly. */
 export const areaProjects = (projects: ProjectRow[], area: string) => projects.filter((p) => (p.area ?? "") === area && area !== "");
+
+// ---- the Projects screen's order (D-20261012-01): kept in settings, never in the vault.
+
+/** `items` in the saved order (by `key`), those not in it after, A–Z by `label`. */
+export function inSavedOrder<T>(items: T[], key: (t: T) => string, label: (t: T) => string, saved: string[] = []): T[] {
+  const at = new Map(saved.map((k, i) => [k, i]));
+  return [...items].sort((a, b) => {
+    const x = at.get(key(a));
+    const y = at.get(key(b));
+    if (x !== undefined && y !== undefined) return x - y;
+    if (x !== undefined) return -1;
+    if (y !== undefined) return 1;
+    return label(a).localeCompare(label(b));
+  });
+}
+
+/** The areas in the screen's order: as dragged, then A–Z, no area ("") last. */
+export function orderedAreas(areas: string[], saved = settings.get().projectOrder?.areas): string[] {
+  const named = [...new Set(areas.filter(Boolean))];
+  const out = inSavedOrder(
+    named,
+    (a) => a,
+    (a) => a,
+    saved,
+  );
+  return areas.includes("") ? [...out, ""] : out;
+}
+
+/** Projects in the screen's order: by area as `orderedAreas`, then as dragged within it, then A–Z. */
+export function orderedProjects(ps: ProjectRow[], order = settings.get().projectOrder): ProjectRow[] {
+  const areas = orderedAreas(
+    ps.map((p) => p.area ?? ""),
+    order?.areas,
+  );
+  const inArea = (a: string) =>
+    inSavedOrder(
+      ps.filter((p) => (p.area ?? "") === a),
+      (p) => p.path,
+      (p) => p.name,
+      order?.projects,
+    );
+  return areas.flatMap(inArea);
+}
+
+/** `full` with `item` moved to just before `before`, or just after `after` when there's no `before`
+ *  (the end of what's shown, which may not be the end of `full`). */
+export function movedTo(full: string[], item: string, after: string | null, before: string | null): string[] {
+  const rest = full.filter((k) => k !== item);
+  const i = before !== null ? rest.indexOf(before) : after !== null ? rest.indexOf(after) + 1 : -1;
+  return i < 0 ? [...rest, item] : [...rest.slice(0, i), item, ...rest.slice(i)];
+}
+
+/** Saves `item`'s new place among the areas (`kind` "areas") or projects (paths): between `after`
+ *  and `before`, as they're shown. Every project and area is in `all`, so their order holds across
+ *  the status tabs. */
+export function moveInProjectOrder(
+  all: ProjectRow[],
+  kind: "areas" | "projects",
+  item: string,
+  after: string | null,
+  before: string | null,
+) {
+  const order = settings.get().projectOrder ?? {};
+  const full =
+    kind === "areas"
+      ? orderedAreas(
+          all.map((p) => p.area ?? ""),
+          order.areas,
+        ).filter(Boolean)
+      : orderedProjects(all, order).map((p) => p.path);
+  settings.update({ projectOrder: { ...order, [kind]: movedTo(full, item, after, before) } });
+}
+
+/** A renamed area or project note keeps its place; renamed onto one that's there, the two merge
+ *  where that one was. */
+export function renameInProjectOrder(kind: "areas" | "projects", from: string, to: string) {
+  const order = settings.get().projectOrder;
+  const list = order?.[kind];
+  if (!list?.includes(from)) return;
+  const next = list.includes(to) ? list.filter((k) => k !== from) : list.map((k) => (k === from ? to : k));
+  settings.update({ projectOrder: { ...order, [kind]: next } });
+}
 
 /** The Inbox: Scratchpad blocks and the To Do list's `#### Other` tasks. */
 export const useInbox = () => useLoaded<InboxItem[]>(() => api.inboxList());
