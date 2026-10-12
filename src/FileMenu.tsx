@@ -11,8 +11,7 @@ import { useEffect, useState } from "react";
 import { api, FileSummary } from "./api";
 import { Icon } from "./icons";
 import { askAboutNote } from "./Ask";
-import { ingest } from "./Ingest";
-import { isTranscriptPath, makeMeetingNotes } from "./meetingFlow";
+import { runSourceAction, SOURCE_ACTION, sourceActions } from "./sourceActions";
 import { canIngest as ingestOffered } from "./Lists";
 import { copyRich, errText, exportPdf, openRename, toggleBookmark, trashFile, useBookmarked } from "./notes/actions";
 import { Popover } from "./ui";
@@ -125,34 +124,24 @@ export function FileMenu({ menu, doc, readFrom }: { menu: MenuState; doc?: () =>
             Ask about this note
           </button>
         )}
-        {canIngest && isTranscriptPath(f.path) && (
-          <button
-            type="button"
-            role="menuitem"
-            title="Write a meeting or 1-1 note from this transcript, ingest it and move the transcript to the Trash"
-            onClick={() => {
-              menu.close();
-              void makeMeetingNotes([f.path]);
-            }}
-          >
-            <Icon name="note" size={14} />
-            Make a meeting note
-          </button>
-        )}
-        {canIngest && (
-          <button
-            type="button"
-            role="menuitem"
-            title="Have the model read this file and propose wiki pages from it"
-            onClick={() => {
-              menu.close();
-              ingest([f.path]);
-            }}
-          >
-            <Icon name="wiki" size={14} />
-            Ingest into the wiki
-          </button>
-        )}
+        {/* The source's actions, as Sources and the Inbox offer them (a note's Ask is above). */}
+        {sourceActions(f.path)
+          .filter((a) => !(isText && a === "ask"))
+          .map((a) => (
+            <button
+              key={a}
+              type="button"
+              role="menuitem"
+              title={SOURCE_ACTION[a].tip(false)}
+              onClick={() => {
+                menu.close();
+                runSourceAction(a, f.path);
+              }}
+            >
+              <Icon name={SOURCE_ACTION[a].icon} size={14} />
+              {SOURCE_ACTION[a].label(false)}
+            </button>
+          ))}
         {isText && (
           <button
             type="button"

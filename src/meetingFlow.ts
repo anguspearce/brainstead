@@ -28,8 +28,8 @@ export function specOf(t: Transcript, edits: Partial<NoteSpec> = {}): NoteSpec {
 export const noteFile = (s: NoteSpec) => `${s.type}. ${s.name.trim()} - ${s.date}.md`;
 export const specOk = (s: NoteSpec) => !!s.name.trim() && /^\d{4}-\d{2}-\d{2}$/.test(s.date);
 
-/** A Teams meeting transcript, as the extension names it in sources/. */
-export const isTranscriptPath = (p: string) => /^sources\/Teams\. Transcript\./.test(p);
+/** A Teams meeting transcript, as the extension names it, in sources/ or a folder in it. */
+export const isTranscriptPath = (p: string) => /^sources\/(?:.+\/)?Teams\. Transcript\./.test(p);
 
 /** Brainstead is sure what note it becomes: nothing to ask, so it can go in one step. */
 export const sureOf = (t: Transcript) => t.inferred.confident && !t.inferred.dateCheck && !t.inferred.exists && specOk(specOf(t));

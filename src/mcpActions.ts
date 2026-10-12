@@ -58,7 +58,7 @@ import {
 import { askEdit } from "./notes/dialogs";
 import { captureStamp, prepareCapture } from "./Capture";
 import { bandOf, inboxRows, taskLine, unclarified } from "./Inbox";
-import { appendAsReference, newReferenceNote, settleInboxItem } from "./inboxActions";
+import { appendAsReference, inboxChoices, newReferenceNote, settleInboxItem, suggestKind } from "./inboxActions";
 import {
   ADVISORY,
   byRun,
@@ -642,7 +642,7 @@ async function listInbox(a: Args): Promise<Listing> {
     if (ask.length) {
       const active = (await api.projectsList()).filter((p) => p.status === "active").map((p) => p.name);
       const got = await api.clarifySuggest(
-        ask.map((i) => ({ id: inboxKey(i), kind: i.kind, text: i.text.trim() })),
+        ask.map((i) => ({ id: inboxKey(i), kind: suggestKind(i), text: i.text.trim() })),
         active,
       );
       for (const g of got) sugg.set(g.id, g);
@@ -713,6 +713,19 @@ async function clarify(a: Args, r: McpRequest): Promise<string> {
   const items = (await api.inboxList()).filter(unclarified);
   const i = items.find((x) => inboxKey(x) === key);
   if (!i) throw new Error(`No Inbox item ${key}. list_inbox shows them, each with its id.`);
+  // The choices the Inbox offers this kind of item (inboxChoices); meeting and reply are other tools'.
+  const may = inboxChoices(i);
+  const becomes = str(a, "becomes") ?? "";
+  if (!may.includes(becomes) || ["meeting", "reply", "ask"].includes(becomes)) {
+    const own = may
+      .filter((b) => b === "meeting" || b === "reply")
+      .map((b) => (b === "meeting" ? "start_run meeting_note" : "draft_reply"));
+    // Ask about this source is the assistant reading it (read_section), not a clarify.
+    const here = may.filter((b) => b !== "meeting" && b !== "reply" && b !== "ask");
+    throw new Error(
+      `The Inbox doesn't offer ${becomes || "that"} for this item. It can be: ${here.join(", ")}${own.length ? `; or use ${own.join(" or ")}` : ""}.`,
+    );
+  }
   const { said, changes, after } = await clarifyChanges(i, a, r);
   if (!changes.length) {
     await after?.();
@@ -2153,6 +2166,14 @@ async function captureExtensions(): Promise<string> {
   const name = { outlook: "Outlook", teams: "Teams", other: "Other" } as const;
   return [
     `The extensions' folder: ${c.folder ?? "not set up yet"}.`,
+    // As the pane shows each one's: the version Load unpacked loads from that folder.
+    ...(Object.keys(c.versions ?? {}).length
+      ? [
+          `Versions in the folder: ${Object.entries(c.versions)
+            .map(([k, v]) => `${k} ${v}`)
+            .join(", ")} (the browser's extensions page shows the version it has loaded).`,
+        ]
+      : []),
     c.browsers.length
       ? `Browsers: ${c.browsers.map((b) => `${b.name} (${b.registered ? "knows the capture host" : "doesn't know the capture host yet"}${b.current ? ", the one in use" : ""})`).join("; ")}.`
       : "No browser found that takes the extensions.",

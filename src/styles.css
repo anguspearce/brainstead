@@ -2084,6 +2084,55 @@ details.callout[open] .callout-chev {
   margin-top: 4px;
   border-radius: 5px;
 }
+
+/* Every tick box the app draws (Inbox, Meeting notes, Fix name, dialogs, the query builder) looks
+   like the task lists' .cb: the native one doesn't match the app. A note's own checkboxes (.prose,
+   the editor) keep theirs. */
+:where(input[type="checkbox"]:not(.prose input, .cm-editor input)) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1.5px solid var(--line2);
+  border-radius: 4px;
+  background: var(--surface);
+  vertical-align: -3px;
+  cursor: pointer;
+}
+:where(input[type="checkbox"]:not(.prose input, .cm-editor input)):hover {
+  border-color: var(--accent);
+}
+:where(input[type="checkbox"]:not(.prose input, .cm-editor input)):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+:where(input[type="checkbox"]:not(.prose input, .cm-editor input)):checked,
+:where(input[type="checkbox"]:not(.prose input, .cm-editor input)):indeterminate {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+:where(input[type="checkbox"]:not(.prose input, .cm-editor input)):checked::after {
+  content: "";
+  width: 8px;
+  height: 4px;
+  border-bottom: 2px solid var(--on-accent);
+  border-left: 2px solid var(--on-accent);
+  transform: translateY(-1px) rotate(-45deg);
+}
+:where(input[type="checkbox"]:not(.prose input, .cm-editor input)):indeterminate::after {
+  content: "";
+  width: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--on-accent);
+}
+:where(input[type="checkbox"]:not(.prose input, .cm-editor input)):disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .tlist {
   list-style: none;
   margin: 0;
@@ -6342,6 +6391,34 @@ select.sel {
   cursor: pointer;
   font-size: 13px;
   line-height: 1.35;
+}
+
+/* A row with its tick box: the box, then the row's button (which chooses it alone). */
+.irowc {
+  display: flex;
+  align-items: flex-start;
+  padding-left: 12px;
+}
+.irowc .irow {
+  flex: 1;
+  min-width: 0;
+  padding-left: 8px;
+  border: 0;
+  background: none;
+  color: inherit;
+}
+.icheck {
+  margin-top: 10px;
+}
+.tb-band .icheck {
+  margin: 0 2px 0 0;
+}
+.imany {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .irow .tt {
   display: block;

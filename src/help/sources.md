@@ -27,7 +27,8 @@ Markdown, text, PDF, Word, PowerPoint and Excel files and images (not SVG) can b
 
 ## Ingest a source
 - Click **Ingest** on a source's row, or **Re-ingest** on one already ingested.
-- A Teams transcript's row has **Meeting note** instead: it writes the meeting note, ingests that and trashes the transcript ([Meeting note from a transcript](app:meeting)). Its ▾ has **Ingest into the wiki** for the transcript itself.
+- A Teams transcript's row has **Meeting note** instead: it writes the meeting note, ingests that and trashes the transcript ([Meeting note from a transcript](app:meeting)). An email thread or Teams chat has **Draft reply** ([Draft reply](app:reply)).
+- Each row's ▾ lists everything that can be done with the source: **Make a meeting note** or **Draft a reply** where they fit, **Ingest into the wiki** and **Ask about this source** (a chat about it in [Ask](app:ask)). The [Inbox](app:inbox) and a file's right-click menu offer the same.
 - **Ingest** in the top bar ingests every new and changed source, one after another. Teams transcripts get meeting notes instead.
 - You can also choose **Ingest into the wiki** from a note's ⋯ or right-click menu, or press `I` on a capture in the [Inbox](app:inbox).
 

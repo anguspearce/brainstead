@@ -1192,9 +1192,13 @@ export const api = {
   /** A capture from the Outlook or Teams extension, written (`path`) or refused (`error`). */
   /** Settings › Capture extensions: the folder to load them from, the browsers that know the host, the last captures. */
   captureStatus: () =>
-    invoke<{ folder: string | null; browsers: { name: string; registered: boolean; current: boolean }[]; recent: Captured[] }>(
-      "capture_status",
-    ),
+    invoke<{
+      folder: string | null;
+      browsers: { name: string; registered: boolean; current: boolean }[];
+      recent: Captured[];
+      /** Each extension's version in the folder, by its folder name (teams-capture). */
+      versions: Record<string, string>;
+    }>("capture_status"),
   captureReveal: (which: "outlook-capture" | "teams-capture") => invoke<void>("capture_reveal", { which }),
   onCapture: (f: (c: Captured) => void): Promise<UnlistenFn> => listen<Captured>("capture", (e) => f(e.payload)),
   // Dataview (src-tauri/src/dataview.rs, src/md/dataview/).

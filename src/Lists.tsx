@@ -11,7 +11,8 @@ import { filedPage } from "./Ask";
 import { Column, FileList, fmtDay, Grouping, Snippet } from "./FileList";
 import { Icon } from "./icons";
 import { ingest, RunsPane } from "./Ingest";
-import { isTranscriptPath, makeMeetingNotes } from "./meetingFlow";
+import { runSourceAction, SOURCE_ACTION, sourceActions } from "./sourceActions";
+import { isTranscriptPath } from "./meetingFlow";
 import { checkTemplate } from "./notes/templater";
 import { changes, health, held, startKnowledge } from "./knowledge";
 import { settings, useStore } from "./store";
@@ -646,23 +647,7 @@ export function SourcesScreen() {
       label: "",
       width: "0 0 150px",
       value: () => "",
-      render: (r) =>
-        ingestable(r.path) &&
-        (isTranscriptPath(r.path) && !r.ingested ? (
-          <TranscriptAction path={r.path} />
-        ) : (
-          <button
-            type="button"
-            className="btn sm"
-            title={r.ingested ? "Ingest this source again, to bring the wiki up to date with it" : "Read this source into the wiki"}
-            onClick={(e) => {
-              e.stopPropagation();
-              ingest([r.path]);
-            }}
-          >
-            {r.ingested ? "Re-ingest" : "Ingest"}
-          </button>
-        )),
+      render: (r) => <SourceButton path={r.path} ingested={r.ingested} />,
     },
     {
       // Only the folder: the title already names the file.
@@ -740,25 +725,23 @@ export function SourcesScreen() {
   );
 }
 
-/** A transcript's row button: Make meeting note (the note written, ingested and the transcript
- *  trashed, src/meetingFlow.ts), with Ingest into the wiki on its menu. */
-function TranscriptAction({ path }: { path: string }) {
+/** A source's row button: its leading action (src/sourceActions.ts: a transcript's meeting note,
+ *  a thread's reply, else Ingest), with every action, the same as the Inbox offers, on its ▾. */
+function SourceButton({ path, ingested }: { path: string; ingested: boolean }) {
   const [at, setAt] = useState<DOMRect | null>(null);
+  const acts = sourceActions(path, ingested);
+  if (!acts.length) return null;
+  const lead = SOURCE_ACTION[acts[0]];
   return (
     <span className="splitbtn" onClick={(e) => e.stopPropagation()}>
-      <button
-        type="button"
-        className="btn sm"
-        title="Write a meeting or 1-1 note from this transcript, ingest it and move the transcript to the Trash"
-        onClick={() => void makeMeetingNotes([path])}
-      >
-        Meeting note
+      <button type="button" className="btn sm" title={lead.tip(ingested)} onClick={() => runSourceAction(acts[0], path)}>
+        {lead.short(ingested)}
       </button>
       <button
         type="button"
         className="btn sm"
-        aria-label="More ways to use this transcript"
-        title="More ways to use this transcript"
+        aria-label="More ways to use this source"
+        title="More ways to use this source"
         onClick={(e) => setAt(e.currentTarget.getBoundingClientRect())}
       >
         <Icon name="chevdown" size={12} />
@@ -766,24 +749,18 @@ function TranscriptAction({ path }: { path: string }) {
       {at && (
         <Popover anchor={at} onClose={() => setAt(null)} width={230}>
           <div className="menu" role="menu">
-            <button
-              type="button"
-              role="menuitem"
-              title="Write a meeting or 1-1 note from this transcript, ingest it and move the transcript to the Trash"
-              onClick={() => (setAt(null), void makeMeetingNotes([path]))}
-            >
-              <Icon name="note" size={14} />
-              Make a meeting note
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              title="Read the transcript itself into the wiki, with no meeting note"
-              onClick={() => (setAt(null), ingest([path]))}
-            >
-              <Icon name="wiki" size={14} />
-              Ingest into the wiki
-            </button>
+            {acts.map((a) => (
+              <button
+                key={a}
+                type="button"
+                role="menuitem"
+                title={SOURCE_ACTION[a].tip(ingested)}
+                onClick={() => (setAt(null), runSourceAction(a, path))}
+              >
+                <Icon name={SOURCE_ACTION[a].icon} size={14} />
+                {SOURCE_ACTION[a].label(ingested)}
+              </button>
+            ))}
           </div>
         </Popover>
       )}

@@ -290,11 +290,17 @@ pub fn register() -> Vec<Browser> {
 }
 
 /// The extensions' folders as shipped: in the app's resources, or the repo's `extensions/` in a
-/// dev build.
+/// dev build. A dev build's resources are a copy made when its Rust was last built, so an edit to
+/// an extension since wouldn't reach Chrome: it reads the repo's folder first.
 fn shipped(app: &tauri::AppHandle) -> Option<PathBuf> {
     use tauri::Manager;
-    let res = app.path().resource_dir().ok().map(|d| d.join("extensions")).filter(|d| d.join("outlook-capture").is_dir());
-    res.or_else(|| Some(Path::new(env!("CARGO_MANIFEST_DIR")).join("../extensions")).filter(|d| d.join("outlook-capture").is_dir()))
+    let repo = || Some(Path::new(env!("CARGO_MANIFEST_DIR")).join("../extensions")).filter(|d| d.join("outlook-capture").is_dir());
+    let res = || app.path().resource_dir().ok().map(|d| d.join("extensions")).filter(|d| d.join("outlook-capture").is_dir());
+    if cfg!(debug_assertions) {
+        repo().or_else(res)
+    } else {
+        res().or_else(repo)
+    }
 }
 
 fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
@@ -324,6 +330,9 @@ pub struct CaptureStatus {
     pub browsers: Vec<Browser>,
     /// The last captures, newest first.
     pub recent: Vec<Captured>,
+    /// Each extension's version in `folder` (its manifest's), by folder name: what Load unpacked
+    /// loads, to check against the version Chrome shows on the extension's card.
+    pub versions: std::collections::BTreeMap<String, String>,
 }
 
 #[tauri::command]
@@ -341,7 +350,15 @@ pub async fn capture_status(app: tauri::AppHandle) -> Result<CaptureStatus, Stri
         });
         let mut recent = recent(&data);
         recent.truncate(10);
-        CaptureStatus { folder, browsers: register(), recent }
+        let versions = ["outlook-capture", "teams-capture"]
+            .iter()
+            .filter_map(|d| {
+                let b = std::fs::read(data.join("extensions").join(d).join("manifest.json")).ok()?;
+                let v: Value = serde_json::from_slice(&b).ok()?;
+                Some((d.to_string(), v["version"].as_str()?.to_string()))
+            })
+            .collect();
+        CaptureStatus { folder, browsers: register(), recent, versions }
     })
     .await
     .map_err(|e| e.to_string())

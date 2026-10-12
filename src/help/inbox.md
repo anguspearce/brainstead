@@ -10,7 +10,7 @@ The Inbox is GTD's clarify step: everything captured but not yet decided. For ea
 ## What lands in the Inbox
 There's a band per source:
 
-- **Captures**: emails, Teams chats and transcripts from the browser capture extensions. They stay until you clarify them.
+- **Captures**: emails, Teams chats and transcripts from the browser capture extensions, and any other source in `sources/` that isn't ingested yet (a file dropped onto or imported into [Sources](app:sources), or put in the folder from outside Brainstead). They stay until you clarify them or they're ingested.
 - **Scratchpad**: each thought in the Scratchpad (a `## 2026-10-03 09:15` block). Clarifying it removes the block.
 - **To Do list › Other**: tasks under `#### Other` on the To Do list, where Quick capture puts them. A task leaves once it has a project, a context, `#waiting-for`, `#someday-maybe` or `#followup`, or its box isn't empty (done, cancelled or in progress). Until then it stays off Next actions in [Tasks](app:tasks).
 
@@ -29,24 +29,30 @@ Click an item, or move with `J` and `K` (or `↑` and `↓`), to open it. Then c
 
 After each choice the next item opens, and a toast offers Undo.
 
+To do the same to several items, tick their boxes (the box in a section's header ticks or unticks every item in it). With more than one ticked, the pane lists them and offers what can be done to all at once: **Make N meeting notes** (all transcripts), **Ingest N into the wiki** and **Keep N in Sources** (all captures), **Mark N done**, **Move N to Someday / maybe**, and **Delete N** (captures go to the Trash), with the same keys. Next action, Waiting for and New project need a form each, so they're one item at a time: click an item to clarify it alone. `⌘Z` undoes one item at a time.
+
 ## Where clarified items go
 A next action or waiting-for with a project goes under the project note's `## Next actions` or `## Waiting for` heading, with a link to the project. Without a project it goes on the To Do list. The form shows the line before you save.
 
 A task under Other keeps its line, rewritten with what you chose, and drops out of the Inbox.
 
 ## Clarify captured emails and chats
-On a capture from Outlook or Teams, `R` and `⌫` change and three more choices appear. **Open the capture** shows the whole file.
+A capture offers only the choices that make sense for it. **Open the capture** shows the whole file.
 
-- `I` **Ingest into the wiki**, with its changes listed in [Changes](app:review).
-- `M` **Make a meeting note**, for a Teams transcript. When Brainstead is sure of the note, it writes and ingests it and trashes the transcript in one step; otherwise [Meeting note from a transcript](app:meeting) opens to ask.
-- `D` **Draft a reply**, for an email thread or chat; opens [Draft reply](app:reply).
-- `R` **Keep in Sources** takes it out of the Inbox and leaves the file in [Sources](app:sources).
-- `⌫` **Move to the Trash** moves the file to the vault's Trash.
+- **A Teams transcript**: `M` **Make a meeting note** (highlighted), `I` **Ingest into the wiki** (the transcript itself, with no note), `A` **Ask about this source**, `R` **Keep in Sources** and `⌫` **Move to the Trash**. When Brainstead is sure of the note, Make a meeting note writes and ingests it and trashes the transcript in one step; otherwise [Meeting note from a transcript](app:meeting) opens to ask. Suggest doesn't ask the AI about a transcript.
+- **An email thread or Teams chat**: `D` **Draft a reply** (highlighted; opens [Draft reply](app:reply)), `I` **Ingest into the wiki**, `A` **Ask about this source**, then Next action, New project, Waiting for and Someday / maybe, `R` **Keep in Sources** and `⌫` **Move to the Trash**.
+- **Any other capture**: `I` **Ingest into the wiki** (highlighted), then the same, without Draft a reply or Waiting for.
+
+The first choices on a capture are its source's own, the same as its row on [Sources](app:sources) offers.
+
+**Ask about this source** starts a chat about it in [Ask](app:ask) and leaves it in the Inbox, to clarify once you know what it is.
+
+**Ingest into the wiki** lists its changes in [Changes](app:review). **Keep in Sources** takes it out of the Inbox and leaves the file in [Sources](app:sources), so a capture has no Done now. **Move to the Trash** moves the file to the vault's Trash.
 
 As a task, a capture starts as `Follow up on [[the capture]]`.
 
 ## Let the AI suggest
-**Suggest** on an open item asks the AI what it should become, with a project, context, effort, due date and why. **Suggest for all** asks about the first 20 items at once. Nothing happens until you accept: press `↩` or **Accept suggestion** (a next action or waiting-for opens the form first). The model is set under Models by job in [Settings › AI assistants](app:settings/assistants).
+**Suggest** on an open item asks the AI what it should become, with a project, context, effort, due date and why. **Suggest for all** asks about the first 20 items at once. A Teams transcript is always suggested **a meeting note**, without asking the AI; a captured email or chat can also be suggested **ingest into the wiki** or, for a thread, **a reply**. Nothing happens until you accept: press `↩` or **Accept suggestion** (a next action or waiting-for opens the form first). The model is set under Models by job in [Settings › AI assistants](app:settings/assistants).
 
 An assistant can ask for the same suggestions and accept one by clarifying the item. Like the form, it makes a next action only with a project or a context, and only in an active project.
 

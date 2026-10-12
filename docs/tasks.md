@@ -33,7 +33,7 @@ Both kinds wait in the Inbox.
 
 <a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/inbox-dark.png"><img alt="The Inbox: captures, Scratchpad thoughts and tasks to clarify, one open with its choices" src="images/inbox-light.png"></picture></a>
 
-The Inbox (⌥⌘2) lists what you've captured but not decided: emails and Teams chats from the browser extensions, Scratchpad thoughts, and tasks under Other on the To Do list. Pick one (`J` and `K` move) and choose what it becomes:
+The Inbox (⌥⌘2) lists what you've captured but not decided: emails and Teams chats from the browser extensions, sources added to `sources/` and not yet ingested, Scratchpad thoughts, and tasks under Other on the To Do list. Pick one (`J` and `K` move) and choose what it becomes:
 
 | Key | Choice |
 |---|---|
@@ -44,6 +44,8 @@ The Inbox (⌥⌘2) lists what you've captured but not decided: emails and Teams
 | `S` | Someday / maybe |
 | `R` | File as reference in a note |
 | `⌫` | Delete |
+
+Tick several items (a section's header box ticks them all) to act on them together: make meeting notes, ingest, keep in Sources, mark done, move to Someday / maybe or delete. Next action, Waiting for and New project stay one at a time.
 
 An email or chat can also be ingested into the wiki (`I`), made into a meeting note (`M`) or answered with a drafted reply (`D`). **Suggest for all** suggests a choice for the first 20 items; ↩ accepts one. ⌘Z undoes each choice.
 

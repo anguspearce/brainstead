@@ -25,8 +25,8 @@ type Tone = "brief" | "warm" | "formal";
 export const replyTask = (task: string, thread: string | null) =>
   thread ? `${task} ([[${thread.split("/").pop()!.replace(/\.md$/, "")}]])` : task;
 
-/** A captured thread: an Outlook email or a Teams chat in sources/. */
-export const isThread = (path: string) => /^sources\/(Email\. |Teams\. Chat\. )/.test(path);
+/** A captured thread: an Outlook email or a Teams chat in sources/ or a folder in it, by its name. */
+export const isThread = (path: string) => /^sources\/(?:.+\/)?(Email\. |Teams\. Chat\. )/.test(path);
 
 /** A thread as the picker names it: its subject and day, not its file name
  *  ("Email. Thread. Re Orbit App launch date - 2026-10-02" → "Re Orbit App launch date · Fri 2 Oct"). */
@@ -36,7 +36,7 @@ export function threadLabel(f: Pick<FileSummary, "title" | "date" | "path">): st
       .replace(/^(Email\. (Thread\. )?|Teams\. Chat\. )/, "")
       .replace(/\s+-\s+\d{4}-\d{2}-\d{2}$/, "")
       .trim() || f.title;
-  const kind = /^sources\/Teams\. /.test(f.path) ? "Teams: " : "";
+  const kind = /^sources\/(?:.+\/)?Teams\. /.test(f.path) ? "Teams: " : "";
   return `${kind}${subject}${f.date ? ` · ${fmtShortDate(f.date)}` : ""}`;
 }
 

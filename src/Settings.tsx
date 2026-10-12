@@ -1176,6 +1176,14 @@ function CapturePane() {
   const [st, setSt] = useState<Awaited<ReturnType<typeof api.captureStatus>> | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const v = useVaultVersion();
+  // Read again whenever the window comes back to the front, as after reloading an extension in
+  // the browser, so the versions and captures shown are current.
+  const [focused, setFocused] = useState(0);
+  useEffect(() => {
+    const again = () => setFocused((n) => n + 1);
+    window.addEventListener("focus", again);
+    return () => window.removeEventListener("focus", again);
+  }, []);
   useEffect(() => {
     let live = true;
     api
@@ -1189,7 +1197,7 @@ function CapturePane() {
     return () => {
       live = false;
     };
-  }, [v]);
+  }, [v, focused]);
   const browsers = st?.browsers ?? [];
   return (
     <>
@@ -1219,7 +1227,18 @@ function CapturePane() {
             <div key={e.id} className="srow">
               <Icon name={last?.path ? "check" : "source"} style={{ color: last?.path ? "var(--green)" : "var(--ink3)" }} />
               <div className="t">
-                <div className="pt">{e.name}</div>
+                <div className="pt">
+                  {e.name}
+                  {st?.versions[e.id] && (
+                    <span
+                      className="faint small"
+                      title={`The version in its folder, which Load unpacked loads. The extension's card in chrome://extensions shows the version Chrome has loaded: if it's older, click reload there.`}
+                    >
+                      {" "}
+                      · version {st.versions[e.id]}
+                    </span>
+                  )}
+                </div>
                 <div className="faint">
                   {e.what}{" "}
                   {last

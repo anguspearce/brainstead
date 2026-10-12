@@ -98,18 +98,51 @@ fn captures(svc: &VaultService, root: &Path) -> Vec<InboxItem> {
         .collect();
     let paths: Vec<String> = fresh.iter().map(|(p, _)| p.clone()).collect();
     let ingested = svc.with_index(|ix, _| ix.ingested(&paths).map_err(|e| e.to_string())).unwrap_or_else(|_| vec![false; paths.len()]);
-    fresh
+    let stem = |path: &str| path.rsplit('/').next().unwrap_or(path).trim_end_matches(".md").to_string();
+    let mut out: Vec<InboxItem> = fresh
         .into_iter()
         .zip(ingested)
         .filter(|(_, ing)| !ing)
         .map(|((path, c), _)| {
-            let stem = path.rsplit('/').next().unwrap_or(&path).trim_end_matches(".md").to_string();
             let stamp = chrono::DateTime::parse_from_rfc3339(&c.at)
                 .ok()
                 .map(|t| t.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M").to_string());
-            InboxItem { kind: "capture", path, line: 0, line_text: c.what, text: stem, stamp, block: None }
+            InboxItem { kind: "capture", text: stem(&path), path, line: 0, line_text: c.what, stamp, block: None }
         })
-        .collect()
+        .collect();
+    // Every other source no wiki page cites and not yet clarified here: a file dropped or imported
+    // into Sources, or put in sources/ from outside the app, waits here too, newest first.
+    let others = svc
+        .with_index(|ix, _| {
+            let files = ix.list(Some("source"))?;
+            let paths: Vec<String> = files.iter().map(|f| f.path.clone()).collect();
+            Ok(files.into_iter().zip(ix.ingested(&paths)?).collect::<Vec<_>>())
+        })
+        .unwrap_or_default();
+    let mut others: Vec<_> =
+        others.into_iter().filter(|(f, ing)| !ing && !done.contains(&f.path) && seen.insert(f.path.clone())).map(|(f, _)| f).collect();
+    others.sort_by_key(|f| std::cmp::Reverse(f.mtime));
+    out.extend(others.into_iter().map(|f| {
+        let stamp =
+            chrono::DateTime::from_timestamp_millis(f.mtime).map(|t| t.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M").to_string());
+        InboxItem { kind: "capture", text: stem(&f.path), line_text: what_file(&f.path).into(), path: f.path, line: 0, stamp, block: None }
+    }));
+    out
+}
+
+/// What a source file is, for its Inbox row: "Word document", "PDF"…
+fn what_file(path: &str) -> &'static str {
+    match path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).as_deref() {
+        Some("md") => "Note",
+        Some("pdf") => "PDF",
+        Some("doc" | "docx") => "Word document",
+        Some("ppt" | "pptx") => "PowerPoint",
+        Some("xls" | "xlsx" | "csv") => "Spreadsheet",
+        Some("png" | "jpg" | "jpeg" | "gif" | "webp" | "heic") => "Image",
+        Some("txt") => "Text",
+        Some("vtt") => "Transcript",
+        _ => "File",
+    }
 }
 
 /// A capture clarified in the Inbox (made a task, ingested, kept or trashed): it leaves the Inbox.

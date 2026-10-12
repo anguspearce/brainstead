@@ -19,7 +19,7 @@ Captures are refused while the vault is read-only; turn that off in [Settings â€
 3. Pin the extension to the toolbar.
 4. Open an email thread or a Teams chat and click the extension's button.
 
-After an update, open this page, then click reload on the extension's card in `chrome://extensions`. The line under the steps lists the browsers that can reach Brainstead; if none is listed, install one and open this page again.
+After an update, open this page, then click reload on the extension's card in `chrome://extensions`. Each extension's row shows the version in its folder; the card in `chrome://extensions` shows the version the browser has loaded, so when they match, the reload took. The line under the steps lists the browsers that can reach Brainstead; if none is listed, install one and open this page again.
 
 ## Check recent captures
 **Recent captures** lists what arrived, or what was refused and why. **Open** opens a captured source. An assistant can read this pane too. To ingest each one as it arrives, switch on **Ingest new sources as they arrive** in [Settings â€º AI assistants](app:settings/assistants).

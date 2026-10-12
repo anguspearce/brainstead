@@ -28,6 +28,9 @@ const STATE_KEY = "run";
 const STALE_RUN_MS = 120_000;
 
 const TEAMS_HOST_RE = /^https:\/\/teams\.(microsoft\.com|live\.com|cloud\.microsoft|microsoft\.us|office365\.us)\//;
+/** Microsoft's meeting recap (its Transcript tab included), which Teams now loads into its recap
+ *  frame (`RecapxPlatIframe`) from the organiser's SharePoint rather than from a Teams host. */
+const RECAP_FRAME_RE = /^https:\/\/[a-z0-9-]+\.sharepoint\.(?:com|us)\/(?:.*\/)?_layouts\/15\/xplatplugins\.aspx/i;
 
 const emptyState = () => ({
   status: "idle", // idle | running | done
@@ -166,7 +169,8 @@ async function capture(tabId) {
   // reliable path. Chat ingestion has one useful frame, so the per-frame picker
   // degrades to "pick the one with messages".
   // Only Teams' own frames are read: the top frame, frames on a Teams host, and about:blank /
-  // about:srcdoc frames (the recap iframe) whose parent is one of those. A third-party frame
+  // about:srcdoc frames and Microsoft's recap page on SharePoint (the recap iframe) whose parent
+  // is one of those. A third-party frame
   // embedded in Teams (an app tab, a preview) can't supply the capture.
   const frames = await chrome.webNavigation.getAllFrames({ tabId: tab.id });
   const frameIds = teamsFrames(frames ?? []);
@@ -206,7 +210,27 @@ async function capture(tabId) {
   const data = await sendToBrainstead({ type: "teams", ...extraction });
   const atTopSuffix = extraction.atTop === false ? " — didn't reach top of chat" : "";
   const containerSuffix = extraction.scrollContainerDesc ? ` [scroll container: ${extraction.scrollContainerDesc}]` : "";
-  await setMessage(`✓ Wrote ${data.path}${atTopSuffix}${containerSuffix}`, "ok");
+  // A capture that came out as a chat on a page with more than one frame (a recap, where the
+  // transcript should have won) says what each frame gave, in the popup: the console isn't
+  // always to hand. Each frame by id (and its parent's), its host, and what it returned.
+  const frameNote =
+    extraction.kind !== "transcript" && (frames ?? []).length > 1
+      ? ` — frames: ${frames
+          .map((f) => {
+            const r = results.find((x) => x.frameId === f.frameId);
+            const host = (f.url ?? "").split("?")[0].split("/").slice(0, 3).join("/") || "?";
+            const what = !frameIds.includes(f.frameId)
+              ? "not read"
+              : !r
+                ? "no result"
+                : r.error
+                  ? `error: ${String(r.error?.message ?? r.error).slice(0, 100)}`
+                  : `${r.result?.kind ?? "nothing"}, ${r.result?.messages?.length ?? 0} messages`;
+            return `${f.frameId}${f.parentFrameId >= 0 ? ` (in ${f.parentFrameId})` : ""} ${host}: ${what}`;
+          })
+          .join("; ")}`
+      : "";
+  await setMessage(`✓ Wrote ${data.path}${atTopSuffix}${containerSuffix}${frameNote}`, "ok");
 }
 
 /** The ids of the tab's frames that belong to Teams itself (see `capture`). */
@@ -219,7 +243,9 @@ function teamsFrames(frames) {
     ok.set(f.frameId, false); // A cycle can't make a frame Teams'.
     let yes;
     if (f.frameId === 0) yes = true;
-    else if (/^about:(blank|srcdoc)/.test(f.url ?? "")) yes = isTeams(byId.get(f.parentFrameId));
+    // A blank frame, or Microsoft's recap page on SharePoint, counts when Teams embeds it: the same
+    // page in any other frame (or another SharePoint page) isn't read.
+    else if (/^about:(blank|srcdoc)/.test(f.url ?? "") || RECAP_FRAME_RE.test(f.url ?? "")) yes = isTeams(byId.get(f.parentFrameId));
     else yes = TEAMS_HOST_RE.test(f.url ?? "");
     ok.set(f.frameId, yes);
     return yes;

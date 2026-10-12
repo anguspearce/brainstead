@@ -49,15 +49,38 @@ pub struct Suggestion {
     why: String,
 }
 
-const BECOMES: [&str; 7] = ["next", "project", "waiting", "done", "someday", "reference", "delete"];
+const BECOMES: [&str; 9] = ["next", "project", "waiting", "done", "someday", "reference", "delete", "ingest", "reply"];
+
+/// Whether an item of `kind` can become `becomes`: ingest is for a capture, reply for a captured
+/// email or chat thread (kind "thread", which is a capture too). A transcript is never asked about.
+fn fits(kind: &str, becomes: &str) -> bool {
+    match becomes {
+        "ingest" => kind == "capture" || kind == "thread",
+        "reply" => kind == "thread",
+        _ => true,
+    }
+}
 
 /// The suggestions in a model's answer: the JSON array in it, each checked; unknown ids and
-/// outcomes are dropped.
+/// outcomes are dropped. The model is given the items numbered from 1 (`ids` in that order), not
+/// their ids, which are long (a capture's path, a task's line and words) and came back changed
+/// often enough that every suggestion was dropped; a number, or an id given back exactly, is taken.
 pub fn parse_suggestions(answer: &str, ids: &[String]) -> Result<Vec<Suggestion>, String> {
     let (raw, _) = brainstead_core::reviews::prep::array_items(answer)?;
+    let id_of = |v: &serde_json::Value| -> Option<String> {
+        let n = v.as_u64().or_else(|| v.as_str().and_then(|s| s.trim().trim_start_matches('#').parse().ok()));
+        match n {
+            Some(n) if n >= 1 => ids.get(n as usize - 1).cloned(),
+            _ => v.as_str().filter(|s| ids.iter().any(|i| i == s)).map(str::to_string),
+        }
+    };
     Ok(raw
         .into_iter()
-        .filter_map(|v| serde_json::from_value::<Suggestion>(v).ok())
+        .filter_map(|mut v| {
+            let id = id_of(v.get("id")?)?;
+            v["id"] = serde_json::Value::String(id);
+            serde_json::from_value::<Suggestion>(v).ok()
+        })
         .filter(|s| ids.contains(&s.id) && BECOMES.contains(&s.becomes.as_str()))
         .map(|mut s| {
             let clean = |o: Option<String>| o.map(|x| x.trim().to_string()).filter(|x| !x.is_empty() && x != "null");
@@ -78,25 +101,48 @@ fn model(app: &AppHandle) -> String {
 #[tauri::command]
 pub async fn clarify_suggest(app: AppHandle, items: Vec<ClarifyItem>, projects: Vec<String>) -> Result<Vec<Suggestion>, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        // A Teams transcript always becomes a meeting note (the Inbox's Make a meeting note): no
+        // need to ask, and asked, the model made it a next action to write one.
+        let (transcripts, items): (Vec<ClarifyItem>, Vec<ClarifyItem>) = items.into_iter().partition(|i| i.kind == "transcript");
+        let mut out: Vec<Suggestion> = transcripts
+            .into_iter()
+            .map(|i| Suggestion {
+                id: i.id,
+                becomes: "meeting".into(),
+                text: String::new(),
+                project: None,
+                context: None,
+                effort: None,
+                due: None,
+                why: "A meeting transcript becomes a meeting note, written from your template and then ingested.".into(),
+            })
+            .collect();
+        if items.is_empty() {
+            return Ok(out);
+        }
         let ids: Vec<String> = items.iter().map(|i| i.id.clone()).collect();
-        let list: String = items.iter().map(|i| format!("- id {}: ({}) {}\n", i.id, i.kind, i.text.replace('\n', " / "))).collect();
+        // Numbered, not by their ids (parse_suggestions maps the numbers back).
+        let list: String = items.iter().enumerate().map(|(n, i)| format!("- id {}: ({}) {}\n", n + 1, i.kind, i.text.replace('\n', " / "))).collect();
         let today = Local::now().format("%Y-%m-%d (%A)");
         let prompt = format!(
             "Clarify these GTD inbox items, as David Allen's clarify step does: for each, decide what it becomes.\n\
 Today is {today}. The active projects are: {}.\n\n\
 Outcomes: \"next\" (a next action: write it as a clear task starting with a verb), \"project\" (needs more than one step: give the project's name), \"waiting\" (someone else must act: the task names who and what), \"done\" (takes under two minutes: do it now), \"someday\" (maybe later), \"reference\" (no action, worth keeping: name the note to file it in), \"delete\" (no longer needed).\n\
+A capture (an email, chat or document captured into the vault's sources) can also be \"ingest\" (worth reading into the wiki: facts, decisions, people) and a thread (an email or chat thread) \"reply\" (it asks the user something to answer); \"ingest\" and \"reply\" are only for those.\n\
 You may look up related notes in the vault to decide (who a person is, which project it belongs to), but keep it quick.\n\
-Answer with only a JSON array, one object per item: {{\"id\": \"…\", \"becomes\": \"next|project|waiting|done|someday|reference|delete\", \"text\": \"…\", \"project\": \"an active project's name or null\", \"context\": \"calls|computer|errands|office|home|… or null\", \"effort\": \"15m|30m|1h|… or null\", \"due\": \"YYYY-MM-DD or null\", \"why\": \"one short sentence\"}}.\n\n\
+Answer with only a JSON array, one object per item: {{\"id\": the item's number, \"becomes\": \"next|project|waiting|done|someday|reference|delete|ingest|reply\", \"text\": \"…\", \"project\": \"an active project's name or null\", \"context\": \"calls|computer|errands|office|home|… or null\", \"effort\": \"15m|30m|1h|… or null\", \"due\": \"YYYY-MM-DD or null\", \"why\": \"one short sentence\"}}.\n\n\
 Items:\n{list}",
             if projects.is_empty() { "none".to_string() } else { projects.join("; ") }
         );
         let system = brainstead_core::ask::system_prompt(&ask::today(), false);
         let id = format!("clarify-{}", Local::now().format("%H%M%S%3f"));
-        let out = ask::run(&app, &id, &prompt, &model(&app), None, &system, None, &mut |_| {});
-        if let Some(e) = out.error {
+        let answer = ask::run(&app, &id, &prompt, &model(&app), None, &system, None, &mut |_| {});
+        if let Some(e) = answer.error {
             return Err(e);
         }
-        parse_suggestions(&out.text, &ids)
+        let kind = |id: &str| items.iter().find(|i| i.id == id).map(|i| i.kind.as_str()).unwrap_or("");
+        out.extend(parse_suggestions(&answer.text, &ids)?.into_iter().filter(|s| fits(kind(&s.id), &s.becomes)));
+        Ok(out)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -309,6 +355,31 @@ mod tests {
         assert_eq!(s[1].becomes, "someday");
         assert_eq!(s[1].due, None);
         assert!(parse_suggestions("no json", &ids).is_err());
+    }
+
+    #[test]
+    fn capture_outcomes_only_for_captures() {
+        assert!(fits("capture", "ingest") && fits("thread", "ingest") && fits("thread", "reply"));
+        assert!(!fits("capture", "reply") && !fits("task", "ingest") && !fits("thought", "reply"));
+        assert!(fits("task", "next") && fits("thread", "delete"));
+    }
+
+    #[test]
+    fn suggestions_by_the_items_numbers() {
+        // The ids the Inbox has: long, with paths, colons and a task's words.
+        let ids = vec![
+            "capture:sources/Teams. Transcript. Steerco - 2026-10-02.md".to_string(),
+            "task:14:- [ ] Ask Lena about \"the\" deck".to_string(),
+        ];
+        let s = parse_suggestions(
+            r##"[{"id":2,"becomes":"next"},{"id":"1","becomes":"reference"},{"id":"#3","becomes":"done"},{"id":"0","becomes":"done"}]"##,
+            &ids,
+        )
+        .unwrap();
+        assert_eq!(
+            s.iter().map(|x| (x.id.as_str(), x.becomes.as_str())).collect::<Vec<_>>(),
+            vec![(ids[1].as_str(), "next"), (ids[0].as_str(), "reference")]
+        );
     }
 
     #[test]

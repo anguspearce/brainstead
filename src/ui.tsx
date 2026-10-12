@@ -355,7 +355,10 @@ export function TableBand({
   n,
   tip,
   none,
+  lead,
 }: {
+  /** Before the icon: a select-all checkbox, say. */
+  lead?: ReactNode;
   icon?: string;
   label: ReactNode;
   n: number;
@@ -366,6 +369,7 @@ export function TableBand({
   return (
     <div className={`tb-band ${none ? "none" : ""}`} role="row">
       <span role="rowheader">
+        {lead}
         {icon && <Icon name={icon} size={13} />}
         {label}
       </span>

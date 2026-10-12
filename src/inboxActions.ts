@@ -6,7 +6,37 @@
 // here so the MCP bridge (src/mcpActions.ts) makes the same ones.
 
 import { api, InboxItem } from "./api";
+import { isTranscriptPath } from "./meetingFlow";
+import { isThread } from "./skills/Reply";
+import { sourceActions } from "./sourceActions";
 import { toggleTaskEdit } from "./taskModel";
+
+/** What an Inbox item can become, in the order its buttons show: the choices that make sense for
+ *  its kind, the one it usually becomes first. A transcript is a meeting note (or kept, or
+ *  trashed); a thread is usually answered; a capture isn't "done now" (Keep in Sources already
+ *  takes it out), only a thread is waited on, and any capture can be asked about (Ask, which
+ *  leaves it in the Inbox). The Inbox's buttons, keys and ticked-several choices, and
+ *  clarify_inbox, all follow this. */
+export function inboxChoices(i: InboxItem): string[] {
+  if (i.kind !== "capture") return ["next", "project", "waiting", "done", "someday", "reference", "delete"];
+  // A capture's source actions first, as Sources offers them (src/sourceActions.ts).
+  const own: string[] = sourceActions(i.path);
+  if (isTranscriptPath(i.path)) return [...own, "reference", "delete"];
+  if (isThread(i.path)) return [...own, "next", "project", "waiting", "someday", "reference", "delete"];
+  return [...own, "next", "project", "someday", "reference", "delete"];
+}
+
+/** The choice an item's buttons lead with, highlighted: a capture's leading source action (a
+ *  transcript's meeting note, a thread's reply, else Ingest). */
+export const leadChoice = (i: InboxItem): string | null => (i.kind === "capture" ? (sourceActions(i.path)[0] ?? null) : null);
+
+/** What Suggest tells the model an item is: a Teams transcript (made a meeting note without asking
+ *  it), a captured email or chat thread (which can also be a reply), another capture (which can be
+ *  ingested), or a thought or task. The Inbox and list_inbox's suggest both ask this way. */
+export function suggestKind(i: InboxItem): string {
+  if (i.kind !== "capture") return i.kind;
+  return isTranscriptPath(i.path) ? "transcript" : isThread(i.path) ? "thread" : "capture";
+}
 
 /** Done now: a task ticked as everywhere else (a recurring one gets its next occurrence:
  *  toggleTaskEdit), a capture marked done, a thought taken out. */
