@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { clipboardImages, CMEditor, completionTrigger, shorthandEdit } from "./cm";
 import { openTaskAt } from "./taskHint";
+import { forceParsing } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { merge3 } from "./merge";
 import { frontmatterEnd, frontmatterKeys, lineSeparator, toggledLine } from "./text";
@@ -186,6 +187,9 @@ describe("images in Edit", () => {
     document.body.appendChild(parent);
     ed = new CMEditor(parent, { imageUrl: async () => "blob:x" });
     ed.load(md);
+    // The first parse gets 20 ms and the rest is left to the background; on a busy machine that can
+    // stop short of the last lines, whose images then aren't drawn yet. Finish it now.
+    forceParsing(ed.view, ed.view.state.doc.length, 5000);
     return parent;
   };
 
