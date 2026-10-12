@@ -235,10 +235,10 @@ describe("MCP actions", () => {
       page: "Project. Orbit App launch.md",
       instruction: { op: "add_task", line: "- [ ] ring the venue [[Project. Orbit App launch]] #waiting-for", heading: "Waiting for" },
     });
-    // A capture: trashed through Changes, then marked done.
+    // A capture: trashed through Changes, and not marked done, so restored it's back in the Inbox.
     calls.length = 0;
     await run("inbox.clarify", { item: "capture:1", becomes: "delete" });
-    expect(calls.map(([c]) => c)).toEqual(["inbox_list", "changes_submit_many", "inbox_capture_done"]);
+    expect(calls.map(([c]) => c)).toEqual(["inbox_list", "changes_submit_many"]);
     expect(submitted()[0]).toMatchObject({ kind: "trash", instruction: { op: "trash" } });
     // Held: the capture stays in the Inbox until the user accepts.
     calls.length = 0;
@@ -1731,6 +1731,72 @@ describe("MCP actions", () => {
       calls.length = 0;
       await raw("doccheck.run", { document: "sources/Orbit plan.pdf" });
       expect(submitted()).toEqual([]);
+      // A kept check that still stands is given again, not run again; stale or fresh, it's run.
+      answers.doc_check_saved = () => ({
+        candidate: "sources/Orbit plan.pdf",
+        doc: "pricing",
+        mode: "standard",
+        at: "2026-10-10T09:00:00+02:00",
+        result,
+        stale: false,
+      });
+      calls.length = 0;
+      expect(await raw("doccheck.run", { document: "sources/Orbit plan.pdf" })).toMatch(/^\(The check from 2026-10-10 09:00/);
+      expect(calls.some(([c]) => c === "doc_check")).toBe(false);
+      await raw("doccheck.run", { document: "sources/Orbit plan.pdf", fresh: true });
+      expect(calls.some(([c]) => c === "doc_check")).toBe(true);
+      answers.doc_check_saved = () => ({
+        candidate: "sources/Orbit plan.pdf",
+        doc: "pricing",
+        mode: "standard",
+        at: "2026-10-10T09:00:00+02:00",
+        result,
+        stale: true,
+      });
+      calls.length = 0;
+      await raw("doccheck.run", { document: "sources/Orbit plan.pdf" });
+      expect(calls.some(([c]) => c === "doc_check")).toBe(true);
+      answers.doc_check_saved = () => null;
+      // Compare: any two documents, A and B; unrelated ones stop at the first look.
+      answers.doc_check = (x) =>
+        x!.candidate === "sources/Orbit plan.pdf" && x!.doc === "sources/Lunch menu.pdf"
+          ? {
+              verdict: "Not comparable: they aren't about the same thing",
+              summary: "A launch plan and a menu.",
+              findings: [],
+              against: null,
+              excluded: [],
+              unrelated: true,
+            }
+          : {
+              verdict: "Mostly the same",
+              summary: "One date moved.",
+              findings: [
+                {
+                  kind: "changed",
+                  title: "Launch date",
+                  where: "§2 vs §2",
+                  candidate: "14 November",
+                  canonical: "1 November",
+                  material: true,
+                },
+              ],
+              against: null,
+              excluded: [],
+            };
+      expect(await raw("compare.run", { document_a: "sources/Orbit plan.pdf", document_b: "sources/Lunch menu.pdf" })).toMatch(
+        /Nothing was compared\.$/,
+      );
+      const cmp = await raw("compare.run", {
+        document_a: "sources/Orbit plan v2.pdf",
+        document_b: "sources/Orbit plan.pdf",
+        look_for: "what_changed",
+      });
+      expect(cmp).toContain("What changed from Orbit plan.pdf (earlier) to Orbit plan v2.pdf (newer).");
+      expect(cmp).toContain("## Changed (material): Launch date");
+      expect(calls.find(([c, x]) => c === "doc_check" && x!.mode === "changes")).toBeTruthy();
+      await expect(run("compare.run", { document_a: "a.md", document_b: "a.md" })).rejects.toThrow(/two different/);
+      answers.doc_check = () => result;
       answers.canonical_register = () => ({ exists: true, problems: [], entries: [entry("v3", "canonical"), entry("v4", "draft")] });
       expect(await run("doccheck.register")).toBe(
         "The canonical docs register (Me. Canonical Docs.md); governing_document takes a key:\n- pricing · Pricing policy v3 · In force · Pricing v3.md\n- pricing · Pricing policy v4 · Draft · Pricing v4.md",
@@ -1749,6 +1815,13 @@ describe("MCP actions", () => {
       answers.draft_reply = (a) => reply(`in ${a!.tone}`);
       expect(await raw("reply.draft", { text: "Can we meet?" })).toMatch(/^Drafted reply \(Brief\), not sent.*\n\nin brief$/);
       expect(await raw("reply.draft", { text: "Can we meet?", tone: "formal" })).toMatch(/\n\nin formal$/);
+      // Ask for a change: the reply as it stands and the change, revised.
+      answers.draft_reply = (a) => reply(`${a!.current} → ${a!.change}`);
+      expect(await raw("reply.draft", { text: "Can we meet?", current: "Yes, Tuesday.", change: "shorter" })).toMatch(
+        /\n\nYes, Tuesday\. → shorter$/,
+      );
+      await expect(run("reply.draft", { text: "Can we meet?", change: "shorter" })).rejects.toThrow(/both current/);
+      answers.draft_reply = (a) => reply(`in ${a!.tone}`);
       // The draft as the screen shows it, not the result's JSON: the verdict, each point, gaps and Add task.
       answers.draft_reply = () => ({
         ...reply("Hi Maya, Thursday works."),

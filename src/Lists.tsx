@@ -761,6 +761,15 @@ function SourceButton({ path, ingested }: { path: string; ingested: boolean }) {
                 {SOURCE_ACTION[a].label(ingested)}
               </button>
             ))}
+            <button
+              type="button"
+              role="menuitem"
+              title="Open Compare with this as document A, to pick the one to compare it with"
+              onClick={() => (setAt(null), nav.go({ screen: "compare", path }))}
+            >
+              <Icon name="shield" size={14} />
+              Compare with…
+            </button>
           </div>
         </Popover>
       )}

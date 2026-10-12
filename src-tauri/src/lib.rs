@@ -770,6 +770,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(capture::plugin())
         .manage(std::sync::Arc::new(ask::Running::default()))
+        .manage(skills::CheckRuns::default())
         .manage(reviews::Reviews::load())
         .manage(weekprep::WeekPrep::load())
         .manage(find::Find::load())
@@ -801,6 +802,10 @@ pub fn run() {
             skills::draft_reply,
             skills::canonical_register,
             skills::doc_check,
+            skills::doc_check_start,
+            skills::doc_check_runs,
+            skills::doc_check_stop,
+            skills::doc_check_saved,
             listnotes::bookmark_remove,
             wiki_meta,
             logs_reveal,
@@ -854,6 +859,7 @@ pub fn run() {
             knowledge::health_fix,
             knowledge::health_ignore,
             knowledge::health_ignore_all,
+            daily_check::catalogue_update,
             knowledge::health_unignore,
             knowledge::health_reshape,
             currentstate::current_state_start,

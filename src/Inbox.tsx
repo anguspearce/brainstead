@@ -8,6 +8,7 @@
 // project, a context or a waiting-for or someday tag, is done, or is moved). ⌘Z undoes. A
 // suggestion from the model is only shown until you accept it.
 
+import { askedFromInbox } from "./StillInInbox";
 import { nav, openDoc, useViewState } from "./nav";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ClarifySuggestion, InboxItem, ProjectRow } from "./api";
@@ -16,10 +17,10 @@ import { contextName, fmtEffort, effortMinutes, projectLink, projectName, unclar
 import { Icon } from "./icons";
 import { fmtShortDate, resolveDateWord } from "./md/dates";
 import { localToday } from "./md/taskQuery";
-import { ingest } from "./Ingest";
+import { ingest, meetingProgress, runs, startRuns } from "./Ingest";
 import { NewProject } from "./Projects";
 import { askAboutNote } from "./Ask";
-import { SOURCE_ACTION } from "./sourceActions";
+import { meetingTip, SOURCE_ACTION } from "./sourceActions";
 import { useSearch } from "./Search";
 import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
@@ -29,9 +30,18 @@ import { Dialog, TableBand } from "./ui";
 import { Markdown } from "./md/Markdown";
 import { settings, useStore } from "./store";
 import { useVaultVersion } from "./state";
-import { isTranscriptPath, makeMeetingNotes } from "./meetingFlow";
+import { followThrough, isTranscriptPath, makeMeetingNotes } from "./meetingFlow";
 import { TaskText } from "./TaskList";
-import { appendAsReference, doneNow, inboxChoices, leadChoice, newReferenceNote, settleInboxItem, suggestKind } from "./inboxActions";
+import {
+  appendAsReference,
+  doneNow,
+  inboxChoices,
+  inboxItemKind,
+  leadChoice,
+  newReferenceNote,
+  settleInboxItem,
+  suggestKind,
+} from "./inboxActions";
 
 export { unclarified } from "./gtd";
 
@@ -117,7 +127,7 @@ const CHOICE: Record<string, { key: string; label: (i: InboxItem) => string; tip
 /** The choices that can be made for several ticked items at once, in order. */
 const BULK = ["meeting", "ingest", "done", "someday", "reference", "delete"];
 const BULK_LABEL: Record<string, (n: number, caps: boolean) => [string, string, string]> = {
-  meeting: (n) => ["M", `Make ${n} meeting notes`, "Turn each transcript into a meeting note"],
+  meeting: (n) => ["M", followThrough().ingest ? `Make and ingest ${n} meeting notes` : `Make ${n} meeting notes`, meetingTip(n)],
   ingest: (n) => ["I", `Ingest ${n} into the wiki`, "Have the AI read each into the wiki and take it out of the Inbox"],
   done: (n) => ["2", `Mark ${n} done`, "Each took two minutes: done, and out of the Inbox"],
   someday: (n) => ["S", `Move ${n} to Someday / maybe`, "Park each as a task tagged someday-maybe"],
@@ -134,6 +144,8 @@ const BULK_LABEL: Record<string, (n: number, caps: boolean) => [string, string, 
 const startText = (i: InboxItem) => (i.kind === "capture" ? `Follow up on [[${i.text}]]` : itemText(i));
 
 export function InboxScreen() {
+  // Drawn again when settings change: Make a meeting note's label follows the Meeting notes switches.
+  useStore(settings);
   const raw = useInbox();
   const projects = useProjects();
   const items = useMemo(() => inboxRows(raw ?? []), [raw]);
@@ -191,8 +203,14 @@ export function InboxScreen() {
     items.findIndex((i) => key(i) === sel),
   );
   const cur = items[idx] ?? null;
+  // A transcript whose meeting note is under way (or failed): its row says so, and while it's
+  // under way it can't be ticked or chosen, so it isn't made twice.
+  useEffect(startRuns, []);
+  const runList = useStore(runs);
+  const progress = (i: InboxItem) => (isTranscript(i) ? meetingProgress(runList ?? [], i.path) : null);
+  const busy = (i: InboxItem) => !!progress(i)?.busy;
   // What's ticked and still in the Inbox; with more than one, the pane acts on them together.
-  const picked = items.filter((i) => checked.includes(key(i)));
+  const picked = items.filter((i) => checked.includes(key(i)) && !busy(i));
   const many = picked.length > 1;
   const active = (projects ?? []).filter((p) => p.status === "active");
 
@@ -235,6 +253,7 @@ export function InboxScreen() {
       case "reply":
         return nav.go({ screen: "reply", path: i.path });
       case "ask":
+        askedFromInbox.set(i.path);
         return askAboutNote(i.path);
       case "ingest":
         if (inFlight.current) return;
@@ -249,10 +268,9 @@ export function InboxScreen() {
         return setFiling(true);
       case "delete":
         if (i.kind === "capture")
-          return act(async () => {
-            await api.trashMove(i.path);
-            await api.inboxCaptureDone(i.path);
-          }, "Moved to the Trash");
+          // Not marked clarified: the file leaving sources/ takes it out, and restored (from the
+          // Trash, ⌘Z or Changes) it's back in the Inbox.
+          return act(() => api.trashMove(i.path), "Moved to the Trash");
         return act(() => settle(i, null), "Deleted");
     }
   };
@@ -288,10 +306,7 @@ export function InboxScreen() {
       if (b === "ingest" || b === "reference") return api.inboxCaptureDone(i.path);
       if (b === "done") return doneNow(i);
       if (b === "someday") return settle(i, taskLine({ text: startText(i), project: null, tag: "someday-maybe" }), null, "Next actions");
-      if (i.kind === "capture") {
-        await api.trashMove(i.path);
-        return api.inboxCaptureDone(i.path);
-      }
+      if (i.kind === "capture") return api.trashMove(i.path);
       return settle(i, null);
     };
     // Bottom up within a note, so taking a line out doesn't move the lines still to do.
@@ -315,6 +330,8 @@ export function InboxScreen() {
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (!cur || form || filing || making || e.metaKey || e.ctrlKey || e.altKey) return;
+      // Its meeting note under way: J / K still move, nothing acts on it.
+      if (busy(cur) && !many && !["j", "k", "ArrowDown", "ArrowUp"].includes(e.key)) return;
       if ((e.target as HTMLElement)?.closest?.("input, textarea, [contenteditable]")) return;
       if (many) {
         const c = bulkChoices(picked).find(([k]) => (k === "⌫" ? "Backspace" : k.toLowerCase()) === e.key);
@@ -415,12 +432,14 @@ export function InboxScreen() {
                 <TableBand
                   lead={
                     <CheckAll
-                      keys={these.map(key)}
+                      keys={these.filter((i) => !busy(i)).map(key)}
                       checked={checked}
                       label={g.label}
                       onChange={(on) =>
                         setChecked((c) =>
-                          on ? [...new Set([...c, ...these.map(key)])] : c.filter((k) => !these.some((i) => key(i) === k)),
+                          on
+                            ? [...new Set([...c, ...these.filter((i) => !busy(i)).map(key)])]
+                            : c.filter((k) => !these.some((i) => key(i) === k)),
                         )
                       }
                     />
@@ -432,21 +451,28 @@ export function InboxScreen() {
                 />
                 {these.map((i) => {
                   const note = [rowNote(i), sugg[key(i)] && `suggests ${LABEL[sugg[key(i)].becomes]}`].filter(Boolean).join(" · ");
-                  const on = checked.includes(key(i));
+                  const p = progress(i);
+                  const on = checked.includes(key(i)) && !p?.busy;
                   return (
-                    <div key={key(i)} role="row" className={`irowc tb-row ${(many ? on : cur && key(cur) === key(i)) ? "sel" : ""}`}>
+                    <div
+                      key={key(i)}
+                      role="row"
+                      className={`irowc tb-row ${p?.busy ? "busy" : ""} ${(many ? on : cur && key(cur) === key(i)) ? "sel" : ""}`}
+                    >
                       <input
                         type="checkbox"
                         className="icheck"
                         checked={on}
+                        disabled={p?.busy}
                         aria-label="Tick to act on it with others"
-                        title="Tick to act on several items together"
+                        title={p?.busy ? "Its meeting note is under way" : "Tick to act on several items together"}
                         onChange={() => toggle(key(i))}
                       />
                       <button
                         type="button"
                         className="irow"
-                        title="Show this item to clarify it (J / K)"
+                        disabled={p?.busy}
+                        title={p?.busy ? `${p.label} It leaves the Inbox once that's done.` : "Show this item to clarify it (J / K)"}
                         onClick={() => {
                           setChecked([]);
                           setSel(key(i));
@@ -455,7 +481,14 @@ export function InboxScreen() {
                         <span className="tt">
                           <TaskText text={i.kind === "capture" ? captureTitle(i.text) : itemText(i).split("\n")[0]} />
                         </span>
-                        {note && <span className="faint">{note}</span>}
+                        {p ? (
+                          <span className={`faint iprog ${p.busy ? "" : "bad"}`} title={p.why}>
+                            {p.busy && <span className="spin" />}
+                            {p.label}
+                          </span>
+                        ) : (
+                          note && <span className="faint">{note}</span>
+                        )}
                       </button>
                     </div>
                   );
@@ -471,6 +504,9 @@ export function InboxScreen() {
               <ul className="imany">
                 {picked.map((i) => (
                   <li key={key(i)}>
+                    <span className="ikindsm" title={inboxItemKind(i).label}>
+                      <Icon name={inboxItemKind(i).icon} size={13} />
+                    </span>
                     <TaskText text={i.kind === "capture" ? captureTitle(i.text) : itemText(i).split("\n")[0]} />
                     <span className="faint small"> · {sourceOf(i)}</span>
                   </li>
@@ -493,8 +529,24 @@ export function InboxScreen() {
             </>
           ) : cur ? (
             <>
-              <span className="eyebrow">{sourceOf(cur)}</span>
+              <span className="eyebrow ikind" title={inboxItemKind(cur).label}>
+                <Icon name={inboxItemKind(cur).icon} size={16} />
+                {sourceOf(cur)}
+              </span>
               {cur.kind === "capture" ? <CaptureBody item={cur} /> : <ItemBody text={itemText(cur)} />}
+              {progress(cur) && (
+                <div className={`doc-banner ${progress(cur)!.busy ? "" : "warn"}`} role="status">
+                  {progress(cur)!.busy ? <span className="spin" /> : <Icon name="info" size={14} />}
+                  <span>
+                    {progress(cur)!.label}
+                    {progress(cur)!.busy
+                      ? " It leaves the Inbox once its note is made and ingested."
+                      : progress(cur)!.why
+                        ? ` ${progress(cur)!.why}`
+                        : ""}
+                  </span>
+                </div>
+              )}
               {isTranscript(cur) ? null : sugg[key(cur)] ? (
                 <SuggestionCard s={sugg[key(cur)]} />
               ) : (
@@ -511,34 +563,36 @@ export function InboxScreen() {
                   </button>
                 </span>
               )}
-              <div className="ikeys">
-                {sugg[key(cur)] && !isTranscript(cur) && (
-                  <button
-                    type="button"
-                    className="key rec"
-                    title={`Do what the AI suggests: ${LABEL[sugg[key(cur)].becomes]} (↩)`}
-                    onClick={() => outcome(cur, sugg[key(cur)])}
-                  >
-                    <span className="kbd">↩</span>Accept suggestion
-                  </button>
-                )}
-                {inboxChoices(cur).map((b) => {
-                  const c = CHOICE[b];
-                  const k = c.key;
-                  return (
+              {!busy(cur) && (
+                <div className="ikeys">
+                  {sugg[key(cur)] && !isTranscript(cur) && (
                     <button
-                      key={b}
                       type="button"
-                      className={`key ${b === leadChoice(cur) ? "rec" : ""}`}
-                      title={`${c.tip(cur)} (${k})`}
-                      onClick={() => outcome(cur, { becomes: b })}
+                      className="key rec"
+                      title={`Do what the AI suggests: ${LABEL[sugg[key(cur)].becomes]} (↩)`}
+                      onClick={() => outcome(cur, sugg[key(cur)])}
                     >
-                      <span className="kbd">{k}</span>
-                      {c.label(cur)}
+                      <span className="kbd">↩</span>Accept suggestion
                     </button>
-                  );
-                })}
-              </div>
+                  )}
+                  {inboxChoices(cur).map((b) => {
+                    const c = CHOICE[b];
+                    const k = c.key;
+                    return (
+                      <button
+                        key={b}
+                        type="button"
+                        className={`key ${b === leadChoice(cur) ? "rec" : ""}`}
+                        title={`${c.tip(cur)} (${k})`}
+                        onClick={() => outcome(cur, { becomes: b })}
+                      >
+                        <span className="kbd">{k}</span>
+                        {c.label(cur)}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               <p className="faint small">Nothing changes until you choose. J / K move between items; ⌘Z undoes.</p>
             </>
           ) : (
@@ -771,7 +825,16 @@ function ClarifyForm({
         </label>
         <label className="nnf">
           <span className="faint">Project</span>
-          <select className="sel" value={c.project ?? ""} onChange={(e) => setC({ ...c, project: e.target.value || null })}>
+          <select
+            title={
+              mode === "next"
+                ? "The active project this next action belongs to; with none, give it a context"
+                : "The active project it belongs to, or none for the To Do list"
+            }
+            className="sel"
+            value={c.project ?? ""}
+            onChange={(e) => setC({ ...c, project: e.target.value || null })}
+          >
             <option value="">{mode === "next" ? "None: give it a context below" : "None (the To Do list)"}</option>
             {projects.map((p) => (
               <option key={p.path} value={p.path}>

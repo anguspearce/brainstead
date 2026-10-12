@@ -6,13 +6,15 @@
 // one), whether it answered what was asked, and a plain-text reply grounded in the vault, in a
 // tone you pick, to copy into Outlook or Teams. Brainstead never sends anything.
 
+import { keepInSources, StillInInbox, useInInbox } from "../StillInInbox";
 import { useEffect, useMemo, useState } from "react";
 import { api, FileSummary, Reply } from "../api";
 import { captureStamp } from "../Capture";
 import { Icon } from "../icons";
 import { fmtShortDate } from "../md/dates";
 import { Markdown } from "../md/Markdown";
-import { openDoc, place, useViewState } from "../nav";
+import { nav, openDoc, place, useViewState } from "../nav";
+import { useVaultVersion } from "../state";
 import { settings, useStore } from "../store";
 import { reportEditError } from "../taskModel";
 import { toast } from "../Toast";
@@ -58,23 +60,38 @@ export function ReplyScreen() {
   const [error, setError] = useState("");
   const [r, setR] = useState<Reply | null>(null);
   const [draft, setDraft] = useState("");
+  // Changes asked for since the draft: each revises the reply as it stands (its edits in it), and
+  // the one before is kept so Undo puts it back. A fresh draft starts them over.
+  const [asked, setAsked] = useState<string[]>([]);
+  const [before, setBefore] = useState<{ r: Reply; draft: string }[]>([]);
+  const [change, setChange] = useState("");
   const chosen = here.path ?? thread;
   const root = useStore(settings).vaultPath ?? "";
 
+  const vv = useVaultVersion();
   useEffect(() => {
     void api
       .filesList("source")
       .then((f) => setThreads(f.filter((x) => isThread(x.path)).sort((a, b) => b.mtime - a.mtime)))
       .catch(() => {});
-  }, []);
+  }, [vv]);
   useEffect(() => {
     setR(null);
+    setAsked([]);
+    setBefore([]);
     if (!chosen) return setText("");
     void api
       .docRead(chosen)
       .then((d) => setText(d.content))
-      .catch(() => setText(""));
-  }, [chosen]);
+      .catch(() => {
+        // Gone (trashed or moved while it was remembered): back to choosing a thread.
+        setText("");
+        setThread(null);
+        const at = place.get().place;
+        if (at.screen === "reply" && at.path === chosen) nav.replace({ ...at, path: undefined });
+        toast(`${chosen.split("/").pop()} isn't there any more: choose another thread or paste one`, undefined, "bad");
+      });
+  }, [chosen, vv]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const run = async (t: Tone = tone) => {
     setBusy(true);
@@ -83,19 +100,51 @@ export function ReplyScreen() {
       const out = await api.draftReply(chosen, chosen ? null : pasted, t);
       setR(out);
       setDraft(out.draft);
+      setAsked([]);
+      setBefore([]);
     } catch (e) {
       setError(String(e));
     } finally {
       setBusy(false);
     }
   };
+  const revise = async () => {
+    const ask = change.trim();
+    if (!ask || !r || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const out = await api.draftReply(chosen, chosen ? null : pasted, tone, draft, ask);
+      setBefore((b) => [...b, { r, draft }]);
+      setAsked((a) => [...a, ask]);
+      setR(out);
+      setDraft(out.draft);
+      setChange("");
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const undo = () => {
+    const last = before[before.length - 1];
+    if (!last) return;
+    setR(last.r);
+    setDraft(last.draft);
+    setBefore((b) => b.slice(0, -1));
+    setAsked((a) => a.slice(0, -1));
+  };
   const title = useMemo(() => {
     const f = threads.find((t) => t.path === chosen);
     return f ? threadLabel(f) : chosen ? chosen.split("/").pop() : null;
   }, [threads, chosen]);
+  // Still in the Inbox, the toast after copying offers to take it out (as the strip below does).
+  const inInbox = useInInbox(chosen);
+  const offerOut = (msg: string) =>
+    toast(msg, inInbox && chosen ? { label: "Take it out of the Inbox", run: () => void keepInSources(chosen) } : undefined, "ok");
   const copy = async () => {
     await navigator.clipboard.writeText(draft);
-    toast("Reply copied: paste it into Outlook or Teams", undefined, "ok");
+    offerOut("Reply copied: paste it into Outlook or Teams");
   };
   const copyRich = async () => {
     const html = draft
@@ -105,7 +154,7 @@ export function ReplyScreen() {
     await navigator.clipboard.write([
       new ClipboardItem({ "text/html": new Blob([html], { type: "text/html" }), "text/plain": new Blob([draft], { type: "text/plain" }) }),
     ]);
-    toast("Reply copied as rich text", undefined, "ok");
+    offerOut("Reply copied as rich text");
   };
   const addTask = async () => {
     if (!r?.task) return;
@@ -123,7 +172,13 @@ export function ReplyScreen() {
         <section className="rthread">
           <div className="row">
             <span className="eyebrow grow">Thread</span>
-            <select className="sel" aria-label="Captured thread" value={chosen ?? ""} onChange={(e) => setThread(e.target.value || null)}>
+            <select
+              className="sel"
+              aria-label="Captured thread"
+              title="The thread to reply to: an email or Teams chat captured into Sources, or Paste a thread… to paste one in"
+              value={chosen ?? ""}
+              onChange={(e) => setThread(e.target.value || null)}
+            >
               <option value="">Paste a thread…</option>
               {threads.map((t) => (
                 <option key={t.path} value={t.path}>
@@ -168,7 +223,7 @@ export function ReplyScreen() {
             </div>
           )}
         </section>
-        <section className="card rdraft">
+        <section className="rdraft">
           <div className="row">
             <span className="eyebrow grow">Drafted reply</span>
             <Seg<Tone>
@@ -202,12 +257,67 @@ export function ReplyScreen() {
             </span>
           </div>
           {error && <p className="err">{error}</p>}
-          {!r && !busy && (
-            <p className="faint">The draft reads the thread, checks what it asked, and looks up the people and topics in your vault.</p>
+          {/* The reply's card, level with the thread's, both as tall as the window lets them be. */}
+          {r ? (
+            <textarea className="card rbody" value={draft} onChange={(e) => setDraft(e.target.value)} aria-label="The reply" />
+          ) : (
+            <div className="card rbody rempty">
+              <p className="faint">
+                {busy
+                  ? "Drafting the reply…"
+                  : "The draft reads the thread, checks what it asked, and looks up the people and topics in your vault."}
+              </p>
+            </div>
           )}
           {r && (
             <>
-              <textarea className="rbody" value={draft} onChange={(e) => setDraft(e.target.value)} aria-label="The reply" />
+              {/* Ask for a change, as in Ask: it revises the reply above. */}
+              {asked.length > 0 && (
+                <div className="rasked">
+                  {asked.map((a, i) => (
+                    <span key={i} className="chip">
+                      {a}
+                    </span>
+                  ))}
+                  <button type="button" className="btn sm ghost" title="Put back the reply as it was before the last change" onClick={undo}>
+                    <Icon name="undo" size={12} />
+                    Undo
+                  </button>
+                </div>
+              )}
+              <div className="card askbox">
+                <textarea
+                  rows={1}
+                  value={change}
+                  placeholder="Ask for a change: shorter, mention the date, less formal…"
+                  aria-label="Ask for a change to the reply"
+                  spellCheck
+                  disabled={busy}
+                  onChange={(e) => setChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void revise();
+                    }
+                  }}
+                />
+                <div className="askbar">
+                  <span className="faint small">
+                    {busy ? "Revising the reply…" : "It revises the reply above, keeping your edits · ↩ send · ⇧↩ new line"}
+                  </span>
+                  <span className="sp" />
+                  <button
+                    type="button"
+                    className="ibtn send"
+                    aria-label="Send"
+                    title="Revise the reply as asked (↩)"
+                    disabled={!change.trim() || busy}
+                    onClick={() => void revise()}
+                  >
+                    <Icon name="send" size={14} />
+                  </button>
+                </div>
+              </div>
               {r.gaps.length > 0 && (
                 <div className="rgaps">
                   <span className="eyebrow">To fill in</span>
@@ -250,6 +360,7 @@ export function ReplyScreen() {
                 )}
               </div>
               <p className="faint small">Paste into Outlook or Teams: Brainstead never sends anything.</p>
+              {chosen && <StillInInbox path={chosen} />}
             </>
           )}
         </section>

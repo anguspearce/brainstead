@@ -99,6 +99,60 @@ export const OWN_ACTIONS = new Set(["missing-pages", "duplicates", "unreferenced
 
 export const ADVISORY = new Set(["stale-pages", "uncited-claims", "no-current-state"]);
 
+/** The note a missing link most likely meant: one whose name is the link's but for a slip or two
+ *  ("meting" for "meeting"), as when a note was renamed after the link was written. Null when
+ *  none is that close, or two are. */
+export function nearName(name: string, paths: string[]): string | null {
+  const want = name.toLowerCase().trim();
+  if (want.length < 4) return null;
+  const most = Math.min(3, Math.max(1, Math.floor(want.length * 0.08)));
+  let best: string | null = null;
+  let bestD = most + 1;
+  let ties = 0;
+  for (const p of paths) {
+    const stem = (p.split("/").pop() ?? p).replace(/\.md$/i, "").toLowerCase();
+    if (Math.abs(stem.length - want.length) > most || stem === want) continue;
+    const d = distance(want, stem, most);
+    if (d < bestD) {
+      best = p;
+      bestD = d;
+      ties = 0;
+    } else if (d === bestD) ties++;
+  }
+  return best && !ties ? best : null;
+}
+
+/** The meeting note made from a transcript a link names: the same title and day, the transcript's
+ *  "Part 1" or "Part 2" counting as the one meeting, as Make a meeting note names it (Meeting, 1-1,
+ *  Workshop or Interview). Null when it isn't a transcript's name or there's no such note. */
+export function noteFromTranscript(name: string, paths: string[]): string | null {
+  const m = /^Teams\. Transcript\. (.+?)(?: - Part \d+)? - (\d{4}-\d{2}-\d{2})(?:\.md)?$/i.exec(name.trim());
+  if (!m) return null;
+  const [, title, date] = m;
+  const want = title.toLowerCase();
+  const hits = paths.filter((p) => {
+    const n = /^(?:Meeting|1-1|Workshop|Interview)\. (.+) - (\d{4}-\d{2}-\d{2})\.md$/.exec(p.split("/").pop() ?? "");
+    return !!n && n[2] === date && (n[1].toLowerCase() === want || distance(n[1].toLowerCase(), want, 2) <= 2);
+  });
+  return hits.length === 1 ? hits[0] : null;
+}
+
+/** Edit distance, given up past `most` (a quick no). */
+function distance(a: string, b: string, most: number): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    let low = i;
+    for (let j = 1; j <= b.length; j++) {
+      row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      low = Math.min(low, row[j]);
+    }
+    if (low > most) return most + 1;
+    prev = row;
+  }
+  return prev[b.length];
+}
+
 /** The checks with Ignore all (knowledge.rs IGNORE_ALL, kept the same): advisory, with no fix of their own. */
 export const IGNORE_ALL = new Set(["stale-pages", "uncited-claims"]);
 

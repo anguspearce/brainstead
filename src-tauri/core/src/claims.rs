@@ -152,6 +152,35 @@ pub fn carry(root: &std::path::Path, from: &str, to: &str) -> std::io::Result<()
     })
 }
 
+/// Every claim whose source is `from` says `to` instead, in every claims file: what a source's
+/// rename (or a missing name pointed at a real note, Link to…) means for the claims made from it,
+/// so a later ingest doesn't write links to the old name. `from` without a folder (a link's name,
+/// `Teams. Transcript. X.md`) matches a source of that name in any folder. How many claims changed.
+pub fn rename_source(root: &std::path::Path, from: &str, to: &str) -> std::io::Result<usize> {
+    let dir = root.join(DIR);
+    let mut n = 0;
+    for e in walkdir::WalkDir::new(&dir).into_iter().flatten().filter(|e| e.path().extension().is_some_and(|x| x == "json")) {
+        let Ok(text) = std::fs::read_to_string(e.path()) else { continue };
+        if !text.contains(from) {
+            continue;
+        }
+        let mut f = parse(&text);
+        let mut here = 0;
+        let bare = !from.contains('/');
+        for c in f.claims.iter_mut().filter(|c| c.source == from || (bare && c.source.rsplit('/').next() == Some(from))) {
+            c.source = to.to_string();
+            here += 1;
+        }
+        if here == 0 {
+            continue;
+        }
+        let out = format!("{}\n", serde_json::to_string_pretty(&f).unwrap_or_default());
+        crate::write::write_atomic(e.path(), out.as_bytes(), false).map_err(|e| std::io::Error::other(e.to_string()))?;
+        n += here;
+    }
+    Ok(n)
+}
+
 /// One subject and attribute: the latest value, and the ones it superseded, newest first.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -264,6 +293,29 @@ mod tests {
         // Out of the wiki, a page has no claims file.
         carry(root, to, "Notes/Orbit Platform.md").unwrap();
         assert!(!moved.exists());
+    }
+
+    #[test]
+    fn claims_made_from_a_renamed_source_name_it_by_its_new_name() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path();
+        let page = "wiki/entities/Maya.md";
+        let from = "Meeting. Orbit Steerco meting - 2026-10-02.md";
+        let text = with_source(None, page, from, &[k("owner", "Maya", None, from), k("owner", "Lena", None, "b.md")]).unwrap();
+        let claims = root.join(path(page).unwrap());
+        std::fs::create_dir_all(claims.parent().unwrap()).unwrap();
+        std::fs::write(&claims, &text).unwrap();
+        let to = "Meeting. Orbit Steerco meeting - 2026-10-02.md";
+        assert_eq!(rename_source(root, from, to).unwrap(), 1);
+        let f = parse(&std::fs::read_to_string(&claims).unwrap());
+        assert_eq!(f.claims.iter().map(|c| c.source.as_str()).collect::<Vec<_>>(), [to, "b.md"]);
+        // A link's name finds a source of that name in a folder.
+        let t = "sources/Teams. Transcript. Steerco - 2026-10-02.md";
+        let text = with_source(None, page, t, &[k("owner", "Theo", None, t)]).unwrap();
+        std::fs::write(&claims, &text).unwrap();
+        assert_eq!(rename_source(root, "Teams. Transcript. Steerco - 2026-10-02.md", to).unwrap(), 1);
+        // Nothing named it: nothing changes.
+        assert_eq!(rename_source(root, "other.md", "x.md").unwrap(), 0);
     }
 
     #[test]

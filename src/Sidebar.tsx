@@ -11,9 +11,12 @@ import { settings, useStore } from "./store";
 import { projectFlag, useInbox, useProjects } from "./gtd";
 import { unclarified } from "./Inbox";
 import { ask } from "./askState";
+import { docChecks, docChecksUnseen, startDocChecks } from "./docChecks";
+import { isActive, runs, startRuns } from "./Ingest";
 import { localToday } from "./md/taskQuery";
-import { tasksFailed, todayRows, useAllTasks, viewRows, VIEWS } from "./taskModel";
+import { reportEditError, tasksFailed, todayRows, undoLast, useAllTasks, viewRows, VIEWS } from "./taskModel";
 import { ago, fmtCount } from "./ui";
+import { toast } from "./Toast";
 import { changes, decisions, health, held, startKnowledge } from "./knowledge";
 import type { IndexStats, Layer, VaultStatus } from "./api";
 
@@ -24,6 +27,8 @@ interface Item {
   count?: (s: IndexStats) => number;
   /** Shown as a filled badge: something needs doing. */
   hot?: boolean;
+  /** What it's for, after "Go to …" in its tooltip. */
+  tip?: string;
 }
 
 export const DAILY: Item[] = [
@@ -43,6 +48,19 @@ export const LIBRARY: Item[] = [
   { screen: "sources", label: "Sources", icon: "source", count: (s) => s.sources },
   { screen: "templates", label: "Templates", icon: "template", count: (s) => s.templates },
   { screen: "graph", label: "Graph", icon: "graph" },
+];
+
+/** The screens that do one job with the AI, found otherwise only from ⌘K or another screen. ⌘K lists
+ *  them under Do, so they aren't in ALL_ITEMS (which ⌘K lists under Go to). */
+export const TOOLS: Item[] = [
+  { screen: "reply", label: "Draft reply", icon: "send", tip: "draft a reply to an email or Teams thread, captured or pasted" },
+  { screen: "meeting", label: "Meeting notes", icon: "note", tip: "make meeting and 1-1 notes from Teams transcripts" },
+  {
+    screen: "doccheck",
+    label: "Compare",
+    icon: "shield",
+    tip: "A document against the canonical, or any two versions of a document",
+  },
 ];
 
 export const FOOTER: Item[] = [
@@ -73,7 +91,7 @@ export const hotkey = (s: Screen): string | null => {
 };
 
 /** A count beside an item; `err` when it couldn't be counted, shown as a warning rather than 0. */
-type Extra = { n: number; hot?: boolean; err?: string };
+type Extra = { n: number; hot?: boolean; err?: string; bad?: boolean; busy?: string };
 
 function NavItem({ item, on, stats, extra }: { item: Item; on: boolean; stats: IndexStats; extra?: Extra }) {
   const n = extra?.n ?? item.count?.(stats) ?? 0;
@@ -83,7 +101,7 @@ function NavItem({ item, on, stats, extra }: { item: Item; on: boolean; stats: I
       type="button"
       className={`navi ${on ? "on" : ""}`}
       aria-current={on ? "page" : undefined}
-      title={extra?.err ? `${go}. ${extra.err}` : go}
+      title={extra?.err ? `${go}. ${extra.err}` : extra?.busy ? `${go}. ${extra.busy}` : item.tip ? `${go}: ${item.tip}` : go}
       onClick={() => nav.go(item.screen)}
     >
       <Icon name={item.icon} />
@@ -92,8 +110,12 @@ function NavItem({ item, on, stats, extra }: { item: Item; on: boolean; stats: I
         <span className="n err" aria-label={extra.err}>
           <Icon name="alert" size={12} />
         </span>
+      ) : extra?.busy && !n ? (
+        <span className="n busy" aria-label={extra.busy}>
+          <span className="spin" />
+        </span>
       ) : (
-        n > 0 && <span className={`n ${extra?.hot ? "hot" : ""}`}>{fmtCount(n)}</span>
+        n > 0 && <span className={`n ${extra?.hot ? "hot" : ""} ${extra?.bad ? "bad" : ""}`}>{fmtCount(n)}</span>
       )}
     </button>
   );
@@ -138,17 +160,33 @@ function Bookmarks({ current }: { current?: string }) {
   return (
     <>
       {(list ?? []).map((b) => (
-        <button
-          key={b.target}
-          type="button"
-          className={`navi bm ${b.path && b.path === current ? "on" : ""} ${b.path ? "" : "gone"}`}
-          title={b.path ? b.path : "No matching note (renamed or deleted?)"}
-          disabled={!b.path}
-          onClick={() => b.path && openDoc(b.path)}
-        >
-          <Icon name="pin" />
-          <span className="lbl">{b.title}</span>
-        </button>
+        <div key={b.target} className="bmrow">
+          <button
+            type="button"
+            className={`navi bm ${b.path && b.path === current ? "on" : ""} ${b.path ? "" : "gone"}`}
+            title={b.path ? b.path : "No matching note (renamed or deleted?)"}
+            disabled={!b.path}
+            onClick={() => b.path && openDoc(b.path)}
+          >
+            <Icon name="pin" />
+            <span className="lbl">{b.title}</span>
+          </button>
+          {/* On hover: takes the bookmark away (the note stays), with Undo. */}
+          <button
+            type="button"
+            className="ibtn xs bmx"
+            aria-label={`Remove the bookmark for ${b.title}`}
+            title={`Remove the bookmark for ${b.title}; the note stays (⌘Z puts it back)`}
+            onClick={() =>
+              void api
+                .bookmarkRemove(b.target)
+                .then(() => toast("Bookmark removed", { label: "Undo", kbd: "⌘Z", run: () => void undoLast() }, "ok"))
+                .catch(reportEditError)
+            }
+          >
+            <Icon name="x" size={11} />
+          </button>
+        </div>
       ))}
     </>
   );
@@ -201,7 +239,8 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   }, []);
   const line = statusLine(st, now);
   const docLayer = place.screen === "doc" && place.path ? layerOf(place.path) : null;
-  const lit = docLayer ? LAYER_SCREEN[docLayer] : place.screen;
+  // Compare's two tabs are one entry.
+  const lit = docLayer ? LAYER_SCREEN[docLayer] : place.screen === "compare" ? "doccheck" : place.screen;
   // Today: overdue and due today (a badge when any is overdue); Tasks: next actions.
   const tasks = useAllTasks();
   const inbox = useInbox();
@@ -230,8 +269,32 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const waiting = held(all ?? []).length;
   if (waiting) extra.review = { n: waiting, hot: true };
   // Ask: open chats with an answer you haven't seen.
-  const unread = useStore(ask).chats.filter((c) => c.unread).length;
-  if (unread) extra.ask = { n: unread, hot: true };
+  const chats = useStore(ask).chats;
+  const unread = chats.filter((c) => c.unread).length;
+  const answering = chats.filter((c) => c.busy).length;
+  if (unread || answering)
+    extra.ask = {
+      n: unread,
+      hot: true,
+      busy: answering ? `${answering === 1 ? "A chat is" : `${answering} chats are`} being answered` : undefined,
+    };
+  // Tools at work: a check or meeting notes going (a spinner), checks that ended unseen (a badge).
+  useEffect(startDocChecks, []);
+  useEffect(startRuns, []);
+  const checks = useStore(docChecks);
+  const checking = checks.filter((c) => c.status === "running");
+  const unseenChecks = useStore(docChecksUnseen);
+  if (checking.length || unseenChecks.n)
+    extra.doccheck = {
+      n: unseenChecks.n,
+      hot: true,
+      bad: unseenChecks.bad,
+      busy: checking.length
+        ? `${["differences", "changes"].includes(checking[0].mode) ? "Comparing" : "Checking"} ${checking[0].candidate.split("/").pop()}${checking.length > 1 ? ` and ${checking.length - 1} more` : ""}…`
+        : undefined,
+    };
+  const writing = (useStore(runs) ?? []).filter((r) => r.kind === "meeting" && isActive(r)).length;
+  if (writing) extra.meeting = { n: 0, busy: `${writing === 1 ? "A meeting note is" : `${writing} meeting notes are`} being made` };
   const need = decisions(h?.report);
   if (need) extra.health = { n: need };
   const readOnly = !!useStore(settings).readOnly;
@@ -252,6 +315,9 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
         {DAILY.map(item)}
         <Section id="library" title="Library">
           {LIBRARY.map(item)}
+        </Section>
+        <Section id="tools" title="Tools">
+          {TOOLS.map(item)}
         </Section>
         <Section id="bookmarks" title="Bookmarks">
           <Bookmarks current={place.screen === "doc" ? place.path : undefined} />

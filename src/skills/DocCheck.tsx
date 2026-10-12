@@ -9,14 +9,16 @@
 // but a note you choose to save.
 
 import { useEffect, useMemo, useState } from "react";
-import { api, CanonicalEntry, CanonicalRegister, CheckResult, FileSummary, Finding } from "../api";
+import { api, CanonicalEntry, CanonicalRegister, CheckResult, CheckRun, FileSummary, Finding, SavedCheck } from "../api";
 import { Icon } from "../icons";
 import { openDoc, place, useViewState } from "../nav";
 import { useStore } from "../store";
+import { docChecks, docChecksUnseen, seenDocChecks, startDocChecks } from "../docChecks";
 import { reportEditError } from "../taskModel";
 import { toast } from "../Toast";
 import { TopBar } from "../TopBar";
-import { Seg } from "../ui";
+import { ago, SearchPick, Seg } from "../ui";
+import { CompareTabs } from "./CompareTabs";
 import { ASSISTANT_FRONTMATTER } from "../md/scripts";
 
 type Mode = "standard" | "callouts";
@@ -86,11 +88,38 @@ export function DocCheckScreen() {
   const [cand, setCand] = useViewState<string | null>("doccheck.candidate", null);
   const [doc, setDoc] = useViewState<string>("doccheck.doc", "");
   const [mode, setMode] = useViewState<Mode>("doccheck.mode", "standard");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [r, setR] = useState<CheckResult | null>(null);
   const [showOk, setShowOk] = useState(false);
   const candidate = here.path ?? cand;
+  // The governing document matters only against the version in force: feedback mode keys without it.
+  const docKey = mode === "callouts" ? "" : doc;
+  // Checks this session (going on in the background, so the screen can be left), and the kept result.
+  useEffect(startDocChecks, []);
+  const runs = useStore(docChecks);
+  // Showing: whatever ended is seen (the sidebar's badge goes), now and as more end.
+  const unseen = useStore(docChecksUnseen);
+  useEffect(() => {
+    if (unseen.n) seenDocChecks();
+  }, [unseen.n]);
+  const setRuns = (f: (l: CheckRun[]) => CheckRun[]) => docChecks.set(f(docChecks.get()));
+  const [saved, setSaved] = useState<SavedCheck | null>(null);
+  const run = runs.find((x) => x.candidate === candidate && x.mode === mode && x.doc === docKey) ?? null;
+  const busy = run?.status === "running";
+  useEffect(() => {
+    setSaved(null);
+    if (!candidate || (mode === "standard" && !doc)) return;
+    let live = true;
+    api
+      .docCheckSaved(candidate, docKey, mode)
+      .then((x) => live && setSaved(x))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [candidate, docKey, mode, run?.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  // What's shown: this session's finished check, else the kept one.
+  const r: CheckResult | null = run?.status === "done" ? run.result : busy ? null : (saved?.result ?? null);
+  const fromSaved = !!saved && r === saved.result;
 
   const load = () =>
     void api
@@ -127,17 +156,14 @@ export function DocCheckScreen() {
         ? "Choose the governing document to check against."
         : "Add a governing document to the register first."
       : null;
-  const run = async () => {
+  const start = async () => {
     if (!candidate) return;
-    setBusy(true);
     setError("");
-    setR(null);
     try {
-      setR(await api.docCheck(candidate, doc, mode));
+      const x = await api.docCheckStart(candidate, docKey, mode);
+      setRuns((l) => [x, ...l.filter((y) => y.id !== x.id)]);
     } catch (e) {
       setError(String(e));
-    } finally {
-      setBusy(false);
     }
   };
   const name = candidate ? (candidate.split("/").pop() ?? candidate) : "";
@@ -164,6 +190,7 @@ export function DocCheckScreen() {
   return (
     <main className="main">
       <TopBar title="Doc check" sub={name || undefined}>
+        <CompareTabs on="doccheck" />
         {r && (
           <>
             <button
@@ -241,21 +268,23 @@ export function DocCheckScreen() {
         <section className="card dcform">
           <div className="row">
             <span className="eyebrow">Check</span>
-            <select
-              className="sel grow"
-              aria-label="Document to check"
-              value={candidate ?? ""}
-              onChange={(e) => setCand(e.target.value || null)}
-            >
-              <option value="">Choose a source…</option>
-              {candidate && !sources.some((s) => s.path === candidate) && <option value={candidate}>{name}</option>}
-              {sources.map((s) => (
-                <option key={s.path} value={s.path}>
-                  {s.path.split("/").pop()}
-                </option>
-              ))}
-            </select>
-            <button type="button" className="btn sm" title="Pick a document from anywhere on disk" onClick={() => void pick()}>
+            {/* A source by typing its name; a file picked from disk shows as chosen too. */}
+            <SearchPick
+              className="grow"
+              label="Document to check"
+              placeholder="Choose a source… (type to find it)"
+              value={candidate}
+              onChange={(v) => setCand(v || null)}
+              items={[
+                ...(candidate && !sources.some((s) => s.path === candidate) ? [{ value: candidate, label: name ?? candidate }] : []),
+                ...sources.map((s) => ({
+                  value: s.path,
+                  label: s.path.split("/").pop() ?? s.path,
+                  hint: s.path.split("/").slice(1, -1).join("/") || undefined,
+                })),
+              ]}
+            />
+            <button type="button" className="btn" title="Pick a document from anywhere on disk" onClick={() => void pick()}>
               Choose a file…
             </button>
           </div>
@@ -274,7 +303,13 @@ export function DocCheckScreen() {
               ]}
             />
             {mode === "standard" && (
-              <select className="sel" aria-label="Governing document" value={doc} onChange={(e) => setDoc(e.target.value)}>
+              <select
+                title="The governing document to check against: its version in force, from the canonical docs register"
+                className="sel"
+                aria-label="Governing document"
+                value={doc}
+                onChange={(e) => setDoc(e.target.value)}
+              >
                 {docs.map((d) => (
                   <option key={d.key} value={d.key}>
                     {d.title}
@@ -294,15 +329,36 @@ export function DocCheckScreen() {
                     : "Have the AI check whether the document took your feedback")
               }
             >
-              <button type="button" className="btn pri" disabled={busy || !!why} onClick={() => void run()}>
+              <button type="button" className="btn pri" disabled={busy || !!why} onClick={() => void start()}>
                 <Icon name="ask" size={14} />
-                {busy ? "Checking…" : "Check"}
+                {busy ? "Checking…" : saved || run?.status === "done" ? "Check again" : "Check"}
               </button>
             </span>
           </div>
           {error && <p className="err">{error}</p>}
+          {run && run.status !== "done" && <CheckProgress run={run} />}
+          {fromSaved && saved && (
+            <div className={`doc-banner ${saved.stale ? "warn" : ""}`} role="status">
+              <Icon name={saved.stale ? "info" : "check"} size={14} />
+              <span>
+                Checked {ago(new Date(saved.at).getTime())}
+                {saved.result.against ? ` against ${saved.result.against.title} ${saved.result.against.version}` : ""}.{" "}
+                {saved.stale
+                  ? "The document or the version in force has changed since: check again for findings that match them."
+                  : "Neither document has changed since, so this still stands."}
+              </span>
+            </div>
+          )}
         </section>
-        {r && (
+        {r && r.unrelated && (
+          <div className="doc-banner warn" role="status">
+            <Icon name="info" size={14} />
+            <span>
+              <b>{r.verdict}.</b> {r.summary} Nothing was checked.
+            </span>
+          </div>
+        )}
+        {r && !r.unrelated && (
           <div className="dcres">
             <section className="card dcverdict">
               <span className="eyebrow">Verdict</span>
@@ -367,6 +423,60 @@ export function DocCheckScreen() {
         )}
       </div>
     </main>
+  );
+}
+
+/** A check under way (or stopped, or failed): its steps ticked off with their times, a clock on the
+ *  one going, and Stop. */
+export function CheckProgress({ run }: { run: CheckRun }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (run.status !== "running") return;
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [run.status]);
+  const secs = (ms: number) => (ms < 1000 ? `${ms} ms` : `${Math.round(ms / 1000)} s`);
+  const since = Math.max(0, now - new Date(run.started).getTime());
+  return (
+    <div className="dcprog">
+      <div className="runsteps">
+        {run.steps.map((s, i) => (
+          <div key={i} className={`runstep ${s.status}`}>
+            <span className="sd">
+              {s.status === "running" && run.status === "running" ? (
+                <span className="spin" />
+              ) : s.status === "done" ? (
+                <Icon name="check" size={11} />
+              ) : (
+                <Icon name="x" size={11} />
+              )}
+            </span>
+            <span className="grow nm">{s.name}</span>
+            {s.ms > 0 && <span className="faint mono small">{secs(s.ms)}</span>}
+          </div>
+        ))}
+      </div>
+      <div className="row">
+        <span className="faint small grow">
+          {run.status === "running"
+            ? `Checking for ${secs(since)}. A long document can take minutes; you can leave this page and come back.`
+            : run.status === "stopped"
+              ? "Stopped: nothing was kept from it."
+              : `Failed: ${run.error ?? "the check didn't finish"}`}
+        </span>
+        {run.status === "running" && (
+          <button
+            type="button"
+            className="btn sm"
+            title="Stop the check; nothing is kept from it"
+            onClick={() => void api.docCheckStop(run.id)}
+          >
+            <Icon name="stop" size={12} />
+            Stop
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

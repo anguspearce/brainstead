@@ -460,6 +460,7 @@ export function TaskAttrs({ t }: { t: TaskRow }) {
       </dt>
       <dd>
         <select
+          title="How important the task is"
           className="sel sm"
           aria-label="Priority"
           value={priorityOf(t)}
@@ -520,6 +521,7 @@ export function TaskAttrs({ t }: { t: TaskRow }) {
       </dt>
       <dd>
         <select
+          title="How long the task takes"
           className="sel sm"
           aria-label="Effort"
           value={t.effort ?? ""}
@@ -540,6 +542,7 @@ export function TaskAttrs({ t }: { t: TaskRow }) {
       </dt>
       <dd>
         <select
+          title="The project this task is part of"
           className="sel sm grow"
           aria-label="Project"
           value={t.project ?? ""}

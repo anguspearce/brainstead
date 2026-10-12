@@ -9,6 +9,8 @@ import { filedPage } from "./Ask";
 import {
   byRun,
   changeMatches,
+  nearName,
+  noteFromTranscript,
   IGNORE_ALL,
   claimsByPage,
   decisions,
@@ -181,5 +183,36 @@ describe("Ignore all", () => {
   it("is on the same checks as knowledge.rs offers it on", () => {
     const rs = readFileSync("src-tauri/src/knowledge.rs", "utf8").match(/IGNORE_ALL: \[&str; \d+\] = \[([^\]]*)\]/)![1];
     expect([...rs.matchAll(/"([^"]+)"/g)].map((m) => m[1])).toEqual([...IGNORE_ALL]);
+  });
+});
+
+describe("nearName", () => {
+  const paths = [
+    "Meeting. Orbit Steerco meeting - 2026-10-02.md",
+    "wiki/entities/Maya.md",
+    "1-1. Lena - 2026-10-01.md",
+    "1-1. Lena - 2026-10-02.md",
+  ];
+  it("finds the note a missing link is a slip away from", () => {
+    expect(nearName("Meeting. Orbit Steerco meting - 2026-10-02", paths)).toBe("Meeting. Orbit Steerco meeting - 2026-10-02.md");
+    expect(nearName("Mya", paths)).toBeNull(); // too short to guess
+    expect(nearName("Meeting. Roadmap review - 2026-10-02", paths)).toBeNull();
+    // Two as close: no guess.
+    expect(nearName("1-1. Lena - 2026-10-0", paths)).toBeNull();
+  });
+});
+
+describe("noteFromTranscript", () => {
+  const paths = [
+    "Meeting. Orbit Funding Budget information - 2026-07-30.md",
+    "Meeting. Orbit Funding Portfolio - 2026-07-31.md",
+    "1-1. Lena - 2026-07-30.md",
+  ];
+  it("finds the meeting note a trashed transcript became, its parts as one meeting", () => {
+    expect(noteFromTranscript("Teams. Transcript. Orbit Funding Budget information - Part 1 - 2026-07-30", paths)).toBe(paths[0]);
+    expect(noteFromTranscript("Teams. Transcript. Orbit Funding Budget information - Part 2 - 2026-07-30", paths)).toBe(paths[0]);
+    expect(noteFromTranscript("Teams. Transcript. Orbit Funding Portfolio - 2026-07-31", paths)).toBe(paths[1]);
+    expect(noteFromTranscript("Teams. Transcript. Orbit Funding Portfolio - 2026-08-01", paths)).toBeNull();
+    expect(noteFromTranscript("Meeting. Orbit Funding Portfolio - 2026-07-31", paths)).toBeNull();
   });
 });

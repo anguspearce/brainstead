@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import { api, FileSummary } from "./api";
 import { Icon } from "./icons";
+import { nav } from "./nav";
 import { askAboutNote } from "./Ask";
 import { runSourceAction, SOURCE_ACTION, sourceActions } from "./sourceActions";
 import { canIngest as ingestOffered } from "./Lists";
@@ -142,6 +143,20 @@ export function FileMenu({ menu, doc, readFrom }: { menu: MenuState; doc?: () =>
               {SOURCE_ACTION[a].label(false)}
             </button>
           ))}
+        {canIngest && (
+          <button
+            type="button"
+            role="menuitem"
+            title="Open Compare with this as document A, to pick the one to compare it with"
+            onClick={() => {
+              menu.close();
+              nav.go({ screen: "compare", path: f.path });
+            }}
+          >
+            <Icon name="shield" size={14} />
+            Compare with…
+          </button>
+        )}
         {isText && (
           <button
             type="button"

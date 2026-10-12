@@ -37,6 +37,18 @@ describe("a file moved elsewhere", () => {
     expect(Object.keys(settings.get().docLooks ?? {})).toEqual(["Projects/Orbit App.md"]);
   });
 
+  it("lets another screen's file go when it's trashed, and follows it when it's renamed", async () => {
+    const t = "sources/Email. Thread. Launch - 2026-10-02.md";
+    restorePlaces({ stack: [{ screen: "reply", path: t }], i: 0 });
+    settings.update({ viewMemory: { "reply.thread": t, "compare.b": t, "reply.tone": "warm" } });
+    await fileMoved({ from: t, to: null, draft: "" });
+    expect(place.get().place).toEqual({ screen: "reply" });
+    expect(settings.get().viewMemory).toEqual({ "reply.thread": null, "compare.b": null, "reply.tone": "warm" });
+    restorePlaces({ stack: [{ screen: "compare", path: "a.md" }], i: 0 });
+    await fileMoved({ from: "a.md", to: "notes/a.md", draft: "notes/a.md" });
+    expect(place.get().place).toMatchObject({ screen: "compare", path: "notes/a.md" });
+  });
+
   it("leaves a note that was trashed, and drops it from the recent list", async () => {
     restorePlaces({ stack: [{ screen: "today" }, { screen: "doc", path: "Lena.md" }], i: 1 });
     settings.update({ recent: [{ path: "Lena.md", title: "Lena", at: 1 }] });

@@ -4,6 +4,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Runs the previous app's infer_meeting.py over the file names in cases.json and freezes its answers.
 
+One answer differs on purpose (D-20261012-03): a 1-1 whose name is one the existing notes use
+already ("Theo, Maya" with notes for Theo and Theo Ward) is made without asking, so after freezing,
+set that case's confident back to true.
+
     python3 tests/fixtures/meeting/freeze.py <path to the previous app's scripts/>
 
 The script's owner is set to the cases' owner, and its vault is a temp folder holding the cases'

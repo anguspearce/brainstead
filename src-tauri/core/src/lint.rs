@@ -113,6 +113,16 @@ static TEXTS: LazyLock<std::sync::Mutex<Kept>> = LazyLock::new(Default::default)
 type Kept = HashMap<PathBuf, (i64, u64, String)>;
 
 /// Each markdown file's text: from TEXTS when it's unchanged since, else read (and kept).
+/// Forgets what's kept of these files' text, so the next run reads them again: for a write that
+/// keeps a file's modification time and size (a safe fix changing `updated:` to a date of the
+/// same length, say), which the cache's check can't see.
+pub fn forget(paths: &[PathBuf]) {
+    let mut kept = TEXTS.lock().unwrap_or_else(|e| e.into_inner());
+    for p in paths {
+        kept.remove(p);
+    }
+}
+
 fn read_all(files: &[File]) -> Vec<(&File, String)> {
     let mut kept = TEXTS.lock().unwrap_or_else(|e| e.into_inner());
     let mut next = HashMap::with_capacity(kept.len());
@@ -809,6 +819,25 @@ mod tests {
         std::fs::write(&page, "See [[Ghos]].\n").unwrap();
         fixture::set_mtime(&page, "2026-01-01 12:01");
         assert_eq!(missing(t.path()), 1);
+    }
+
+    #[test]
+    fn reads_a_note_again_after_a_write_that_kept_its_time_and_size() {
+        let t = tempfile::tempdir().unwrap();
+        let page = t.path().join("wiki/entities/B.md");
+        std::fs::create_dir_all(page.parent().unwrap()).unwrap();
+        let stale = |root: &Path| {
+            let r = run_in(root, today(), &HashSet::new(), fixture::zone());
+            r.checks.iter().find(|c| c.id == "stale-dates").map_or(0, |c| c.items.len())
+        };
+        std::fs::write(&page, "---\nupdated: 2026-01-01\n---\n# B\n").unwrap();
+        fixture::set_mtime(&page, "2026-01-20 12:00");
+        assert_eq!(stale(t.path()), 1);
+        // A safe fix: the same length of date, the file's time kept. Unseen until it's forgotten.
+        std::fs::write(&page, "---\nupdated: 2026-01-20\n---\n# B\n").unwrap();
+        fixture::set_mtime(&page, "2026-01-20 12:00");
+        forget(std::slice::from_ref(&page));
+        assert_eq!(stale(t.path()), 0);
     }
 
     #[test]

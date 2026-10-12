@@ -103,6 +103,7 @@ export function Jobs() {
           </div>
           <span className="jtime">
             <select
+              title="The day of your weekly review (its preparation runs four hours before it)"
               className="sel"
               value={wr.day}
               aria-label="Weekly review day"
@@ -214,6 +215,7 @@ export function Jobs() {
           </div>
           <span className="jtime">
             <select
+              title="The day the weekly summary is written"
               className="sel"
               value={sch.weeklyDay}
               aria-label="Weekly summary day"

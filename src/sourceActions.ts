@@ -9,7 +9,7 @@
 import { askAboutNote } from "./Ask";
 import { ingest } from "./Ingest";
 import { canIngest } from "./Lists";
-import { isTranscriptPath, makeMeetingNotes } from "./meetingFlow";
+import { followThrough, isTranscriptPath, makeMeetingNotes } from "./meetingFlow";
 import { nav } from "./nav";
 import { isThread } from "./skills/Reply";
 
@@ -27,6 +27,18 @@ export function sourceActions(path: string, ingested = false): SourceAction[] {
   return ingested ? ["ingest", ...all.filter((a) => a !== "ingest")] : all;
 }
 
+/** What Make a meeting note does, as the Meeting notes switches have it: the note, then ingesting
+ *  it and moving the transcript to the Trash when they're on. */
+export function meetingTip(n = 1): string {
+  const f = followThrough();
+  const then = [
+    f.ingest && (n === 1 ? "ingest it" : "ingest each"),
+    f.trash && (n === 1 ? "move the transcript to the Trash" : "move the transcripts to the Trash"),
+  ].filter(Boolean);
+  const what = n === 1 ? "Write a meeting or 1-1 note from this transcript" : "Write a meeting or 1-1 note from each transcript";
+  return then.length ? `${what}, then ${then.join(" and ")}` : what;
+}
+
 /** Each action's key (in the Inbox), icon, label, short label (a row's button) and tip. */
 export const SOURCE_ACTION: Record<
   SourceAction,
@@ -41,9 +53,10 @@ export const SOURCE_ACTION: Record<
   meeting: {
     key: "M",
     icon: "note",
-    label: () => "Make a meeting note",
+    // Says what follows the note, as Settings › AI assistants' Meeting notes switches have it.
+    label: () => (followThrough().ingest ? "Make and ingest a meeting note" : "Make a meeting note"),
     short: () => "Meeting note",
-    tip: () => "Write a meeting or 1-1 note from this transcript, ingest it and move the transcript to the Trash",
+    tip: () => meetingTip(),
   },
   reply: {
     key: "D",

@@ -504,6 +504,8 @@ export interface MeetingInference {
   ask: string[];
   suggestedFilename: string | null;
   existingNotes: string[];
+  /** The names the person's existing 1-1 notes use, when the transcript's is none of them: to pick from. */
+  nameForms?: string[];
   exists: boolean;
   /** The date is only the day the transcript was captured: the user confirms or changes it. */
   dateCheck: boolean;
@@ -515,6 +517,8 @@ export interface Transcript {
   inferred: MeetingInference;
   /** Dealt with already: a wiki page cites it, or a note links to it. */
   done: "ingested" | "linked" | null;
+  /** Its meeting note exists already and a wiki page cites it: only the transcript is left. */
+  noteIngested: boolean;
 }
 
 export interface NoteSpec {
@@ -692,6 +696,35 @@ export interface CheckResult {
   findings: Finding[];
   against: CanonicalEntry | null;
   excluded: CanonicalEntry[];
+  /** The two documents aren't about the same thing (its first look, or the comparison itself): nothing compared. */
+  unrelated?: boolean;
+}
+
+/** Doc check's modes, and Compare's (two documents, A and B). */
+export type CheckMode = "standard" | "callouts" | "differences" | "changes";
+
+/** A Doc check under way or done this session (doc_check_start), with its steps. */
+export interface CheckRun {
+  id: string;
+  candidate: string;
+  doc: string;
+  mode: CheckMode;
+  /** running, done, failed or stopped. */
+  status: string;
+  started: string;
+  steps: { name: string; status: string; ms: number }[];
+  error: string | null;
+  result: CheckResult | null;
+}
+
+/** A finished Doc check, kept with the versions it read; stale when either document changed since. */
+export interface SavedCheck {
+  candidate: string;
+  doc: string;
+  mode: CheckMode;
+  at: string;
+  result: CheckResult;
+  stale: boolean;
 }
 
 export interface IngestRun {
@@ -985,9 +1018,18 @@ export const api = {
   bookmarkRemove: (target: string) => invoke<void>("bookmark_remove", { target }),
   /** Triage's Keep: not stale again for two weeks. */
   bookmarkKeep: (target: string) => invoke<void>("bookmark_keep", { target }),
-  draftReply: (thread: string | null, text: string | null, tone: string) => invoke<Reply>("draft_reply", { thread, text, tone }),
+  /** With `current` and `change`, revises that reply as asked rather than drafting afresh. */
+  draftReply: (thread: string | null, text: string | null, tone: string, current: string | null = null, change: string | null = null) =>
+    invoke<Reply>("draft_reply", { thread, text, tone, current, change }),
   canonicalRegister: () => invoke<CanonicalRegister>("canonical_register"),
-  docCheck: (candidate: string, doc: string, mode: "standard" | "callouts") => invoke<CheckResult>("doc_check", { candidate, doc, mode }),
+  docCheck: (candidate: string, doc: string, mode: CheckMode) => invoke<CheckResult>("doc_check", { candidate, doc, mode }),
+  /** Starts a check in the background; its steps and result come as onDocCheckChanged. */
+  docCheckStart: (candidate: string, doc: string, mode: CheckMode) => invoke<CheckRun>("doc_check_start", { candidate, doc, mode }),
+  docCheckRuns: () => invoke<CheckRun[]>("doc_check_runs"),
+  docCheckStop: (id: string) => invoke<void>("doc_check_stop", { id }),
+  docCheckSaved: (candidate: string, doc: string, mode: CheckMode) =>
+    invoke<SavedCheck | null>("doc_check_saved", { candidate, doc, mode }),
+  onDocCheckChanged: (f: (r: CheckRun) => void): Promise<UnlistenFn> => listen<CheckRun>("doccheck-changed", (e) => f(e.payload)),
   sourceProvenance: (path: string) => invoke<Provenance | null>("source_provenance", { path }),
   ingestRuns: () => invoke<IngestRun[]>("ingest_runs"),
   ingestStop: (id: string) => invoke<void>("ingest_stop", { id }),
@@ -1046,6 +1088,8 @@ export const api = {
   healthDismiss: (a: string, b: string) => invoke<void>("health_dismiss", { a, b }),
   /** Ignores an issue (its check and its line) until its page changes. */
   healthIgnore: (check: string, text: string) => invoke<void>("health_ignore", { check, text }),
+  /** Orphan pages' Add them to index.md: index.md's catalogue brought up to date now; what happened. */
+  catalogueUpdate: () => invoke<string>("catalogue_update"),
   /** Ignore all, on stale pages and claims with no citation: how many were ignored. */
   healthIgnoreAll: (check: string) => invoke<number>("health_ignore_all", { check }),
   /** Shows a check's ignored issues again (every check's with null); returns how many. */

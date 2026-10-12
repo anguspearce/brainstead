@@ -16,7 +16,7 @@ pub const REGISTER: &str = "Me. Canonical Docs.md";
 const COLUMNS: [&str; 6] = ["key", "title", "version", "status", "path", "aliases"];
 const STATUSES: [&str; 3] = ["canonical", "draft", "superseded"];
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Entry {
     /// Lower case.

@@ -12,7 +12,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 
 import type { InboxItem } from "./api";
-import { doneNow, inboxChoices, leadChoice, suggestKind } from "./inboxActions";
+import { doneNow, inboxChoices, inboxItemKind, leadChoice, suggestKind } from "./inboxActions";
 
 const item = (lineText: string): InboxItem =>
   ({ kind: "task", path: "Me. To Do List.md", line: 4, lineText, text: lineText.replace(/^- \[ \] /, "") }) as InboxItem;
@@ -62,5 +62,16 @@ describe("each kind of Inbox item's choices", () => {
     expect(suggestKind(cap("sources/meetings/2026/Teams. Transcript. Steerco - 2026-10-02.md"))).toBe("transcript");
     expect(suggestKind(cap("sources/teams/Teams. Chat. Standup - 2026-10-03.md"))).toBe("thread");
     expect(suggestKind(cap("notes/Email. Draft.md"))).toBe("capture");
+  });
+  it("draws each kind of item with its own icon", () => {
+    const icon = (path: string) => inboxItemKind(cap(path)).icon;
+    expect(icon("sources/Teams. Transcript. Steerco - 2026-10-02.md")).toBe("mic");
+    expect(icon("sources/emails/Email. Thread. Re Launch - 2026-10-02.md")).toBe("mail");
+    expect(icon("sources/Teams. Chat. Standup - 2026-10-03.md")).toBe("chat");
+    expect(
+      ["Plan.docx", "Plan.PDF", "Deck.pptx", "Budget.xlsx", "Board.png", "Minutes.md", "Data.zip"].map((f) => icon(`sources/${f}`)),
+    ).toEqual(["file-word", "file-pdf", "slides", "sheet", "image", "note", "source"]);
+    expect(inboxItemKind({ ...cap("Scratchpad.md"), kind: "thought" }).icon).toBe("bulb");
+    expect(inboxItemKind({ ...cap("To Do.md"), kind: "task" }).icon).toBe("tasks");
   });
 });

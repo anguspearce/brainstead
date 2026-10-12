@@ -30,6 +30,25 @@ export function inboxChoices(i: InboxItem): string[] {
  *  transcript's meeting note, a thread's reply, else Ingest). */
 export const leadChoice = (i: InboxItem): string | null => (i.kind === "capture" ? (sourceActions(i.path)[0] ?? null) : null);
 
+/** What kind of thing an Inbox item is, for its icon and the name beside it: a thought, a task, or
+ *  a capture by what its file is (a transcript, an email or chat thread, a Word file, a PDF…). */
+export function inboxItemKind(i: InboxItem): { icon: string; label: string } {
+  if (i.kind === "thought") return { icon: "bulb", label: "Scratchpad thought" };
+  if (i.kind === "task") return { icon: "tasks", label: "Task" };
+  if (isTranscriptPath(i.path)) return { icon: "mic", label: "Teams transcript" };
+  const name = i.path.split("/").pop() ?? "";
+  if (/^Email\. /.test(name)) return { icon: "mail", label: "Email" };
+  if (/^Teams\. /.test(name)) return { icon: "chat", label: "Teams chat" };
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  if (ext === "docx" || ext === "doc") return { icon: "file-word", label: "Word document" };
+  if (ext === "pdf") return { icon: "file-pdf", label: "PDF" };
+  if (ext === "pptx" || ext === "ppt") return { icon: "slides", label: "PowerPoint" };
+  if (["xlsx", "xls", "csv"].includes(ext)) return { icon: "sheet", label: "Spreadsheet" };
+  if (["png", "jpg", "jpeg", "gif", "webp", "heic"].includes(ext)) return { icon: "image", label: "Image" };
+  if (ext === "md" || ext === "txt") return { icon: "note", label: "Note" };
+  return { icon: "source", label: "File" };
+}
+
 /** What Suggest tells the model an item is: a Teams transcript (made a meeting note without asking
  *  it), a captured email or chat thread (which can also be a reply), another capture (which can be
  *  ingested), or a thought or task. The Inbox and list_inbox's suggest both ask this way. */

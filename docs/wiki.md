@@ -94,12 +94,13 @@ The **Graph** draws how pages link: a page's neighbourhood, or the whole wiki. E
 ## Meeting notes and the other tools
 
 - **Meeting notes** turns a Teams transcript into a meeting or 1-1 note from your template, with names spelt as your vault spells them. The note is made (listed in Changes) and ingested, and the transcript moves to the Trash; both are on by default in Settings › AI assistants, and a transcript is kept if either fails.
-  - Start it from **Meeting note** on a transcript in Sources, or `M` (or **Make a meeting note** on the right-click menu) in the Inbox. If Brainstead is sure of the note's type, name and date, it does it all in one step; otherwise it opens Meeting notes at the question.
-  - Tick several (or **Tick all**) and **Draft all** asks once for their dates, then does each.
+  - Start it from **Meeting note** on a transcript in Sources, or `M` (or **Make and ingest a meeting note** on the right-click menu) in the Inbox. If Brainstead is sure of the note's type, name and date, it does it all in one step; otherwise it opens Meeting notes at the question.
+  - Tick several (or **Tick all**) and **Make and ingest all** asks once for their dates, then does each. The card always says where a transcript is (being written, failed, held in Changes, its note there already) and leads with the step that's left.
   - The note is dated with the meeting's day. If the Teams extension couldn't read it, the capture day is used and you confirm it first.
 - **Fix name** corrects a misspelt name across every note and wiki page at once (sources are left alone), adds the wrong spelling as an alias, and remembers it for future ingests. One ⌘Z undoes it all.
 - **Draft reply** drafts an answer to an email or Teams thread, drawing on the vault, for you to copy and send.
 - **Triage bookmarks** goes through your bookmarked notes with a suggestion for each: keep, update or drop.
 - **Doc check** checks a document against the version in force of the one it should follow, or whether a revision took in your feedback. The version in force comes from your register of governing documents, the note `Me. Canonical Docs.md`, which Doc check can start for you.
+- **Compare** (the same sidebar entry's other tab) compares any two documents, A and B: their differences, or what changed between two versions. Both first look at the documents' openings and stop when they aren't about the same thing. Checks run in the background and are kept until either document changes.
 
 Assistants do all of this with Brainstead's tools, named as the screens are: for example `import_sources`, `facts`, `lint`, `ignore_issue`, `health_issue`, `page_shape`, `reshape_pages`, `write_current_state`, `list_contradictions` and `contradictions`.

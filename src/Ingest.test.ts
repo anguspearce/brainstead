@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { IngestRun, SourceRow } from "./api";
-import { isActive, meetingNoteMade, merge, queueOffer } from "./Ingest";
+import { isActive, meetingNoteMade, meetingProgress, merge, queueOffer } from "./Ingest";
 import { ingestable, sourceStatus } from "./Lists";
 
 const run = (id: string, status = "running"): IngestRun => ({
@@ -62,5 +62,57 @@ describe("after a meeting note", () => {
     const q = queueOffer(queueOffer([], a), b);
     expect(q).toEqual([a, b]);
     expect(queueOffer(q, a)).toBe(q);
+  });
+});
+
+describe("meetingProgress", () => {
+  const t = "sources/Teams. Transcript. Steerco - 2026-10-02.md";
+  const run = (o: Partial<IngestRun>): IngestRun =>
+    ({
+      id: "r",
+      kind: "ingest",
+      source: "",
+      started: "2026-10-12T10:00:00",
+      finished: null,
+      model: "",
+      status: "done",
+      steps: [],
+      proposals: [],
+      dropped: [],
+      pages: [],
+      error: null,
+      ...o,
+    }) as IngestRun;
+  const made = { steps: [{ name: "Note", status: "done", detail: "Made", ms: 1 }] } as Partial<IngestRun>;
+  const note = { type: "Meeting", name: "Steerco", date: "2026-10-02" };
+
+  it("follows a transcript from its note being written to its note being ingested", () => {
+    expect(meetingProgress([], t)).toBeNull();
+    expect(meetingProgress([run({ kind: "meeting", source: t, status: "running" })], t)).toEqual({ label: "Writing note…", busy: true });
+    const done = run({ kind: "meeting", source: t, note, ...made });
+    expect(
+      meetingProgress([run({ source: "Meeting. Steerco - 2026-10-02.md", status: "queued", started: "2026-10-12T10:01:00" }), done], t)
+        ?.busy,
+    ).toBe(true);
+    expect(meetingProgress([run({ source: "Meeting. Steerco - 2026-10-02.md", started: "2026-10-12T10:01:00" }), done], t)).toBeNull();
+  });
+
+  it("says when it failed or is held, and frees the row", () => {
+    expect(meetingProgress([run({ kind: "meeting", source: t, status: "failed", error: "No model" })], t)).toEqual({
+      label: "Note failed",
+      busy: false,
+      why: "No model",
+    });
+    const held = run({
+      kind: "meeting",
+      source: t,
+      note,
+      steps: [{ name: "Note", status: "done", detail: "Held in Changes", ms: 1 }],
+    } as Partial<IngestRun>);
+    expect(meetingProgress([held], t)?.label).toBe("Note held in Changes");
+    const done = run({ kind: "meeting", source: t, note, ...made });
+    expect(
+      meetingProgress([run({ source: "Meeting. Steerco - 2026-10-02.md", status: "failed", started: "2026-10-12T10:01:00" }), done], t),
+    ).toMatchObject({ label: "Ingest failed", busy: false });
   });
 });

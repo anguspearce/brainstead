@@ -561,6 +561,11 @@ fn health_link_ghost_now(app: AppHandle, target: String, to: String, pages: Vec<
         crate::changes::submit(&app, s)?;
         n += 1;
     }
+    // Claims made from a file of the missing name (renamed since, their source left behind) name
+    // the page it's pointed at now, so a later ingest doesn't link the old name again.
+    if let Err(e) = brainstead_core::claims::rename_source(&root, &format!("{target}.md"), &to) {
+        crate::applog!("claims for {target}: {e}");
+    }
     // As every fix does, so the missing page leaves the list once the links point elsewhere.
     if n > 0 {
         settled(&app, |check, i| check == "missing-pages" && i.name.as_deref() == Some(target.as_str()));

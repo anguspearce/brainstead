@@ -9,7 +9,8 @@
 // needs judgement goes to Ask, whose changes are listed in Changes.
 
 import { useEffect, useMemo, useState } from "react";
-import { api, CurrentStateRun, FileSummary, LintCheck, LintItem, LintReport } from "./api";
+import { api, CurrentStateRun, FileSummary, LintCheck, LintItem, LintReport, TrashEntry } from "./api";
+import { fmtShortDate } from "./md/dates";
 import { linkMatches } from "./Capture";
 import { askWith } from "./askState";
 import { ingest } from "./Ingest";
@@ -26,6 +27,8 @@ import {
   health,
   pageName,
   IGNORE_ALL,
+  nearName,
+  noteFromTranscript,
   reloadHealth,
   safeFixes,
   startKnowledge,
@@ -39,6 +42,7 @@ import { toast } from "./Toast";
 import { TopBar } from "./TopBar";
 import { Dialog } from "./ui";
 import { Store, useStore } from "./store";
+import { useVaultVersion } from "./state";
 
 const undo = { label: "Undo", kbd: "⌘Z", run: () => void undoLast() };
 
@@ -124,6 +128,20 @@ export function HealthScreen() {
   const [linking, setLinking] = useState<LintItem | null>(null);
   const [reshaping, setReshaping] = useState<number | null>(null);
   const fixes = safeFixes(r);
+  // The vault's files, for Missing pages' Did you mean; read again as the vault changes.
+  const [paths, setPaths] = useState<string[]>([]);
+  const [trashed, setTrashed] = useState<Map<string, TrashEntry>>(new Map());
+  const vv = useVaultVersion();
+  useEffect(() => {
+    void api
+      .filesList(null)
+      .then((f) => setPaths(f.filter((x) => x.layer !== "template").map((x) => x.path)))
+      .catch(() => {});
+    void api
+      .trashList()
+      .then((t) => setTrashed(new Map(t.map((e) => [e.basename.replace(/\.md$/i, "").toLowerCase(), e]))))
+      .catch(() => {});
+  }, [vv]);
   const need = decisions(r);
 
   const recheck = () =>
@@ -205,8 +223,24 @@ export function HealthScreen() {
               <span className="faint small">The trend shows after a second day.</span>
             ) : null}
           </div>
-          {r && <Group title="Wiki checks" checks={classic} open={open} setOpen={setOpen} on={{ setTrash, setLinking, setReshaping }} />}
-          {r && <Group title="More checks" checks={ours} open={open} setOpen={setOpen} on={{ setTrash, setLinking, setReshaping }} />}
+          {r && (
+            <Group
+              title="Wiki checks"
+              checks={classic}
+              open={open}
+              setOpen={setOpen}
+              on={{ setTrash, setLinking, setReshaping, paths, trashed }}
+            />
+          )}
+          {r && (
+            <Group
+              title="More checks"
+              checks={ours}
+              open={open}
+              setOpen={setOpen}
+              on={{ setTrash, setLinking, setReshaping, paths, trashed }}
+            />
+          )}
         </div>
         <aside className="hside">{r && <SideCards r={r} />}</aside>
       </div>
@@ -294,7 +328,15 @@ export const CHECK_TIPS: Record<string, string> = {
   "system-callouts": 'System notes whose "This is a system note" header has gone; Fix puts it back as Brainstead last saw it',
 };
 
-type Handlers = { setTrash: (p: string) => void; setLinking: (i: LintItem) => void; setReshaping: (n: number) => void };
+type Handlers = {
+  setTrash: (p: string) => void;
+  setLinking: (i: LintItem) => void;
+  setReshaping: (n: number) => void;
+  /** Every note and page, for a missing link's Did you mean (nearName). */
+  paths: string[];
+  /** What's in the Trash, by file name: a missing link may name one. */
+  trashed: Map<string, TrashEntry>;
+};
 
 function Group({
   title,
@@ -337,10 +379,11 @@ function Group({
               {n + ignored > 0 && <Icon name="chevdown" size={12} style={{ transform: isOpen ? undefined : "rotate(-90deg)" }} />}
             </button>
             {isOpen && (
-              <div className="ckitems">
+              <div className={`ckitems ${c.id === "missing-pages" || c.id === "broken-sources" ? "ghosts" : ""}`}>
                 {c.id === "page-shape" && <ReshapeAll items={c.items} on={on} />}
                 {c.id === "no-current-state" && <WriteCurrentState n={c.items.length} />}
                 {IGNORE_ALL.has(c.id) && n > 0 && <IgnoreAll check={c.id} n={n} />}
+                {c.id === "orphans" && n > 0 && <OrphansFix n={n} />}
                 {c.id === "uncited-claims"
                   ? claimsByPage(c.items)
                       .slice(0, 200)
@@ -360,11 +403,20 @@ function Group({
 /** One issue, with what can be done about it. */
 function Row({ check, i, on }: { check: string; i: LintItem; on: Handlers }) {
   const page = i.page;
+  // A missing link that's a slip away from a note there (renamed after the link was written).
+  // In the Trash (a transcript trashed after its meeting note, say): the note it became, if any.
+  // A missing page, or a source a page cites that isn't there: the same help either way.
+  const ghost = (check === "missing-pages" || check === "broken-sources") && i.name ? i.name : null;
+  const linking = check === "broken-sources" && page ? [page] : (i.pages ?? []);
+  const inTrash = ghost ? (on.trashed.get(ghost.toLowerCase()) ?? null) : null;
+  const near = ghost ? (noteFromTranscript(ghost, on.paths) ?? nearName(ghost, on.paths)) : null;
   const open = page && !page.startsWith("images/") ? () => openDoc(page) : undefined;
   const label = (() => {
     switch (check) {
       case "missing-pages":
         return `[[${i.name}]]`;
+      case "broken-sources":
+        return `${pageName(page ?? "")} cites [[${i.name}]], which isn't there`;
       case "missing-crossrefs":
         return `${pageName(page ?? "")}: “${i.name}” not linked`;
       case "duplicates":
@@ -380,7 +432,7 @@ function Row({ check, i, on }: { check: string; i: LintItem; on: Handlers }) {
     }
   })();
   return (
-    <div className="ckitem">
+    <div className={`ckitem ${ghost ? "ghost" : ""}`}>
       {open ? (
         <button type="button" className="blink grow" title={`Open ${page}`} onClick={open}>
           {label}
@@ -388,7 +440,6 @@ function Row({ check, i, on }: { check: string; i: LintItem; on: Handlers }) {
       ) : (
         <span className="grow">{label}</span>
       )}
-      {check === "missing-pages" && <span className="faint small">{i.pages?.length === 1 ? "1 page" : `${i.pages?.length} pages`}</span>}
       {check === "duplicates" && i.detail && <span className="faint small">{i.detail}</span>}
       {check === "page-shape" && page && <ReshapeOne page={page} i={i} />}
       {i.safe && page && check !== "page-shape" && (
@@ -396,32 +447,117 @@ function Row({ check, i, on }: { check: string; i: LintItem; on: Handlers }) {
           Fix
         </BusyButton>
       )}
-      {check === "missing-pages" && i.name && (
+      {/* A missing link (a missing page, or a source that isn't there): three columns shared by
+          the check's rows (.ckitems.ghosts) — what's known about it, the suggestion, the buttons. */}
+      {ghost && (
         <>
-          <BusyButton
-            id={`create:${i.name}`}
-            onClick={() =>
-              act(
-                `create:${i.name}`,
-                () => api.healthCreatePage(i.name!, "entities"),
-                (p) => {
-                  toast(`Created ${pageName(p)}`, undo, "ok");
-                  openDoc(p);
-                },
-                false,
-              )
-            }
-          >
-            Create
-          </BusyButton>
-          <button
-            type="button"
-            className="btn sm"
-            title="Point this missing link at a page that already exists"
-            onClick={() => on.setLinking(i)}
-          >
-            Link to…
-          </button>
+          <div className="gpills">
+            {inTrash && (
+              <span className="chip amber" title={`${inTrash.originalRel} was moved to the Trash`}>
+                In the Trash since {fmtShortDate(inTrash.deletedAt.slice(0, 10))}
+              </span>
+            )}
+            {check === "missing-pages" && (
+              <span className="faint small" title={(i.pages ?? []).join("\n")}>
+                Linked from {(i.pages ?? []).slice(0, 2).map(pageName).join(", ")}
+                {(i.pages?.length ?? 0) > 2 ? ` and ${(i.pages?.length ?? 0) - 2} more` : ""}
+              </span>
+            )}
+          </div>
+          <div className="gnear small">
+            {near && (
+              <>
+                Did you mean <b>{pageName(near)}</b>?
+              </>
+            )}
+          </div>
+          <div className="gbtns">
+            {near && (
+              <BusyButton
+                id={`near:${i.name}`}
+                className="btn sm pri"
+                title={`Point the link at ${pageName(near)} on ${linking.length === 1 ? "its page" : "each page"}; revertable in Changes`}
+                onClick={() =>
+                  act(
+                    `near:${i.name}`,
+                    () => api.healthLinkGhost(ghost, near, linking),
+                    (n) =>
+                      toast(
+                        `Linked to ${pageName(near)} on ${n} page${n === 1 ? "" : "s"}`,
+                        { label: "Changes", run: () => nav.go("review") },
+                        "ok",
+                      ),
+                  )
+                }
+              >
+                Link to it
+              </BusyButton>
+            )}
+            {inTrash && (
+              <BusyButton
+                id={`restore:${i.name}`}
+                className={`btn sm ${near ? "" : "pri"}`}
+                title={`Put ${inTrash.basename} back where it was, so the link works again`}
+                onClick={() =>
+                  act(
+                    `restore:${i.name}`,
+                    () => api.trashRestore(inTrash.id, null),
+                    (p) => toast(`Restored ${pageName(p)}`, undefined, "ok"),
+                  )
+                }
+              >
+                Restore from Trash
+              </BusyButton>
+            )}
+            {/* A file in the Trash isn't a page to write: Restore or Link to it instead. */}
+            {check === "missing-pages" && !inTrash && (
+              <BusyButton
+                id={`create:${i.name}`}
+                onClick={() =>
+                  act(
+                    `create:${i.name}`,
+                    () => api.healthCreatePage(ghost, "entities"),
+                    (p) => {
+                      toast(`Created ${pageName(p)}`, undo, "ok");
+                      openDoc(p);
+                    },
+                    false,
+                  )
+                }
+              >
+                Create
+              </BusyButton>
+            )}
+            <button
+              type="button"
+              className="btn sm"
+              title={
+                check === "broken-sources"
+                  ? "Point this source at a file that's there instead"
+                  : "Point this missing link at a page that already exists"
+              }
+              onClick={() => on.setLinking({ ...i, name: ghost, pages: linking })}
+            >
+              Link to…
+            </button>
+            {check === "broken-sources" && (
+              <BusyButton
+                id={`ignore:${check}:${i.text}`}
+                className="btn sm ghost"
+                title="Stop listing this issue until its page changes"
+                onClick={() =>
+                  act(
+                    `ignore:${check}:${i.text}`,
+                    () => api.healthIgnore(check, i.text),
+                    () => {},
+                    false,
+                  )
+                }
+              >
+                Ignore
+              </BusyButton>
+            )}
+          </div>
         </>
       )}
       {check === "duplicates" && page && i.pages?.[0] && (
@@ -450,7 +586,8 @@ function Row({ check, i, on }: { check: string; i: LintItem; on: Handlers }) {
         </BusyButton>
       )}
       {check === "uningested-sources" && page && <IngestButton path={page} />}
-      {!i.safe && !OWN_ACTIONS.has(check) && (
+      {check === "changed-sources" && page && <IngestButton path={page} again />}
+      {!i.safe && !OWN_ACTIONS.has(check) && !ghost && (
         <BusyButton
           id={`ignore:${check}:${i.text}`}
           className="btn sm ghost"
@@ -535,6 +672,33 @@ function IgnoreAll({ check, n }: { check: string; n: number }) {
         }
       >
         Ignore all
+      </BusyButton>
+    </div>
+  );
+}
+
+/** Orphan pages: index.md's catalogue links every wiki page, so bringing it up to date (as the daily
+ *  check does) leaves none an orphan. */
+function OrphansFix({ n }: { n: number }) {
+  return (
+    <div className="ckitem">
+      <span className="grow faint small">
+        {n === 1 ? "It isn't" : "They aren't"} in index.md's catalogue yet, which lists every wiki page; the daily check brings it up to
+        date, or do it now.
+      </span>
+      <BusyButton
+        id="orphans-index"
+        className="btn sm pri"
+        title="Bring index.md's catalogue up to date now, so every wiki page is linked from it"
+        onClick={() =>
+          act(
+            "orphans-index",
+            () => api.catalogueUpdate(),
+            (m) => toast(m.charAt(0).toUpperCase() + m.slice(1), undefined, "ok"),
+          )
+        }
+      >
+        Add {n === 1 ? "it" : "them"} to index.md
       </BusyButton>
     </div>
   );
@@ -678,7 +842,7 @@ function ReshapeOne({ page, i }: { page: string; i: LintItem }) {
   );
 }
 
-function IngestButton({ path }: { path: string }) {
+function IngestButton({ path, again = false }: { path: string; again?: boolean }) {
   // As on Sources: only files an ingest can read get the button.
   if (!ingestable(path))
     return (
@@ -690,10 +854,14 @@ function IngestButton({ path }: { path: string }) {
     <button
       type="button"
       className="btn sm"
-      title="Ingest this source into the wiki; its page changes are listed in Changes"
+      title={
+        again
+          ? "Ingest it again, so the pages citing it catch up with how it reads now; their changes are listed in Changes"
+          : "Ingest this source into the wiki; its page changes are listed in Changes"
+      }
       onClick={() => ingest([path])}
     >
-      Ingest
+      {again ? "Ingest again" : "Ingest"}
     </button>
   );
 }

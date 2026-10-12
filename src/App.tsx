@@ -7,6 +7,7 @@ import { api } from "./api";
 import { ActivityScreen } from "./Activity";
 import { ErrorBoundary, ScreenError } from "./ErrorBoundary";
 import { DocCheckScreen } from "./skills/DocCheck";
+import { CompareScreen } from "./skills/Compare";
 import { ReplyScreen } from "./skills/Reply";
 import { TriageScreen } from "./skills/Triage";
 import { AskScreen } from "./Ask";
@@ -75,6 +76,7 @@ const SCREENS: Partial<Record<Screen, () => React.ReactElement>> = {
   triage: TriageScreen,
   reply: ReplyScreen,
   doccheck: DocCheckScreen,
+  compare: CompareScreen,
 };
 
 /** Whether the shell can show yet: a vault is chosen, and Full Disk Access is granted or was declined. */

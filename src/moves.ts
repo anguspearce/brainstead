@@ -38,8 +38,16 @@ export async function fileMoved(m: { from: string; to: string | null; draft: str
     moveDocLook(m.from, m.to);
     renameInProjectOrder("projects", m.from, m.to);
   }
+  // A screen's remembered choice of this file (Draft reply's thread, Doc check's document,
+  // Compare's A or B) follows it too, or is let go.
+  const memory = settings.get().viewMemory ?? {};
+  if (Object.values(memory).includes(m.from))
+    settings.update({ viewMemory: Object.fromEntries(Object.entries(memory).map(([k, v]) => [k, v === m.from ? (m.to ?? null) : v])) });
   const { place: here, canBack } = place.get();
-  if (here.screen !== "doc" || here.path !== m.from) return;
+  if (here.path !== m.from) return;
+  // Any other screen showing the file (Draft reply's thread, Compare's A, Meeting notes' transcript…)
+  // follows it, or lets it go when it's trashed.
+  if (here.screen !== "doc") return nav.replace({ ...here, path: m.to ?? undefined });
   if (m.to) nav.replace({ ...here, path: m.to });
   else if (canBack) nav.back();
   else nav.go("notes");

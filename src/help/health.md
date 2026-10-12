@@ -30,7 +30,11 @@ Some issues have one right answer, so Brainstead fixes them without asking:
 Click **Fix** on one issue, or **Fix safe issues** in the top bar for all of them. `⌘Z` undoes each fix.
 
 ## Deal with the rest
-- **Missing pages**: **Create** makes the page in `wiki/entities/` (from `Templates/Wiki page.md` if there is one) and opens it. **Link to…** points the link at an existing page instead, everywhere it's used: type part of a page name and pick it. It's listed in Changes, with Revert.
+- **Missing pages**: **Create** makes the page in `wiki/entities/` (from `Templates/Wiki page.md` if there is one) and opens it. **Link to…** points the link at an existing page instead, everywhere it's used: type part of a page name and pick it. It's listed in Changes, with Revert. Each row says which pages link it. When a note's name is a slip away from the missing link (as after a note was renamed: "meting" for "meeting"), the row asks **Did you mean** that note, and **Link to it** points the links there in one click. Linking also points the wiki's claims made from the old name at the note, so a later ingest doesn't write the old name again.
+- **A missing page or broken source whose file is in the Trash** (a transcript trashed after its meeting note, say) says **In the Trash since** the day. If a meeting note was made from it (same title and day; a transcript's Part 1 and Part 2 count as one meeting), the row asks **Did you mean** that note, with **Link to it**. **Restore from Trash** puts the file back instead. When Brainstead trashes a transcript at the end of making its meeting note, it points the links to it at the note first, so nothing is left missing.
+- **Broken sources** (a page's `sources:` lists a file that isn't there): **Link to…** points it at a file that's there, with **Did you mean** and **Restore from Trash** as for missing pages.
+- **Sources changed since they were cited**: **Ingest again** reads the source again, so the pages citing it catch up.
+- **Orphan pages**: `index.md`'s catalogue links every wiki page, so an orphan is one it hasn't caught up with yet (the daily check does). **Add them to index.md** brings it up to date now.
 - **Possible duplicates**: **Open the other** compares them; **Not duplicates** stops the pair being flagged.
 - **Anything else** (an orphan page, a stale page, a broken source…): **Ignore** hides it until its page (or, for a claim, its line) changes; **Show again** lists ignored ones again. Stale pages and claims with no citation also have **Ignore all**, at the top of their list.
 

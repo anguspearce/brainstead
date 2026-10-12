@@ -169,6 +169,14 @@ export function ingestRunEnded(r: IngestRun) {
 
 async function trash(transcript: string, note: string, ingested: boolean) {
   try {
+    // Links to the transcript (a wiki page written from it before the note, say) point at the note
+    // first, with the claims made from it, so trashing it leaves no missing page behind.
+    const meta = await api
+      .docRead(transcript)
+      .then((d) => d.meta)
+      .catch(() => null);
+    const pages = [...new Set((meta?.backlinks ?? []).map((b) => b.path))].filter((p) => p !== note);
+    if (pages.length) await api.healthLinkGhost(transcript.split("/").pop()!.replace(/\.md$/, ""), note, pages).catch(() => 0);
     await api.trashMove(transcript);
     finish(transcript, { note, ingested, trashed: true });
   } catch (e) {

@@ -31,7 +31,8 @@ export type Screen =
   | "meeting"
   | "triage"
   | "reply"
-  | "doccheck";
+  | "doccheck"
+  | "compare";
 
 export type SettingsPane = "general" | "notes" | "vault" | "assistants" | "jobs" | "capture" | "permissions" | "about";
 

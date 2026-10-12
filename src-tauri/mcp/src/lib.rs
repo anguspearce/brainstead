@@ -618,12 +618,12 @@ pub fn tools() -> Vec<Value> {
                 "check": {"type": "string", "description": "With all: stale-pages or uncited-claims. With show_again: the check's id (orphans, stale-pages…); every check when left out."}
             }), &[])),
         tool("health_issue", "A Knowledge health issue's button", Destroy,
-            "Does what an issue's own button on Knowledge health does (needs the app), the issue named by its text as lint gives it. create (Create, on a missing page): writes the page as a new entity page, as Create does (a concept page is edit_page's, in wiki/concepts/); link_to (Link to…, on a missing page): points every link to the missing page at an existing page, given as to; not_duplicates (Not duplicates, on a possible duplicate): the pair isn't listed again; move_to_trash (Move to the Trash, on an image nothing uses; restore_from_trash puts it back). A page made is undone with ⌘Z in the app; each relinked page is a change in Changes, with Revert. Only as the user asked.",
+            "Does what an issue's own button on Knowledge health does (needs the app), the issue named by its text as lint gives it. create (Create, on a missing page): writes the page as a new entity page, as Create does (a concept page is edit_page's, in wiki/concepts/); link_to (Link to…, on a missing page): points every link to the missing page at an existing page, given as to; not_duplicates (Not duplicates, on a possible duplicate): the pair isn't listed again; move_to_trash (Move to the Trash, on an image nothing uses; restore_from_trash puts it back); link_to also points a broken source (a page citing a file that isn't there) at a file that is; add_to_index (Add them to index.md, on Orphan pages, no item) brings index.md's catalogue up to date now, which links every wiki page. A missing page or broken source whose file is in the Trash (list_trash) can be put back with restore_from_trash instead. A page made is undone with ⌘Z in the app; each relinked page is a change in Changes, with Revert. Only as the user asked.",
             schema(json!({
-                "action": {"type": "string", "enum": ["create", "link_to", "not_duplicates", "move_to_trash"]},
-                "item": {"type": "string", "description": "The issue's text, as lint gives it."},
+                "action": {"type": "string", "enum": ["create", "link_to", "not_duplicates", "move_to_trash", "add_to_index"]},
+                "item": {"type": "string", "description": "The issue's text, as lint gives it (not for add_to_index)."},
                 "to": {"type": "string", "description": "For link_to: the page the links should point at, by name or path."}
-            }), &["action", "item"])),
+            }), &["action"])),
         tool("list_contradictions", "Contradictions", Read,
             "The Contradictions screen's findings (needs the app): when the last check ran, and as the screen's banners say, why it failed or which fixes it couldn't make; then every finding, in the screen's order (real ones by severity, then unclear, then those settled), each with its id, the claims that clash (page, value, as-of date and quote), the model's verdict, and the judge's fix with its change in Changes (waiting there for the user, or made, with the change's id), as the screen's Judge's view and The fix is in Changes show them. Settle one or save the report with contradictions; start_run contradictions runs the check again.",
             schema(json!({}), &[])),
@@ -668,15 +668,26 @@ pub fn tools() -> Vec<Value> {
                 "path": {"type": "string", "description": "The note it points at, from list_bookmarks."}
             }), &["target", "path"])}}), &["items"])),
         tool("draft_reply", "Draft a reply", Run,
-            "Drafts a reply to an email thread in sources/ (thread) or to pasted text, as the Draft reply screen does (needs the app). It says how fully the draft answers the thread. Nothing is sent and nothing in the vault changes: give the draft to the user.",
+            "Drafts a reply to an email thread in sources/ (thread) or to pasted text, as the Draft reply screen does (needs the app). It says how fully the draft answers the thread. With current and change, it revises that reply as asked, as the screen's Ask for a change box does, keeping the rest of it. Nothing is sent and nothing in the vault changes: give the draft to the user.",
             schema(json!({
                 "thread": {"type": "string", "description": "The email thread's path in sources/."},
                 "text": {"type": "string", "description": "Instead of thread: the message to reply to, pasted."},
-                "tone": {"type": "string", "enum": ["brief", "warm", "formal"], "description": "The screen's Tone: brief (as short as it can be while still answering, the default), warm (friendly and personal) or formal (courteous and complete, for someone senior or outside the team)."}
+                "tone": {"type": "string", "enum": ["brief", "warm", "formal"], "description": "The screen's Tone: brief (as short as it can be while still answering, the default), warm (friendly and personal) or formal (courteous and complete, for someone senior or outside the team)."},
+                "current": {"type": "string", "description": "To revise: the reply as it stands, with any edits the user made."},
+                "change": {"type": "string", "description": "To revise: what to change, as the user asked (shorter, mention the date…)."}
             }), &[])),
         tool("doc_check", "Check a document", Run,
-            "Checks a document, as Doc check does (needs the app): against the version in force of a governing document in the canonical docs register, or against the feedback the user gave on its last version. The findings come in the screen's words, as Copy findings gives them (Conflict, Not covered, Superseded term, Beyond scope, Agrees; the version In force and those not used). Without document it gives the register, each version's key and status (In force, Draft, Superseded), so you can pick governing_document from it; with start_register and no register yet, it's Start the register (Me. Canonical Docs.md, with its empty table). save is Save as note: the findings as a new note, Doc check. <name> - YYYY-MM-DD. Those two are recorded in Changes, where the user can revert them; otherwise nothing in the vault changes.",
-            schema(json!({"document": {"type": "string", "description": "Document to check, by path."}, "save": {"type": "boolean", "description": "With document: Save as note, the findings saved as a new note once the check is done."}, "start_register": {"type": "boolean", "description": "Without document: Start the register, when there's none yet."}, "governing_document": {"type": "string", "description": "For version_in_force: the governing document, by its key in the register; the register's first when left out, as the screen's picker starts with."}, "mode": {"type": "string", "enum": ["version_in_force", "earlier_feedback"], "description": "The screen's modes: version_in_force (Against the version in force, the default) lists where the document differs from the governing document; earlier_feedback (Against my earlier feedback) checks each point of the user's feedback on the last version against this one."}}), &[])),
+            "Checks a document, as Doc check does (needs the app): against the version in force of a governing document in the canonical docs register, or against the feedback the user gave on its last version. The findings come in the screen's words, as Copy findings gives them (Conflict, Not covered, Superseded term, Beyond scope, Agrees; the version In force and those not used). Without document it gives the register, each version's key and status (In force, Draft, Superseded), so you can pick governing_document from it; with start_register and no register yet, it's Start the register (Me. Canonical Docs.md, with its empty table). save is Save as note: the findings as a new note, Doc check. <name> - YYYY-MM-DD. Those two are recorded in Changes, where the user can revert them; otherwise nothing in the vault changes. A finished check is kept, as the screen keeps it: while neither document has changed it's given again (saying when it was made) rather than run again, unless fresh.",
+            schema(json!({"document": {"type": "string", "description": "Document to check, by path."}, "save": {"type": "boolean", "description": "With document: Save as note, the findings saved as a new note once the check is done."}, "fresh": {"type": "boolean", "description": "Check again even when a kept result still stands (neither document changed since)."}, "start_register": {"type": "boolean", "description": "Without document: Start the register, when there's none yet."}, "governing_document": {"type": "string", "description": "For version_in_force: the governing document, by its key in the register; the register's first when left out, as the screen's picker starts with."}, "mode": {"type": "string", "enum": ["version_in_force", "earlier_feedback"], "description": "The screen's modes: version_in_force (Against the version in force, the default) lists where the document differs from the governing document; earlier_feedback (Against my earlier feedback) checks each point of the user's feedback on the last version against this one."}}), &[])),
+        tool("compare_docs", "Compare two documents", Run,
+            "Compares any two documents, A and B, neither taking precedence, as Compare's Any two documents tab does (needs the app); for a document against the version in force, use doc_check. look_for differences (the default) lists where they differ, what's only in A or only in B, and what agrees; what_changed lists what was added, removed and changed from B (the earlier version) to A (the newer). It first looks at their openings and stops there, comparing nothing, when they aren't about the same thing. The findings come in the screen's words, as Copy findings gives them. A finished comparison is kept: while neither document has changed it's given again rather than run again, unless fresh. save is Save as note (Compare. A vs B - YYYY-MM-DD), recorded in Changes, where the user can revert it; otherwise nothing in the vault changes.",
+            schema(json!({
+                "document_a": {"type": "string", "description": "Document A, by path (the newer version for what_changed)."},
+                "document_b": {"type": "string", "description": "Document B, by path (the earlier version for what_changed)."},
+                "look_for": {"type": "string", "enum": ["differences", "what_changed"], "description": "differences (the default) or what_changed."},
+                "fresh": {"type": "boolean", "description": "Compare again even when a kept result still stands."},
+                "save": {"type": "boolean", "description": "Save as note, once it's compared."}
+            }), &["document_a", "document_b"])),
         // Around the vault.
         tool("activity", "Recent activity", Read,
             "log.md, newest first: what Brainstead and the assistants changed in the vault (needs the app), a line an entry with its date, action and title. action keeps one kind of entry, as the Activity screen's action chips do; query keeps the entries with all its words in their title, description or action's label, as its search does, best matches first or with order latest the newest first. With date, the day picked as on the screen: the files changed that day, then that day's entries (action and query narrow the entries, not the files). detail adds each entry's time and description.",
@@ -761,7 +772,7 @@ pub fn tools() -> Vec<Value> {
         tool("open", "Open Brainstead", Read,
             "Opens Brainstead (starting it when it isn't running) and brings its window to the front, on a screen, a Settings pane, a note or a search when given; it changes nothing. meeting (Meeting note from a transcript) opens on transcript when given, reply (Draft a reply) on thread, doc_check (Check a document) on document, ready for the user to go on there; edit opens the page in Edit; graph with page opens Graph around that page; focus opens the page (or the one showing) in focus mode, as ⌘. does; image shows an image full size over the window, as a click on one in a note does. Only when the user asks to see something.",
             schema(json!({
-                "screen": {"type": "string", "enum": ["today", "inbox", "tasks", "projects", "weekly_review", "changes", "ask", "search", "notes", "wiki", "sources", "templates", "graph", "knowledge_health", "contradictions", "activity", "triage", "meeting", "reply", "doc_check", "trash", "settings"], "description": "The screen, as the sidebar or the command palette names it; the one showing when left out."},
+                "screen": {"type": "string", "enum": ["today", "inbox", "tasks", "projects", "weekly_review", "changes", "ask", "search", "notes", "wiki", "sources", "templates", "graph", "knowledge_health", "contradictions", "activity", "triage", "meeting", "reply", "doc_check", "compare", "trash", "settings"], "description": "The screen, as the sidebar or the command palette names it; the one showing when left out."},
                 "pane": {"type": "string", "enum": ["general", "notes", "vault", "assistants", "jobs", "capture", "permissions", "about"], "description": "With screen settings: the pane."},
                 "page": page,
                 "lines": {"type": "array", "items": {"type": "string"}, "description": "With page: lines of it to highlight, scrolled to the first, each as its text (as lint gives a claim with no citation)."},
@@ -1048,6 +1059,7 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
         "update_project",
         "rename_area",
         "doc_check",
+        "compare_docs",
         "restore_from_trash",
         "contradictions",
     ]
@@ -1183,6 +1195,7 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
             act("triage.suggest", obj)
         }
         "draft_reply" => act("reply.draft", obj),
+        "compare_docs" => act("compare.run", obj),
         "doc_check" => {
             let run = obj.get("document").and_then(Value::as_str).is_some_and(|c| !c.trim().is_empty());
             act(if run { "doccheck.run" } else { "doccheck.register" }, obj)

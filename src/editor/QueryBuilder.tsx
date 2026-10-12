@@ -236,7 +236,7 @@ function Select<T extends string>({
   label: string;
 }) {
   return (
-    <select className="inp sm" value={value} onChange={(e) => onChange(e.target.value as T)} aria-label={label}>
+    <select title={label} className="inp sm" value={value} onChange={(e) => onChange(e.target.value as T)} aria-label={label}>
       {options.map((o) => {
         const [v, l] = Array.isArray(o) ? o : [o, o];
         return (

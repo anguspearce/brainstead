@@ -302,6 +302,18 @@ fn plural(n: usize, one: &str) -> String {
     format!("{n} {one}{}", if n == 1 { "" } else { "s" })
 }
 
+/// Knowledge health's Add them to index.md, on Orphan pages: the catalogue brought up to date now,
+/// rather than at the next daily check, so every wiki page is linked from it. What happened.
+#[tauri::command]
+pub async fn catalogue_update(app: AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let group = format!("catalogue-{}", chrono::Local::now().format("%Y%m%d%H%M%S"));
+        Ok(index_md(&app, None, &group))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Brings index.md's catalogue up to date, or proposes adding it.
 fn index_md(app: &AppHandle, trigger: Option<&str>, group: &str) -> String {
     let Some(root) = app.state::<VaultService>().root() else { return "no vault".into() };

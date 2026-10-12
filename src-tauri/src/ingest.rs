@@ -744,6 +744,8 @@ pub struct Transcript {
     /// Already dealt with, and how: "ingested" (a wiki page cites it) or "linked" (a note links
     /// to it). None while it's still to do, even when its meeting note exists (it may be empty).
     done: Option<&'static str>,
+    /// Its meeting note exists already and a wiki page cites it: nothing left but the transcript.
+    note_ingested: bool,
 }
 
 /// A transcript's first few kilobytes (its header lines), or nothing when it can't be read.
@@ -797,9 +799,23 @@ pub async fn meeting_transcripts(app: AppHandle) -> Res<Vec<Transcript>> {
                 } else {
                     None
                 };
-                Transcript { path: f.path, mtime: f.mtime, inferred, done }
+                Transcript { path: f.path, mtime: f.mtime, inferred, done, note_ingested: false }
             })
             .collect();
+        // An existing note's own ingested state, as Sources tells it (a wiki page cites it).
+        let existing: Vec<(usize, String)> = out
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.inferred.exists)
+            .filter_map(|(i, t)| t.inferred.suggested_filename.clone().map(|f| (i, f)))
+            .collect();
+        if !existing.is_empty() {
+            let names: Vec<String> = existing.iter().map(|(_, f)| f.clone()).collect();
+            let cited = app.state::<VaultService>().with_index(|ix, _| ix.ingested(&names))?;
+            for ((i, _), c) in existing.into_iter().zip(cited) {
+                out[i].note_ingested = c;
+            }
+        }
         out.sort_by_key(|t| std::cmp::Reverse(t.mtime));
         Ok(out)
     })

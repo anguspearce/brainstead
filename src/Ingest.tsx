@@ -64,6 +64,27 @@ export function meetingNoteMade(r: IngestRun): boolean {
 
 export const isActive = (r: IngestRun) => r.status === "running" || r.status === "queued";
 
+/** Where a transcript's meeting note is, from the runs (the Ingest runs pane's): being written,
+ *  its note being ingested, failed at either, or held in Changes; null when nothing is under way or
+ *  it all went through (the transcript then leaves for the Trash). `busy` while it's under way. */
+export function meetingProgress(all: IngestRun[], transcript: string): { label: string; busy: boolean; why?: string } | null {
+  // The newest meeting run for it (the list is newest first).
+  const m = all.find((r) => r.kind === "meeting" && r.source === transcript);
+  if (!m) return null;
+  if (isActive(m)) return { label: m.status === "queued" ? "Waiting to write its note…" : "Writing note…", busy: true };
+  if (m.status !== "done")
+    return { label: m.status === "stopped" ? "Note stopped" : "Note failed", busy: false, why: m.error ?? undefined };
+  if (!meetingNoteMade(m)) return { label: "Note held in Changes", busy: false, why: "Accept it in Changes to go on" };
+  // The note's own ingest, started after it's made, by the note's file name.
+  const note = m.note ? `${m.note.type.trim()}. ${m.note.name.trim()} - ${m.note.date.trim()}.md` : null;
+  const ing = note ? all.find((r) => r.kind !== "meeting" && r.source.split("/").pop() === note && r.started >= m.started) : undefined;
+  if (!ing) return null;
+  if (isActive(ing)) return { label: "Ingesting…", busy: true };
+  if (ing.status !== "done")
+    return { label: ing.status === "stopped" ? "Ingest stopped" : "Ingest failed", busy: false, why: ing.error ?? undefined };
+  return null;
+}
+
 /** Starts ingesting these files; says so. */
 export function ingest(paths: string[]) {
   if (!paths.length) return toast("There's nothing here to ingest", undefined, "bad");

@@ -30,7 +30,14 @@ import { nav, openDoc, place } from "./nav";
 import { openRename, trashFile } from "./notes/actions";
 import { openNewNote } from "./notes/dialogs";
 import { useSearchOf } from "./Search";
-import { ALL_ITEMS, HOTKEYS, hotkey } from "./Sidebar";
+import { DAILY, FOOTER, HOTKEYS, hotkey, LIBRARY, TOOLS } from "./Sidebar";
+
+/** What the Tools entries are found by besides their names (what ⌘K once called them). */
+const TOOL_WORDS: Partial<Record<string, string>> = {
+  reply: "draft a reply email teams message respond",
+  meeting: "meeting note from a transcript teams 1-1 write up",
+  doccheck: "doc check check a document canonical register version in force feedback operating model align",
+};
 import { applyTheme, settings } from "./store";
 import { useDebounced } from "./ui";
 
@@ -54,11 +61,13 @@ const KBD: Partial<Record<string, string>> = {
 };
 
 export function commands(): Command[] {
-  const screens: Command[] = ALL_ITEMS.map((i) => ({
+  // Every sidebar entry in the sidebar's order, Tools included (under their sidebar names, found by what they do too).
+  const screens: Command[] = [...DAILY, ...LIBRARY, ...TOOLS, ...FOOTER].map((i) => ({
     id: `go:${i.screen}`,
     group: "Go to",
     icon: i.icon,
     label: i.label,
+    keywords: TOOL_WORDS[i.screen],
     kbd: KBD[i.screen],
     run: () => nav.go(i.screen),
   }));
@@ -174,14 +183,6 @@ export function commands(): Command[] {
       run: () => nav.go({ screen: "settings", pane: "vault" }),
     },
     {
-      id: "meeting",
-      group: "Do",
-      icon: "note",
-      label: "Meeting note from a transcript",
-      keywords: "teams transcript 1-1 write up",
-      run: () => nav.go("meeting"),
-    },
-    {
       id: "fixname",
       group: "Do",
       icon: "text",
@@ -198,20 +199,12 @@ export function commands(): Command[] {
       run: () => nav.go("triage"),
     },
     {
-      id: "reply",
-      group: "Do",
-      icon: "send",
-      label: "Draft a reply…",
-      keywords: "email teams message respond",
-      run: () => nav.go("reply"),
-    },
-    {
-      id: "doccheck",
+      id: "compare",
       group: "Do",
       icon: "shield",
-      label: "Check a document…",
-      keywords: "doc check canonical operating model align",
-      run: () => nav.go("doccheck"),
+      label: "Compare two documents…",
+      keywords: "diff differences versions changed side by side",
+      run: () => nav.go("compare"),
     },
     {
       id: "rebuild",

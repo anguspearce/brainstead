@@ -8,6 +8,7 @@
 // `[[` and `#` from the index, ↑ for earlier messages, and the model picker. The state is in
 // src/askState.ts; History lists every chat, saved to the vault or kept in Brainstead's app data.
 
+import { askedFromInbox, StillInInbox } from "./StillInInbox";
 import { HelpButton } from "./help/HelpDrawer";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChatSummary, CliInfo, Skill, api } from "./api";
@@ -54,6 +55,7 @@ import { ASSISTANT_FRONTMATTER } from "./md/scripts";
 
 export function AskScreen() {
   const s = useStore(ask);
+  const fromInbox = useStore(askedFromInbox);
   const found = useStore(clis);
   const [history, setHistory] = useState(false);
   useEffect(() => {
@@ -101,6 +103,8 @@ export function AskScreen() {
         </button>
         <HelpButton />
       </div>
+      {/* A capture the Inbox sent here to ask about: its Inbox choices, here. */}
+      {fromInbox && <StillInInbox path={fromInbox} onDone={() => askedFromInbox.set(null)} />}
       {c ? <ChatView key={c.id} c={c} found={found} /> : <div className="body" />}
       {history && <HistoryDialog onClose={() => setHistory(false)} />}
     </main>
@@ -484,7 +488,12 @@ function FileAnswer({ text, chat, onClose }: { text: string; chat: string | null
         </label>
         <label className="nnf">
           <span className="faint">Kind</span>
-          <select className="sel" value={kind} onChange={(e) => setKind(e.target.value as "concept" | "entity")}>
+          <select
+            title="What kind of wiki page it becomes: a concept (an idea, process or topic) or an entity (a person, team, project or product)"
+            className="sel"
+            value={kind}
+            onChange={(e) => setKind(e.target.value as "concept" | "entity")}
+          >
             <option value="concept">Concept (an idea, a process, a topic)</option>
             <option value="entity">Entity (a person, team, project, product)</option>
           </select>

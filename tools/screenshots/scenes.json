@@ -320,6 +320,13 @@
     "docs": true
   },
   {
+    "name": "health-missing",
+    "screen": "health",
+    "view": {
+      "health:open": "missing-pages"
+    }
+  },
+  {
     "name": "health-page-shape",
     "screen": "health",
     "view": {
@@ -397,6 +404,10 @@
   {
     "name": "doccheck",
     "screen": "doccheck"
+  },
+  {
+    "name": "compare",
+    "screen": "compare"
   },
   {
     "name": "spelling",

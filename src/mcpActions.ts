@@ -10,6 +10,7 @@
 // out here or by the MCP server, then made or held by the rule in src-tauri/src/changes.rs, each
 // recorded in Changes with Revert.
 
+import { compareMarkdown, compareNote } from "./skills/Compare";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import moment from "moment";
 import { listen } from "@tauri-apps/api/event";
@@ -28,6 +29,7 @@ import {
   FindSuggestion,
   FixNameRequest,
   InboxItem,
+  IngestRun,
   LogEntry,
   NoteSpec,
   ProjectRow,
@@ -118,7 +120,7 @@ import { canIngest, ingestable } from "./Lists";
 import { LAYERS as SEARCH_LAYERS } from "./Search";
 import { fmtDay } from "./FileList";
 import { passageText, PASSAGES_SHOWN } from "./Provenance";
-import { offerFollowUp, runMatches } from "./Ingest";
+import { meetingProgress, offerFollowUp, runMatches } from "./Ingest";
 import { findingsMarkdown, findingsNote, governingDocs, REGISTER, REGISTER_STUB, STATUS as REGISTER_STATUS } from "./skills/DocCheck";
 import { LABEL as TRIAGE } from "./skills/Triage";
 import { ANSWERED, replyTask } from "./skills/Reply";
@@ -631,9 +633,15 @@ const SUGGEST_AT_MOST = 20;
 async function listInbox(a: Args): Promise<Listing> {
   // In the screen's order, band by band, so Suggest asks about the same first 20.
   const items = inboxRows(await api.inboxList());
+  // A transcript's meeting note under way or failed, as its Inbox row says (meetingProgress).
+  const allRuns = await api.ingestRuns().catch(() => [] as IngestRun[]);
+  const prog = (i: InboxItem) => (i.kind === "capture" && isTranscriptPath(i.path) ? meetingProgress(allRuns, i.path) : null);
   const where = (i: InboxItem) =>
     i.kind === "capture" ? `capture ${i.path}` : i.kind === "thought" ? `Scratchpad ${i.stamp ?? ""}` : "To Do list › Other";
-  const line = (i: InboxItem) => `- ${i.text.replace(/\n/g, " ").slice(0, 200)} — ${where(i)}  (${inboxKey(i)})`;
+  const line = (i: InboxItem) => {
+    const p = prog(i);
+    return `- ${i.text.replace(/\n/g, " ").slice(0, 200)} — ${where(i)}${p ? ` · ${p.label}${p.why ? ` (${p.why})` : ""}` : ""}  (${inboxKey(i)})`;
+  };
   // Suggest: the model's suggestion for the first rows shown, asked as the Inbox screen asks it
   // (each item's text, and the active projects' names).
   const sugg = new Map<string, ClarifySuggestion>();
@@ -845,8 +853,8 @@ export async function clarifyChanges(
       if (i.kind === "capture")
         return {
           said: "deleted",
+          // Not marked clarified, as the Inbox's Move to the Trash: restored, it's back in the Inbox.
           changes: [sub(a, r, i.path, "trash", `Move ${i.path.replace(/\.md$/, "").split("/").pop()} to the Trash`, { op: "trash" })],
-          after: captureDone,
         };
       return { said: "deleted", changes: takeOut() };
     default:
@@ -912,7 +920,6 @@ export async function clarifyItem(i: InboxItem, a: Args): Promise<string> {
     case "delete":
       if (i.kind === "capture") {
         await api.trashMove(i.path);
-        await api.inboxCaptureDone(i.path);
       } else await settleInboxItem(i, null);
       said = "deleted";
       break;
@@ -2374,14 +2381,48 @@ async function docCheck(a: Args, r: McpRequest): Promise<unknown> {
     governing = governingDocs(await api.canonicalRegister())[0]?.key ?? "";
     if (!governing) throw new Error(`Add a governing document to the register (${REGISTER}) first, as the screen asks.`);
   }
-  const result = await api.docCheck(document, governing, mode);
+  // As the screen keys it: the governing document only counts against the version in force.
+  const key = mode === "callouts" ? "" : governing;
+  // The kept result while neither document has changed, as the screen shows it, unless fresh asks again.
+  const saved = a.fresh === true ? null : await api.docCheckSaved(document, key, mode).catch(() => null);
+  const result = saved && !saved.stale ? saved.result : await api.docCheck(document, key, mode);
   // In the screen's words (Conflict, Not covered, In force…), as Copy findings gives them.
   const name = document.split("/").pop() ?? document;
-  const found = findingsMarkdown(name, result);
+  const kept =
+    saved && !saved.stale
+      ? `(The check from ${saved.at.slice(0, 16).replace("T", " ")}: neither document has changed since. fresh checks again.)\n\n`
+      : "";
+  const found = kept + findingsMarkdown(name, result);
   if (a.save !== true) return found;
   const path = findingsNote(name);
   const o = await submitAll([sub(a, r, path, "new", `Doc check of ${name}`, { op: "page", content: found })]);
   told(o.applied ? `saved the doc check of ${name} as a note` : `held the doc check of ${name} for you in Changes`);
+  return `${found}\nSaved as ${path}: ${o.message}`;
+}
+
+/** compare_docs: Compare's Any two documents, A and B, with its kept result while neither changed. */
+async function compareDocs(a: Args, r: McpRequest): Promise<unknown> {
+  const da = str(a, "document_a") ?? "";
+  const db = str(a, "document_b") ?? "";
+  if (!da || !db) throw new Error("Give document_a and document_b, by path.");
+  if (da === db) throw new Error("Give two different documents.");
+  const mode = a.look_for === "what_changed" ? "changes" : "differences";
+  const saved = a.fresh === true ? null : await api.docCheckSaved(da, db, mode).catch(() => null);
+  const result = saved && !saved.stale ? saved.result : await api.docCheck(da, db, mode);
+  const an = da.split("/").pop() ?? da;
+  const bn = db.split("/").pop() ?? db;
+  const kept =
+    saved && !saved.stale
+      ? `(The comparison from ${saved.at.slice(0, 16).replace("T", " ")}: neither has changed since. fresh compares again.)\n\n`
+      : "";
+  if (result.unrelated) return `${kept}${result.verdict}: ${result.summary} Nothing was compared.`;
+  const found = kept + compareMarkdown(an, bn, mode, result);
+  if (a.save !== true) return found;
+  const path = compareNote(an, bn);
+  const o = await submitAll([
+    sub(a, r, path, "new", `Compare ${an} and ${bn}`, { op: "page", content: compareMarkdown(an, bn, mode, result) }),
+  ]);
+  told(o.applied ? `saved the comparison of ${an} and ${bn} as a note` : `held the comparison of ${an} and ${bn} for you in Changes`);
   return `${found}\nSaved as ${path}: ${o.message}`;
 }
 
@@ -2440,7 +2481,11 @@ async function draftReply(a: Args): Promise<string> {
   const tone = str(a, "tone") ?? "brief";
   if (!["brief", "warm", "formal"].includes(tone)) throw new Error("tone is brief, warm or formal (brief when left out).");
   const thread = str(a, "thread") ?? null;
-  const r = await api.draftReply(thread, str(a, "text") ?? null, tone);
+  // The screen's Ask for a change: the reply as it stands and what to change, revised as asked.
+  const current = str(a, "current") ?? null;
+  const change = str(a, "change") ?? null;
+  if (!current !== !change) throw new Error("To revise a reply, give both current (the reply as it stands) and change (what to change).");
+  const r = await api.draftReply(thread, str(a, "text") ?? null, tone, current, change);
   const said = ANSWERED[r.answered];
   const head = [said ? `${said[0]}${r.verdict ? `: ${r.verdict}` : ""}` : "", ...r.callouts.map((c) => `- ${c.status}: ${c.point}`)];
   const tail = [
@@ -2525,6 +2570,7 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   "reply.draft": draftReply,
   "doccheck.register": docCheckRegister,
   "doccheck.run": docCheck,
+  "compare.run": compareDocs,
   "weekly.status": weeklyStatus,
   "weekly.suggestion": weeklySuggestion,
   "weekly.start_over": weeklyStartOver,
@@ -2544,7 +2590,9 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
     const exists = (t: Transcript) => (t.inferred.exists ? noteFile(specOf(t)) : null);
     const line = (t: Transcript) =>
       `- ${t.path} · ${t.done ? `done: ${MEETING_DONE[t.done]}` : `looks like ${t.inferred.type ?? "a meeting"} ${t.inferred.name ?? t.inferred.topic ?? ""} ${t.inferred.date ?? ""}${t.inferred.dateCheck ? " (the capture day: check the meeting date)" : ""}`}${
-        exists(t) ? ` · note exists: ${exists(t)}` : ""
+        exists(t)
+          ? ` · note exists: ${exists(t)}${t.noteIngested ? " (ingested already: only the transcript is left, trash_note it if the user agrees)" : ""}`
+          : ""
       }${drafting(t) ? " · being drafted" : drafted(t) ? " · a note was drafted (see Changes)" : ""}${(t.inferred.ask ?? []).map((q) => `\n  - ${q}`).join("")}`;
     return listed(a, rows, {
       text: line,
@@ -2639,10 +2687,19 @@ async function healthIssue(a: Args): Promise<string> {
   if (!r) throw new Error("Knowledge health has no report yet; try again in a moment.");
   const action = str(a, "action");
   const text = str(a, "item") ?? "";
-  const want = { create: "missing-pages", link_to: "missing-pages", not_duplicates: "duplicates", move_to_trash: "unreferenced-images" }[
-    action ?? ""
-  ];
-  if (!want) throw new Error("action is create, link_to, not_duplicates or move_to_trash.");
+  // Orphan pages' Add them to index.md: the whole check at once, no item.
+  if (action === "add_to_index") {
+    const said = await api.catalogueUpdate();
+    told("brought index.md's catalogue up to date");
+    return `${said.charAt(0).toUpperCase()}${said.slice(1)}.`;
+  }
+  const want = {
+    create: "missing-pages",
+    link_to: str(a, "item")?.includes(" not found") ? "broken-sources" : "missing-pages",
+    not_duplicates: "duplicates",
+    move_to_trash: "unreferenced-images",
+  }[action ?? ""];
+  if (!want) throw new Error("action is create, link_to, not_duplicates, move_to_trash or add_to_index.");
   const c = r.checks.find((x) => x.id === want);
   const i = c?.items.find((x) => x.text === text);
   if (!c || !i) return `That isn't an issue under ${c?.title ?? want}: give its text as lint gives it.`;
@@ -2657,7 +2714,9 @@ async function healthIssue(a: Args): Promise<string> {
     if (!to) throw new Error("Give to: the page the links should point at.");
     const [target] = await api.linksResolve([to]);
     if (!target) return `There's no page called ${to}.`;
-    const n = await api.healthLinkGhost(i.name!, target, i.pages ?? [], a.unattended === true);
+    // A broken source is on its one page; a missing page's links are on every page using it.
+    const pages = c.id === "broken-sources" && i.page ? [i.page] : (i.pages ?? []);
+    const n = await api.healthLinkGhost(i.name!, target, pages, a.unattended === true);
     noted(`pointed the links to ${i.name} at ${pageName(target)}`);
     return `Pointed the links to ${i.name} at ${pageName(target)} in ${n} page${n === 1 ? "" : "s"}, each a change in Changes, where the user can revert it.`;
   }
@@ -3255,6 +3314,7 @@ const SCREEN_IDS: Record<string, Screen> = {
   changes: "review",
   knowledge_health: "health",
   doc_check: "doccheck",
+  compare: "compare",
 };
 
 /** The screens that open on a file of their own, and the argument that names it (as their tools name it). */

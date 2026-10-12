@@ -41,6 +41,9 @@ pub struct Inference {
     pub ask: Vec<String>,
     pub suggested_filename: Option<String>,
     pub existing_notes: Vec<String>,
+    /// The names the existing 1-1 notes for this first name use, when they differ and the
+    /// transcript's name is none of them: the screen offers them to pick from.
+    pub name_forms: Vec<String>,
     pub exists: bool,
     /// The date is only the day the transcript was captured (the name's date, with no
     /// `**Meeting:**` line), so the user confirms or changes it before the note is drafted.
@@ -190,14 +193,30 @@ pub fn infer(
         if let Some(name) = out.name.clone() {
             let first = name.split_whitespace().next().unwrap_or("").to_string();
             let f = forms(&first);
-            let re = Regex::new(r"^1-1\. | - \d{4}-\d{2}-\d{2}\.md$").unwrap();
-            let mut distinct: Vec<String> = f.iter().map(|x| re.replace_all(x, "").to_string()).collect();
+            // Each note's name: what's between `1-1. ` and its first ` - ` (a topic or the date
+            // follows), for this first name only (not a Theodora for a Theo).
+            let mut distinct: Vec<String> = f
+                .iter()
+                .filter_map(|x| {
+                    let rest = x.strip_prefix("1-1. ")?.trim_end_matches(".md");
+                    let n = rest.split(" - ").next().unwrap_or(rest).trim();
+                    let n = Regex::new(r"\s*-?\s*\d{4}-\d{2}-\d{2}$").unwrap().replace(n, "").trim().to_string();
+                    (n.split_whitespace().next() == Some(first.as_str())).then_some(n)
+                })
+                .collect();
             distinct.sort();
             distinct.dedup();
             out.existing_notes = f;
-            if distinct.len() > 1 {
+            if let Some(same) = distinct.iter().find(|d| d.eq_ignore_ascii_case(&name)) {
+                // The transcript names one the notes use already: that one, no question.
+                out.name = Some(same.clone());
+            } else if distinct.len() > 1 {
                 out.confident = false;
-                out.ask.push(format!("Existing notes for {first} use more than one name form: {distinct:?}."));
+                out.ask.push(format!(
+                    "Existing 1-1 notes for {first} use {}: pick the one for this note, or keep {name}.",
+                    distinct.join(", ")
+                ));
+                out.name_forms = distinct;
             } else if let Some(one) = distinct.into_iter().next() {
                 out.name = Some(one);
             }
@@ -208,7 +227,7 @@ pub fn infer(
         out.exists = exists(&f);
         if out.exists {
             out.confident = false;
-            out.ask.push(format!("{f} already exists - fill it in, overwrite, or skip?"));
+            out.ask.push(format!("{f} exists already: open it, ingest it as it is, or change the name or date for a new note."));
         }
         out.suggested_filename = Some(f);
     }
@@ -319,6 +338,26 @@ mod tests {
             assert_eq!(got.confident, w["confident"], "{f}");
             assert_eq!(serde_json::json!(got.suggested_filename), w["suggested_filename"], "{f}");
         }
+    }
+
+    #[test]
+    fn a_name_the_notes_use_already_needs_no_question() {
+        let notes = [
+            "1-1. Theo - 2026-09-01.md",
+            "1-1. Theo - Roadmap review- 2024-09-04.md",
+            "1-1. Theo - Next role - 2026-08-01.md",
+            "1-1. Theo Ward - 2026-07-01.md",
+            "1-1. Theodora - 2026-06-01.md",
+        ];
+        let forms = |first: &str| notes.iter().filter(|n| n.starts_with(&format!("1-1. {first}"))).map(|n| n.to_string()).collect();
+        let got = infer("Teams. Transcript. 11 Theo, Maya - 2026-10-12.md", "", Some("Maya"), forms, |_| false);
+        assert!(got.confident, "{:?}", got.ask);
+        assert_eq!(got.name.as_deref(), Some("Theo"));
+        assert!(got.name_forms.is_empty());
+        // A name none of them use: the ones they do are offered.
+        let got = infer("Teams. Transcript. 11 Theo W, Maya - 2026-10-12.md", "", Some("Maya"), forms, |_| false);
+        assert!(!got.confident);
+        assert_eq!(got.name_forms, vec!["Theo", "Theo Ward"]);
     }
 
     #[test]

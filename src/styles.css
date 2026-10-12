@@ -237,6 +237,8 @@ input {
 .search-pill .kbd {
   margin-left: auto;
 }
+
+/* Out to the sidebar's right edge (its padding taken back inside), so the scrollbar sits against it. */
 .sidescroll {
   display: flex;
   flex-direction: column;
@@ -244,6 +246,32 @@ input {
   overflow-y: auto;
   min-height: 0;
   flex: 1;
+  margin-right: -12px;
+  padding-right: 12px;
+}
+
+/* A bookmark's row, with its × on hover (bookmark removed, the note kept). */
+.bmrow {
+  position: relative;
+}
+.bmrow .navi.bm {
+  width: 100%;
+  padding-right: 26px;
+}
+.bmrow .bmx {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink3);
+  opacity: 0;
+}
+.bmrow:hover .bmx,
+.bmrow .bmx:focus-visible {
+  opacity: 1;
+}
+.bmrow .bmx:hover {
+  color: var(--ink);
 }
 .sect {
   font-size: 11px;
@@ -317,6 +345,15 @@ input {
   color: var(--red);
 }
 
+/* Work going on there (an answer, a check, meeting notes being made): a spinner in the count's place. */
+.navi .n.busy {
+  display: inline-flex;
+}
+.navi .n.busy .spin {
+  width: 12px;
+  height: 12px;
+}
+
 /* A count that wants attention (Changes, the Inbox to clarify): a filled badge. */
 .navi .n.hot {
   min-width: 18px;
@@ -329,6 +366,9 @@ input {
   font-weight: 600;
   line-height: 18px;
   text-align: center;
+}
+.navi .n.hot.bad {
+  background: var(--amber);
 }
 .sideempty {
   padding: 4px 8px;
@@ -1126,6 +1166,41 @@ input {
   border-radius: 6px;
   cursor: pointer;
   text-align: left;
+}
+
+/* SearchPick: a select-like button, and its search over the list. */
+.sel.spick {
+  height: 28px;
+  border: 1px solid var(--line2);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 500 12.5px var(--sans);
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.spickbox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+.spicklist {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 0;
+}
+.spicklist button.kcur {
+  background: var(--accent-soft);
+}
+.spicklist button.on {
+  font-weight: 600;
 }
 .menu button:hover {
   background: var(--accent-soft);
@@ -6413,6 +6488,57 @@ select.sel {
 .tb-band .icheck {
   margin: 0 2px 0 0;
 }
+
+/* A transcript whose meeting note is under way: shown, not chosen; its status in place of its line. */
+
+/* A capture still in the Inbox, on Draft reply or Ask: its choices that take it out. */
+.stillin {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 14px;
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  background: var(--sunk);
+  font-size: 13px;
+}
+.main.ask > .stillin {
+  margin: 10px 16px 0;
+}
+.mexists {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.irowc.busy .irow {
+  cursor: default;
+  opacity: 0.7;
+}
+.irow .iprog {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.irow .iprog.bad {
+  color: var(--amber);
+}
+
+/* The kind of thing an item is (inboxItemKind), drawn beside the pane's heading line. */
+.eyebrow.ikind {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+.eyebrow.ikind svg {
+  color: var(--accent);
+}
+.ikindsm {
+  display: inline-flex;
+  vertical-align: -2px;
+  margin-right: 6px;
+  color: var(--ink3);
+}
 .imany {
   margin: 0;
   padding-left: 18px;
@@ -7036,6 +7162,49 @@ select.sel {
   gap: 8px;
   font-size: 12.5px;
   min-height: 28px;
+}
+
+/* A missing link's rows (Missing pages, Broken sources): three columns the rows share — what's
+   known about it (its pills), the suggestion, wrapping, and the buttons — under its name, on a
+   line of its own. The pills' and buttons' columns are as wide as their widest row. */
+.ckitems.ghosts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  column-gap: 14px;
+}
+.ckitems.ghosts > :not(.ckitem.ghost) {
+  grid-column: 1 / -1;
+}
+.ckitem.ghost {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  row-gap: 6px;
+  align-items: center;
+  padding: 6px 0;
+}
+.ckitem.ghost + .ckitem.ghost {
+  border-top: 1px solid var(--line);
+}
+.ckitem.ghost > :first-child {
+  grid-column: 1 / -1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.ckitem.ghost .gpills,
+.ckitem.ghost .gbtns {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  white-space: nowrap;
+}
+.ckitem.ghost .gbtns {
+  justify-content: flex-end;
+}
+.ckitem.ghost .gnear {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .ckitem .grow {
   text-align: left;
@@ -8238,10 +8407,15 @@ button.hc {
 }
 
 /* Draft reply */
+
+/* Two columns as tall as the window: a heading row each, then a card that takes what's left
+   (the thread's and the reply's, level), then what goes under them. */
 .body.reply {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
-  align-items: start;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+  overflow: hidden;
 }
 .rthread,
 .rdraft {
@@ -8249,16 +8423,27 @@ button.hc {
   flex-direction: column;
   gap: 10px;
   min-width: 0;
+  min-height: 0;
 }
-.rdraft {
-  padding: 16px 18px;
+.rthread > .row,
+.rdraft > .row {
+  flex: none;
+  min-height: 32px;
+}
+.rthread > .card,
+.rdraft > .card {
+  flex: 1 1 auto;
+  min-height: 160px;
+}
+.rthread > :not(.row, .card),
+.rdraft > :not(.row, .card) {
+  flex: none;
 }
 .rtext {
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 60vh;
   overflow: auto;
 }
 .rtext pre {
@@ -8278,17 +8463,18 @@ button.hc {
   padding: 0;
 }
 .rpaste {
-  min-height: 240px;
   padding: 12px 14px;
   font: 13px/1.5 var(--sans);
   color: var(--ink);
-  resize: vertical;
+  resize: none;
 }
 .rverdict {
   padding: 10px 12px;
   border-radius: 10px;
   background: var(--amber-soft);
   font-size: 12.5px;
+  max-height: 35vh;
+  overflow: auto;
 }
 .rverdict.green {
   background: var(--green-soft);
@@ -8298,14 +8484,23 @@ button.hc {
   padding-left: 16px;
 }
 .rbody {
-  min-height: 220px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
+  padding: 12px 14px;
   font: 14px/1.6 var(--sans);
   color: var(--ink);
-  resize: vertical;
+  resize: none;
+  outline: 0;
+}
+.rbody:focus-visible {
+  border-color: var(--accent);
+}
+.rbody.rempty p {
+  margin: 0;
+}
+.rasked {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 .rgaps {
   display: flex;
@@ -8356,6 +8551,19 @@ button.hc {
 .doccheck section > .row {
   gap: 10px;
   align-items: center;
+}
+
+/* The register's heading row, then its table, with room between them. */
+.body.doccheck > section:not(.card) {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dcprog {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
 }
 .dcres {
   display: grid;

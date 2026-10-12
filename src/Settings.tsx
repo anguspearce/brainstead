@@ -408,6 +408,7 @@ function SpellLanguage() {
         <div className="faint">Which English words are checked against: colour or color, organise or organize.</div>
       </div>
       <select
+        title="The language spelling is checked in"
         className="sel"
         aria-label="Spelling language"
         value={s.spellLanguage && have.includes(s.spellLanguage) ? s.spellLanguage : ""}
@@ -1371,6 +1372,7 @@ function About() {
             Keep
           </label>
           <select
+            title="How many days of Brainstead's log are kept"
             id="logdays"
             className="sel"
             value={String(s.logDays ?? 14)}

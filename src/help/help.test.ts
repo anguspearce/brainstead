@@ -30,6 +30,7 @@ const SCREENS: Screen[] = [
   "triage",
   "reply",
   "doccheck",
+  "compare",
 ];
 const PANES: SettingsPane[] = ["general", "notes", "vault", "assistants", "jobs", "capture", "permissions", "about"];
 

@@ -145,7 +145,19 @@ fn what_file(path: &str) -> &'static str {
     }
 }
 
-/// A capture clarified in the Inbox (made a task, ingested, kept or trashed): it leaves the Inbox.
+/// A source restored from the Trash is in the Inbox again, whatever was done with it before.
+pub fn forget_clarified(path: &str) {
+    let mut done = captures_done();
+    let n = done.len();
+    done.retain(|p| p != path);
+    if done.len() != n {
+        if let Ok(b) = serde_json::to_vec_pretty(&done) {
+            let _ = write::write_atomic(&captures_done_file(), &b, false);
+        }
+    }
+}
+
+/// A capture clarified in the Inbox (made a task, ingested or kept): it leaves the Inbox.
 #[tauri::command]
 pub async fn inbox_capture_done(path: String) -> Res<()> {
     writing(move || {

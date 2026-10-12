@@ -237,7 +237,13 @@ export function TasksScreen() {
                     @{c}
                   </button>
                 ))}
-                <select className="sel sm" aria-label="Effort" value={effort} onChange={(e) => setEffort(e.target.value)}>
+                <select
+                  title="Show only tasks that take this long or less"
+                  className="sel sm"
+                  aria-label="Effort"
+                  value={effort}
+                  onChange={(e) => setEffort(e.target.value)}
+                >
                   {EFFORT_LIMITS.map(([v, l]) => (
                     <option key={v} value={v}>
                       {l}

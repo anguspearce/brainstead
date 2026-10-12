@@ -379,3 +379,100 @@ export function TableBand({
     </div>
   );
 }
+
+/** A choice from a long list, found by typing: a button showing what's chosen (like a select),
+ *  that opens a search box over the list. ↑↓ move, ↩ picks, Esc closes. */
+export function SearchPick({
+  items,
+  value,
+  onChange,
+  placeholder,
+  label,
+  className = "",
+}: {
+  items: { value: string; label: string; hint?: string }[];
+  value: string | null;
+  onChange: (v: string) => void;
+  /** Shown when nothing is chosen, and in the search box. */
+  placeholder: string;
+  /** What it chooses, for its tooltip and screen readers: "Document to check". */
+  label: string;
+  className?: string;
+}) {
+  const [at, setAt] = useState<DOMRect | null>(null);
+  const [q, setQ] = useState("");
+  const [i, setI] = useState(0);
+  const list = useRef<HTMLDivElement>(null);
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const hits = items.filter((it) => words.every((w) => `${it.label} ${it.hint ?? ""}`.toLowerCase().includes(w)));
+  const cur = items.find((it) => it.value === value);
+  const close = () => {
+    setAt(null);
+    setQ("");
+    setI(0);
+  };
+  const choose = (v: string) => {
+    onChange(v);
+    close();
+  };
+  useEffect(() => {
+    list.current?.querySelector<HTMLElement>(`[data-i="${i}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [i]);
+  return (
+    <>
+      <button
+        type="button"
+        className={`sel spick ${className}`}
+        aria-label={label}
+        title={cur ? `${label}: ${cur.label}` : `${label}: type to find one`}
+        onClick={(e) => setAt(e.currentTarget.getBoundingClientRect())}
+      >
+        <span className={`ell ${cur ? "" : "faint"}`}>{cur?.label ?? placeholder}</span>
+        <Icon name="chevdown" size={12} />
+      </button>
+      {at && (
+        <Popover anchor={at} onClose={close} width={Math.max(320, at.width)}>
+          <div className="spickbox">
+            <SearchBox
+              value={q}
+              onChange={(v) => {
+                setQ(v);
+                setI(0);
+              }}
+              placeholder={placeholder}
+              escAnywhere={false}
+              inputRef={(el) => el?.focus()}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowDown") setI((x) => Math.min(hits.length - 1, x + 1));
+                else if (e.key === "ArrowUp") setI((x) => Math.max(0, x - 1));
+                else if (e.key === "Enter" && hits[i]) choose(hits[i].value);
+                else if (e.key === "Escape") close();
+                else return;
+                e.preventDefault();
+              }}
+            />
+            <div className="menu spicklist" ref={list} role="listbox" aria-label={label}>
+              {hits.map((it, n) => (
+                <button
+                  key={it.value}
+                  type="button"
+                  role="option"
+                  data-i={n}
+                  aria-selected={it.value === value}
+                  className={`${n === i ? "kcur" : ""} ${it.value === value ? "on" : ""}`}
+                  title={it.hint ?? it.label}
+                  onMouseEnter={() => setI(n)}
+                  onClick={() => choose(it.value)}
+                >
+                  <span className="ell">{it.label}</span>
+                  {it.hint && <span className="faint small ell">{it.hint}</span>}
+                </button>
+              ))}
+              {!hits.length && <p className="faint small mpad">Nothing matches “{q}”.</p>}
+            </div>
+          </div>
+        </Popover>
+      )}
+    </>
+  );
+}

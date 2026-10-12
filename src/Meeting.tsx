@@ -11,17 +11,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, NoteSpec, Transcript } from "./api";
 import { Icon } from "./icons";
-import { isActive, runs, RunsPane, startRuns } from "./Ingest";
-import { useStore } from "./store";
+import { ingest, isActive, meetingProgress, runs, RunsPane, startRuns } from "./Ingest";
+import { settings, useStore } from "./store";
 import { pageName } from "./knowledge";
 import { Markdown } from "./md/Markdown";
 import { reportEditError } from "./taskModel";
 import { toast } from "./Toast";
 import { TopBar } from "./TopBar";
 import { useVaultVersion } from "./state";
-import { place, useViewState } from "./nav";
+import { nav, openDoc, place, useViewState } from "./nav";
 import { Dialog, Seg } from "./ui";
-import { draftNotes, noteFile, specOf, specOk } from "./meetingFlow";
+import { draftNotes, followThrough, noteFile, specOf, specOk } from "./meetingFlow";
 
 export { noteFile, specOf, specOk };
 
@@ -37,8 +37,113 @@ export const needsDate = (t: Transcript, edits: Partial<NoteSpec> = {}) => t.inf
 export const noteExists = (t: Transcript, edits: Partial<NoteSpec> = {}) =>
   t.inferred.exists && noteFile(specOf(t, edits)) === noteFile(specOf(t));
 
+/** What the card's buttons do. */
+export type CardAction = "make" | "confirmAndMake" | "ingestNote" | "trash" | "openNote" | "openChanges" | "openVault" | "openGeneral";
+
+/** What the card says about a transcript and offers to do with it, the best first (the
+ *  highlighted button). Every case the transcript can be in, in order: Read-only, its note under
+ *  way, failed or held, the note there already, the transcript dealt with already, the details
+ *  still to give, then the ordinary make. */
+export function cardFor(
+  t: Transcript,
+  edits: Partial<NoteSpec> = {},
+  o: { readOnly?: boolean; sending?: boolean; progress?: { label: string; busy: boolean; why?: string } | null; ingest?: boolean } = {},
+): { say?: string; tone?: "busy" | "warn" | "ok"; actions: CardAction[]; makeDisabled?: string } {
+  const p = o.progress;
+  const spec = specOf(t, edits);
+  if (o.readOnly)
+    return { say: "Read-only is on, so no note can be made. Turn it off in Settings › Vault.", tone: "warn", actions: ["openVault"] };
+  if (o.sending || p?.busy)
+    return {
+      say: `${p?.label ?? "Writing note…"} It carries on by itself; ${o.ingest ? "once the note is made and ingested" : "once the note is made"}, the transcript leaves this list.`,
+      tone: "busy",
+      actions: [],
+    };
+  if (p?.label === "Note held in Changes")
+    return {
+      say: "The note is held in Changes, so it isn't in the vault yet. Accept it there and it's made, then ingested.",
+      tone: "warn",
+      actions: ["openChanges"],
+    };
+  if (p && /^Note (failed|stopped)/.test(p.label))
+    return {
+      say: `${p.label === "Note stopped" ? "Making the note was stopped" : "Making the note failed"}${p.why ? `: ${p.why}` : ""}. Try again, or let the transcript go.`,
+      tone: "warn",
+      actions: ["make", "trash"],
+    };
+  if (p && /^Ingest (failed|stopped)/.test(p.label))
+    return {
+      say: `The note was made, but its ingest ${p.label === "Ingest stopped" ? "was stopped" : "failed"}${p.why ? `: ${p.why}` : ""}.`,
+      tone: "warn",
+      actions: ["ingestNote", "trash", "openNote"],
+    };
+  if (noteExists(t, edits))
+    return t.noteIngested
+      ? {
+          say: `${noteFile(spec)} is made and ingested already (a wiki page cites it): only the transcript is left.`,
+          tone: "ok",
+          actions: ["trash", "openNote"],
+        }
+      : {
+          say: `${noteFile(spec)} exists already. Ingest it as it is, or change the name or date above for a new note.`,
+          tone: "warn",
+          actions: ["ingestNote", "trash", "openNote"],
+        };
+  if (t.done === "ingested")
+    return {
+      say: "This transcript was ingested itself, so the wiki has it already. A note can still be made from it.",
+      tone: "ok",
+      actions: ["trash", "make"],
+    };
+  if (t.done === "linked")
+    return {
+      say: "A note links to this transcript already, most likely the meeting note made from it.",
+      tone: "ok",
+      actions: ["trash", "make"],
+    };
+  if (!specOk(spec))
+    return {
+      actions: ["make"],
+      makeDisabled: !spec.name.trim()
+        ? `Give the note ${spec.type === "1-1" ? "the person it was with" : "a name"} above`
+        : "Give the note its date above, as YYYY-MM-DD",
+    };
+  if (needsDate(t, edits))
+    return {
+      say: `${spec.date} is the day the transcript was captured, not necessarily the meeting's. Check it, or type the right one above.`,
+      tone: "warn",
+      actions: ["confirmAndMake"],
+    };
+  const asks = t.inferred.ask.length > 0;
+  return {
+    say: asks ? "Check the details above and change any that are wrong, then make the note." : undefined,
+    actions: t.inferred.ask.some((a) => /Settings › General/.test(a)) ? ["make", "openGeneral"] : ["make"],
+  };
+}
+
 /** Why a transcript is done, as the list says it (list_transcripts too). */
 export const DONE: Record<NonNullable<Transcript["done"]>, string> = { ingested: "ingested", linked: "linked from a note" };
+
+/** Ingest the existing note: what follows a made note (Settings › AI assistants' Meeting notes switches),
+ *  for one that exists already: ingest it, and move the transcript to the Trash. */
+function keepNoteTip(): string {
+  const f = followThrough();
+  const then = [f.ingest && "ingest the note", f.trash && "move the transcript to the Trash"].filter(Boolean);
+  return then.length
+    ? `No new note: keep the one that's there as it is, then ${then.join(" and ")}`
+    : "No new note: keep the one that's there as it is (ingesting and trashing are off in Settings)";
+}
+
+async function keepNote(transcript: string, note: string) {
+  const f = followThrough();
+  try {
+    if (f.ingest) ingest([note]);
+    if (f.trash) await api.trashMove(transcript);
+    toast(f.ingest ? `Ingesting ${note.replace(/\.md$/, "")}` : "Kept as it is", undefined, "ok");
+  } catch (e) {
+    reportEditError(e);
+  }
+}
 
 export function MeetingScreen() {
   const [all, setList] = useState<Transcript[] | null>(null);
@@ -83,15 +188,11 @@ export function MeetingScreen() {
     () => new Set([...sending, ...(allRuns ?? []).filter((r) => r.kind === "meeting" && isActive(r)).map((r) => r.source)]),
     [allRuns, sending],
   );
-  const drafted = useMemo(
-    () => new Set((allRuns ?? []).filter((r) => r.kind === "meeting" && r.status === "done").map((r) => r.source)),
-    [allRuns],
-  );
   const batch = useMemo(
     () => (list ?? []).filter((t) => picked.has(t.path) && !drafting.has(t.path) && !noteExists(t, edits[t.path])),
     [list, picked, drafting, edits],
   );
-  // Draft all asks once for the dates of the ticked transcripts, rather than a Confirm on each.
+  // Make all asks once for the dates of the ticked transcripts, rather than a Confirm on each.
   const [dating, setDating] = useState<Record<string, string> | null>(null);
   const tickAll = (on: boolean) => setPicked(on ? new Set((list ?? []).map((t) => t.path)) : new Set());
   const ticked = (list ?? []).filter((t) => picked.has(t.path)).length;
@@ -110,7 +211,7 @@ export function MeetingScreen() {
     setSending((x) => new Set([...x, ...paths]));
     draftNotes(pairs)
       .then((ids) => {
-        toast(ids.length === 1 ? "Drafting the note: it'll be made in the vault" : `Drafting ${ids.length} notes, one after another`);
+        toast(ids.length === 1 ? "Making the note: it'll be in the vault shortly" : `Making ${ids.length} notes, one after another`);
         setPicked(new Set());
       })
       .catch(reportEditError)
@@ -121,6 +222,67 @@ export function MeetingScreen() {
           return n;
         }),
       );
+  };
+
+  // The card: what's to say about the chosen transcript, and its buttons (cardFor).
+  const readOnly = useStore(settings).readOnly;
+  const ingestOn = followThrough().ingest;
+  const card = cur
+    ? cardFor(cur, edits[cur.path], {
+        readOnly,
+        sending: sending.has(cur.path),
+        progress: meetingProgress(allRuns ?? [], cur.path),
+        ingest: ingestOn,
+      })
+    : { actions: [] as CardAction[] };
+  const failed = !!card.say && /^(Making the note|The note was made, but)/.test(card.say);
+  const ACTION: Record<CardAction, { label: string; tip: string; icon: string }> = {
+    make: {
+      label: failed ? "Try again" : ingestOn ? "Make and ingest the note" : "Make the note",
+      tip: "Have the AI write the note from this transcript and your template",
+      icon: "note",
+    },
+    confirmAndMake: {
+      label: `Use ${spec?.date ?? "this date"} and ${ingestOn ? "make and ingest" : "make"} the note`,
+      tip: "The meeting was on this day: use it, and make the note",
+      icon: "check",
+    },
+    ingestNote: {
+      label: failed ? "Ingest the note again" : ingestOn ? "Ingest the existing note" : "Keep the existing note",
+      tip: keepNoteTip(),
+      icon: "wiki",
+    },
+    trash: {
+      label: "Move the transcript to the Trash",
+      tip: "Move the transcript to the vault's Trash (restore it from there)",
+      icon: "trash",
+    },
+    openNote: { label: "Open the note", tip: `Open ${spec ? noteFile(spec) : "the note"} to check it or fill it in`, icon: "note" },
+    openChanges: { label: "Open Changes", tip: "Accept or reject the held note in Changes", icon: "review" },
+    openVault: { label: "Open Settings › Vault", tip: "Turn Read-only off there", icon: "settings" },
+    openGeneral: {
+      label: "Set your name in Settings › General",
+      tip: "Your name tells Brainstead which of two people is you",
+      icon: "settings",
+    },
+  };
+  const act = (a: CardAction) => {
+    if (!cur || !spec) return;
+    if (a === "make") return draft([cur]);
+    if (a === "confirmAndMake") {
+      const ed = { ...edits, [cur.path]: { ...edits[cur.path], date: spec.date } };
+      setEdits(ed);
+      return draft([cur], ed);
+    }
+    if (a === "ingestNote") return void keepNote(cur.path, noteFile(spec));
+    if (a === "trash")
+      return void api
+        .trashMove(cur.path)
+        .then(() => toast("Transcript moved to the Trash", undefined, "ok"))
+        .catch(reportEditError);
+    if (a === "openNote") return openDoc(noteFile(spec));
+    if (a === "openChanges") return nav.go("review");
+    nav.go({ screen: "settings", pane: a === "openVault" ? "vault" : "general" });
   };
 
   return (
@@ -142,10 +304,10 @@ export function MeetingScreen() {
           <button
             type="button"
             className="btn"
-            title={`Have the AI draft a meeting note from each of the ${batch.length} ticked transcripts`}
+            title={`Have the AI write a meeting note from each of the ${batch.length} ticked transcripts`}
             onClick={() => setDating(Object.fromEntries(batch.map((t) => [t.path, specOf(t, edits[t.path]).date])))}
           >
-            Draft all {batch.length}
+            {ingestOn ? "Make and ingest all" : "Make all"} {batch.length}
           </button>
         )}
       </TopBar>
@@ -213,7 +375,12 @@ export function MeetingScreen() {
               <span className="eyebrow">The note</span>
               <label className="nnf">
                 <span className="faint">Type</span>
-                <select className="sel" value={spec.type} onChange={(e) => set({ type: e.target.value })}>
+                <select
+                  title="The kind of note: Meeting, 1-1, Workshop or Interview, each made from its template"
+                  className="sel"
+                  value={spec.type}
+                  onChange={(e) => set({ type: e.target.value })}
+                >
                   {TYPES.map((t) => (
                     <option key={t}>{t}</option>
                   ))}
@@ -241,33 +408,66 @@ export function MeetingScreen() {
                   </button>
                 )}
               </label>
+              {/* The names this person's notes use, when the transcript's is none of them: one click. */}
+              {!!cur.inferred.nameForms?.length && (
+                <div className="qchips">
+                  {cur.inferred.nameForms.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      className={`chip f ${spec.name === n ? "on" : ""}`}
+                      aria-pressed={spec.name === n}
+                      title={`Name the note for ${n}, as the existing 1-1 notes do`}
+                      onClick={() => set({ name: n })}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              )}
               <span className="faint mono small">{noteFile(spec)}</span>
-              {cur.inferred.ask.map((a) => (
-                <p key={a} className="faint small">
-                  <Icon name="info" size={12} /> {a}
+              {/* The questions about its details (an existing note is the card's own message). */}
+              {cur.inferred.ask
+                .filter((a) => !/exists already/.test(a))
+                .map((a) => (
+                  <p key={a} className="faint small">
+                    <Icon name="info" size={12} /> {a}
+                  </p>
+                ))}
+              {card.say && (
+                <div className={`doc-banner ${card.tone === "warn" ? "warn" : ""}`} role="status">
+                  {card.tone === "busy" ? <span className="spin" /> : <Icon name={card.tone === "ok" ? "check" : "info"} size={14} />}
+                  <span>{card.say}</span>
+                </div>
+              )}
+              <div className="mexists">
+                {card.actions.map((a, n) => {
+                  const b = ACTION[a];
+                  const off = a === "make" && card.makeDisabled;
+                  return (
+                    <span key={a} title={off ? card.makeDisabled : b.tip}>
+                      <button
+                        type="button"
+                        className={`btn ${n === 0 ? "pri" : a === "trash" ? "ghost" : ""}`}
+                        disabled={!!off}
+                        onClick={() => act(a)}
+                      >
+                        <Icon name={b.icon} size={14} />
+                        {b.label}
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+              {(card.actions[0] === "make" || card.actions[0] === "confirmAndMake") && !card.makeDisabled && (
+                <p className="faint small">
+                  {(() => {
+                    const f = followThrough();
+                    const then = [f.ingest && "ingested", f.trash && "the transcript moved to the Trash"].filter(Boolean).join(", then ");
+                    return `The note is made (revertable in Changes)${then ? `, then ${then}` : ""}.`;
+                  })()}
                 </p>
-              ))}
-              <button
-                type="button"
-                className="btn pri"
-                disabled={!specOk(spec) || needsDate(cur, edits[cur.path]) || noteExists(cur, edits[cur.path]) || drafting.has(cur.path)}
-                title={
-                  noteExists(cur, edits[cur.path])
-                    ? `${noteFile(spec)} exists already: open it to fill it in, or change the name or date for a new note`
-                    : needsDate(cur, edits[cur.path])
-                      ? "Confirm or change the date first: it's the day the transcript was captured"
-                      : drafted.has(cur.path)
-                        ? "A note was drafted from this transcript already: see Changes"
-                        : "Have the AI draft the note from this transcript"
-                }
-                onClick={() => draft([cur])}
-              >
-                <Icon name="note" size={14} />
-                {drafting.has(cur.path) ? "Drafting…" : drafted.has(cur.path) ? "Draft again" : "Draft the note"}
-              </button>
-              <p className="faint small">
-                Then: the note is made (revertable in Changes), and you can ingest it and move the transcript to the Trash.
-              </p>
+              )}
             </div>
           )}
           <RunsPane />
@@ -276,7 +476,7 @@ export function MeetingScreen() {
       {dating && (
         <Dialog onClose={() => setDating(null)} width={520} label="Check the dates">
           <div className="confirm">
-            <h2 className="h2">Draft {batch.length} notes with these dates?</h2>
+            <h2 className="h2">Make {batch.length} notes with these dates?</h2>
             <p className="muted">Each note is named and dated with the day below. Change any that's wrong.</p>
             <div className="mdates">
               {batch.map((t) => (
@@ -297,13 +497,13 @@ export function MeetingScreen() {
             </div>
             <div className="row">
               <span className="grow" />
-              <button type="button" className="btn lg" title="Go back without drafting" onClick={() => setDating(null)}>
+              <button type="button" className="btn lg" title="Go back without making them" onClick={() => setDating(null)}>
                 Cancel
               </button>
               <button
                 type="button"
                 className="btn lg pri"
-                title="The dates are right: draft a note from each ticked transcript"
+                title="The dates are right: make a note from each ticked transcript"
                 onClick={() => {
                   const ed = { ...edits };
                   batch.forEach((t) => (ed[t.path] = { ...ed[t.path], date: dating[t.path] ?? "" }));
@@ -312,7 +512,7 @@ export function MeetingScreen() {
                   draft(batch, ed);
                 }}
               >
-                Draft all {batch.length}
+                {ingestOn ? "Make and ingest all" : "Make all"} {batch.length}
               </button>
             </div>
           </div>

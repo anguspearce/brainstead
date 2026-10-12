@@ -37,6 +37,7 @@ function transcript(path: string, over: Partial<Transcript["inferred"]> = {}): T
   return {
     path,
     mtime: 0,
+    noteIngested: false,
     done: null,
     inferred: {
       filename: path,

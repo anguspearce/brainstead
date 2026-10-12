@@ -261,6 +261,7 @@ pub async fn trash_restore(app: AppHandle, id: String, r#as: Option<String>) -> 
         writable(&app.state::<AppState>())?;
         let root = root(&app.state::<VaultService>())?;
         let to = trash::restore(&root, &id, r#as.as_deref().filter(|s| !s.is_empty()))?;
+        crate::gtd::forget_clarified(&to);
         app.state::<Drafts>().rename(&trashed_draft(&id), &to);
         written(&app, &[root.join(&to)]);
         Ok(to)
