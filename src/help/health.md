@@ -36,7 +36,7 @@ Click **Fix** on one issue, or **Fix safe issues** in the top bar for all of the
 - **Sources changed since they were cited**: **Ingest again** reads the source again, so the pages citing it catch up.
 - **Orphan pages**: `index.md`'s catalogue links every wiki page, so an orphan is one it hasn't caught up with yet (the daily check does). **Add them to index.md** brings it up to date now.
 - **Possible duplicates**: **Open the other** compares them; **Not duplicates** stops the pair being flagged.
-- **Anything else** (an orphan page, a stale page, a broken source…): **Ignore** hides it until its page (or, for a claim, its line) changes; **Show again** lists ignored ones again. Stale pages and claims with no citation also have **Ignore all**, at the top of their list.
+- **Anything else** (a stale page, a broken source…): **Ignore** hides it until its page (or, for a claim, its line) changes; **Show again** lists ignored ones again. Stale pages and claims with no citation also have **Ignore all**, at the top of their list.
 
 A fixed issue leaves the list as soon as its fix is made, and the checks rerun within a second of any change to the vault, wherever it was made (Changes, Ask, another editor).
 - **Images nothing uses**: **Move to the Trash**, after asking; you can restore them.

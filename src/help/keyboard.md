@@ -77,11 +77,13 @@ Each key works where its heading says. Quick capture's shortcut is set in [Setti
 - `J` `K` `↑` `↓` — Next, previous
 - `↩` — Accept the suggestion
 - `N` `P` `W` — Next action, new project, waiting for
-- `2` `S` `R` — Done in two minutes, someday, file as reference
+- `2` `S` — Done in two minutes, someday
+- `R` — File as reference, or keep a capture in Sources
 - `⌫` — Delete (a capture goes to the Trash)
 - `I` — Ingest into the wiki (a capture)
 - `M` — Make a meeting note (a transcript)
 - `D` — Draft a reply (a captured email or Teams thread)
+- `A` — Ask about this source (a capture)
 
 ## Bookmarks triage
 - `K` `I` `T` `A` — Keep, ingest into the wiki, make a task, archive
@@ -92,6 +94,10 @@ Each key works where its heading says. Quick capture's shortcut is set in [Setti
 - `J` `K` — Next, previous change
 - `A` `R` — Accept, reject the held change
 - `⌘↩` — Accept every held change in its run
+- `↑` `↓` — Step through the search's matches
+
+## Draft reply
+- `↩` — Send what you typed in Ask for a change
 
 ## Ask
 - `⌘T` — New chat

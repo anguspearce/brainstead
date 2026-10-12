@@ -14,7 +14,7 @@ A note has three modes:
 
 Beside the note are **Linked from** (every note that links here, with the line), its **open tasks** to tick, and its **outline**. On a 1-1 note, **Last time with** shows the previous 1-1 and the follow-ups still open with that person.
 
-The top bar has **Ask** (a chat about this note), a bookmark, **Copy** (markdown, rich text, path or title), **Rename…** (⇧⌘R, rewriting every link to the note), **Graph** and **Focus mode** (⌘., Esc leaves it). The **Note** menu has most of these. **Export PDF…** (⌘P) writes the note in its look, with page numbers. Each note can have its own look (Brainstead, Business, Editorial, Modern, Minimal, Report or Technical), colour, and light or dark.
+The top bar has **Ask** (a chat about this note), a bookmark, **Copy** (markdown, rich text, path or title), **Rename…** (⇧⌘R, rewriting every link to the note), **Graph** and **Focus mode** (⌘., Esc leaves it). The **Note** menu has most of these. Right-click a file for its menu, which also has a source's actions (**Make and ingest a meeting note**, **Draft a reply**, **Ingest into the wiki**, **Ask about this source**) where they fit, and **Compare with…**. **Export PDF…** (⌘P) writes the note in its look, with page numbers. Each note can have its own look (Brainstead, Business, Editorial, Modern, Minimal, Report or Technical), colour, and light or dark.
 
 ## Read aloud
 
@@ -86,4 +86,4 @@ Other apps can still change these files.
 
 ## The Trash
 
-Moving a note to the Trash puts it in the vault's `.trash` folder, with Undo. The Trash screen lists and searches what's there, puts files back where they were, and deletes them for good.
+Moving a note to the Trash puts it in the vault's `.trash` folder, with Undo. Trashing a transcript first points its links at its meeting note, when it has one. A capture restored from the Trash goes back to the Inbox. The Trash screen lists and searches what's there, puts files back where they were, and deletes them for good.

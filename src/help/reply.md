@@ -20,7 +20,7 @@ Edit the draft in place. **To fill in** lists the gaps the reply leaves for you,
 
 **Copy reply** copies plain text; **Copy as rich text** keeps the paragraphs for an email. When the reply commits you to something, **Add task** captures that follow-up as a task, linked to the captured thread.
 
-An assistant can draft a reply for you in the same tones, **Brief** unless you ask for another. Nothing is sent.
+An assistant can draft a reply for you in the same tones, **Brief** unless you ask for another, and revise it as you ask, as **Ask for a change** does. Nothing is sent.
 
 While the thread is still in the [Inbox](app:inbox), a **Still in the Inbox** strip under the reply takes it out without going back: **Done, keep in Sources** (the usual one once you've replied), **Ingest and take out**, or **Move to the Trash**. **Copy reply** also offers **Take it out of the Inbox** in its message.
 

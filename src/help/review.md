@@ -34,7 +34,7 @@ To have the summaries always held for you, turn on **Hold the summaries for me**
 ## Read the feed
 The feed groups changes by run, newest first: "Daily check, 5 Oct: 6 changes to 4 pages", an ingest, an Ask chat. Each row shows the title, page, source, model and age, with **Flagged**, **Reverted** or a kind such as **New page**. `J` and `K` move between changes.
 
-**Search changes** above the list narrows held changes and the feed to those with every word you type in their title, page, source or model. The box counts what it found (`3/12`); `↓` and `↑` step through them, and `Esc` or ✕ clears it.
+**Search changes** above the list narrows held changes and the feed to those with every word you type in their title, page, source or model. The box shows which match you're on out of how many (`3/12`); `↓` and `↑` step through them, and `Esc` or ✕ clears it.
 
 On the right is the change as a diff under its section, with any flags above it. **What it rests on** lists the quotes behind it, each marked **Found in the source**, **Not found in the source**, or **Not checked** (a file Brainstead can't read). Click a quote's source to open it, or **Open the page**.
 

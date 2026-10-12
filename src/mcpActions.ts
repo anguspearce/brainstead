@@ -2444,6 +2444,9 @@ async function docCheck(a: Args, r: McpRequest): Promise<unknown> {
     saved && !saved.stale
       ? `(The check from ${saved.at.slice(0, 16).replace("T", " ")}: neither document has changed since. fresh checks again.)\n\n`
       : "";
+  // As the screen, which offers no Save as note for documents that aren't about the same thing.
+  if (result.unrelated)
+    return `${kept}${result.verdict}: ${result.summary} Nothing was checked${a.save === true ? ", so nothing was saved as a note" : ""}.`;
   const found = kept + findingsMarkdown(name, result);
   if (a.save !== true) return found;
   const path = findingsNote(name);

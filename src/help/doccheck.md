@@ -25,7 +25,7 @@ Choose a source beside **Check** (type part of its name to find it), or **Choose
 
 Click **Check**. If it can't run yet, it says why.
 
-A check runs in the background, and a long document can take minutes. Its steps are ticked off as it goes (reading the document, reading the version in force, comparing them), each with its time and a clock on the one going. **Stop** ends it at once: nothing more is asked of the AI and nothing is kept. You can leave the page meanwhile: a message says when it's done, with **Open** to come back to it, the document, mode and governing document chosen as they were.
+A check runs in the background, and a long document can take minutes. Its steps are ticked off as it goes (reading the document, reading the version in force, **Check they're about the same thing**, comparing them), each with its time and a clock on the one going. **Stop** ends it at once: nothing more is asked of the AI and nothing is kept. You can leave the page meanwhile: **Compare** in the sidebar shows a spinner while a check runs and a badge for those that finished while you were elsewhere, and a message says when it's done, with **Open** to come back to it, the document, mode and governing document chosen as they were.
 
 Every finished check is kept on this computer (not in your vault). Choosing the same document, governing document and mode again shows it straight away, saying when it was checked. While neither document has changed since it was read, it still stands; if either has, it says so, and **Check again** gets findings that match them. **Save as note** puts the findings in your vault.
 

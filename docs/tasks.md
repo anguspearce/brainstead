@@ -42,12 +42,12 @@ The Inbox (⌥⌘2) lists what you've captured but not decided: emails and Teams
 | `W` | Waiting for |
 | `2` | Done now (under 2 min) |
 | `S` | Someday / maybe |
-| `R` | File as reference in a note |
+| `R` | File as reference in a note, or keep a capture in Sources |
 | `⌫` | Delete |
 
 Tick several items (a section's header box ticks them all) to act on them together: make meeting notes, ingest, keep in Sources, mark done, move to Someday / maybe or delete. One that fails doesn't stop the rest: it stays ticked and the message says why. Next action, Waiting for and New project stay one at a time.
 
-An email or chat can also be ingested into the wiki (`I`), made into a meeting note (`M`) or answered with a drafted reply (`D`). A transcript stays in the Inbox until its meeting note is made and ingested; if either fails it stays, to be chosen again. Suggest only suggests what the Inbox offers for that kind of item. **Suggest for all** suggests a choice for the first 20 items; ↩ accepts one. ⌘Z undoes each choice.
+A capture offers only the choices that fit its kind. A transcript: make a meeting note (`M`), ingest (`I`), ask about it (`A`), keep in Sources (`R`) or delete. An email or chat thread: draft a reply (`D`), ingest, ask, Next action, New project, Waiting for, Someday / maybe, keep in Sources or delete. Any other capture: the same without the reply or Waiting for. A capture has no Done now, and only a thread can be Waiting for. **Ask about this source** starts a chat about it in Ask, where a **Still in the Inbox** strip takes it out when you're done. A transcript stays in the Inbox until its meeting note is made and ingested; if either fails it stays, to be chosen again. Suggest only suggests what the Inbox offers for that kind of item. **Suggest for all** suggests a choice for the first 20 items; ↩ accepts one. ⌘Z undoes each choice.
 
 ## Tasks
 

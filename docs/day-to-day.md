@@ -63,4 +63,4 @@ Settings (⌘,) has General, Notes, Vault, AI assistants, Jobs & schedule, Captu
 - **Drafts.** Unsaved text is kept as a draft a second after you stop typing, and offered back after a crash.
 - **Undo.** ⌘Z undoes the app's last five changes (a tick, a date, a clarified item, an assistant's change, a rename), even after a restart. In a note, ⌘Z undoes your typing.
 - **`log.md` and Activity.** Brainstead records what it changes in the vault's `log.md`. **Activity** shows it with a heatmap of files changed by day, charts of your notes by type and tag, and the most linked notes.
-- **The vault is yours.** Brainstead keeps only what you'd expect in the vault: notes, tasks, chats, the wiki and `log.md`. Settings, the index, drafts and name corrections live in `~/Library/Application Support/Brainstead/`.
+- **The vault is yours.** Brainstead keeps only what you'd expect in the vault: notes, tasks, chats, the wiki and `log.md`. Settings, the index, drafts, name corrections and kept Doc check and Compare results live in `~/Library/Application Support/Brainstead/`.

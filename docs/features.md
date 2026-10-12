@@ -29,7 +29,7 @@ No vault yet? **Create a new vault** asks for a name and a place, and adds a few
 
 Notifications are asked for the first time Brainstead has something to tell you.
 
-Moving over from another notes app? When its's files are in the vault, the **Moving over from another notes app** checklist at the top of Settings › General lists what's left to do:
+Moving over from another notes app? When its files are in the vault, the **Moving over from another notes app** checklist at the top of Settings › General lists what's left to do:
 
 - make the vault writable;
 - run the daily and weekly summaries here;
@@ -46,6 +46,7 @@ The sidebar, top to bottom:
 
 - **Today**, **Inbox**, **Tasks**, **Projects**, **Weekly review**, **Changes** and **Ask**;
 - the library: **Search**, **Notes**, **Wiki**, **Sources**, **Templates**, **Graph**;
+- the tools: **Draft reply**, **Meeting notes** and **Compare**; a spinner beside Meeting notes or Compare means it's at work;
 - your **Bookmarks**;
 - at the foot, **Knowledge health**, **Activity**, **Trash**, **Settings**, and whether the index is up to date.
 

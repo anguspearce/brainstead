@@ -137,6 +137,7 @@ describe("help topics", () => {
       "Inbox",
       "Bookmarks triage",
       "Changes",
+      "Draft reply",
       "Ask",
     ]);
     expect(KEYS[0][1]).toContainEqual(["?", "Help for this screen"]);

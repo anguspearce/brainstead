@@ -24,6 +24,7 @@ The chips filter by type: **All**, the five commonest types with counts, and **O
 Right-click a row for its menu:
 
 - **Ask about this note**, **Ingest into the wiki**, **Bookmark** (or **Remove bookmark**).
+- On a source, its actions where they fit: **Make and ingest a meeting note** (a transcript), **Draft a reply** (an email or chat thread) and **Ask about this source**; and **Compare with…**, which opens [Compare](app:compare) with this file as A.
 - **Copy markdown**, **Copy path**, **Copy title**.
 - **Reveal in Finder**.
 - **Rename…**, which can update every link to the note, and **Discard draft** when it has one.

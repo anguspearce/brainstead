@@ -34,7 +34,7 @@ The finished build plan is untracked in `archive/`. Decisions: `_sift/decisions.
 - `make check` must pass before every commit.
 - Quit the installed Brainstead before `make dev` if they share an app data folder, or both run the scheduled jobs. `BRAINSTEAD_DATA` separates them.
 - Tests copy `tests/fixtures/vault/` to a temp folder; never a real vault.
-- Capture extensions: Vitest tests sit beside their pure functions (`extensions/**/*.test.js`), run by `make check`. Bump `manifest.json`'s version on any change; users reload via Settings › Capture extensions and `chrome://extensions`.
+- Capture extensions: Vitest tests sit beside their pure functions (`extensions/**/*.test.js`), run by `make check`. Bump `manifest.json`'s version on any change; users reload via Settings › Capture extensions, which shows each extension's version in its folder, and `chrome://extensions`. A dev build copies the extensions from the repo's `extensions/`, not its resources, so an edit reaches Chrome without a Rust rebuild (`src-tauri/src/nativehost.rs`, `shipped`).
 - Evals default to cheap models (Haiku under test, Sonnet judging); ingest scenarios need and name Sonnet.
 
 Releasing: `make release NOTES="What's new"` (`tools/release.py`). It refuses to start without notes or with uncommitted changes, then bumps and builds the app, makes the DMG and the updater's files (the notes go in the update offer), commits the bump as `Brainstead <version>`, pushes, creates the GitHub release with `Brainstead.dmg`, `Brainstead.app.tar.gz` and `latest.json`, and installs the app, opening it again if it was running. `INSTALL=0` skips the install, `VERSION=1.2.0` sets the version, `DRY_RUN=1` prints the steps. After a failure, run it again: the unreleased version is kept. Keep the name `Brainstead.dmg`: the README links to it.
@@ -61,13 +61,14 @@ In `~/Library/Application Support/Brainstead/`, or `BRAINSTEAD_DATA`.
 
 | What | Where |
 |---|---|
-| Settings | `settings.json` |
+| Settings, including the order of areas and projects on Projects | `settings.json` |
 | Index (SQLite, FTS5), rebuilt when its schema changes | `index.db` |
 | Drafts, undo, extracted PDF and Office text | `drafts/`, `undo.json`, `text/` |
 | Agent changes; texts before and after, compressed. Kept 90 days or 500 MB (Settings › AI assistants) | `changes/<id>.json`, `changes/text/` |
 | The old review queue, moved in once, kept one release | `proposals-backup/` |
 | Runs: ingest, daily and weekly summaries, daily check, contradictions, Write Current state | `runs/`, `summaries/`, `daily-check.json`, `contradictions/`, `current-state.json` |
 | Knowledge health: not-duplicates, daily counts | `health.json` |
+| Doc check and Compare results, kept while neither document changes | `doc-checks/` |
 | Weekly review in progress | `weekly.json` |
 | Weekly review's prepared suggestions (by week) and runs | `weekly-prep/` |
 | Unsaved chats; saved chats' turns while read-only (by vault name); Antigravity's working folder | `chats/`, `chats-pending/`, `ask/agy/` |

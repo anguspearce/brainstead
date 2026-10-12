@@ -1878,6 +1878,12 @@ describe("MCP actions", () => {
       expect(await raw("compare.run", { document_a: "sources/Orbit plan.pdf", document_b: "sources/Lunch menu.pdf", save: true })).toMatch(
         /Nothing was compared, so nothing was saved as a note\.$/,
       );
+      // Doc check stops the same way, and saves nothing either.
+      const before = submitted().length;
+      expect(
+        await raw("doccheck.run", { document: "sources/Orbit plan.pdf", governing_document: "sources/Lunch menu.pdf", save: true }),
+      ).toMatch(/Nothing was checked, so nothing was saved as a note\.$/);
+      expect(submitted().length).toBe(before);
       const cmp = await raw("compare.run", {
         document_a: "sources/Orbit plan v2.pdf",
         document_b: "sources/Orbit plan.pdf",

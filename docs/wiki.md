@@ -15,6 +15,8 @@ Sources (⌥⌘0) are the files in `sources/`: emails, Teams chats and transcrip
 - Drag files onto Sources, or click **Import**, to copy them in.
 - The **Outlook** and **Teams** Chrome extensions capture a thread, chat or meeting transcript into `sources/` with one click. Set them up in Settings › Capture extensions. Each capture also waits in the Inbox.
 - Each source is **New**, **Changed** (since the pages citing it were written) or **Ingested**.
+- A row's button is what the source usually becomes: **Meeting note** for a Teams transcript, **Draft reply** for an email or chat thread, otherwise **Ingest**. Its ▾ has the rest: **Make and ingest a meeting note** or **Draft a reply** where they fit, **Ingest into the wiki**, **Ask about this source** and **Compare with…**. A file's right-click menu offers the same.
+- Transcripts, emails and chats are known by their names (`Teams. Transcript. …`, `Email. …`, `Teams. Chat. …`), in `sources/` or any folder under it.
 - The **Ingest runs** pane lists each run's steps, the latest first and older ones as you scroll. **Search runs** finds them by name, state, model or day, and **See N changes** opens Changes at the run's first change.
 - PDFs open with page navigation, zoom and find. Word, PowerPoint and Excel files show their text; **Quick Look** (`Space`) shows how they look. Images show the text read from them, which search uses too.
 
@@ -76,7 +78,9 @@ Knowledge health checks the wiki whenever the vault changes: missing pages and l
 - **Fix safe issues** fixes the ones with one right answer (a missing link, a date, a `log.md` line, a system note's lost header), undoably.
 - **Ignore** hides an issue until its page changes; **Show again** brings a check's ignored issues back. Stale pages and claims with no citation also have **Ignore all**.
 - A fixed issue leaves the list at once, and the checks rerun within a second of any change to the vault. Checks only worth a look (stale pages, claims with no citation, pages with no Current state) have a grey icon, not amber.
-- Missing pages can be created, or linked to an existing page with **Link to…**. Duplicates can be compared or dismissed.
+- Missing pages can be created, or linked to an existing page with **Link to…**. Each says which pages link it. When a note's name is a slip away (after a rename, say), the row asks **Did you mean** that note, and **Link to it** points the links there.
+- A missing page or source whose file is in the Trash says **In the Trash since** the day, with **Restore from Trash** instead of **Create**.
+- A source changed since it was cited has **Ingest again**, so its pages catch up. Orphan pages have **Add them to index.md**, which brings the catalogue up to date now. Duplicates can be compared or dismissed.
 - **Pages not in the page shape** lists pages laid out another way. **Reshape pages** fixes the ones it can, without the AI, and checks that nothing is lost before it saves. Each page is one change in Changes, and you can revert the whole run at once. A page it can't fix says why; fix it, or **Reshape anyway**. The screen's help lists exactly what it changes.
 - **Pages with no Current state** lists pages with a Timeline but no Current state. **Write 5** and **Write all** have a cheap model write one from the page's opening and newest Timeline entries. Each page is a change in one run in Changes.
 - **Fix with Ask** hands the issues that need judgement to an assistant; its fixes are listed in Changes.
@@ -98,9 +102,11 @@ The **Graph** draws how pages link: a page's neighbourhood, or the whole wiki. E
   - Tick several (or **Tick all**) and **Make and ingest all** asks once for their dates, then does each. The card always says where a transcript is (being written, failed, held in Changes, its note there already) and leads with the step that's left.
   - The note is dated with the meeting's day. If the Teams extension couldn't read it, the capture day is used and you confirm it first.
 - **Fix name** corrects a misspelt name across every note and wiki page at once (sources are left alone), adds the wrong spelling as an alias, and remembers it for future ingests. One ⌘Z undoes it all.
-- **Draft reply** drafts an answer to an email or Teams thread, drawing on the vault, for you to copy and send.
+- **Draft reply** drafts an answer to an email or Teams thread, drawing on the vault, for you to copy and send. Type what to change in **Ask for a change** under the reply ("shorter") and press `↩`; it keeps your own edits, and **Undo** puts back the reply as it was. While the thread is still in the Inbox, a **Still in the Inbox** strip takes it out from there: **Done, keep in Sources**, **Ingest and take out** or **Move to the Trash**.
 - **Triage bookmarks** goes through your bookmarked notes with a suggestion for each: keep, update or drop.
-- **Doc check** checks a document against the version in force of the one it should follow, or whether a revision took in your feedback. The version in force comes from your register of governing documents, the note `Me. Canonical Docs.md`, which Doc check can start for you.
-- **Compare** (the same sidebar entry's other tab) compares any two documents, A and B: their differences, or what changed between two versions. Both first look at the documents' openings and stop when they aren't about the same thing. Checks run in the background, with **Stop** (which keeps nothing), and are kept until either document changes from the version they read.
+- **Compare**, in the sidebar's Tools, has two tabs:
+  - **Doc check** checks a document against the version in force of the one it should follow, or whether a revision took in your feedback. The version in force comes from your register of governing documents, the note `Me. Canonical Docs.md`, which Doc check can start for you.
+  - **Any two documents** compares A and B: their differences, or what changed between two versions. **Compare with…** on a file's right-click menu or a source's ▾ opens it with that file as A.
+  - Both first look at the documents' openings (**Check they're about the same thing**) and stop when they aren't. Each step is ticked off with its time. Checks run in the background, with **Stop** (which keeps nothing); the sidebar shows a spinner while one runs and a badge for those that finished while you were elsewhere. Results are kept until either document changes from the version they read.
 
 Assistants do all of this with Brainstead's tools, named as the screens are: for example `import_sources`, `facts`, `lint`, `ignore_issue`, `health_issue`, `page_shape`, `reshape_pages`, `write_current_state`, `list_contradictions` and `contradictions`.

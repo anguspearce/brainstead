@@ -10,6 +10,8 @@ Ask is a chat about your vault with an AI assistant installed on this computer, 
 ## Ask from any screen
 Most screens have an **Ask** button beside `?`. It starts a new chat about what you're looking at: the selected task, project, Inbox item, change, clash or page, or the screen itself when nothing is selected. Its tooltip says which. The question is begun for you ("About the task “Call Sam…”: ") to finish and send.
 
+**Ask about this source**, on a source's ▾ in [Sources](app:sources), a file's right-click menu or `A` on a capture in the [Inbox](app:inbox), starts a new chat begun "About [[the source]]: ". Started from the Inbox, the chat shows a **Still in the Inbox** strip while the capture waits there, to take it out without going back: **Done, keep in Sources**, **Ingest and take out** (**Make and ingest a meeting note** for a transcript) or **Move to the Trash**. A new chat takes the strip away.
+
 ## Start and manage chats
 Each chat is a tab. Click **+** (New chat) or press `⌘T` for a new one. A dot on a tab means an answer you haven't seen yet, and the sidebar's **Ask** shows how many open chats have one. Closing the last tab opens a new, empty one. Closing a tab doesn't delete the chat: it stays in **History**, where you can find a chat by title, reopen it, rename it, pin it or move it to the Trash. Saved and pinned chats are kept; closed chats that aren't saved or pinned are deleted once 20 newer ones are in History. The daily or weekly summary shows as a tab marked with a calendar while it runs, without taking you to Ask.
 

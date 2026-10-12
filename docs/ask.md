@@ -37,7 +37,7 @@ In short, an assistant can do whatever the screens do. The help tool, and the in
 - capture to the Inbox or the Scratchpad, and clarify Inbox items;
 - create projects, change their status, area and **Done looks like**, rename an area on all its projects, and put areas and projects in order;
 - edit any page, make notes (from your templates too) and wiki pages, rename, and move notes to or from the Trash;
-- add the example notes, save a Doc check or start its register, save a Contradictions report, and use Knowledge health's **Reshape pages** and **Link to…**.
+- add the example notes, save a Doc check or start its register, save a comparison, save a Contradictions report, and use Knowledge health's **Reshape pages** and **Link to…**.
 
 A quote not found in its source is flagged, once.
 
@@ -56,10 +56,10 @@ An assistant can list, reject or revert changes when you ask. It accepts a held 
 **At once, with no ⌘Z, only when you ask:**
 
 - the Weekly review's **Start over** (what it changed in the vault stays) and Moving over's ticks and **Retire them** (the previous app's skills and scripts go to the Trash). Neither works in a session nobody is watching;
-- going through the Weekly review, marking contradictions resolved or ignored, Knowledge health's **Ignore** and **Show again**;
+- going through the Weekly review, marking contradictions resolved or ignored, Knowledge health's **Ignore**, **Ignore all** and **Show again**;
 - Ask's chats (rename, pin, move to the Trash), Tasks' saved lists, a note's own look, and settings (all but the vault, Read-only and the folders left out);
 - how long Changes keeps its history, **Rebuild index**, and your tools that start Claude Code sessions;
-- runs, with their progress and **Stop**: an ingest, the daily or weekly summary, the weekly review's preparation, the daily check, Find tasks and projects, a contradictions check, a meeting note from a transcript, **Write Current state**, bookmark triage, a drafted reply and a doc check. What a run changes is listed in Changes, with Revert.
+- runs, with their progress and **Stop**: an ingest, the daily or weekly summary, the weekly review's preparation, the daily check, Find tasks and projects, a contradictions check, a meeting note from a transcript, **Write Current state**, bookmark triage, a drafted reply (revised when you ask for a change), a doc check and a comparison of two documents. What a run changes is listed in Changes, with Revert.
 
 **What it can read:** search, any page or section, backlinks, facts, tasks, the Inbox, projects, the summaries, the Weekly review, Changes, runs, transcripts, the Trash, Activity, Sources, Knowledge health's report, provenance, contradictions, the graph, Ask's chats, settings, Glance's counts, whether the app is running, and the in-app help. Each read is its own tool, marked read-only, so you can let an assistant read without asking you.
 
