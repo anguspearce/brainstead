@@ -15,10 +15,6 @@ vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(async () => {}) }))
 
 import { closedAfter, openTag, scriptBefore, templaterAssist, templaterCompletions } from "./templaterAssist";
 
-// jsdom has no layout; CodeMirror measures text after the view is made.
-Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
-Range.prototype.getBoundingClientRect = () => new DOMRect();
-
 const complete = (doc: string, template = true, after = "") =>
   templaterCompletions(
     new CompletionContext(

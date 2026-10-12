@@ -9,10 +9,6 @@ import { describe, expect, it } from "vitest";
 import { Highlight } from "./highlightSyntax";
 import { activeAt, codeBlock, insertBlock, link, setHeading, TABLE, toggleBlock, toggleMark, wikilink } from "./format";
 
-// jsdom has no layout; CodeMirror measures ranges to scroll the caret into view.
-Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
-Range.prototype.getBoundingClientRect = () => new DOMRect();
-
 /** A view over `doc`, `|` marking the caret, or `«`…`»` the selection. */
 function view(doc: string) {
   const caret = doc.includes("|");

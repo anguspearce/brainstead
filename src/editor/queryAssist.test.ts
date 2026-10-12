@@ -19,9 +19,6 @@ import { closeFenceOnEnter, dataviewjsOptions, dataviewOptions, fenceAt, queryDi
 import { dvLiteral, dvText, emptyDvForm, emptyTasksForm, parseDvForm, parseTasksForm, tasksText } from "./queryBuild";
 import { DV_API, DV_FUNCTION_INFO, setVaultVocabForTest, tasksInstructions } from "./queryVocab";
 
-Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
-Range.prototype.getBoundingClientRect = () => new DOMRect();
-
 setVaultVocabForTest({
   tags: ["#project", "#work/admin"],
   folders: ["Clients", "wiki/entities"],
