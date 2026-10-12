@@ -380,7 +380,8 @@ export async function templaterCompletions(ctx: CompletionContext): Promise<Comp
   const js = scriptBefore(before);
   if (js === null || /^<%#/.test(before.slice(before.lastIndexOf("<%")))) return null;
   const state = EditorState.create({ doc: js, extensions: [javascriptLanguage] });
-  ensureSyntaxTree(state, js.length, 200);
+  // A generous budget: a short one ran out on a busy machine and left the names declared earlier out.
+  ensureSyntaxTree(state, js.length, 2000);
   // Just after `<%` it's as if asked for: the list opens before anything is typed.
   const fresh = /<%[*_-]?\s*$/.test(before);
   const jctx = new CompletionContext(state, js.length, ctx.explicit || fresh);
