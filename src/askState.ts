@@ -185,7 +185,11 @@ function remember() {
   }
 }
 
-const seeing = (id: string) => place.get().place.screen === "ask" && ask.get().active === id && document.visibilityState !== "hidden";
+/** The window is in front of you: closing it only hides it, and a hidden page can still say it's
+ *  visible, so focus is asked too. */
+export const shown = () => document.visibilityState !== "hidden" && document.hasFocus();
+
+const seeing = (id: string) => place.get().place.screen === "ask" && ask.get().active === id && shown();
 
 /** The capture the Inbox sent to Ask about it, and the chat that's about it, for Ask's Still in the
  *  Inbox strip. Any new chat (⌘T, or asking about something else) clears it. */

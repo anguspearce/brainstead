@@ -31,6 +31,7 @@ import {
   openSaved,
   pendingPrompt,
   selectChat,
+  shown,
   send,
   setModel,
   stop,
@@ -72,10 +73,21 @@ export function AskScreen() {
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, []);
-  // Seeing a chat reads it.
+  // Seeing a chat reads it: an answer that lands while the window is closed stays unread until it's back.
   const c = s.chats.find((x) => x.id === s.active) ?? null;
   useEffect(() => {
-    if (c?.unread) selectChat(c.id);
+    if (!c?.unread) return;
+    const id = c.id;
+    const read = () => {
+      if (shown()) selectChat(id);
+    };
+    read();
+    window.addEventListener("focus", read);
+    document.addEventListener("visibilitychange", read);
+    return () => {
+      window.removeEventListener("focus", read);
+      document.removeEventListener("visibilitychange", read);
+    };
   }, [c?.id, c?.unread]);
 
   return (

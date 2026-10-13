@@ -19,7 +19,7 @@ Pick the assistant and model before the first message. New chats start with the 
 - An empty chat offers example questions and Brainstead's skills to click, or says **No assistant found** and what to install.
 - Keys: ↩ sends, ⇧↩ adds a line, ↑ and ↓ recall earlier messages, Esc (or **Stop**) stops an answer.
 - Messages sent while it answers queue up; a cross takes one out.
-- A dot on a tab marks an answer you haven't seen; the sidebar's Ask badge counts them. With Claude Code, a meter shows how full the chat's context is.
+- A dot on a tab marks an answer you haven't seen; the sidebar's Ask badge counts them. An answer that arrives while the window is closed (a scheduled summary, say) stays unseen until the window is back, even on the tab it was left on. With Claude Code, a meter shows how full the chat's context is.
 - `/` lists workflows. Brainstead's `/wiki` answers from the vault with citations, with any assistant. The vault's own Claude Code skills are listed too.
 - `[[` links a note and `#` a tag.
 - After each answer the box offers a next message in grey; → types it in. Turn it off with **Suggest a next message** in Settings › AI assistants; **Models by job** picks its model.
