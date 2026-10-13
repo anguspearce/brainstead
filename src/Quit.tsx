@@ -1,3 +1,7 @@
+// Copyright © 2026 Wayne Davies. Free software under the GNU General Public License, version 3 or later.
+// See LICENSE for the full text.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // The question ⌘Q and the menu bar's Quit Brainstead ask (the `quit-requested` event from
 // src-tauri): unsaved edits are asked about first (the leave dialog), then this. Esc or a click
 // outside is Cancel.

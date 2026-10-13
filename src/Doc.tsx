@@ -1302,7 +1302,7 @@ export function h1RepeatsTitle(src: string, title: string): boolean {
 const COPY_TIPS: Partial<Record<FileAction, string>> = {
   "copy-markdown": "Copy the note's markdown source",
   "copy-rich": "Copy the note formatted, to paste into an email or document",
-  "copy-path": "Copy the file's path in the vault",
+  "copy-path": "Copy the file's full path",
   "copy-title": "Copy the note's title",
 };
 

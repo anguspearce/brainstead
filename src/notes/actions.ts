@@ -16,6 +16,7 @@ import { reportEditError, undoLast } from "../taskModel";
 import { toast } from "../Toast";
 import { noteDialog } from "./dialogs";
 import { isTranscriptPath, trashTranscript } from "../meetingFlow";
+import { settings } from "../store";
 
 /** An error from Rust as one line for a person. */
 export const errText = (e: unknown) => (typeof e === "object" && e && "message" in e ? String((e as EditError).message) : String(e));
@@ -86,6 +87,12 @@ export async function trashFile(path: string): Promise<void> {
   }
 }
 
+/** A vault path as the file's full path on disk, which is what Copy path copies. */
+export function fullPath(path: string): string {
+  const root = (settings.get().vaultPath ?? "").replace(/\/$/, "");
+  return root ? `${root}/${path}` : path;
+}
+
 /** The actions the Note menu, the toolbar and the file menu share. */
 export type FileAction = "copy-markdown" | "copy-rich" | "copy-path" | "copy-title" | "export-pdf" | "rename" | "reveal" | "trash";
 
@@ -100,7 +107,7 @@ export async function fileAction(a: FileAction, f: { path: string; title: string
         if (el) await copyRich(el);
         return;
       case "copy-path":
-        await api.copyText(f.path);
+        await api.copyText(fullPath(f.path));
         return toast("Path copied");
       case "copy-title":
         await api.copyText(f.title);

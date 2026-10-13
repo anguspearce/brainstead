@@ -19,7 +19,8 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 
 const TRANSCRIPT = "sources/Teams. Transcript. Offsite - 2026-10-06.md";
 
-import { trashFile } from "./actions";
+import { fileAction, fullPath, trashFile } from "./actions";
+import { settings } from "../store";
 
 describe("Move to the Trash from the file menu", () => {
   it("points a transcript's links at its meeting note first, and trashes anything else as it is", async () => {
@@ -35,5 +36,15 @@ describe("Move to the Trash from the file menu", () => {
     await trashFile("notes/Plan.md");
     expect(invoke.mock.calls.map(([c]) => c)).not.toContain("health_link_ghost");
     expect(invoke.mock.calls.find(([c]) => c === "trash_move")![1]).toEqual({ path: "notes/Plan.md" });
+  });
+});
+
+describe("Copy path", () => {
+  it("copies the file's full path on disk, not its path in the vault", async () => {
+    settings.update({ vaultPath: "/Users/maya/Orbit notes/" });
+    expect(fullPath("Projects/Plan.md")).toBe("/Users/maya/Orbit notes/Projects/Plan.md");
+    invoke.mockClear();
+    await fileAction("copy-path", { path: "Projects/Plan.md", title: "Plan" });
+    expect(JSON.stringify(invoke.mock.calls.at(-1))).toContain("/Users/maya/Orbit notes/Projects/Plan.md");
   });
 });

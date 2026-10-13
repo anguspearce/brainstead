@@ -14,7 +14,7 @@ import { nav } from "./nav";
 import { askAboutNote } from "./Ask";
 import { runSourceAction, SOURCE_ACTION, sourceActions } from "./sourceActions";
 import { canIngest as ingestOffered } from "./Lists";
-import { copyRich, errText, exportPdf, openRename, toggleBookmark, trashFile, useBookmarked } from "./notes/actions";
+import { copyRich, errText, exportPdf, fullPath, openRename, toggleBookmark, trashFile, useBookmarked } from "./notes/actions";
 import { Popover } from "./ui";
 import { toast } from "./Toast";
 
@@ -197,8 +197,8 @@ export function FileMenu({ menu, doc, readFrom }: { menu: MenuState; doc?: () =>
         <button
           type="button"
           role="menuitem"
-          title={`Copy the file's path in the vault, ${f.path}${sc("⌥⌘C")}`}
-          onClick={run(() => api.copyText(f.path), "Path copied")}
+          title={`Copy the file's full path, ${fullPath(f.path)}${sc("⌥⌘C")}`}
+          onClick={run(() => api.copyText(fullPath(f.path)), "Path copied")}
         >
           <Icon name="copy" size={14} />
           Copy path
