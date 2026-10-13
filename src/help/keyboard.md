@@ -19,7 +19,7 @@ Each key works where its heading says. Quick capture's shortcut is set in [Setti
 - `?` — Help for this screen
 - `Esc` — Clear the screen's search box
 - `⇧⌘?` — Brainstead Help (Help menu)
-- `⌘Q` — Quit (asks first about unsaved changes)
+- `⌘Q` — Quit (asks first, and about unsaved changes before that)
 
 ## A note
 - `⌘1` `⌘2` `⌘3` — View, Edit, Source

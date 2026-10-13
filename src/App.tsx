@@ -20,6 +20,7 @@ import { FollowUp } from "./Ingest";
 import { FixNameHost } from "./FixName";
 import { ImageViewerHost } from "./ImageViewer";
 import { ShortcutsHost } from "./Shortcuts";
+import { QuitDialog } from "./Quit";
 import { HelpDrawer, startHelpMenu } from "./help/HelpDrawer";
 import { startMcpBridge } from "./mcpActions";
 import { startSpeech } from "./speech/player";
@@ -97,11 +98,10 @@ export default function App({ scene }: { scene: Scene | null }) {
     if (p) hideSplash();
   }, [p]);
 
-  // ⌘Q: unsaved edits are asked about first (the leave dialog), then the app quits. Restarting
-  // into an update (src-tauri/src/updates.rs) asks the same, and saves the settings first.
+  // ⌘Q is asked in src/Quit.tsx. Restarting into an update (src-tauri/src/updates.rs) asks about
+  // unsaved edits as it does, and saves the settings first.
   useEffect(() => {
     const off = [
-      api.onQuitRequested(() => whenFree(() => void api.appQuit())),
       api.onRestartRequested(() => {
         let went = false;
         whenFree(() => {
@@ -204,6 +204,7 @@ export default function App({ scene }: { scene: Scene | null }) {
       <FollowUp />
       <RevertConflict />
       <UpdateHost />
+      <QuitDialog />
       <Toasts />
     </div>
   );

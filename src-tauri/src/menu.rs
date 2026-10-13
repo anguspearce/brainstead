@@ -82,6 +82,17 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
         }
         None => menu.append(&SubmenuBuilder::new(app, "Help").item(&help_open).item(&help_keys).item(&help_site).build()?)?,
     }
+    // The standard Quit quits at once (macOS's terminate:, which Tauri can't stop); this one asks
+    // first, as the menu bar's Quit does (tray::tray_quit, src/Quit.tsx).
+    if let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next().filter(|_| cfg!(target_os = "macos")) {
+        let items = app_menu.items()?;
+        if let Some(at) =
+            items.iter().position(|i| matches!(i, MenuItemKind::Predefined(p) if p.text().is_ok_and(|t| t.starts_with("Quit"))))
+        {
+            app_menu.remove_at(at)?;
+            app_menu.insert(&MenuItemBuilder::with_id("app:quit", "Quit Brainstead").accelerator("CmdOrCtrl+Q").build(app)?, at)?;
+        }
+    }
     app.set_menu(menu)?;
     *app.state::<NoteMenu>().0.lock().unwrap() = doc_items;
     app.on_menu_event(|app, ev| {
@@ -95,6 +106,10 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
         }
         if id == "app:about" {
             about(app);
+            return;
+        }
+        if id == "app:quit" {
+            crate::tray::tray_quit(app.clone());
             return;
         }
         if id == "app:updates" {
