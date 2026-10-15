@@ -14,7 +14,7 @@ The finished build plan is untracked in `archive/`. Decisions: `_sift/decisions.
 
 ## Commands
 
-The commands below are for macOS. Windows has no `make`: use `python tools/check.py` for the check (`python tools/check.py rust` runs one group), `npm run tauri dev` to run with hot reload and `npm run tauri build` to build the NSIS installer in `src-tauri/target/release/bundle/nsis/` (`Brainstead_<version>_x64-setup.exe`). The `app`, `install-app`, `dmg`, `icons`, `sign-check` and `screenshots` targets are macOS only.
+The commands below are for macOS. Windows has no `make`: use `python tools/check.py` for the check (`python tools/check.py rust` runs one group), `npm run tauri dev` to run with hot reload, `npm run tauri build` to build the NSIS installer in `src-tauri/target/release/bundle/nsis/` (`Brainstead_<version>_x64-setup.exe`) and `python tools/install_windows.py` to build it, quit Brainstead, install it silently for your user and open it (`make install-app`'s counterpart). The `app`, `install-app`, `dmg`, `icons`, `sign-check` and `screenshots` targets are macOS only.
 
 On Windows you need rustup (stable-msvc), Visual Studio Build Tools with the "Desktop development with C++" workload, Node.js 22 or later, Python 3 (the git hooks call `python3`, so it must be on your PATH under that name) and ruff. Run `npm ci` once. CI runs the full check on macOS and Windows and compiles on Linux.
 

@@ -5,7 +5,7 @@
 # Brainstead — build, sign and install the app.
 #
 # This Makefile is for macOS. On Windows run `python tools/check.py` for the checks and
-# `npm run tauri build` for the installer.
+# `npm run tauri build` for the installer (`python tools/install_windows.py` builds and installs it).
 
 APP      := src-tauri/target/release/bundle/macos/Brainstead.app
 

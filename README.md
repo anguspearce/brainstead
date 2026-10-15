@@ -65,6 +65,7 @@ npm ci
 npm run tauri dev      # run it with hot reload
 python tools/check.py  # the full check
 npm run tauri build    # the installer, in src-tauri/target/release/bundle/nsis/
+python tools/install_windows.py  # build it and install it for your user
 ```
 
 [Development](docs/development.md) has the rest: signing, the checks, the MCP server, evals, screenshots and where things live.
