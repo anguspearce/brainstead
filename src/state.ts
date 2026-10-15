@@ -49,12 +49,17 @@ export async function recheckPermissions() {
 }
 
 export async function startStatus() {
+  // Every change of status is an event, so once one has come the first read's answer is the
+  // older of the two (it can arrive after an event the vault opening sent meanwhile).
+  let heard = false;
   await api.onIndexStatus((s) => {
+    heard = true;
     const was = vaultStatus.get().state;
     vaultStatus.set(s);
     // A finished (re)index changes everything.
     if (s.state === "ready" && was !== "ready") vaultVersion.set({ n: vaultVersion.get().n + 1, changes: null });
   });
   await api.onVaultChanged((c) => vaultVersion.set({ n: vaultVersion.get().n + 1, changes: c }));
-  vaultStatus.set(await api.vaultStatus());
+  const first = await api.vaultStatus();
+  if (!heard) vaultStatus.set(first);
 }

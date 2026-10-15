@@ -768,6 +768,7 @@ pub fn run() {
     if let Some(w) = &settings_warning {
         crate::applog!("settings: {w}");
     }
+    let vault_service = VaultService::opening(settings.vault_path.clone());
     let state = AppState { settings: Mutex::new(settings), settings_path };
 
     let builder = tauri::Builder::default();
@@ -796,7 +797,7 @@ pub fn run() {
         .manage(find::Find::load())
         .manage(capture::CaptureState::default())
         .manage(state)
-        .manage(VaultService::default())
+        .manage(vault_service)
         .manage(menu::NoteMenu::default())
         .manage(edits::UndoStack::load(edits::undo_file(&data)))
         .manage(brainstead_core::drafts::Drafts::new(notes::drafts_dir(&data)))
