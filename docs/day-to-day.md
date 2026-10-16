@@ -18,7 +18,7 @@ Brainstead's menu-bar icon shows three dots while a run is going, and a dot when
 - Changes held for you and items in the Inbox, each opening its screen.
 - **Open Brainstead** (⌘O), **Today** (⌘T), **Ask** (⌘J), **Run the daily check now**, **Settings…** (⌘,) and **Quit Brainstead** (⌘Q).
 
-Turn on **Open at login** (in Settings › General or the menu-bar window) and **Only in the menu bar when the window is closed** (Settings › General), and Brainstead starts when you log in and stays out of the Dock until you open its window (on Windows, out of the taskbar). On Windows, with **Show in the menu bar** off, closing the window quits Brainstead; with it on, closing hides the window to the tray. Starting Brainstead a second time brings the running window forward.
+Turn on **Open at login** (in Settings › General or the menu-bar window) and **Only in the menu bar when the window is closed** (Settings › General), and Brainstead starts when you log in and stays out of the Dock until you open its window. Windows has no such setting, because a closed window is already out of the taskbar: with **Show in the menu bar** on, closing the window hides it to the tray; with it off, closing the window quits Brainstead. On Windows, **Open at login** starts Brainstead with its window, and starting Brainstead a second time brings the running window forward.
 
 ## Summaries and jobs
 
@@ -59,7 +59,7 @@ Settings (⌘,) has General, Notes, Vault, AI assistants, Jobs & schedule, Captu
 
 ## In the background
 
-- **Updates.** Brainstead checks for a new version 20 seconds after it opens and then once a day, and offers it in its window the next time the window has the focus, with what's new in it: **Install and Restart**, **Later** (asked again at the next day's check) or **Skip This Version**. Brainstead › Check for Updates… checks now. Installing shows the download's progress, then restarts. An update waits while something is running (Ask answering, an ingest, a summary, the daily check), and restarting asks about unsaved edits first, as quitting does.
+- **Updates.** Brainstead checks for a new version 20 seconds after it opens and then once a day, and offers it in its window the next time the window has the focus, with what's new in it: **Install and Restart**, **Later** (asked again at the next day's check) or **Skip This Version**. Brainstead › Check for Updates… checks now. Installing shows the download's progress, then restarts. An update waits while something is running (Ask answering, an ingest, a summary, the daily check), and restarting asks about unsaved edits first, as quitting does. On Windows Brainstead doesn't check yet, because releases carry only the Mac app: install a new version with its installer.
 - **The index.** Brainstead indexes the vault in a database outside it, so search and lists are instant. It picks up changes from other apps as they happen.
 - **Safe writes.** Every save is all-or-nothing, keeps the file's line endings, and refuses if the file changed since it was read. Files that aren't UTF-8 open read-only.
 - **Drafts.** Unsaved text is kept as a draft a second after you stop typing, and offered back after a crash.

@@ -196,7 +196,7 @@ export function HealthScreen() {
           id="fix-all"
           icon="check"
           className="btn"
-          title="Fix every issue that's safe to fix; ⌘Z undoes it"
+          title={keyLabel("Fix every issue that's safe to fix; ⌘Z undoes it")}
           disabled={!fixes.length}
           onClick={() => act("fix-all", () => api.healthFix(fixes), fixed)}
         >
@@ -443,7 +443,7 @@ function Row({ check, i, on }: { check: string; i: LintItem; on: Handlers }) {
       {i.safe && page && check !== "page-shape" && (
         <BusyButton
           id={`fix:${i.text}`}
-          title="Fix this issue; ⌘Z undoes it"
+          title={keyLabel("Fix this issue; ⌘Z undoes it")}
           onClick={() => act(`fix:${i.text}`, () => api.healthFix([fixOf(check, i)]), fixed)}
         >
           Fix
@@ -515,7 +515,7 @@ function Row({ check, i, on }: { check: string; i: LintItem; on: Handlers }) {
             {check === "missing-pages" && !inTrash && (
               <BusyButton
                 id={`create:${i.name}`}
-                title={`Make an entity page called ${pageName(ghost)} in wiki/entities and open it; ⌘Z undoes it`}
+                title={keyLabel(`Make an entity page called ${pageName(ghost)} in wiki/entities and open it; ⌘Z undoes it`)}
                 onClick={() =>
                   act(
                     `create:${i.name}`,

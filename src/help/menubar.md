@@ -26,4 +26,6 @@ While Brainstead runs, its menu-bar icon opens a small window. On Windows the ic
 While the window is open: `⌘O` opens Brainstead, `⌘T` Today, `⌘J` Ask, `⌘,` Settings and `⌘Q` quits. They don't work while you're typing in the capture box.
 
 ## Keep Brainstead in the menu bar
-Turn on **Open at login** and **Only in the menu bar when the window is closed** in [Settings › General](app:settings/general). Brainstead then starts at login, and closing its window takes it out of the Dock (the taskbar on Windows); the icon, or opening the app, brings it back. Quick capture, browser captures and the scheduled summaries keep working. On Windows, with **Show in the menu bar** off, closing the window quits Brainstead; starting it again while it runs brings its window forward.
+Turn on **Open at login** and **Only in the menu bar when the window is closed** in [Settings › General](app:settings/general). Brainstead then starts at login, and closing its window takes it out of the Dock; the icon, or opening the app, brings it back. Quick capture, browser captures and the scheduled summaries keep working.
+
+Windows has no **Only in the menu bar** setting, because a closed window is already out of the taskbar. With **Show in the menu bar** on, closing the window hides it to the tray and Brainstead keeps running; with it off, closing the window quits Brainstead. Starting it again while it runs brings its window forward.

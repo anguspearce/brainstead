@@ -133,7 +133,7 @@ import { LABEL as TRIAGE } from "./skills/Triage";
 import { ANSWERED, replyTask } from "./skills/Reply";
 import { actionLabel, actionsIn, filterLog, rankLog } from "./activityModel";
 import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from "./taskGroups";
-import { isMac, keyLabel, terminalApp } from "./platform";
+import { captureDefault, isMac, keyLabel, terminalApp } from "./platform";
 
 const TODO_LIST = "Me. To Do List.md";
 const SCRATCHPAD = "Me. Scratchpad.md";
@@ -3082,13 +3082,14 @@ async function modelChoices(): Promise<[string, string][]> {
   return found.filter((c) => c.path).flatMap((c) => c.models.map((m) => [m.id, modelLabel(m.id, found)] as [string, string]));
 }
 
-const SETTINGS: SettingRow[] = [
+/** Settings as list_settings shows them; a function, so the platform's defaults are the ones in force. */
+const settingRows = (): SettingRow[] => [
   ["ownerName", "General", "Your name", "text", ""],
   ["theme", "General", "Appearance (system, light or dark)", "theme", "system"],
   ["openAtLogin", "General", "Open at login", "bool", false],
   ["menuBar", "General", "Show in the menu bar", "bool", true],
   ["menuBarOnly", "General", `Only in the menu bar when the window is closed${isMac ? "" : " (Mac only; no effect here)"}`, "bool", false],
-  ["captureShortcut", "General", "Quick capture shortcut (as Control+Alt+Space)", "shortcut", "Control+Alt+Space"],
+  ["captureShortcut", "General", `Quick capture shortcut (as ${captureDefault()})`, "shortcut", captureDefault()],
   ["spellCheck", "Notes", "Check spelling", "bool", true],
   ["grammarCheck", "Notes", "Check grammar", "bool", true],
   [
@@ -3196,7 +3197,7 @@ async function settingsTool(a: Args): Promise<string> {
   // Open at login is macOS's login item, not a setting in the file; null where macOS can't say
   // (a copy run from a folder), and then it isn't offered, as the screen hides it.
   const login = (await api.loginItem().catch(() => null)) ?? null;
-  const offered = SETTINGS.filter(([k]) => k !== "openAtLogin" || login !== null);
+  const offered = settingRows().filter(([k]) => k !== "openAtLogin" || login !== null);
   const valueOf = (key: string, def: unknown) => {
     if (key === "openAtLogin") return login;
     const [head, sub] = key.split(".");

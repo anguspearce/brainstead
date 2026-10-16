@@ -289,7 +289,7 @@ function TaskMenu({ t, at, onClose }: { t: TaskRow; at: DOMRect; onClose: () => 
                 }
               }}
             />
-            <span className="faint small">↩ to rename; its dates and tags stay as they are.</span>
+            <span className="faint small">{keyLabel("↩")} to rename; its dates and tags stay as they are.</span>
           </div>
         ) : (
           <>

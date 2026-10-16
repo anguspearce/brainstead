@@ -80,7 +80,7 @@ agy mcp add brainstead -- "/Applications/Brainstead.app/Contents/MacOS/Brainstea
 
 On Windows the command points at the installed exe instead, for example `claude mcp add -s user brainstead -- "%LOCALAPPDATA%\Brainstead\Brainstead.exe" --mcp`. Settings › AI assistants shows the exact path for each assistant.
 
-Searching and reading the vault, facts, the summaries, the health report, the Page shape check and help work with Brainstead closed. Everything else needs the app, and opens it. An update doesn't disconnect a session: its tools move to the new version by themselves, between calls. An assistant can also bring the window to the front on a screen, a Settings pane, a note, a search or an image.
+Searching and reading the vault, facts, the summaries, the health report, the Page shape check and help work with Brainstead closed. Everything else needs the app, and opens it. On a Mac an update doesn't disconnect a session: its tools move to the new version by themselves, between calls. On Windows the update stops them, so reconnect them in the assistant (in Claude Code, `/mcp`). An assistant can also bring the window to the front on a screen, a Settings pane, a note, a search or an image.
 
 Some things stay with you:
 

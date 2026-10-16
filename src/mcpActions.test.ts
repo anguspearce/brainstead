@@ -25,7 +25,7 @@ import { focusMode, startFocus } from "./focus";
 import { nav } from "./nav";
 import { imageView } from "./ImageViewer";
 import { followUp } from "./Ingest";
-import { isMac, keyLabel, terminalApp } from "./platform";
+import { isMac, keyLabel, platform, setPlatform, terminalApp } from "./platform";
 
 const row = (over: Partial<TaskRow>): TaskRow => ({
   path: "Me. To Do List.md",
@@ -1155,6 +1155,18 @@ describe("MCP actions", () => {
       expect(out).toContain("summaries.dailyEnabled · Settings › Jobs & schedule › Daily summary: false");
       expect(out).toContain("summaries.weeklyEnabled · Settings › Jobs & schedule › Weekly summary: false");
       expect(out).toContain("logDays · Settings › About › The app's logs › Keep (days: 7, 14, 30 or 90): 14");
+    });
+
+    it("gives the capture shortcut's default for the platform, as Settings does", async () => {
+      const was = platform();
+      try {
+        setPlatform("windows");
+        expect(await run("settings")).toContain(`Quick capture shortcut (as Control+Shift+Space): "Control+Shift+Space"`);
+        setPlatform("macos");
+        expect(await run("settings")).toContain(`Quick capture shortcut (as Control+Alt+Space): "Control+Alt+Space"`);
+      } finally {
+        setPlatform(was);
+      }
     });
 
     it("lists bookmarks with Triage's untouched days, and filters saved searches by query", async () => {

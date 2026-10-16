@@ -177,7 +177,7 @@ function Bookmarks({ current }: { current?: string }) {
             type="button"
             className="ibtn xs bmx"
             aria-label={`Remove the bookmark for ${b.title}`}
-            title={`Remove the bookmark for ${b.title}; the note stays (⌘Z puts it back)`}
+            title={keyLabel(`Remove the bookmark for ${b.title}; the note stays (⌘Z puts it back)`)}
             onClick={() =>
               void api
                 .bookmarkRemove(b.target)

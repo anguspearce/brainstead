@@ -70,7 +70,7 @@ Two things stay with you on the [Trash](app:trash) screen: **Empty the Trash** a
 ## When Brainstead isn't open
 Reading pages, search, facts, the summaries, the health report and the Page shape check work whether the app is open or not. Everything else needs the app: the assistant opens Brainstead and waits for it.
 
-Updating Brainstead doesn't disconnect an assistant in a session outside the app: its tools move to the new version by themselves, between calls, a few seconds after the update is in place.
+Updating Brainstead doesn't disconnect an assistant in a session outside the app on a Mac: its tools move to the new version by themselves, between calls, a few seconds after the update is in place. On Windows the update stops them, because Windows can't replace a program while it runs; reconnect them in the assistant afterwards (in Claude Code, `/mcp`).
 
 An assistant can also bring Brainstead's window to the front when you ask to see something: a screen, a Settings pane, a note, a search, or [Graph](app:graph) around a page.
 

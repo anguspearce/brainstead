@@ -29,6 +29,9 @@ mod other;
 #[cfg(not(target_os = "macos"))]
 use other as imp;
 
+mod tray;
+pub use tray::{place_tray_window, tray_icon, tray_window_resized};
+
 /// Where Brainstead keeps settings.json and index.db: `~/Library/Application Support/Brainstead/`
 /// on macOS, `%APPDATA%\Brainstead` on Windows. `BRAINSTEAD_DATA` overrides it (screenshots,
 /// tests). The rule is in core, which the standalone MCP server shares.
@@ -673,6 +676,26 @@ fn manifest_file(file: &Path, want: &serde_json::Value, write: bool) -> (bool, b
         }
     }
     (current || have.is_some(), current)
+}
+
+/// Puts the menu bar up. macOS has one menu bar for the app. Elsewhere a menu set on the app is
+/// attached to every window, the frameless capture and menu windows too, so it goes on the main
+/// window alone.
+pub fn set_menu_bar(app: &tauri::AppHandle, menu: tauri::menu::Menu<tauri::Wry>) -> tauri::Result<()> {
+    #[cfg(target_os = "macos")]
+    app.set_menu(menu)?;
+    #[cfg(not(target_os = "macos"))]
+    if let Some(main) = tauri::Manager::get_webview_window(app, "main") {
+        main.set_menu(menu)?;
+    }
+    Ok(())
+}
+
+/// Whether releases carry an update for this system (`crate::updates`). A release has the macOS
+/// package and its signature alone (tools/update_files.py); anywhere else the updater would find no
+/// package for the platform, so it doesn't look.
+pub fn release_updates() -> bool {
+    cfg!(target_os = "macos")
 }
 
 /// Which of the features that aren't on every system this one has. The window hides what is

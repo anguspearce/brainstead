@@ -142,7 +142,7 @@ const BULK_LABEL: Record<string, (n: number, caps: boolean) => [string, string, 
     caps ? `Move ${n} to the Trash` : `Delete ${n}`,
     caps
       ? "Move the captured files to the vault’s Trash"
-      : "Delete them from the Inbox (captures go to the Trash); ⌘Z undoes one at a time",
+      : keyLabel("Delete them from the Inbox (captures go to the Trash); ⌘Z undoes one at a time"),
   ],
 };
 /** Choices for several ticked items at once, as [key, choice, label, tip]: those every one of them

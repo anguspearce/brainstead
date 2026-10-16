@@ -2536,7 +2536,7 @@ fn create_task(ctx: &Ctx, a: TaskArgs) -> Result<String, String> {
 
 /// Runs the server on stdin and stdout; the process's exit code.
 pub fn main_with(args: &[String], default_data: PathBuf) -> i32 {
-    let mut ctx = match Ctx::from_args(args, default_data) {
+    let ctx = match Ctx::from_args(args, default_data) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("brainstead mcp: {e}");
@@ -2545,6 +2545,7 @@ pub fn main_with(args: &[String], default_data: PathBuf) -> i32 {
     };
     #[cfg(unix)]
     let served = {
+        let mut ctx = ctx;
         if let Some(r) = reload::Resume::take() {
             r.apply(&mut ctx);
         }

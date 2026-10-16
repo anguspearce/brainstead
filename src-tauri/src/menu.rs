@@ -131,14 +131,7 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
             app_menu.insert(&MenuItemBuilder::with_id("app:quit", "Quit Brainstead").accelerator("CmdOrCtrl+Q").build(app)?, at)?;
         }
     }
-    // macOS has one menu bar for the app. Elsewhere a menu set on the app is attached to every
-    // window, the frameless capture and menu windows too, so it goes on the main window alone.
-    #[cfg(target_os = "macos")]
-    app.set_menu(menu)?;
-    #[cfg(not(target_os = "macos"))]
-    if let Some(main) = app.get_webview_window("main") {
-        main.set_menu(menu)?;
-    }
+    crate::platform::set_menu_bar(app, menu)?;
     *app.state::<NoteMenu>().0.lock().unwrap() = doc_items;
     app.on_menu_event(|app, ev| {
         let id = ev.id().as_ref();

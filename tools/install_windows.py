@@ -9,6 +9,13 @@ running Brainstead, installs it for this user and opens it.
 
 The installer runs silent (/S), so there is no SmartScreen prompt and no reinstall page; installing
 over the same version replaces the files and keeps the data folder (%APPDATA%\\Brainstead).
+
+Quitting asks first, as make install-app does on a Mac: `Brainstead.exe --quit` hands the request to
+the running copy, which asks about unsaved edits and quits. One still running after QUIT_WAIT
+seconds is stopped. Only the installed app's own window process is asked or stopped, never a
+`--mcp` server an assistant started from the same program, nor a dev build elsewhere. The
+installer's own check (Windows' Restart Manager) still stops anything running the installed program
+file, MCP servers included, because Windows can't replace a program file in use.
 """
 
 import json
@@ -21,6 +28,40 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CONF = ROOT / "src-tauri" / "tauri.conf.json"
 BUNDLE = ROOT / "src-tauri" / "target" / "release" / "bundle" / "nsis"
+QUIT_WAIT = 10
+
+
+def app_pids(exe):
+    """The installed app's own processes: those running `exe`, less its `--mcp` servers."""
+    query = (
+        "Get-CimInstance Win32_Process -Filter \"Name='Brainstead.exe'\" | "
+        "Select-Object ProcessId, ExecutablePath, CommandLine | ConvertTo-Json -Compress"
+    )
+    out = subprocess.run(["powershell", "-NoProfile", "-Command", query], capture_output=True, text=True).stdout.strip()
+    if not out:
+        return []
+    rows = json.loads(out)
+    rows = rows if isinstance(rows, list) else [rows]
+    want = os.path.normcase(str(exe))
+    return [
+        r["ProcessId"]
+        for r in rows
+        if os.path.normcase(r.get("ExecutablePath") or "") == want and "--mcp" not in (r.get("CommandLine") or "").split()
+    ]
+
+
+def quit_app(exe):
+    """Asks the installed app to quit (`--quit`), and stops it if it's still running after QUIT_WAIT seconds."""
+    if not app_pids(exe):
+        return
+    subprocess.run([str(exe), "--quit"], cwd=exe.parent)
+    for _ in range(QUIT_WAIT * 2):
+        if not app_pids(exe):
+            return
+        time.sleep(0.5)
+    print(f"Brainstead didn't quit within {QUIT_WAIT} s (unsaved edits?), so it is stopped", flush=True)
+    for pid in app_pids(exe):
+        subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
 
 
 def main():
@@ -40,12 +81,12 @@ def main():
     setup = BUNDLE / f"Brainstead_{version}_x64-setup.exe"
     if not setup.is_file():
         sys.exit(f"install_windows: no installer at {setup}")
-    # The installer would stop it too; quitting first keeps the files free to replace.
-    subprocess.run(["taskkill", "/IM", "Brainstead.exe", "/F"], capture_output=True)
+    exe = Path(os.environ["LOCALAPPDATA"]) / "Brainstead" / "Brainstead.exe"
+    if exe.is_file():
+        quit_app(exe)
     if subprocess.run([str(setup), "/S"]).returncode != 0:
         sys.exit("install_windows: the installer failed")
 
-    exe = Path(os.environ["LOCALAPPDATA"]) / "Brainstead" / "Brainstead.exe"
     if not exe.is_file():
         sys.exit(f"install_windows: installed, but {exe} isn't there")
     print(f"installed {exe}")

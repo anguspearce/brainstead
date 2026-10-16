@@ -91,10 +91,15 @@ export async function trashFile(path: string): Promise<void> {
   }
 }
 
-/** A vault path as the file's full path on disk, which is what Copy path copies. */
+/**
+ * A vault path as the file's full path on disk, which is what Copy path copies. A vault path
+ * always uses `/`; a Windows root (`C:\Users\…`) uses `\`, so the path takes the root's separator.
+ */
 export function fullPath(path: string): string {
-  const root = (settings.get().vaultPath ?? "").replace(/\/$/, "");
-  return root ? `${root}/${path}` : path;
+  const raw = settings.get().vaultPath ?? "";
+  const sep = /^([A-Za-z]:\\|\\\\)/.test(raw) ? "\\" : "/";
+  const root = raw.replace(/[\\/]$/, "");
+  return root ? `${root}${sep}${path.replaceAll("/", sep)}` : path;
 }
 
 /** The actions the Note menu, the toolbar and the file menu share. */

@@ -774,10 +774,12 @@ pub fn run() {
     let builder = tauri::Builder::default();
     // First of the plugins, as the plugin requires: a second launch hands over to this copy, which
     // shows its window, rather than running a second copy on the same index, bridge and capture
-    // shortcut. Not for a screenshot scene, which runs beside the app on purpose.
+    // shortcut. Not for a screenshot scene, which runs beside the app on purpose, nor for a copy
+    // with its own data folder (`BRAINSTEAD_DATA`, a dev copy): the lock is the app identifier's,
+    // shared by every build, and that copy has its own index and bridge.
     #[cfg(any(windows, target_os = "linux"))]
-    let builder = if scene().is_none() {
-        builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app)))
+    let builder = if scene().is_none() && std::env::var_os("BRAINSTEAD_DATA").is_none() {
+        builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| tray::second_launch(app, &args)))
     } else {
         builder
     };
@@ -1013,6 +1015,11 @@ pub fn run() {
             scene
         ])
         .setup(move |app| {
+            // `Brainstead --quit` (the Windows install script) with no copy running to hand it to
+            // (`tray::second_launch`): there is nothing to quit, so this copy doesn't start either.
+            if std::env::args().skip(1).any(|a| a == "--quit") {
+                std::process::exit(0);
+            }
             // Runs an earlier session left waiting: nothing will take them now.
             ingest::settle_stale();
             // The capture extensions' host, registered with each browser (not by a screenshot demo,
@@ -1086,7 +1093,8 @@ pub fn run() {
                 // Closing the window hides it: the app keeps running for the capture shortcut,
                 // and clicking the Dock or tray icon brings the window back. ⌘Q quits. On Windows
                 // with no tray icon (`tray::close_quits`) closing quits, through the window's own
-                // quit so it asks about unsaved edits first.
+                // quit so it asks about unsaved edits first; the "unasked" payload tells src/Quit.tsx
+                // not to ask "Quit Brainstead?" as well, since closing is how a Windows app quits.
                 let w2 = w.clone();
                 w.on_window_event(move |ev| match ev {
                     tauri::WindowEvent::CloseRequested { api, .. } => {
@@ -1094,7 +1102,7 @@ pub fn run() {
                         let app = w2.app_handle();
                         let _ = app.save_window_state(STATE_FLAGS);
                         if tray::close_quits(app) {
-                            let _ = tauri::Emitter::emit_to(app, "main", "quit-requested", ());
+                            let _ = tauri::Emitter::emit_to(app, "main", "quit-requested", "unasked");
                         } else {
                             let _ = w2.hide();
                             tray::main_closed(app);

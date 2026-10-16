@@ -1081,7 +1081,12 @@ export const api = {
   smartListDelete: (name: string) => invoke<void>("smart_list_delete", { name }),
   /** Quits (⌘Q, once unsaved edits have been dealt with). */
   appQuit: () => invoke<void>("app_quit"),
-  onQuitRequested: (f: () => void): Promise<UnlistenFn> => listen("quit-requested", () => f()),
+  /**
+   * `ask` is false for a quit that shouldn't ask "Quit Brainstead?": closing the window on Windows
+   * with no tray icon, or the Windows install script's `Brainstead --quit`.
+   */
+  onQuitRequested: (f: (ask: boolean) => void): Promise<UnlistenFn> =>
+    listen<string | null>("quit-requested", (e) => f(e.payload !== "unasked")),
   /** Restarts into an update just installed, once unsaved edits have been dealt with. */
   appRestart: () => invoke<void>("app_restart"),
   onRestartRequested: (f: () => void): Promise<UnlistenFn> => listen("restart-requested", () => f()),
