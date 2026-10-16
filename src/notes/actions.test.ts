@@ -19,7 +19,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 
 const TRANSCRIPT = "sources/Teams. Transcript. Offsite - 2026-10-06.md";
 
-import { fileAction, fullPath, trashFile } from "./actions";
+import { fileAction, fullPath, loadImagesForPrint, trashFile } from "./actions";
 import { settings } from "../store";
 
 describe("Move to the Trash from the file menu", () => {
@@ -46,5 +46,23 @@ describe("Copy path", () => {
     invoke.mockClear();
     await fileAction("copy-path", { path: "Projects/Plan.md", title: "Plan" });
     expect(JSON.stringify(invoke.mock.calls.at(-1))).toContain("/Users/maya/Orbit notes/Projects/Plan.md");
+  });
+});
+
+describe("Export PDF", () => {
+  it("loads lazy images before printing, so ones below the fold are in the PDF", async () => {
+    const box = document.createElement("div");
+    box.innerHTML = `<img loading="lazy" src="a.png"><img loading="lazy" src="b.png">`;
+    const decode = vi.fn(async () => {});
+    for (const img of box.querySelectorAll("img")) {
+      Object.defineProperty(img, "complete", { value: false });
+      img.decode = decode;
+    }
+    await loadImagesForPrint(box, 50);
+    expect([...box.querySelectorAll("img")].map((i) => i.loading)).toEqual(["eager", "eager"]);
+    expect(decode).toHaveBeenCalledTimes(2);
+    // One that never loads doesn't hold the export up.
+    box.querySelector("img")!.decode = () => new Promise(() => {});
+    await loadImagesForPrint(box, 20);
   });
 });

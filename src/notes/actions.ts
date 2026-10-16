@@ -40,6 +40,15 @@ export async function copyRich(el: HTMLElement): Promise<void> {
   }
 }
 
+/** Loads every image on the page, lazy ones off the screen too, and waits for them (up to
+ *  `ms`): WebKit's print doesn't load a lazy image, so the PDF would have none below the fold. */
+export async function loadImagesForPrint(root: ParentNode = document, ms = 10_000): Promise<void> {
+  const imgs = [...root.querySelectorAll("img")];
+  for (const img of imgs) img.loading = "eager";
+  const loaded = imgs.map((img) => (img.complete ? Promise.resolve() : img.decode().catch(() => {})));
+  await Promise.race([Promise.all(loaded), new Promise((r) => setTimeout(r, ms))]);
+}
+
 /** Asks where to save, then prints the window's document (its print styles) to a PDF there. */
 export async function exportPdf(title: string): Promise<void> {
   const dest = await save({ defaultPath: `${title}.pdf`, filters: [{ name: "PDF", extensions: ["pdf"] }] });
@@ -49,6 +58,7 @@ export async function exportPdf(title: string): Promise<void> {
   const { restore, forced } = splitTablesForPrint();
   toast("Exporting as PDF…");
   try {
+    await loadImagesForPrint();
     await api.exportPdf(dest, title, forced);
     toast("Exported as PDF", { label: "Show", run: () => void api.reveal(dest).catch(() => {}) });
   } catch (e) {
