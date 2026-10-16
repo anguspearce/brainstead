@@ -262,17 +262,44 @@ function start(id: string, text: string) {
   const c = ask.get().chats.find((x) => x.id === id)!;
   api
     .askSend(id, text, c.model ?? DEFAULT_MODEL, sessionOf(c))
+    .then(() => sent.add(id))
     .catch((e) => finish({ chatId: id, text: "", session: null, error: String(e) }));
 }
 
+/** The chats whose turn Rust has started, so it knows how the turn stands (recover). */
+const sent = new Set<string>();
+
+/** Stop: the CLI is stopped, and a chat whose answer had already ended without the window hearing
+ *  of it finishes at once. */
 export function stop(id: string) {
-  void api.askCancel(id);
+  void api.askCancel(id).then(() => recover(id));
+}
+
+/** Finishes a chat still answering whose turn Rust says has ended: its `ask-done` was missed (one
+ *  stayed on Writing… after the CLI had finished). Checked on Stop, and every few seconds while a
+ *  chat answers. */
+export async function recover(id: string) {
+  if (!sent.has(id) || !ask.get().chats.find((c) => c.id === id)?.busy) return;
+  const t = await api.askOutcome(id).catch(() => null);
+  if (!t || t.running || !sent.has(id)) return;
+  void api.askLog(`chat ${id}: the window missed the answer's end, so took it from Rust`).catch(() => {});
+  await finish(
+    t.done ?? { chatId: id, text: "", session: null, error: "This answer's end was lost, so Brainstead stopped waiting for it." },
+  );
 }
 
 async function finish(d: AskDone) {
   const before = ask.get().chats.find((c) => c.id === d.chatId);
-  if (!before) return;
-  update(d.chatId, (c) => ({ ...applyDone(c, d), unread: !seeing(c.id) }));
+  sent.delete(d.chatId);
+  // Each turn ends once: an ask-done that arrives after recover has finished it is ignored.
+  if (!before?.busy) return;
+  try {
+    update(d.chatId, (c) => ({ ...applyDone(c, d), unread: !seeing(c.id) }));
+  } catch (e) {
+    void api.askLog(`chat ${d.chatId}: couldn't finish the answer: ${String(e)}`).catch(() => {});
+    update(d.chatId, (c) => ({ ...c, busy: false, streaming: null, status: null }));
+    return;
+  }
   await save(d.chatId);
   const c = ask.get().chats.find((x) => x.id === d.chatId);
   if (!c) return;
@@ -398,6 +425,10 @@ export async function startAsk() {
     if (ask.get().chats.find((c) => c.id === d.chatId)?.review) return;
     void finish(d);
   });
+  // A missed ask-done doesn't leave a chat answering for ever.
+  setInterval(() => {
+    for (const c of ask.get().chats) if (c.busy && !c.review) void recover(c.id);
+  }, 5000);
   // A scheduled review opens as a tab while it runs, without taking you to Ask.
   await api.onReviewStarted((r) => {
     const c: Chat = {

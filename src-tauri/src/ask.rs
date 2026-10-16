@@ -11,6 +11,7 @@
 //! previous app saves them (brainstead_core::chats), or, while Brainstead is read-only, in `chats/` in
 //! the app data folder until a save can reach the vault.
 
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -195,6 +196,36 @@ fn write_agy_help(dir: &std::path::Path) -> std::io::Result<()> {
 /// Runs one turn and waits for it, calling `on` with each event (the window gets them too).
 /// How a chat's CLI starts Brainstead's MCP server: this program with `--mcp`, told the data
 /// folder, the chat and its model, so its proposals say where they came from.
+/// Each Ask chat's latest turn: None while it's answering, then how it ended. A window that missed
+/// the turn's `ask-done` (once one stayed on Writing… after the CLI had finished) picks the answer up
+/// from here with `ask_outcome`.
+#[derive(Default)]
+pub struct Turns(Mutex<HashMap<String, Option<DoneMsg>>>);
+
+impl Turns {
+    fn start(&self, chat: &str) {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).insert(chat.to_string(), None);
+    }
+    fn finish(&self, done: &DoneMsg) {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).insert(done.chat_id.clone(), Some(done.clone()));
+    }
+    fn get(&self, chat: &str) -> TurnState {
+        match self.0.lock().unwrap_or_else(|e| e.into_inner()).get(chat) {
+            Some(None) => TurnState { running: true, done: None },
+            Some(Some(d)) => TurnState { running: false, done: Some(d.clone()) },
+            None => TurnState { running: false, done: None },
+        }
+    }
+}
+
+/// A chat's latest turn for the window: answering, or how it ended (neither when Brainstead has no
+/// record of one).
+#[derive(Serialize)]
+pub struct TurnState {
+    running: bool,
+    done: Option<DoneMsg>,
+}
+
 pub fn mcp_server(chat_id: &str, model: &str) -> Option<ask::Mcp> {
     let exe = std::env::current_exe().ok()?;
     let data = platform::data_dir();
@@ -322,19 +353,47 @@ pub fn ask_send(app: AppHandle, chat_id: String, prompt: String, model: String, 
     if app.state::<Arc<Running>>().busy(&chat_id) {
         return Err("This chat is still answering.".into());
     }
+    let turns = app.state::<Arc<Turns>>().inner().clone();
+    turns.start(&chat_id);
     std::thread::spawn(move || {
-        let mcp = mcp_server(&chat_id, &model);
-        let propose = mcp.is_some() && Cli::route(&model).takes_mcp();
-        let cli = Cli::route(&model);
-        let mut system = ask::system_prompt(&today(), propose);
-        if let Some(h) = ask::help_hint(cli, mcp.is_some() && cli.takes_mcp()) {
-            system = format!("{system}\n{h}");
+        // Whatever happens, the turn ends: a panic is an error in the chat (and in the log), never
+        // a chat left answering.
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mcp = mcp_server(&chat_id, &model);
+            let propose = mcp.is_some() && Cli::route(&model).takes_mcp();
+            let cli = Cli::route(&model);
+            let mut system = ask::system_prompt(&today(), propose);
+            if let Some(h) = ask::help_hint(cli, mcp.is_some() && cli.takes_mcp()) {
+                system = format!("{system}\n{h}");
+            }
+            let prompt = brainstead_core::workflows::expand(&prompt).unwrap_or(prompt);
+            run(&app, &chat_id, &prompt, &model, session.as_deref(), &system, mcp.as_ref(), &mut |_| {})
+        }))
+        .unwrap_or_else(|_| Outcome {
+            error: Some("Brainstead stopped this answer because something went wrong; its log has the details (Settings › About).".into()),
+            ..Default::default()
+        });
+        let done = DoneMsg { chat_id, outcome };
+        turns.finish(&done);
+        let how = done.outcome.error.as_deref().map(|e| format!(" with an error: {e}")).unwrap_or_default();
+        match app.emit("ask-done", &done) {
+            Ok(()) => crate::applog!("ask: chat {} answered{how}", done.chat_id),
+            Err(e) => crate::applog!("ask: chat {} answered{how}, but the window couldn't be told: {e}", done.chat_id),
         }
-        let prompt = brainstead_core::workflows::expand(&prompt).unwrap_or(prompt);
-        let outcome = run(&app, &chat_id, &prompt, &model, session.as_deref(), &system, mcp.as_ref(), &mut |_| {});
-        let _ = app.emit("ask-done", DoneMsg { chat_id, outcome });
     });
     Ok(())
+}
+
+/// How a chat's latest turn stands, for a window that may have missed its `ask-done`.
+#[tauri::command]
+pub fn ask_outcome(turns: State<Arc<Turns>>, chat_id: String) -> TurnState {
+    turns.get(&chat_id)
+}
+
+/// A line from the window's Ask into the app's log.
+#[tauri::command]
+pub fn ask_log(line: String) {
+    crate::applog!("ask: {line}");
 }
 
 #[tauri::command]
@@ -674,4 +733,23 @@ pub fn skills_list(svc: State<VaultService>) -> Vec<Skill> {
     out.retain(|s| !all.iter().any(|a| a.name == s.name));
     all.extend(out);
     all
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_turn_is_running_until_it_ends_and_then_keeps_its_answer() {
+        let t = Turns::default();
+        assert!(!t.get("c1").running && t.get("c1").done.is_none());
+        t.start("c1");
+        assert!(t.get("c1").running);
+        t.finish(&DoneMsg { chat_id: "c1".into(), outcome: Outcome { text: "Done.".into(), ..Default::default() } });
+        let s = t.get("c1");
+        assert!(!s.running);
+        assert_eq!(s.done.unwrap().outcome.text, "Done.");
+        t.start("c1");
+        assert!(t.get("c1").running && t.get("c1").done.is_none());
+    }
 }

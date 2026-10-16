@@ -123,6 +123,10 @@ Ad-hoc builds lose Full Disk Access on every rebuild. To fix:
 
 Open at login works only in the installed app, not `make dev`.
 
+## Ask's turns
+
+An Ask turn runs on a thread in `src-tauri/src/ask.rs` (`ask_send`), streams `ask-event` and ends with one `ask-done`. The thread catches a panic, so every turn ends, and logs each ending (`ask: chat … answered`) to `logs/`. Rust also keeps each chat's latest turn (`Turns`): if the window misses the `ask-done` (a chat once stayed on Writing… after the CLI had finished), `recover` in `src/askState.ts` takes the answer from `ask_outcome`, on Stop and every 5 seconds while a chat answers, and logs that it did. A turn ends once: a late `ask-done` is ignored.
+
 ## Help
 
 The `?` drawer's topics are `src/help/*.md`: one per screen and Settings pane, plus getting-started guides and the keyboard list. The window imports them and Rust embeds them (`core/build.rs`), so Ask answers from the same text via the MCP `help` tool. `src/help/help.test.ts` checks every screen has a topic, links resolve to real screens, and there are no emoji or real names.

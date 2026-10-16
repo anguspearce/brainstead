@@ -22,6 +22,7 @@ import {
   keepChat,
   modelLabel,
   newChat,
+  recover,
   save,
   send,
   sessionOf,
@@ -44,6 +45,35 @@ describe("Ask state", () => {
     const found = [{ cli: "claude" as const, path: "/x", version: "2", models: [{ id: "claude:sonnet", name: "Sonnet" }] }];
     expect(modelLabel("claude:sonnet", found)).toBe("Claude Code · Sonnet");
     expect(modelLabel("gpt-5.5", null)).toBe("ChatGPT · gpt-5.5");
+  });
+
+  it("finishes a turn whose ask-done the window missed, with Rust's answer, once", async () => {
+    const answer = { chatId: "", text: "Fixed it in two files.", session: "s1", error: null };
+    let running = true;
+    invoke.mockImplementation(async (cmd: string, a?: unknown) => {
+      if (cmd === "ask_outcome")
+        return running ? { running: true, done: null } : { running: false, done: { ...answer, chatId: (a as { chatId: string }).chatId } };
+      if (cmd === "chat_save") return { filename: "local:Chat. Fix.md", title: "Fix", createdAt: "", updatedAt: "" };
+      return undefined;
+    });
+    const id = newChat("claude:sonnet");
+    send(id, "Fix the name");
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("ask_send", expect.anything()));
+    await new Promise((r) => setTimeout(r));
+    // Still answering in Rust: nothing changes.
+    await recover(id);
+    expect(ask.get().chats[0].busy).toBe(true);
+    // The CLI has finished but its ask-done never came.
+    running = false;
+    await recover(id);
+    const c = ask.get().chats[0];
+    expect(c.busy).toBe(false);
+    expect(c.transcript.filter((i) => i.role === "assistant").map((i) => i.text)).toEqual(["Fixed it in two files."]);
+    expect(invoke).toHaveBeenCalledWith("ask_log", expect.anything());
+    // A late check finds nothing to do.
+    await recover(id);
+    expect(ask.get().chats[0].transcript.filter((i) => i.role === "assistant")).toHaveLength(1);
+    invoke.mockImplementation(async () => undefined);
   });
 
   it("titles a chat from its question until a better title comes", () => {

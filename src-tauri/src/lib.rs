@@ -770,6 +770,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(capture::plugin())
         .manage(std::sync::Arc::new(ask::Running::default()))
+        .manage(std::sync::Arc::new(ask::Turns::default()))
         .manage(skills::CheckRuns::default())
         .manage(reviews::Reviews::load())
         .manage(weekprep::WeekPrep::load())
@@ -933,6 +934,8 @@ pub fn run() {
             ask::ask_clis,
             ask::ask_send,
             ask::ask_cancel,
+            ask::ask_outcome,
+            ask::ask_log,
             ask::chat_title,
             ask::ask_next,
             ask::chats_list,

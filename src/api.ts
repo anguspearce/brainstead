@@ -1309,6 +1309,9 @@ export const api = {
   askSend: (chatId: string, prompt: string, model: string, session: string | null) =>
     invoke<void>("ask_send", { chatId, prompt, model, session }),
   askCancel: (chatId: string) => invoke<void>("ask_cancel", { chatId }),
+  /** How a chat's latest turn stands, for an `ask-done` the window missed. */
+  askOutcome: (chatId: string) => invoke<{ running: boolean; done: AskDone | null }>("ask_outcome", { chatId }),
+  askLog: (line: string) => invoke<void>("ask_log", { line }),
   chatTitle: (user: string, assistant: string) => invoke<string | null>("chat_title", { user, assistant }),
   askNext: (title: string, turns: [string, string][]) => invoke<string | null>("ask_next", { title, turns }),
   chatsList: () => invoke<ChatSummary[]>("chats_list"),
