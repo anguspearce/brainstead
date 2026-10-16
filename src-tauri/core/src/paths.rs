@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Paths the same way on every system: real paths without Windows' `\\?\` prefix, the check that a
-//! vault-relative path stays in the vault, the app data folder, and picking a program from
-//! `where`'s answer.
+//! vault-relative path stays in the vault, a vault-relative path as the file system spells it, the
+//! app data folder, and picking a program from `where`'s answer.
 
+use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
 
 /// The real path (links followed, `..` resolved), or an error when it isn't there. On Windows
@@ -36,17 +37,80 @@ pub fn is_rooted(raw: &str) -> bool {
     raw.starts_with('/') || (cfg!(windows) && (raw.starts_with('\\') || has_drive(raw))) || Path::new(raw).has_root()
 }
 
+/// What separates folders in a vault-relative path on this system: `/`, and `\` on Windows.
+/// Elsewhere a backslash is an ordinary character in a name.
+pub const SEPARATORS: &[char] = if cfg!(windows) { &['/', '\\'] } else { &['/'] };
+
 /// Whether `rel` is a path inside the vault: not empty, not rooted (`/x`, `\x`, `\\?\C:\x`), no
 /// `..` and no empty segment, with `/` and `\` both separators. Joining a rooted path onto the
-/// vault's root would replace the root, and `..` would climb out of it. A drive (`C:\x`, `C:x`)
-/// is refused on Windows only: a colon can't be in a Windows file name, while elsewhere `Q: Ideas.md`
-/// is an ordinary note.
+/// vault's root would replace the root, and `..` would climb out of it. On Windows a colon is
+/// refused too, and so is a segment that ends in a dot or a space (`.` itself aside): a Windows
+/// file name can't have either, so `C:\x` and `C:x` name a drive, `Templates::$INDEX_ALLOCATION`
+/// a folder's stream (the folder itself), and `Templates./x.md` or `x.md ` another file's name,
+/// as Win32 drops a trailing dot, and a trailing space from the last name. Elsewhere
+/// `Q: Ideas.md` and `Notes.` are ordinary names.
 pub fn is_vault_relative(rel: &str) -> bool {
     !rel.is_empty()
         && !rel.starts_with(['/', '\\'])
-        && !(cfg!(windows) && has_drive(rel))
+        && !(cfg!(windows) && (rel.contains(':') || rel.split(['/', '\\']).any(|s| s != "." && s.ends_with(['.', ' ']))))
         && !rel.split(['/', '\\']).any(|s| s == ".." || s.is_empty())
         && Path::new(rel).components().all(|c| !matches!(c, Component::Prefix(_) | Component::RootDir | Component::ParentDir))
+}
+
+/// The vault-relative path `rel` names, spelled as the file system has it: each folder and the
+/// file by its own name, with `/` between them. The rules for agent changes go by the path (a
+/// change in `Templates/` waits for the user), and one file has many spellings: any case on
+/// Windows and macOS, and on Windows `\` between folders and the 8.3 short name (`TEMPLA~1`).
+/// The longest part of `rel` that is there is read back from the file system (`canonical`); the
+/// rest, for a file that isn't there yet, keeps its spelling below it. Err when `rel` isn't a path
+/// in the vault (`is_vault_relative`, or a `.` segment) or leads out of it (a link to a folder
+/// elsewhere).
+pub fn vault_rel(root: &Path, rel: &str) -> Result<String, String> {
+    spelled(root, rel, false)
+}
+
+/// `vault_rel` for the name a file is to have (a rename's): its folders as the file system spells
+/// them, the name as given. Renaming `idea.md` to `Idea.md` changes only the case, and on Windows
+/// and macOS `vault_rel` would read the new name back as the old one, the same file.
+pub fn vault_rel_new(root: &Path, rel: &str) -> Result<String, String> {
+    spelled(root, rel, true)
+}
+
+/// The 8.3 short name Windows gave the last part of `p`, or None when it gave none (the volume
+/// doesn't make them, or the name is short already).
+#[cfg(all(test, windows))]
+pub(crate) fn short_name(p: &Path) -> Option<String> {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    let long: Vec<u16> = p.as_os_str().encode_wide().chain([0]).collect();
+    let mut buf = vec![0u16; 4096];
+    // SAFETY: `long` ends in a NUL, and the call writes at most `buf.len()` units into `buf`.
+    let n = unsafe { windows_sys::Win32::Storage::FileSystem::GetShortPathNameW(long.as_ptr(), buf.as_mut_ptr(), buf.len() as u32) };
+    let n = usize::try_from(n).ok().filter(|&n| n > 0 && n < buf.len())?;
+    let short = PathBuf::from(std::ffi::OsString::from_wide(&buf[..n]));
+    let name = short.file_name()?.to_string_lossy().into_owned();
+    (Some(name.as_str()) != p.file_name().and_then(|f| f.to_str())).then_some(name)
+}
+
+fn spelled(root: &Path, rel: &str, keep_name: bool) -> Result<String, String> {
+    let refuse = || format!("Not a path in the vault: {rel}");
+    if !is_vault_relative(rel) || rel.split(['/', '\\']).any(|s| s == ".") {
+        return Err(refuse());
+    }
+    let root = canonical(root).map_err(|e| format!("Couldn't read the vault folder: {e}"))?;
+    let parts: Vec<&str> = rel.split(SEPARATORS).collect();
+    for there in (0..=parts.len() - usize::from(keep_name)).rev() {
+        let real = match canonical(&parts[..there].iter().fold(root.clone(), |p, s| p.join(s))) {
+            Ok(real) => real,
+            // Not there (or not a name the system takes): the folder above it is tried.
+            Err(e) if matches!(e.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory | ErrorKind::InvalidFilename) => continue,
+            Err(e) => return Err(format!("Couldn't read {rel}: {e}")),
+        };
+        let inside = real.strip_prefix(&root).map_err(|_| format!("{} (it leads out of the vault)", refuse()))?;
+        let mut out: Vec<String> = inside.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect();
+        out.extend(parts[there..].iter().map(|s| s.to_string()));
+        return if out.is_empty() { Err(refuse()) } else { Ok(out.join("/")) };
+    }
+    Err(refuse())
 }
 
 /// The app data folder (settings.json, index.db): `BRAINSTEAD_DATA` when set, otherwise
@@ -148,11 +212,103 @@ mod tests {
         }
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn another_name_for_a_file_is_not_in_the_vault_on_windows() {
+        for bad in [
+            "Templates./Meeting.md",
+            "Templates /Meeting.md",
+            "Templates\\Meeting.md.",
+            "Templates/Meeting.md ",
+            "Templates/.../Meeting.md",
+            "Templates::$INDEX_ALLOCATION/Meeting.md",
+            "Templates/Meeting.md::$DATA",
+        ] {
+            assert!(!is_vault_relative(bad), "{bad}");
+        }
+    }
+
     #[cfg(not(windows))]
     #[test]
     fn a_colon_is_an_ordinary_character_elsewhere() {
-        for ok in ["Q: Ideas.md", "wiki/Q: Ideas.md", "C:x"] {
+        for ok in ["Q: Ideas.md", "wiki/Q: Ideas.md", "C:x", "Notes./x.md", "Notes /x.md"] {
             assert!(is_vault_relative(ok), "{ok}");
+        }
+    }
+
+    /// A vault with `Templates/Meeting.md`.
+    fn templates() -> tempfile::TempDir {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(d.path().join("Templates")).unwrap();
+        std::fs::write(d.path().join("Templates/Meeting.md"), "x").unwrap();
+        d
+    }
+
+    #[test]
+    fn vault_rel_reads_a_path_back_as_the_file_system_spells_it() {
+        let d = templates();
+        let root = d.path();
+        let ok = |rel: &str| vault_rel(root, rel).unwrap();
+        assert_eq!(ok("Templates/Meeting.md"), "Templates/Meeting.md");
+        // Not there yet: the folders that are, then the rest as given.
+        assert_eq!(ok("Templates/New.md"), "Templates/New.md");
+        assert_eq!(ok("Templates/Sub/New.md"), "Templates/Sub/New.md");
+        assert_eq!(ok("New.md"), "New.md");
+        // A system that doesn't mind case (Windows, macOS by default) names the file in any case.
+        if root.join("TEMPLATES/MEETING.MD").is_file() {
+            assert_eq!(ok("templates/meeting.md"), "Templates/Meeting.md");
+            assert_eq!(ok("TEMPLATES/New.md"), "Templates/New.md");
+        }
+        for bad in ["", "/x.md", "../x.md", "Templates/../../x.md", "Templates/./Meeting.md", "a//b.md"] {
+            assert!(vault_rel(root, bad).is_err(), "{bad}");
+        }
+        // A rename keeps the name it's given: idea.md to Idea.md is a rename on any system.
+        std::fs::write(root.join("idea.md"), "x").unwrap();
+        assert_eq!(vault_rel_new(root, "Idea.md").unwrap(), "Idea.md");
+        if root.join("TEMPLATES").is_dir() {
+            assert_eq!(vault_rel_new(root, "templates/Idea.md").unwrap(), "Templates/Idea.md");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn vault_rel_follows_links_and_refuses_one_out_of_the_vault() {
+        let d = templates();
+        let elsewhere = tempfile::tempdir().unwrap();
+        std::fs::write(elsewhere.path().join("x.md"), "x").unwrap();
+        std::os::unix::fs::symlink(d.path().join("Templates"), d.path().join("Snippets")).unwrap();
+        std::os::unix::fs::symlink(elsewhere.path(), d.path().join("Out")).unwrap();
+        assert_eq!(vault_rel(d.path(), "Snippets/Meeting.md").unwrap(), "Templates/Meeting.md");
+        assert!(vault_rel(d.path(), "Out/x.md").unwrap_err().contains("leads out of the vault"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn vault_rel_reads_back_every_windows_spelling() {
+        let d = templates();
+        let root = d.path();
+        for rel in ["Templates\\Meeting.md", "templates\\MEETING.md", "TEMPLATES/meeting.MD"] {
+            assert_eq!(vault_rel(root, rel).unwrap(), "Templates/Meeting.md", "{rel}");
+        }
+        assert_eq!(vault_rel(root, "templates\\Sub\\New.md").unwrap(), "Templates/Sub/New.md");
+        match short_name(&root.join("Templates")) {
+            Some(short) => {
+                assert_eq!(vault_rel(root, &format!("{short}/Meeting.md")).unwrap(), "Templates/Meeting.md");
+                assert_eq!(vault_rel(root, &format!("{short}\\New.md")).unwrap(), "Templates/New.md");
+                assert_eq!(vault_rel_new(root, &format!("{short}/Idea.md")).unwrap(), "Templates/Idea.md");
+            }
+            None => eprintln!("This volume makes no 8.3 names, so the short spelling isn't tried."),
+        }
+        // Win32 drops a trailing dot, and a trailing space from the last name, so these name the
+        // file too, and are refused.
+        for bad in ["Templates./Meeting.md", "Templates/Meeting.md.", "Templates/Meeting.md "] {
+            assert!(root.join(bad).is_file(), "{bad} names the file");
+            assert!(vault_rel(root, bad).is_err(), "{bad}");
+        }
+        // As are a folder's trailing space, which no file can have, and a colon, which names a
+        // stream (NTFS's for a folder is the folder).
+        for bad in ["Templates /Meeting.md", "Templates::$INDEX_ALLOCATION/Meeting.md"] {
+            assert!(vault_rel(root, bad).is_err(), "{bad}");
         }
     }
 

@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use brainstead_core::changes::{self, Instruction};
 use brainstead_core::proposals::{self, Kind, Origin, Patch, Quote, SourceText};
 use brainstead_core::search::SearchRequest;
-use brainstead_core::{bridge, extract, filename, lint, projects, write, Index};
+use brainstead_core::{bridge, extract, filename, lint, paths, projects, write, Index};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use unicode_normalization::UnicodeNormalization;
@@ -1636,9 +1636,10 @@ fn new_note_path(ctx: &Ctx, a: &NoteArgs) -> Result<String, String> {
         }
     }
     let name = filename::compose(a.kind.as_deref(), &a.title, a.date.as_deref()).ok_or("The note needs a title.")?;
-    let folder = a.folder.as_deref().unwrap_or("").trim().trim_matches('/').to_string();
+    let mut folder = a.folder.as_deref().unwrap_or("").trim().trim_matches(paths::SEPARATORS).to_string();
     if !folder.is_empty() {
-        brainstead_core::trash::safe_rel(&folder).map_err(|e| e.to_string())?;
+        // As the file system spells it, so `templates` and `TEMPLA~1` are Templates/.
+        folder = paths::vault_rel(&ctx.vault, &folder)?;
         let first = folder.split('/').next().unwrap_or("");
         if folder.split('/').any(|s| s.starts_with('.')) || proposals::NOT_FOR_NOTES.iter().any(|n| n.eq_ignore_ascii_case(first)) {
             return Err(format!("A note can't go in {folder}/: not in sources/, wiki/ (edit_page makes wiki pages) or Templates/."));
@@ -1888,15 +1889,17 @@ fn find_page(ctx: &Ctx, ix: &Index, page: &str) -> Result<PageRef, String> {
     if p.is_empty() {
         return Err("Which page? None was given.".into());
     }
-    if p.contains('/') || p.ends_with(".md") {
-        brainstead_core::trash::safe_rel(&p).map_err(|e| e.to_string())?;
+    if p.contains(paths::SEPARATORS) || p.ends_with(".md") {
+        // The page by the file's own spelling, which the app's rules for changes go by: on Windows
+        // `templates\meeting.md` and `TEMPLA~1/Meeting.md` are `Templates/Meeting.md`.
         let with_ext = if Path::new(&p).extension().is_some() { p.clone() } else { format!("{p}.md") };
         for cand in [&p, &with_ext] {
-            if ctx.vault.join(cand).is_file() {
-                return Ok(PageRef::Found(cand.clone()));
+            let rel = paths::vault_rel(&ctx.vault, cand)?;
+            if ctx.vault.join(&rel).is_file() {
+                return Ok(PageRef::Found(rel));
             }
         }
-        return Ok(PageRef::NotThere(with_ext));
+        return Ok(PageRef::NotThere(paths::vault_rel(&ctx.vault, &with_ext)?));
     }
     match ix.resolve(std::slice::from_ref(&p))?.into_iter().next().flatten() {
         Some(rel) => Ok(PageRef::Found(rel)),

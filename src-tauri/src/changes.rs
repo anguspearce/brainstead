@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 use brainstead_core::changes::{self, Change, Facts, Instruction, Status, Store};
 use brainstead_core::proposals::{self, Kind, Origin, Quote};
-use brainstead_core::{reviews, write};
+use brainstead_core::{paths, reviews, write};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -131,8 +131,8 @@ pub fn submit_many(app: &AppHandle, list: Vec<Submit>) -> Res<Vec<Outcome>> {
     // The pages as the changes before leave them.
     let mut pages: std::collections::HashMap<String, Option<String>> = std::collections::HashMap::new();
     let mut staged = Vec::new();
-    for s in list {
-        brainstead_core::trash::safe_rel(&s.page).map_err(EditError::from)?;
+    for mut s in list {
+        spelled(&root, &mut s.page, &mut s.instruction)?;
         let scheduled = changes::scheduled(&s.origin);
         if read_only && !scheduled {
             writable(&app.state::<AppState>())?;
@@ -191,6 +191,18 @@ pub fn submit_many(app: &AppHandle, list: Vec<Submit>) -> Res<Vec<Outcome>> {
             }
         })
         .collect()
+}
+
+/// The change's page, and a rename's new path, as the file system spells them
+/// (`paths::vault_rel`), so the rules see `Templates/Meeting.md` however an agent named it:
+/// `templates\meeting.md` or `TEMPLA~1/Meeting.md` on Windows. Refuses a path that isn't in the
+/// vault, or on Windows one Win32 would read as another name (`Templates./Meeting.md`).
+fn spelled(root: &Path, page: &mut String, instruction: &mut Instruction) -> Res<()> {
+    *page = paths::vault_rel(root, page).map_err(invalid)?;
+    if let Instruction::Rename { to } = instruction {
+        *to = paths::vault_rel_new(root, to).map_err(invalid)?;
+    }
+    Ok(())
 }
 
 /// Why a rename, a move to the Trash or a restore waits for the user: a template, or links
@@ -535,6 +547,10 @@ fn for_the_user(app: &AppHandle, root: &Path, c: &Change) -> Res<Option<String>>
     if c.for_user.is_some() {
         return Ok(c.for_user.clone());
     }
+    // By the file's own spelling, as `submit_many` decides.
+    let mut c = c.clone();
+    spelled(root, &mut c.page, &mut c.instruction)?;
+    let c = &c;
     if c.instruction.moves() {
         return move_needs_the_user(app, c);
     }
@@ -1046,5 +1062,39 @@ mod tests {
         assert!(write_claims(&st, root, &mut c).unwrap().is_none());
         revert_claims(&st, root, &c);
         assert_eq!(std::fs::read_to_string(&abs).unwrap(), other);
+    }
+
+    #[test]
+    fn a_change_is_ruled_on_by_the_files_own_path() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path();
+        std::fs::create_dir_all(root.join("Templates")).unwrap();
+        std::fs::write(root.join("Templates/Meeting.md"), "# Meeting\n").unwrap();
+        let spell = |page: &str, mut i: Instruction| {
+            let mut page = page.to_string();
+            spelled(root, &mut page, &mut i).map(|_| (page, i)).map_err(|e| e.message().to_string())
+        };
+        let mut names = vec!["Templates/Meeting.md"];
+        if root.join("TEMPLATES/MEETING.MD").is_file() {
+            names.push("templates/MEETING.md");
+        }
+        if cfg!(windows) {
+            names.extend(["Templates\\Meeting.md", "templates\\meeting.md"]);
+        }
+        for n in names {
+            let (page, _) = spell(n, Instruction::Trash).unwrap();
+            assert_eq!(page, "Templates/Meeting.md", "{n}");
+            assert!(changes::needs_the_user(&page, Some("a"), "b").is_some(), "{n}");
+            // A rename into the folder, however it's spelled, keeps the name it's given.
+            let folder = n.rsplit_once(['/', '\\']).unwrap().0;
+            let (_, i) = spell("Idea. A.md", Instruction::Rename { to: format!("{folder}/Idea. A.md") }).unwrap();
+            assert_eq!(i, Instruction::Rename { to: "Templates/Idea. A.md".into() }, "{n}");
+        }
+        // Another name Win32 reads for the template, and paths out of the vault, are refused.
+        let bad: &[&str] =
+            if cfg!(windows) { &["Templates./Meeting.md", "Templates/Meeting.md.", "../x.md"] } else { &["../x.md", "/x.md"] };
+        for n in bad {
+            assert!(spell(n, Instruction::Trash).unwrap_err().contains("Not a path in the vault"), "{n}");
+        }
     }
 }

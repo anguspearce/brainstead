@@ -50,7 +50,7 @@ Updates: the app checks `releases/latest/download/latest.json` (`tauri.conf.json
 `CLAUDE.md` has the full list. In short:
 
 - The vault is the only source of truth and other apps edit it. Never reformat markdown the user didn't change. Writes are atomic and refuse if the file changed since read.
-- No model writes to the vault directly: changes go through the app (`src-tauri/src/changes.rs`) and are recorded in Changes. User-started ones apply at once. Held: a scheduled change that fails a check, anything touching `Templates/` (renames and trashes too), runnable code, a system note's header.
+- No model writes to the vault directly: changes go through the app (`src-tauri/src/changes.rs`) and are recorded in Changes. User-started ones apply at once. Held: a scheduled change that fails a check, anything touching `Templates/` (renames and trashes too), runnable code, a system note's header. The rules go by the page's path as the file system spells it (`paths::vault_rel`, in the MCP server's page lookup and in `submit_many`): on Windows one file is also `templates\meeting.md` or `TEMPLA~1/Meeting.md`, and a name Win32 would read as another (`Templates./x.md`, `x.md::$DATA`) is refused.
 - OS-specific code stays in `src-tauri/src/platform/`, for Windows and Linux.
 - Same change as the behaviour: `docs/`, `README.md`, the screen's help (`src/help/*.md`) and MCP support.
 - Invented names only (Orbit App, Maya, Lena, Acme…) in fixtures, docs, comments and UI text.

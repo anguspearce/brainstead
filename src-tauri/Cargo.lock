@@ -411,6 +411,7 @@ dependencies = [
  "tempfile",
  "unicode-normalization",
  "walkdir",
+ "windows-sys 0.61.2",
  "zip 2.4.2",
 ]
 
@@ -442,6 +443,7 @@ dependencies = [
  "tempfile",
  "unicode-normalization",
  "walkdir",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

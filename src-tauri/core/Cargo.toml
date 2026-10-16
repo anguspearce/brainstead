@@ -30,3 +30,7 @@ dirs = "6"
 
 [dev-dependencies]
 tempfile = "3"
+
+# The 8.3 short name of a test folder (paths.rs), one of the spellings a path is read back from.
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }

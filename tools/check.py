@@ -34,7 +34,8 @@ GROUPS = {
         (TAURI, "cargo fmt --all --check", {}),
         (TAURI, "cargo test -p brainstead-core", CARGO_ENV),
         (TAURI, "cargo test -p brainstead-mcp", CARGO_ENV),
-        (TAURI, "cargo test --lib -p brainstead", CARGO_ENV),
+        # The app program's own tests too: on Windows only it gets the manifest the menu code needs.
+        (TAURI, "cargo test --lib --bins -p brainstead", CARGO_ENV),
         (TAURI, "cargo clippy --workspace --all-targets -- -D warnings", CARGO_ENV),
     ],
     "tsc": [

@@ -41,7 +41,7 @@ In short, an assistant can do whatever the screens do. The help tool, and the in
 
 A quote not found in its source is flagged, once.
 
-**Held for you to accept:** a change to a template (including a new template, or renaming or trashing one), a change to a [system note's header](notes.md#system-notes), and one that adds code that runs. In a session nobody is watching, a change that fails a check is held too, and so is one from a run it starts that fails a check.
+**Held for you to accept:** a change to a template (including a new template, or renaming or trashing one), however the assistant spells the path (Brainstead goes by the file's own name, so on Windows `templates\meeting.md` or the folder's short name `TEMPLA~1` is still `Templates/Meeting.md`), a change to a [system note's header](notes.md#system-notes), and one that adds code that runs. In a session nobody is watching, a change that fails a check is held too, and so is one from a run it starts that fails a check.
 
 An assistant can list, reject or revert changes when you ask. It accepts a held change only in a session you're in, and only one held because a check failed. The rest are yours to accept on the Changes screen.
 

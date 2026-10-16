@@ -74,6 +74,8 @@ arboard = { version = "3.6", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"
+# tauri's MockRuntime, to build the menu bar in a test (menu.rs).
+tauri = { version = "2", features = ["test"] }
 
 # Thin LTO with parallel codegen units: incremental release builds in ~20s instead of minutes.
 [profile.release]

@@ -578,6 +578,66 @@ fn renames_trash_and_deletes_are_sent() {
     assert!(refused(&f.ctx, "delete_task", json!({"task": "Me. To Do List.md:1", "text": "no such task"})).contains("no task"));
 }
 
+/// The page each tool sends for `spelling`, which names Templates/Meeting.md: edit_page,
+/// rename_note (and where it renames to) and trash_note.
+fn sent_pages(f: &Fixture, spelling: &str) -> [String; 4] {
+    let page = |c: &Value, k: &str| c[k].as_str().unwrap_or_default().to_string();
+    let (_, edit) = submitted(f, "edit_page", json!({"page": spelling, "title": "x", "section": "Notes", "content": "Agenda first."}));
+    let (_, rename) = submitted(f, "rename_note", json!({"page": spelling, "title": "Meeting note"}));
+    let (_, trash) = submitted(f, "trash_note", json!({"page": spelling}));
+    [page(&edit, "page"), page(&rename, "page"), page(&rename["instruction"], "to"), page(&trash, "page")]
+}
+
+#[test]
+fn a_page_is_sent_as_the_file_system_spells_it() {
+    let f = fixture();
+    let want = ["Templates/Meeting.md", "Templates/Meeting.md", "Templates/Meeting note.md", "Templates/Meeting.md"].map(String::from);
+    assert_eq!(sent_pages(&f, "Templates/Meeting.md"), want);
+    // A system that doesn't mind case (Windows, macOS by default) names the file in any case.
+    if f.ctx.vault.join("TEMPLATES/MEETING.MD").is_file() {
+        assert_eq!(sent_pages(&f, "templates/meeting.md"), want);
+        assert!(refused(&f.ctx, "create_note", json!({"title": "Retro", "folder": "templates", "content": "x"})).contains("can't go in"));
+    }
+}
+
+/// The 8.3 short name Windows gave the last part of `p`, or None when it gave none.
+#[cfg(windows)]
+fn short_name(p: &Path) -> Option<String> {
+    use std::os::windows::ffi::{OsStrExt, OsStringExt};
+    let long: Vec<u16> = p.as_os_str().encode_wide().chain([0]).collect();
+    let mut buf = vec![0u16; 4096];
+    // SAFETY: `long` ends in a NUL, and the call writes at most `buf.len()` units into `buf`.
+    let n = unsafe { windows_sys::Win32::Storage::FileSystem::GetShortPathNameW(long.as_ptr(), buf.as_mut_ptr(), buf.len() as u32) };
+    let n = usize::try_from(n).ok().filter(|&n| n > 0 && n < buf.len())?;
+    let name = PathBuf::from(std::ffi::OsString::from_wide(&buf[..n])).file_name()?.to_string_lossy().into_owned();
+    (Some(name.as_str()) != p.file_name().and_then(|f| f.to_str())).then_some(name)
+}
+
+#[cfg(windows)]
+#[test]
+fn every_windows_spelling_of_a_template_is_sent_as_its_own_path() {
+    let f = fixture();
+    let want = ["Templates/Meeting.md", "Templates/Meeting.md", "Templates/Meeting note.md", "Templates/Meeting.md"].map(String::from);
+    let mut spellings = vec!["Templates\\Meeting.md".to_string(), "templates\\MEETING.md".into()];
+    match short_name(&f.ctx.vault.join("Templates")) {
+        Some(short) => spellings.extend([format!("{short}/Meeting.md"), format!("{short}\\Meeting")]),
+        None => eprintln!("This volume makes no 8.3 names, so the short spelling isn't tried."),
+    }
+    for s in &spellings {
+        assert_eq!(sent_pages(&f, s), want, "{s}");
+    }
+    // Win32 drops a trailing dot, so these name the template too; they're refused.
+    for s in ["Templates./Meeting.md", "Templates/Meeting.md.", "Templates::$INDEX_ALLOCATION/Meeting.md"] {
+        for tool_name in ["edit_page", "rename_note", "trash_note"] {
+            let t = refused(&f.ctx, tool_name, json!({"page": s, "title": "x", "section": "Notes", "content": "y"}));
+            assert!(t.contains("Not a path in the vault"), "{tool_name} {s}: {t}");
+        }
+    }
+    if let Some(short) = short_name(&f.ctx.vault.join("Templates")) {
+        assert!(refused(&f.ctx, "create_note", json!({"title": "Retro", "folder": short, "content": "x"})).contains("can't go in"));
+    }
+}
+
 #[test]
 fn summaries_by_day_or_the_latest() {
     let f = fixture();

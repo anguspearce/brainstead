@@ -31,6 +31,11 @@ mod vault;
 mod weekly;
 mod weekprep;
 
+/// For the app program's test of the Windows File menu (main.rs), the one test program
+/// tauri-build gives the Windows manifest that the menu code needs.
+#[doc(hidden)]
+pub use menu::{windows_file, EXIT};
+
 use std::path::PathBuf;
 use std::sync::Mutex;
 

@@ -6,13 +6,14 @@
 //! note. A choice is sent to the window as a `menu` event carrying the item's id (src/noteMenu.ts
 //! acts on it); the note's items are enabled only while a note is open. Help gets Brainstead Help
 //! and Keyboard Shortcuts (src/help/HelpDrawer.tsx acts on those). The app menu gets Brainstead's
-//! own About and Check for Updates… (src/updates.rs).
+//! own About and Check for Updates… (src/updates.rs). On Windows File's Exit is the app's own item,
+//! which quits as the tray's Quit does.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use tauri::menu::{Menu, MenuItem, MenuItemBuilder, MenuItemKind, PredefinedMenuItem, SubmenuBuilder};
-use tauri::{AppHandle, Emitter, Manager, State, Wry};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State, Wry};
 
 /// The Note menu's items that need an open note.
 #[derive(Default)]
@@ -81,9 +82,64 @@ fn items(f: &crate::platform::PlatformFeatures) -> Vec<(&'static str, &'static s
     out
 }
 
+/// Windows' File › Exit, in place of the predefined Quit (`windows_file`).
+pub const EXIT: &str = "app:exit";
+
+/// What a choice from the menu bar does.
+#[derive(Debug, PartialEq, Eq)]
+enum Choice<'a> {
+    /// The window acts on it (src/noteMenu.ts, src/help/HelpDrawer.tsx).
+    Window(&'a str),
+    /// Quit as the tray's Quit does: the window asks about unsaved edits, then "Quit Brainstead?"
+    /// (macOS's Quit Brainstead, Windows' File › Exit).
+    Quit,
+    /// Brainstead's own About panel (macOS).
+    About,
+    /// Check for Updates… (macOS).
+    Updates,
+    /// Help › Brainstead Website.
+    Website,
+    /// A predefined item, which the system carries out itself.
+    None,
+}
+
+fn choice(id: &str) -> Choice<'_> {
+    match id {
+        "app:quit" | EXIT => Choice::Quit,
+        "app:about" => Choice::About,
+        "app:updates" => Choice::Updates,
+        "help:website" => Choice::Website,
+        _ if id.starts_with("note:") || id.starts_with("help:") => Choice::Window(id),
+        _ => Choice::None,
+    }
+}
+
+/// Windows' File menu: Close Window, then Exit. tauri's default File menu ends with the
+/// predefined Quit, which muda carries out as `PostQuitMessage(0)`: tao's event loop ends at the
+/// `WM_QUIT` (`GetMessageW` returns 0) and tauri sends `RunEvent::Exit` with no `ExitRequested`
+/// before it, so the window never asks about unsaved edits (Save, Discard, Stay), its size and
+/// place aren't saved and assistant runs aren't stopped. Exit is an item of the app's own, which
+/// goes the way the tray's Quit does (`tray::tray_quit`).
+pub fn windows_file<R: Runtime>(app: &AppHandle<R>, menu: &Menu<R>) -> tauri::Result<()> {
+    let file = SubmenuBuilder::new(app, "File")
+        .item(&PredefinedMenuItem::close_window(app, None)?)
+        .separator()
+        .item(&MenuItemBuilder::with_id(EXIT, "E&xit").build(app)?)
+        .build()?;
+    match menu.items()?.iter().position(|i| matches!(i, MenuItemKind::Submenu(s) if s.text().is_ok_and(|t| t == "File"))) {
+        Some(at) => {
+            menu.remove_at(at)?;
+            menu.insert(&file, at)
+        }
+        None => menu.prepend(&file),
+    }
+}
+
 /// Puts the menu bar up and routes its Note items to the window.
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::default(app)?;
+    #[cfg(windows)]
+    windows_file(app, &menu)?;
     let new = MenuItemBuilder::with_id("note:new", "New Note…").accelerator("CmdOrCtrl+N").build(app)?;
     let mut sub = SubmenuBuilder::new(app, "Note").item(&new).separator();
     let mut doc_items = Vec::new();
@@ -133,34 +189,24 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
     }
     crate::platform::set_menu_bar(app, menu)?;
     *app.state::<NoteMenu>().0.lock().unwrap() = doc_items;
-    app.on_menu_event(|app, ev| {
-        let id = ev.id().as_ref();
-        if id == "help:website" {
+    app.on_menu_event(|app, ev| match choice(ev.id().as_ref()) {
+        Choice::Website => {
             use tauri_plugin_opener::OpenerExt;
             if let Err(e) = app.opener().open_url(WEBSITE, None::<&str>) {
                 crate::applog!("website: {e}");
             }
-            return;
         }
-        if id == "app:about" {
-            about(app);
-            return;
-        }
-        if id == "app:quit" {
-            crate::tray::tray_quit(app.clone());
-            return;
-        }
-        if id == "app:updates" {
-            crate::updates::check_now(app);
-            return;
-        }
-        if id.starts_with("note:") || id.starts_with("help:") {
+        Choice::About => about(app),
+        Choice::Quit => crate::tray::tray_quit(app.clone()),
+        Choice::Updates => crate::updates::check_now(app),
+        Choice::Window(id) => {
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.show();
                 let _ = w.set_focus();
             }
             let _ = app.emit_to("main", "menu", id);
         }
+        Choice::None => {}
     });
     Ok(())
 }
@@ -253,5 +299,15 @@ mod tests {
     fn website_matches_the_settings_screen() {
         let settings = include_str!("../../src/Settings.tsx");
         assert!(settings.contains(&format!("export const WEBSITE = \"{}\";", super::WEBSITE)));
+    }
+
+    #[test]
+    fn exit_quits_as_the_tray_does_and_note_and_help_items_go_to_the_window() {
+        assert_eq!(choice(EXIT), Choice::Quit);
+        assert_eq!(choice("app:quit"), Choice::Quit);
+        assert_eq!(choice("help:website"), Choice::Website);
+        assert_eq!(choice("note:save"), Choice::Window("note:save"));
+        assert_eq!(choice("help:shortcuts"), Choice::Window("help:shortcuts"));
+        assert_eq!(choice("quit"), Choice::None);
     }
 }
