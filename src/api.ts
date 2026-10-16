@@ -862,7 +862,9 @@ export type Instruction =
   | { op: "rename"; to: string }
   | { op: "trash" }
   /** A Trash entry put back, at the change's page. */
-  | { op: "restore"; id: string };
+  | { op: "restore"; id: string }
+  /** An image added to `images/`, at the change's page. */
+  | { op: "image" };
 
 /** One edit to a task's line (src-tauri/src/changes.rs's LineEdit). */
 export type TaskLineEdit =
@@ -873,7 +875,7 @@ export type TaskLineEdit =
   | { op: "project"; project: string | null }
   | { op: "rank"; prev: number | null; next: number | null };
 
-export type ChangeKind = "edit" | "new" | "task" | "rename" | "trash" | "restore";
+export type ChangeKind = "edit" | "new" | "task" | "rename" | "trash" | "restore" | "image";
 
 /** A change in Changes: what an assistant or a run did, or a change held for you. */
 /** Write Current state's run, going or last. */
@@ -1226,6 +1228,9 @@ export const api = {
   imageSave: (name: string, base64: string) => invoke<string>("image_save", { name, base64 }),
   /** Same, for a file dropped from Finder (absolute path). */
   imageImport: (abs: string) => invoke<string>("image_import", { abs }),
+  /** An image an assistant adds (add_image): saved to `images/` and recorded in Changes. */
+  imageAdd: (name: string, base64: string, reason: string | null, origin: ChangeOrigin, model: string | null) =>
+    invoke<ChangeOutcome>("image_add", { name, base64, reason, origin, model }),
   renamePreview: (path: string, to: string) => invoke<RenamePlan>("rename_preview", { path, to }),
   renameCommit: (plan: RenamePlan) => invoke<string>("rename_commit", { plan }),
   trashMove: (path: string) => invoke<TrashEntry>("trash_move", { path }),

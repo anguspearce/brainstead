@@ -14,7 +14,7 @@ A note has three modes:
 
 Beside the note are **Linked from** (every note that links here, with the line), its **open tasks** to tick, and its **outline**. On a 1-1 note, **Last time with** shows the previous 1-1 and the follow-ups still open with that person.
 
-The top bar has **Ask** (a chat about this note), a bookmark, **Copy** (markdown, rich text, path or title), **Rename…** (⇧⌘R, rewriting every link to the note), **Graph** and **Focus mode** (⌘., Esc leaves it). The **Note** menu has most of these. Right-click a file for its menu, which also has a source's actions (**Make and ingest a meeting note**, **Draft a reply**, **Ingest into the wiki**, **Ask about this source**) where they fit, and **Compare with…**. **Export PDF…** (⌘P) writes the note in its look, with page numbers. Each note can have its own look (Brainstead, Business, Editorial, Modern, Minimal, Report or Technical), colour, and light or dark.
+The top bar has **Ask** (a chat about this note), a bookmark, **Copy** (markdown, rich text, path or title), **Rename…** (⇧⌘R, rewriting every link to the note), **Graph** and **Focus mode** (⌘., Esc leaves it). The **Note** menu has most of these. Right-click a file for its menu, which also has a source's actions (**Make and ingest a meeting note**, **Draft a reply**, **Ingest into the wiki**, **Ask about this source**) where they fit, and **Compare with…**. **Export PDF…** (⌘P) writes the note in its look, images included, with page numbers. Each note can have its own look (Brainstead, Business, Editorial, Modern, Minimal, Report or Technical), colour, and light or dark.
 
 ## Read aloud
 

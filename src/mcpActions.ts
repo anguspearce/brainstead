@@ -2572,6 +2572,16 @@ async function trashTranscriptTool(a: Args, r: McpRequest): Promise<string> {
   return outcome?.message ?? `Moved ${page} to the Trash.`;
 }
 
+/** add_image: the image saved to images/ as a paste is, and recorded in Changes. */
+async function addImageTool(a: Args, r: McpRequest): Promise<string> {
+  const name = str(a, "name");
+  const data = str(a, "base64");
+  if (!name || !data) throw new Error("Give the image's name and bytes.");
+  const o = await api.imageAdd(name, data, str(a, "reason") ?? null, originOf(a, r), r.model ?? null);
+  told(`added ${pageName(o.page)}`);
+  return o.message;
+}
+
 /** Each action by name. */
 const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   "tasks.list": listTasks,
@@ -2608,6 +2618,7 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   changes: changesTool,
   "run.start": startRun,
   "note.trash_transcript": trashTranscriptTool,
+  "image.add": addImageTool,
   "run.status": runStatus,
   "run.stop": stopRun,
   "health.fix": healthFix,

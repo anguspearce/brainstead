@@ -1310,6 +1310,28 @@ describe("MCP actions", () => {
       await expect(run("graph", { page: "Nobody" })).rejects.toThrow(/no page called Nobody/);
     });
 
+    it("adds an image as a paste saves it, recorded in Changes with the session's origin", async () => {
+      answers.image_add = () => ({
+        id: "c1",
+        applied: true,
+        page: "images/plan.png",
+        flags: [],
+        message: "Added images/plan.png. Embed it in a note with ![[images/plan.png]]. Revert it in Changes.",
+      });
+      const origin = { kind: "chat", chat: "chat-1" };
+      expect(await run("image.add", { name: "plan.png", base64: "iVBORw0K", reason: "For the note", origin })).toMatch(
+        /!\[\[images\/plan\.png\]\]/,
+      );
+      expect(calls.find(([c]) => c === "image_add")![1]).toEqual({
+        name: "plan.png",
+        base64: "iVBORw0K",
+        reason: "For the note",
+        origin,
+        model: null,
+      });
+      await expect(run("image.add", { name: "plan.png" })).rejects.toThrow(/name and bytes/);
+    });
+
     it("restores from the Trash through Changes, under another path, and stops every run", async () => {
       answers.trash_list = () => [
         { id: "t1", originalRel: "Idea. One.md", layer: "note", basename: "Idea. One.md", deletedAt: "", sizeBytes: 1 },

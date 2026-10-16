@@ -37,6 +37,7 @@ In short, an assistant can do whatever the screens do. The help tool, and the in
 - capture to the Inbox or the Scratchpad, and clarify Inbox items;
 - create projects, change their status, area and **Done looks like**, rename an area on all its projects, and put areas and projects in order;
 - edit any page, make notes (from your templates too) and wiki pages, rename, and move notes to or from the Trash;
+- add an image to `images/` (from a file or its bytes) for a note it writes to embed, as pasting one does; Revert moves it to Brainstead's Trash;
 - add the example notes, save a Doc check or start its register, save a comparison, save a Contradictions report, and use Knowledge health's **Reshape pages** and **Link to…**.
 
 A quote not found in its source is flagged, once.

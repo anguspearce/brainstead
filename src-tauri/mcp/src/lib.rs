@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use brainstead_core::changes::{self, Instruction};
 use brainstead_core::proposals::{self, Kind, Origin, Patch, Quote, SourceText};
 use brainstead_core::search::SearchRequest;
-use brainstead_core::{bridge, extract, filename, lint, paths, projects, write, Index};
+use brainstead_core::{bridge, extract, filename, images, lint, paths, projects, write, Index};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use unicode_normalization::UnicodeNormalization;
@@ -31,7 +31,7 @@ const TODO_LIST: &str = "Me. To Do List.md";
 /// so it stays under that; each tool's description says the rest.
 const INSTRUCTIONS: &str = "Brainstead's tools over the user's vault (notes, a wiki in wiki/, sources in sources/), doing what the app's screens do. \
 The list_* tools and the others marked read-only only read; help answers questions about the app itself. \
-Every change to a note (tasks, the Inbox, projects, edit_page, create_note, rename_note, trash_note) is made at once and recorded in Brainstead's Changes, where the user can revert it. \
+Every change to a note (tasks, the Inbox, projects, edit_page, create_note, add_image, rename_note, trash_note) is made at once and recorded in Brainstead's Changes, where the user can revert it. \
 A change to Templates/, one that adds code that runs (a script, a Tasks function, a Templater tag) or one that changes a system note's header is always held for the user to accept in the app. \
 Other tools change things at once; each one's description says how it's undone. \
 Change only what the user asked for. While the vault is read-only (app_status says) every change is refused. \
@@ -513,6 +513,14 @@ pub fn tools() -> Vec<Value> {
                 "test_run": {"type": "boolean", "description": "With template: the template editor's Test run, the note it would make shown and nothing written (other notes it would make only listed)."},
                 "reason": reason
             }), &["title"])),
+        tool("add_image", "Add an image to the vault", Change,
+            "Saves an image into the vault's images/ folder, as pasting one into a note does (needs the app), for a note to embed: it answers with the image's path and the embed to put in the note's text with create_note or edit_page, ![[images/<name>]]. Give path (an image file on this computer) or base64 (the image's bytes) with name. Its type is read from its bytes: png, jpg, gif, webp, bmp, avif or svg, up to 20 MB. It never writes over an image: a name that's taken gets -2, -3… Recorded in Changes, where Revert moves it to Brainstead's Trash.",
+            schema(json!({
+                "path": {"type": "string", "description": "The image file's path on this computer (absolute, ~/…, or relative to this session's folder). Not with base64."},
+                "base64": {"type": "string", "description": "The image's bytes, base64-encoded. Not with path."},
+                "name": {"type": "string", "description": "Its file name, such as launch-plan.png (the extension is set from the bytes). With path, the file's own name when left out."},
+                "reason": reason
+            }), &[])),
         tool("rename_note", "Rename a note", Change,
             "Renames a note or any file in the vault in its folder, with the links to it rewritten (needs the app); revertable in Changes. Give the new name's parts; Brainstead builds `Type. Title - date` and keeps the file's own extension, as the file menu's Rename does (a source report.pdf stays a PDF). With preview, only the links it would rewrite are listed, as the Rename box lists them. A rename that touches Templates/ is held for the user.",
             schema(json!({
@@ -1131,6 +1139,7 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
                 Ok(create_note(ctx, a)?.into())
             }
         }
+        "add_image" => Ok(add_image(ctx, parse(obj)?)?.into()),
         "rename_note" => Ok(rename_note(ctx, parse(obj)?)?.into()),
         "trash_note" => {
             let a: TrashArgs = parse(obj.clone())?;
@@ -1530,6 +1539,81 @@ fn rename_preview(ctx: &Ctx, ix: &Index, rel: &str, to: &str) -> Result<String, 
     }
     out.push("Call again without preview to rename it.".into());
     Ok(out.join("\n"))
+}
+
+#[derive(Deserialize)]
+struct ImageArgs {
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    base64: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    reason: String,
+    #[serde(default)]
+    unattended: bool,
+}
+
+/// The image's bytes and its file name, from a path or base64, checked before it's sent to the
+/// app: an image by its bytes, small enough, not in the vault already.
+fn image_input(ctx: &Ctx, a: &ImageArgs) -> Result<(Vec<u8>, String), String> {
+    use base64::Engine as _;
+    let given = a.name.as_deref().map(str::trim).filter(|n| !n.is_empty());
+    let (bytes, name) = match (a.path.as_deref().map(str::trim).filter(|p| !p.is_empty()), a.base64.as_deref()) {
+        (Some(_), Some(_)) => return Err("Give path or base64, not both.".into()),
+        (None, None) => return Err("Give path (an image file) or base64 (its bytes) with name.".into()),
+        (Some(p), None) => {
+            let abs = match p.strip_prefix("~/") {
+                Some(rest) => std::env::var_os("HOME").map(PathBuf::from).ok_or("There's no home folder to find ~/ in.")?.join(rest),
+                None => PathBuf::from(p),
+            };
+            let abs = std::fs::canonicalize(&abs).map_err(|e| format!("Couldn't find {p}: {e}"))?;
+            if let Some(rel) = std::fs::canonicalize(&ctx.vault).ok().and_then(|v| abs.strip_prefix(v).ok().map(Path::to_path_buf)) {
+                let rel = rel.to_string_lossy().replace('\\', "/");
+                return Err(format!("That image is in the vault already, at {rel}: embed it with ![[{rel}]]."));
+            }
+            let len = std::fs::metadata(&abs).map_err(|e| format!("Couldn't read {p}: {e}"))?.len();
+            if !abs.is_file() || len > images::MAX_BYTES as u64 {
+                return Err(if abs.is_file() {
+                    format!("{p} is over {} MB.", images::MAX_BYTES >> 20)
+                } else {
+                    format!("{p} isn't a file.")
+                });
+            }
+            let bytes = std::fs::read(&abs).map_err(|e| format!("Couldn't read {p}: {e}"))?;
+            let own = abs.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            (bytes, given.map(str::to_string).unwrap_or(own))
+        }
+        (None, Some(b64)) => {
+            let bytes =
+                base64::engine::general_purpose::STANDARD.decode(b64.trim()).map_err(|e| format!("base64 isn't valid base64: {e}"))?;
+            (bytes, given.ok_or("Give the image a name, such as launch-plan.png.")?.to_string())
+        }
+    };
+    if bytes.len() > images::MAX_BYTES {
+        return Err(format!("That image is over {} MB.", images::MAX_BYTES >> 20));
+    }
+    let ext = images::sniff(&bytes).ok_or("That isn't an image: Brainstead adds png, jpg, gif, webp, bmp, avif and svg.")?;
+    let base = name.rsplit('/').next().unwrap_or(&name);
+    let stem = match base.rsplit_once('.') {
+        Some((s, _)) if !s.is_empty() => s,
+        _ => base,
+    };
+    Ok((bytes, format!("{stem}.{ext}")))
+}
+
+/// Pasting an image: saved to images/ by the app and recorded in Changes.
+fn add_image(ctx: &Ctx, a: ImageArgs) -> Result<String, String> {
+    use base64::Engine as _;
+    let (bytes, name) = image_input(ctx, &a)?;
+    let args = json!({
+        "name": name,
+        "base64": base64::engine::general_purpose::STANDARD.encode(&bytes),
+        "reason": a.reason,
+        "origin": origin(ctx, a.unattended),
+    });
+    Ok(act(ctx, "image.add", args)?.text)
 }
 
 #[derive(Deserialize)]

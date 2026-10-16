@@ -37,6 +37,7 @@ These are made at once too. Each is listed in [Changes](app:review), where you c
 - The Inbox: clarify an item, as the form does. When that changes two notes, both are made, or both held, together.
 - Projects: create one, rename it, or set its status, area or **Done looks like**; rename an area on every project under it.
 - Pages: edit any page, make a note (from a template too) or a wiki page, rename a file, or move it to the Trash.
+- Images: add one to the vault's `images/` folder, as pasting it into a note does, for a note it writes to embed. It's never held, and **Revert** moves it to Brainstead's Trash.
 - **Add the example notes**, Doc check's **Save as note** and **Start the register**, a saved Contradictions report, and Knowledge health's **Reshape pages**, **Link to…** and **Link to it**.
 
 A quote that isn't in its source is flagged, once.

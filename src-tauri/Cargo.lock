@@ -353,7 +353,7 @@ dependencies = [
 
 [[package]]
 name = "brainstead"
-version = "1.1.7"
+version = "1.1.8"
 dependencies = [
  "arboard",
  "base64 0.22.1",
@@ -433,6 +433,7 @@ dependencies = [
 name = "brainstead-mcp"
 version = "0.1.0"
 dependencies = [
+ "base64 0.23.1",
  "brainstead-core",
  "chrono",
  "libc",

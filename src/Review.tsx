@@ -8,6 +8,7 @@
 // why, for you to accept or reject. Reading the feed is optional: only held changes are counted.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { api, ChangeRow, ChangeView, Hunk } from "./api";
 import { Icon } from "./icons";
 import { fieldIcon, fieldTip, splitTaskFields } from "./taskFields";
@@ -52,6 +53,8 @@ const kindChip = (c: ChangeRow) =>
     <span className="chip amber">Moved to the Trash</span>
   ) : c.kind === "restore" ? (
     <span className="chip">Restored from the Trash</span>
+  ) : c.kind === "image" ? (
+    <span className="chip acc">Image added</span>
   ) : null;
 
 function when(iso: string): string {
@@ -661,6 +664,22 @@ function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: num
             <span>
               {isHeld ? "Moves" : "Moved"} <b>{pageName(v.page)}</b> to Brainstead’s Trash, where it can be restored.
             </span>
+          )}
+        </div>
+      )}
+      {v.kind === "image" && (
+        <div className="card qimage">
+          <span className="qmove">
+            <Icon name="image" size={16} />
+            <span>
+              Added <b>{pageName(v.page)}</b> to images/
+              {v.status === "applied"
+                ? ", for notes to embed. Revert moves it to Brainstead’s Trash."
+                : "; it was moved to Brainstead’s Trash."}
+            </span>
+          </span>
+          {v.status === "applied" && (
+            <img src={convertFileSrc(`${(settings.get().vaultPath ?? "").replace(/\/$/, "")}/${v.page}`)} alt={pageName(v.page)} />
           )}
         </div>
       )}

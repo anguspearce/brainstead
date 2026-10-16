@@ -25,7 +25,7 @@ Three kinds of change are always held, whoever started them:
 - a change to a system note's header (the "This is a system note" callout)
 - a change that adds code that runs when a note is shown (a `dataviewjs` block, inline `$=`, a Tasks `by function` line or Templater's `<% %>`)
 
-Renames and moves to the Trash are made at once, unless they touch a template (the note is one, the rename puts it in `Templates/`, or links it updates are in one): then they're held. An assistant's restore from the Trash is made at once too, unless it puts the file in `Templates/` or the note has code that runs. Revert renames the note back, restores it, or moves a restored one back to the Trash.
+Renames and moves to the Trash are made at once, unless they touch a template (the note is one, the rename puts it in `Templates/`, or links it updates are in one): then they're held. An assistant's restore from the Trash is made at once too, unless it puts the file in `Templates/` or the note has code that runs. Revert renames the note back, restores it, or moves a restored one back to the Trash. An image an assistant adds to `images/`, for a note to embed, is made at once and shown here; Revert moves it to Brainstead's Trash.
 
 Assistants' task, Inbox and project edits are listed and held by the same rules; your own edits on those screens aren't listed.
 
