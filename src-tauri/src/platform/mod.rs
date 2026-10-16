@@ -698,67 +698,13 @@ pub fn release_updates() -> bool {
     cfg!(target_os = "macos")
 }
 
-/// Which of the features that aren't on every system this one has. The window hides what is
-/// missing, and the MCP server's `app_status` says it (`brainstead_mcp::platform_features`, the
-/// same table, checked against this one by a test).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PlatformFeatures {
-    /// "macos", "windows" or "linux".
-    pub platform: &'static str,
-    pub quick_look: bool,
-    pub spelling: bool,
-    pub grammar: bool,
-    pub read_aloud: bool,
-    pub export_pdf: bool,
-    pub rich_copy: bool,
-    pub full_disk_access: bool,
-    pub open_at_login: bool,
-    /// The text in images (OCR), for search and the index.
-    pub image_text: bool,
-}
-
-pub fn platform_features() -> PlatformFeatures {
-    let none = PlatformFeatures {
-        platform: "linux",
-        quick_look: false,
-        spelling: false,
-        grammar: false,
-        read_aloud: false,
-        export_pdf: false,
-        rich_copy: false,
-        full_disk_access: false,
-        open_at_login: false,
-        image_text: false,
-    };
-    if cfg!(target_os = "macos") {
-        PlatformFeatures {
-            platform: "macos",
-            quick_look: true,
-            spelling: true,
-            grammar: true,
-            read_aloud: true,
-            export_pdf: true,
-            rich_copy: true,
-            full_disk_access: true,
-            open_at_login: true,
-            image_text: true,
-        }
-    } else if cfg!(windows) {
-        PlatformFeatures { platform: "windows", rich_copy: true, open_at_login: true, ..none }
-    } else {
-        none
-    }
-}
+/// Which of the features that aren't on every system this one has: one table in core, which the
+/// window (`platform_features`) and the MCP server's `app_status` both read.
+pub use brainstead_core::features::{platform_features, PlatformFeatures};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_mcp_server_reports_the_same_features_as_the_window() {
-        assert_eq!(serde_json::to_value(platform_features()).unwrap(), brainstead_mcp::platform_features());
-    }
 
     #[test]
     fn a_host_manifest_is_written_once_and_then_current() {

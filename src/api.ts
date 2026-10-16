@@ -6,11 +6,11 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
-import { platform, Platform } from "./platform";
+import type { Platform } from "./platform";
 
 export type Theme = "system" | "light" | "dark";
 
-/** What the running platform can do (src-tauri/src/platform); a screen shows a control only when its feature is on. */
+/** What this system can do (src-tauri/core/src/features.rs); a screen shows a control only when its feature is on. */
 export interface PlatformFeatures {
   platform: Platform;
   quickLook: boolean;
@@ -22,32 +22,6 @@ export interface PlatformFeatures {
   fullDiskAccess: boolean;
   openAtLogin: boolean;
   imageText: boolean;
-}
-
-let featuresCache: PlatformFeatures | undefined;
-/** The platform's features, asked once. Every feature is taken as available when the backend can't say. */
-async function platformFeatures(): Promise<PlatformFeatures> {
-  if (featuresCache) return featuresCache;
-  let got: Partial<PlatformFeatures> | undefined;
-  try {
-    got = await invoke<PlatformFeatures>("platform_features");
-  } catch {
-    got = undefined;
-  }
-  featuresCache = {
-    platform: platform(),
-    quickLook: true,
-    spelling: true,
-    grammar: true,
-    readAloud: true,
-    exportPdf: true,
-    richCopy: true,
-    fullDiskAccess: true,
-    openAtLogin: true,
-    imageText: true,
-    ...(got && typeof got === "object" ? got : {}),
-  };
-  return featuresCache;
 }
 
 export interface Settings {
@@ -1162,7 +1136,8 @@ export const api = {
   settingsWrite: (settings: Settings) => invoke<Settings>("settings_write", { settings }),
   vaultStatus: () => invoke<VaultStatus>("vault_status"),
   rebuildIndex: () => invoke<void>("rebuild_index"),
-  platformFeatures,
+  /** Which features this system has (src/features.ts keeps the answer). */
+  platformFeatures: () => invoke<PlatformFeatures>("platform_features"),
   permissions: () => invoke<Permissions>("permissions"),
   openFullDiskAccess: () => invoke<void>("open_full_disk_access"),
   reveal: (path: string) => invoke<void>("reveal", { path }),

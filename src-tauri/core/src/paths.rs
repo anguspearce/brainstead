@@ -77,9 +77,11 @@ pub fn vault_rel_new(root: &Path, rel: &str) -> Result<String, String> {
 }
 
 /// The 8.3 short name Windows gave the last part of `p`, or None when it gave none (the volume
-/// doesn't make them, or the name is short already).
-#[cfg(all(test, windows))]
-pub(crate) fn short_name(p: &Path) -> Option<String> {
+/// doesn't make them, or the name is short already). For tests, this crate's and the MCP server's:
+/// one of the spellings a path is read back from.
+#[cfg(windows)]
+#[doc(hidden)]
+pub fn short_name(p: &Path) -> Option<String> {
     use std::os::windows::ffi::{OsStrExt, OsStringExt};
     let long: Vec<u16> = p.as_os_str().encode_wide().chain([0]).collect();
     let mut buf = vec![0u16; 4096];

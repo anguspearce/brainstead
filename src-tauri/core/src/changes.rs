@@ -487,15 +487,12 @@ pub fn move_needs_the_user<'a>(page: &str, to: Option<&str>, rewrites: impl Into
 }
 
 /// Whether a vault-relative path is in `Templates/`. The app gives the rules each page as the
-/// file system spells it (`paths::vault_rel`); a path that reaches them spelled otherwise is
-/// still caught when it differs in case or separator, or on Windows by a trailing dot (which
-/// Win32 drops) or space (which no folder's name ends in). An 8.3 short name (`TEMPLA~1`) only
-/// `vault_rel` can read back.
+/// file system spells it (`paths::vault_rel`, which also refuses the names Win32 reads as another
+/// file's: a trailing dot or space, a stream); a path that reaches them spelled otherwise is still
+/// caught when it differs in case or separator. An 8.3 short name (`TEMPLA~1`) only `vault_rel`
+/// can read back.
 fn in_templates(p: &str) -> bool {
-    p.split(['/', '\\']).next().is_some_and(|f| {
-        let f = if cfg!(windows) { f.trim_end_matches(['.', ' ']) } else { f };
-        f.eq_ignore_ascii_case("Templates")
-    })
+    p.split(['/', '\\']).next().is_some_and(|f| f.eq_ignore_ascii_case("Templates"))
 }
 
 fn short(s: &str) -> String {
@@ -1073,10 +1070,6 @@ mod tests {
             assert!(move_needs_the_user(page, None, []).is_some(), "{page}");
             assert!(move_needs_the_user("Idea. A.md", Some(page), []).is_some(), "{page}");
             assert!(move_needs_the_user("Idea. A.md", Some("Idea. B.md"), [page]).is_some(), "{page}");
-        }
-        for page in ["Templates./Meeting.md", "Templates /Meeting.md", "Templates. ./Meeting.md"] {
-            assert_eq!(needs_the_user(page, Some("a"), "b").is_some(), cfg!(windows), "{page}");
-            assert_eq!(move_needs_the_user(page, None, []).is_some(), cfg!(windows), "{page}");
         }
         assert!(needs_the_user("Templates archive/Meeting.md", Some("a"), "b").is_none());
         assert!(needs_the_user("Notes/Templates/Meeting.md", Some("a"), "b").is_none());

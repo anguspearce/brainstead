@@ -85,35 +85,6 @@ fn items(f: &crate::platform::PlatformFeatures) -> Vec<(&'static str, &'static s
 /// Windows' File › Exit, in place of the predefined Quit (`windows_file`).
 pub const EXIT: &str = "app:exit";
 
-/// What a choice from the menu bar does.
-#[derive(Debug, PartialEq, Eq)]
-enum Choice<'a> {
-    /// The window acts on it (src/noteMenu.ts, src/help/HelpDrawer.tsx).
-    Window(&'a str),
-    /// Quit as the tray's Quit does: the window asks about unsaved edits, then "Quit Brainstead?"
-    /// (macOS's Quit Brainstead, Windows' File › Exit).
-    Quit,
-    /// Brainstead's own About panel (macOS).
-    About,
-    /// Check for Updates… (macOS).
-    Updates,
-    /// Help › Brainstead Website.
-    Website,
-    /// A predefined item, which the system carries out itself.
-    None,
-}
-
-fn choice(id: &str) -> Choice<'_> {
-    match id {
-        "app:quit" | EXIT => Choice::Quit,
-        "app:about" => Choice::About,
-        "app:updates" => Choice::Updates,
-        "help:website" => Choice::Website,
-        _ if id.starts_with("note:") || id.starts_with("help:") => Choice::Window(id),
-        _ => Choice::None,
-    }
-}
-
 /// Windows' File menu: Close Window, then Exit. tauri's default File menu ends with the
 /// predefined Quit, which muda carries out as `PostQuitMessage(0)`: tao's event loop ends at the
 /// `WM_QUIT` (`GetMessageW` returns 0) and tauri sends `RunEvent::Exit` with no `ExitRequested`
@@ -189,24 +160,31 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
     }
     crate::platform::set_menu_bar(app, menu)?;
     *app.state::<NoteMenu>().0.lock().unwrap() = doc_items;
-    app.on_menu_event(|app, ev| match choice(ev.id().as_ref()) {
-        Choice::Website => {
-            use tauri_plugin_opener::OpenerExt;
-            if let Err(e) = app.opener().open_url(WEBSITE, None::<&str>) {
-                crate::applog!("website: {e}");
+    app.on_menu_event(|app, ev| {
+        let id = ev.id().as_ref();
+        match id {
+            "help:website" => {
+                use tauri_plugin_opener::OpenerExt;
+                if let Err(e) = app.opener().open_url(WEBSITE, None::<&str>) {
+                    crate::applog!("website: {e}");
+                }
             }
-        }
-        Choice::About => about(app),
-        Choice::Quit => crate::tray::tray_quit(app.clone()),
-        Choice::Updates => crate::updates::check_now(app),
-        Choice::Window(id) => {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.set_focus();
+            "app:about" => about(app),
+            // macOS's Quit Brainstead and Windows' File › Exit quit as the tray's Quit does: the
+            // window asks about unsaved edits, then "Quit Brainstead?".
+            "app:quit" | EXIT => crate::tray::tray_quit(app.clone()),
+            "app:updates" => crate::updates::check_now(app),
+            // The window acts on the Note and Help items (src/noteMenu.ts, src/help/HelpDrawer.tsx).
+            _ if id.starts_with("note:") || id.starts_with("help:") => {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+                let _ = app.emit_to("main", "menu", id);
             }
-            let _ = app.emit_to("main", "menu", id);
+            // A predefined item, which the system carries out itself.
+            _ => {}
         }
-        Choice::None => {}
     });
     Ok(())
 }
@@ -299,15 +277,5 @@ mod tests {
     fn website_matches_the_settings_screen() {
         let settings = include_str!("../../src/Settings.tsx");
         assert!(settings.contains(&format!("export const WEBSITE = \"{}\";", super::WEBSITE)));
-    }
-
-    #[test]
-    fn exit_quits_as_the_tray_does_and_note_and_help_items_go_to_the_window() {
-        assert_eq!(choice(EXIT), Choice::Quit);
-        assert_eq!(choice("app:quit"), Choice::Quit);
-        assert_eq!(choice("help:website"), Choice::Website);
-        assert_eq!(choice("note:save"), Choice::Window("note:save"));
-        assert_eq!(choice("help:shortcuts"), Choice::Window("help:shortcuts"));
-        assert_eq!(choice("quit"), Choice::None);
     }
 }

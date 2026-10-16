@@ -600,26 +600,13 @@ fn a_page_is_sent_as_the_file_system_spells_it() {
     }
 }
 
-/// The 8.3 short name Windows gave the last part of `p`, or None when it gave none.
-#[cfg(windows)]
-fn short_name(p: &Path) -> Option<String> {
-    use std::os::windows::ffi::{OsStrExt, OsStringExt};
-    let long: Vec<u16> = p.as_os_str().encode_wide().chain([0]).collect();
-    let mut buf = vec![0u16; 4096];
-    // SAFETY: `long` ends in a NUL, and the call writes at most `buf.len()` units into `buf`.
-    let n = unsafe { windows_sys::Win32::Storage::FileSystem::GetShortPathNameW(long.as_ptr(), buf.as_mut_ptr(), buf.len() as u32) };
-    let n = usize::try_from(n).ok().filter(|&n| n > 0 && n < buf.len())?;
-    let name = PathBuf::from(std::ffi::OsString::from_wide(&buf[..n])).file_name()?.to_string_lossy().into_owned();
-    (Some(name.as_str()) != p.file_name().and_then(|f| f.to_str())).then_some(name)
-}
-
 #[cfg(windows)]
 #[test]
 fn every_windows_spelling_of_a_template_is_sent_as_its_own_path() {
     let f = fixture();
     let want = ["Templates/Meeting.md", "Templates/Meeting.md", "Templates/Meeting note.md", "Templates/Meeting.md"].map(String::from);
     let mut spellings = vec!["Templates\\Meeting.md".to_string(), "templates\\MEETING.md".into()];
-    match short_name(&f.ctx.vault.join("Templates")) {
+    match paths::short_name(&f.ctx.vault.join("Templates")) {
         Some(short) => spellings.extend([format!("{short}/Meeting.md"), format!("{short}\\Meeting")]),
         None => eprintln!("This volume makes no 8.3 names, so the short spelling isn't tried."),
     }
@@ -633,7 +620,7 @@ fn every_windows_spelling_of_a_template_is_sent_as_its_own_path() {
             assert!(t.contains("Not a path in the vault"), "{tool_name} {s}: {t}");
         }
     }
-    if let Some(short) = short_name(&f.ctx.vault.join("Templates")) {
+    if let Some(short) = paths::short_name(&f.ctx.vault.join("Templates")) {
         assert!(refused(&f.ctx, "create_note", json!({"title": "Retro", "folder": short, "content": "x"})).contains("can't go in"));
     }
 }

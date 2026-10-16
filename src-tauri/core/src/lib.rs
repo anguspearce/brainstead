@@ -18,6 +18,7 @@ pub mod contradictions;
 pub mod dataview;
 pub mod drafts;
 pub mod extract;
+pub mod features;
 pub mod filename;
 pub mod find;
 pub mod fixname;

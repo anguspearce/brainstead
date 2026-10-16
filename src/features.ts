@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // What this platform can do (Quick Look, spelling, Export PDF…), read by the screens that offer it.
-// Loaded once at startup (src/main.tsx); until then every feature counts as available.
+// Loaded once at startup (src/main.tsx); until then, and when the backend can't say, every feature
+// counts as available.
 
 import { api, PlatformFeatures } from "./api";
 import { platform, setPlatform } from "./platform";
@@ -24,7 +25,12 @@ export const features = new Store<PlatformFeatures>({
 
 /** Asks the backend which features exist and adopts the platform it reports. */
 export async function loadFeatures() {
-  const f = await api.platformFeatures();
+  let f: PlatformFeatures;
+  try {
+    f = await api.platformFeatures();
+  } catch {
+    return;
+  }
   features.set(f);
   if (f.platform !== platform()) setPlatform(f.platform);
 }

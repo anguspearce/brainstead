@@ -1032,52 +1032,6 @@ enum CallError {
     Tool(String),
 }
 
-/// Which of the features that aren't on every system this one has, as the app's
-/// `platform::platform_features` says (this crate can't call the app's; a test there compares the
-/// two). `app_status` gives it.
-pub fn platform_features() -> Value {
-    let mac = cfg!(target_os = "macos");
-    let windows = cfg!(windows);
-    json!({
-        "platform": if mac { "macos" } else if windows { "windows" } else { "linux" },
-        "quickLook": mac,
-        "spelling": mac,
-        "grammar": mac,
-        "readAloud": mac,
-        "exportPdf": mac,
-        "richCopy": mac || windows,
-        "fullDiskAccess": mac,
-        "openAtLogin": mac || windows,
-        "imageText": mac,
-    })
-}
-
-/// `platform_features` as `app_status` says it: the system, and what it doesn't have.
-fn features_text(f: &Value) -> String {
-    let names = [
-        ("quickLook", "Quick Look"),
-        ("spelling", "spelling"),
-        ("grammar", "grammar"),
-        ("readAloud", "Read aloud"),
-        ("exportPdf", "Export PDF"),
-        ("richCopy", "rich copy"),
-        ("fullDiskAccess", "Full Disk Access"),
-        ("openAtLogin", "Open at login"),
-        ("imageText", "the text in images"),
-    ];
-    let system = match f["platform"].as_str() {
-        Some("macos") => "macOS",
-        Some("windows") => "Windows",
-        _ => "Linux",
-    };
-    let missing: Vec<&str> = names.iter().filter(|(k, _)| f[*k] != true).map(|(_, n)| *n).collect();
-    if missing.is_empty() {
-        format!("System: {system}, with every feature.")
-    } else {
-        format!("System: {system}. Not on this system, so not in the window: {}.", missing.join(", "))
-    }
-}
-
 /// What a tool gives back: its text, and for a listing tool with an output schema, the same rows
 /// as data (MCP's structuredContent).
 struct Out {
@@ -1303,10 +1257,11 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
         "list_assistants" => act("assistants.found", obj),
         "glance" => act("glance", obj),
         "app_status" => {
+            // Then the system's features (brainstead_core::features), the table the window hides by.
             let mut out = act("status", obj)?;
-            let f = platform_features();
+            let f = brainstead_core::features::platform_features();
             out.text.push('\n');
-            out.text.push_str(&features_text(&f));
+            out.text.push_str(&f.describe());
             out.structured = Some(json!({"features": f}));
             Ok(out)
         }
