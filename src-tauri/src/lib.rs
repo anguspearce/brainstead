@@ -631,7 +631,7 @@ const AGENT_END: &str = "<!-- brainstead:end -->";
 /// checked and recorded in Changes (decided 2026-10-05).
 const AGENT_BLOCK: &str = "## Changing the vault\n\n\
 Brainstead manages this vault. Change it only through the `brainstead` MCP tools, never with your own file tools: \
-edit_page (any page, or a new wiki page), create_note, create_task, delete_task, rename_note, trash_note, and the task, Inbox and project tools. \
+edit_page (any page, or a new wiki page), create_note, add_image (an image for a note to embed), create_task, delete_task, rename_note, trash_note, and the task, Inbox and project tools. \
 Brainstead checks each change and records it in its Changes screen, where the user can revert it. \
 To ingest a source, use start_run with run ingest; to fix a misspelt name, fix_name; for the wiki's health, lint and fix_health. \
 Read with search, read_section, backlinks and resolve_entity. \
@@ -913,6 +913,7 @@ pub fn run() {
             notes::drafts_list,
             notes::image_save,
             notes::image_import,
+            notes::image_add,
             notes::rename_preview,
             notes::rename_commit,
             notes::trash_move,

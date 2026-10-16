@@ -41,6 +41,8 @@ pub enum Kind {
     Trash,
     /// A note put back from Brainstead's Trash.
     Restore,
+    /// An image added to `images/` (add_image).
+    Image,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

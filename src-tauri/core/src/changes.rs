@@ -74,6 +74,8 @@ pub enum Instruction {
     Trash,
     /// A Trash entry (`id`) put back, at the change's page.
     Restore { id: String },
+    /// An image saved to `images/`, at the change's page: made when it's recorded, never held.
+    Image,
 }
 
 impl Instruction {
@@ -142,8 +144,8 @@ impl Instruction {
                 }
                 Ok(text)
             }
-            Instruction::Rename { .. } | Instruction::Trash | Instruction::Restore { .. } => {
-                Err("A rename, a move to the Trash or a restore doesn't change the text.".into())
+            Instruction::Rename { .. } | Instruction::Trash | Instruction::Restore { .. } | Instruction::Image => {
+                Err("A rename, a move to the Trash, a restore or an image doesn't change the text.".into())
             }
         }
     }
@@ -153,9 +155,9 @@ impl Instruction {
         matches!(self, Instruction::Page { .. })
     }
 
-    /// Moves the note rather than changing its text.
+    /// Moves the note (or adds an image) rather than changing its text.
     pub fn moves(&self) -> bool {
-        matches!(self, Instruction::Rename { .. } | Instruction::Trash | Instruction::Restore { .. })
+        matches!(self, Instruction::Rename { .. } | Instruction::Trash | Instruction::Restore { .. } | Instruction::Image)
     }
 }
 

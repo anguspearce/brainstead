@@ -133,6 +133,30 @@ pub async fn image_save(app: AppHandle, name: String, base64: String) -> Res<Str
     .await
 }
 
+/// An image an assistant added (the MCP add_image tool): saved to `images/` as a paste is, and
+/// recorded in Changes, where Revert moves it to the Trash.
+#[tauri::command]
+pub async fn image_add(
+    app: AppHandle,
+    name: String,
+    base64: String,
+    reason: Option<String>,
+    origin: brainstead_core::proposals::Origin,
+    model: Option<String>,
+) -> Res<crate::changes::Outcome> {
+    writing(move || {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(base64.trim())
+            .map_err(|e| EditError::from(format!("That image couldn't be read: {e}")))?;
+        if bytes.len() > images::MAX_BYTES {
+            return Err(EditError::from(format!("That image is over {} MB.", images::MAX_BYTES >> 20)));
+        }
+        let rel = save_image(&app, &name, &bytes)?;
+        crate::changes::record_image(&app, &rel, reason.as_deref().unwrap_or(""), origin, model)
+    })
+    .await
+}
+
 /// An image dropped from Finder (a full path) copied into `images/`.
 #[tauri::command]
 pub async fn image_import(app: AppHandle, abs: String) -> Res<String> {

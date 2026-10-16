@@ -950,3 +950,37 @@ fn trash_note_sends_a_transcript_to_the_app() {
     assert!(!is_transcript_page("sources/Teams. Chat. Standup - 2026-10-03.md"));
     assert!(!is_transcript_page("notes/Teams. Transcript. Steerco.md"));
 }
+
+#[test]
+fn add_image_sends_the_bytes_to_the_app() {
+    use base64::Engine as _;
+    let f = fixture();
+    let png: &[u8] = &[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 0];
+    let outside = f._tmp.path().join("Launch plan.jpg");
+    std::fs::write(&outside, png).unwrap();
+    let app = fake_app(f.ctx.data.clone(), |_| bridge::Reply { ok: true, result: json!("Added images/Launch-plan.png."), error: None });
+    let t = ok(&f.ctx, "add_image", json!({"path": outside, "reason": "For the launch note"}));
+    let req = app.join().unwrap();
+    assert_eq!(req.action, "image.add");
+    assert!(t.contains("Added images/Launch-plan.png"), "{t}");
+    // Its type is read from the bytes, not its name.
+    assert_eq!(req.args["name"], "Launch plan.png");
+    assert_eq!(base64::engine::general_purpose::STANDARD.decode(req.args["base64"].as_str().unwrap()).unwrap(), png);
+    assert_eq!(req.args["origin"]["chat"], "chat-1");
+
+    let b64 = base64::engine::general_purpose::STANDARD.encode(b"<svg xmlns='http://www.w3.org/2000/svg'/>");
+    let app = fake_app(f.ctx.data.clone(), |_| bridge::Reply { ok: true, result: json!("Added."), error: None });
+    ok(&f.ctx, "add_image", json!({"base64": b64, "name": "diagram"}));
+    assert_eq!(app.join().unwrap().args["name"], "diagram.svg");
+
+    assert!(refused(&f.ctx, "add_image", json!({})).contains("Give path"));
+    assert!(refused(&f.ctx, "add_image", json!({"base64": b64})).contains("Give the image a name"));
+    assert!(refused(&f.ctx, "add_image", json!({"path": outside, "base64": b64})).contains("not both"));
+    let pdf = f._tmp.path().join("report.pdf");
+    std::fs::write(&pdf, b"%PDF-1.7").unwrap();
+    assert!(refused(&f.ctx, "add_image", json!({"path": pdf})).contains("isn't an image"));
+    let inside = f.ctx.vault.join("images/in-vault.png");
+    std::fs::create_dir_all(inside.parent().unwrap()).unwrap();
+    std::fs::write(&inside, png).unwrap();
+    assert!(refused(&f.ctx, "add_image", json!({"path": inside})).contains("![[images/in-vault.png]]"));
+}

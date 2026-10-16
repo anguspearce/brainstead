@@ -9085,6 +9085,20 @@ button.hc {
   color: var(--ink2);
 }
 
+/* an image an assistant added, in Changes (src/Review.tsx) */
+.qimage {
+  display: flex;
+  flex-direction: column;
+}
+.qimage img {
+  display: block;
+  max-width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  margin: 0 14px 14px;
+  border-radius: 6px;
+}
+
 /* the menu-bar window (src/Tray.tsx), as a sibling app's: a rounded panel the height of what it shows */
 html.tray-view,
 html.tray-view body {

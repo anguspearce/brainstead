@@ -14,17 +14,22 @@ use unicode_normalization::UnicodeNormalization;
 use crate::write::{create_file_bytes, Result, WriteError};
 
 pub const IMAGES_DIR: &str = "images";
+/// The largest image an assistant can add (add_image).
+pub const MAX_BYTES: usize = 20 << 20;
 const EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif"];
 
-/// The extension from the bytes, for a paste with no file name to go by.
-fn sniff(b: &[u8]) -> Option<&'static str> {
+/// The extension from the bytes: for a paste with no file name to go by, and for an image an
+/// assistant adds, whose name isn't trusted.
+pub fn sniff(b: &[u8]) -> Option<&'static str> {
+    let text = b.trim_ascii_start();
     match b {
         [0x89, b'P', b'N', b'G', ..] => Some("png"),
         [0xff, 0xd8, 0xff, ..] => Some("jpg"),
         [b'G', b'I', b'F', b'8', ..] => Some("gif"),
         [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P', ..] => Some("webp"),
+        [_, _, _, _, b'f', b't', b'y', b'p', b'a', b'v', b'i', b'f', ..] => Some("avif"),
         [b'B', b'M', ..] => Some("bmp"),
-        _ if b.starts_with(b"<svg") || b.starts_with(b"<?xml") => Some("svg"),
+        _ if text.starts_with(b"<svg") || text.starts_with(b"<?xml") => Some("svg"),
         _ => None,
     }
 }
@@ -84,6 +89,14 @@ mod tests {
     use super::*;
 
     const PNG: &[u8] = &[0x89, b'P', b'N', b'G', 0, 1];
+
+    #[test]
+    fn sniffs_the_type_from_the_bytes() {
+        assert_eq!(sniff(PNG), Some("png"));
+        assert_eq!(sniff(b"\0\0\0\x1cftypavif\0"), Some("avif"));
+        assert_eq!(sniff(b"\n  <svg xmlns='http://www.w3.org/2000/svg'/>"), Some("svg"));
+        assert_eq!(sniff(b"%PDF-1.7"), None);
+    }
 
     #[test]
     fn names() {

@@ -133,6 +133,9 @@ pub fn submit_many(app: &AppHandle, list: Vec<Submit>) -> Res<Vec<Outcome>> {
     let mut staged = Vec::new();
     for s in list {
         brainstead_core::trash::safe_rel(&s.page).map_err(EditError::from)?;
+        if matches!(s.instruction, Instruction::Image) {
+            return Err(invalid("An image is added with add_image."));
+        }
         let scheduled = changes::scheduled(&s.origin);
         if read_only && !scheduled {
             writable(&app.state::<AppState>())?;
@@ -331,6 +334,19 @@ fn apply(app: &AppHandle, root: &Path, mut c: Change, base: Option<String>) -> R
         message.push_str(&format!(" Flagged: {}", c.flags.join(" ")));
     }
     Ok(Outcome { id: c.id.clone(), applied: true, page: c.to.clone().unwrap_or(c.page.clone()), flags: c.flags.clone(), message })
+}
+
+/// An image an assistant added (add_image), already saved at `rel`: recorded as applied, with
+/// Revert (to Brainstead's Trash). Never held: a new file in `images/` changes no page.
+pub fn record_image(app: &AppHandle, rel: &str, reason: &str, origin: Origin, model: Option<String>) -> Res<Outcome> {
+    let name = rel.rsplit('/').next().unwrap_or(rel);
+    let mut c = Change::new(rel, Kind::Image, &format!("Add image {name}"), reason, origin, model, Instruction::Image);
+    c.status = Status::Applied;
+    c.decided = Some(proposals::now_local());
+    store().save(&c)?;
+    emit_changed(app);
+    let message = format!("Added {rel}. Embed it in a note with ![[{rel}]]. Revert it in Changes.");
+    Ok(Outcome { id: c.id.clone(), applied: true, page: rel.to_string(), flags: vec![], message })
 }
 
 /// Writes the change's claims into its page's claims file (an ingest's set, or a source renamed),
@@ -615,6 +631,14 @@ fn revert_one(app: &AppHandle, id: &str) -> Res<Reverted> {
             let e = tauri::async_runtime::block_on(crate::notes::trash_move(app.clone(), c.page.clone()))?;
             c.trash = Some(e.id);
             format!("Moved {name} back to the Trash")
+        }
+        Instruction::Image => {
+            if !root.join(&c.page).is_file() {
+                return Ok(Reverted { ok: false, message: format!("{} isn't in the vault any more.", c.page), before: None });
+            }
+            let e = tauri::async_runtime::block_on(crate::notes::trash_move(app.clone(), c.page.clone()))?;
+            c.trash = Some(e.id);
+            format!("Moved {} to the Trash", c.page)
         }
         _ => {
             let after = c.after.as_deref().and_then(|h| st.text(h)).ok_or_else(|| invalid("This change's history is gone."))?;
