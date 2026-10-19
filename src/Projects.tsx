@@ -134,7 +134,8 @@ export function ProjectsScreen() {
   };
   const areaKeys = areas.map(([a]) => a).filter(Boolean);
   const open = projects?.find((p) => p.path === sel) ?? null;
-  const pick = (p: ProjectRow) => nav.replace({ screen: "projects", path: p.path });
+  // A second click on the selected project lets it go.
+  const pick = (p: ProjectRow) => nav.replace(p.path === sel ? { screen: "projects" } : { screen: "projects", path: p.path });
 
   return (
     <main className="main">

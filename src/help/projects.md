@@ -8,7 +8,7 @@ summary: Every project note by status and area, with its next actions, waiting-f
 A project is a note named `Project. <name>.md`. Its properties hold its status, area and outcome. Its tasks are those written in it plus any task elsewhere that links it. In the daily and weekly summaries, area Personal goes under **Personal** and any other area under **Work done**, done projects included.
 
 ## Find a project
-**Active**, **On hold**, **Someday** and **Completed** in the top bar switch by status, each with its count. The list groups projects by area (no area last). Under each project's name, a grey line says how many next actions and waiting-fors it has and when the note or any of its tasks last changed. Click an area's name to fold its projects away or show them again; what's folded is remembered.
+**Active**, **On hold**, **Someday** and **Completed** in the top bar switch by status, each with its count. The list groups projects by area (no area last). Under each project's name, a grey line says how many next actions and waiting-fors it has and when the note or any of its tasks last changed. Click a project to open it on the right, and click it again to let it go. Click an area's name to fold its projects away or show them again; what's folded is remembered.
 
 To put areas or projects in your own order, point at a row and drag it by the grip on its left: an area among the areas, a project among its area's projects. **No area** stays last, and areas and projects you haven't moved come after the ones you have, A to Z. The order is kept in Brainstead's settings on this Mac, not in your notes.
 
