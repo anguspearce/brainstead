@@ -32,7 +32,7 @@ import { DraftNudge, GtdChips, TaskList } from "./TaskList";
 import { useVaultVersion } from "./state";
 import { reportEditError, undoLast, useAllTasks } from "./taskModel";
 import { toast } from "./Toast";
-import { askLink, askQuote, TopBar } from "./TopBar";
+import { askLink, askQuote, MoreMenu, TopBar } from "./TopBar";
 import { ago, Dialog, fmtCount, Seg } from "./ui";
 
 /** ⌘K's New project: the Projects screen opens with New project showing. */
@@ -556,29 +556,6 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
               Make active
             </button>
           )}
-          {p.status === "active" && (
-            <button
-              type="button"
-              className="btn"
-              title="Pause the project; it moves to the On hold tab"
-              onClick={() => void set("status", "on-hold", `${p.name} on hold`)}
-            >
-              <Icon name="waiting" size={14} />
-              Put on hold
-            </button>
-          )}
-          {p.status !== "someday" && (
-            <button
-              type="button"
-              className="btn"
-              title="Park the project for some day; it moves to the Someday tab"
-              onClick={() => void set("status", "someday", `${p.name} moved to someday`)}
-            >
-              <Icon name="someday" size={14} />
-              Someday
-            </button>
-          )}
-          <span className="grow" />
           <button
             type="button"
             className="btn ghost"
@@ -588,24 +565,45 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
             <Icon name="pencil" size={14} />
             Edit
           </button>
-          <button
-            type="button"
-            className="btn ghost"
-            title="Open Ask with the project note attached, to ask the model about it"
-            onClick={() => askAboutNote(p.path)}
-          >
-            <Icon name="ask" size={14} />
-            Ask about this project
-          </button>
-          <button
-            type="button"
-            className="btn ghost danger"
-            title="Move the project note to the Trash, after asking first"
-            onClick={() => setDeleting(true)}
-          >
-            <Icon name="trash" size={14} />
-            Move to the Trash
-          </button>
+          {/* The project's other moves under More, so it has one main action. */}
+          <MoreMenu
+            title="Put on hold, Someday, Ask about this project, Move to the Trash"
+            items={[
+              ...(p.status === "active"
+                ? [
+                    {
+                      label: "Put on hold",
+                      icon: "waiting",
+                      title: "Pause the project; it moves to the On hold tab",
+                      run: () => void set("status", "on-hold", `${p.name} on hold`),
+                    },
+                  ]
+                : []),
+              ...(p.status !== "someday"
+                ? [
+                    {
+                      label: "Someday",
+                      icon: "someday",
+                      title: "Park the project for some day; it moves to the Someday tab",
+                      run: () => void set("status", "someday", `${p.name} moved to someday`),
+                    },
+                  ]
+                : []),
+              {
+                label: "Ask about this project",
+                icon: "ask",
+                title: "Open Ask with the project note attached, to ask the model about it",
+                run: () => askAboutNote(p.path),
+              },
+              {
+                label: "Move to the Trash",
+                icon: "trash",
+                title: "Move the project note to the Trash, after asking first",
+                run: () => setDeleting(true),
+                danger: true,
+              },
+            ]}
+          />
         </div>
       </div>
       <aside className="pside">

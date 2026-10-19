@@ -1605,15 +1605,16 @@ mark.search-hit {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* A note's properties: name and value pairs in a line that wraps, above a rule, not a box. */
 .props {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 4px 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 24px;
   margin: 0 0 22px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--line);
   font-size: 12.5px;
 }
 .props.err {
@@ -1621,7 +1622,10 @@ mark.search-hit {
   color: var(--amber);
 }
 .prop {
-  display: contents;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 .props dt {
   color: var(--ink3);
@@ -2490,8 +2494,8 @@ details.callout[open] .callout-chev {
    today; Coming up this week, Waiting for and Deferred until now), and a right rail. */
 .body.today {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 28px;
+  grid-template-columns: minmax(0, 1100px) 320px;
+  gap: 40px;
   padding: 28px 24px 60px 40px;
   align-items: start;
 }
@@ -7182,7 +7186,7 @@ select.sel {
   border-radius: 0;
 }
 .hsum {
-  padding: 16px 18px;
+  padding: 0 0 4px;
   display: flex;
   align-items: center;
   gap: 28px;
@@ -7216,8 +7220,7 @@ select.sel {
   overflow: hidden;
 }
 .hgroup {
-  padding: 10px 14px;
-  background: var(--sunk);
+  padding: 0 0 8px;
   border-bottom: 1px solid var(--line);
 }
 .ck {
@@ -7226,7 +7229,7 @@ select.sel {
   gap: 10px;
   width: 100%;
   height: 38px;
-  padding: 0 14px;
+  padding: 0 6px;
   border: 0;
   border-top: 1px solid var(--line);
   background: none;
@@ -7260,7 +7263,7 @@ select.sel {
   color: var(--ink3);
 }
 .ckitems {
-  padding: 4px 14px 12px 38px;
+  padding: 4px 6px 12px 30px;
   background: var(--sunk);
   display: flex;
   flex-direction: column;
@@ -9680,12 +9683,17 @@ html.tray-view body {
 .card.found {
   margin: 12px 16px 16px;
 }
+
+/* Suggested from your notes, at the top of Tasks and Projects: a heading and rows, no box. */
+.found {
+  border-bottom: 1px solid var(--line);
+}
 .foundhead,
 .foundrow {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
+  padding: 8px 12px;
 }
 .foundhead > svg {
   color: var(--accent);

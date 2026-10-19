@@ -221,7 +221,7 @@ export function HealthScreen() {
       </TopBar>
       <div className="body health">
         <div className="hmain">
-          <div className="card hsum">
+          <div className="hsum">
             <div className="hnum">
               <span className="eyebrow">Need a decision</span>
               <b>{r ? need : "…"}</b>
@@ -356,7 +356,7 @@ function Group({
   on: Handlers;
 }) {
   return (
-    <div className="card hchecks">
+    <div className="hchecks">
       <div className="hgroup eyebrow">{title}</div>
       {checks.map((c) => {
         const n = c.items.length;

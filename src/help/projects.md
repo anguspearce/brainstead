@@ -26,14 +26,14 @@ Click a project to open it. Edit its name, **Done looks like** (the outcome) and
 The side shows the project note, notes that link it, wiki pages it links, recent activity and what's done (cancelled tasks struck through).
 
 ## Change its status
-The buttons under the tasks change only the note's status:
+Under the tasks are **Mark complete** (or **Make active**), **Edit** and ⋯. They change only the note's status:
 
 - **Mark complete** moves it to Completed.
-- **Put on hold** moves an active project to On hold.
-- **Someday** parks it on Someday.
 - **Make active** brings it back to Active.
+- **Put on hold** (on ⋯) moves an active project to On hold.
+- **Someday** (on ⋯) parks it on Someday.
 
-**Ask about this project** opens [Ask](app:ask) with the project note attached. **Move to the Trash** says how many tasks are in the note and how many elsewhere link it, then moves it to the [Trash](app:trash). **Undo** in the toast, or restoring it, brings it back; until then, tasks elsewhere link a missing note.
+**Ask about this project** (on ⋯) opens [Ask](app:ask) with the project note attached. **Move to the Trash** (on ⋯) says how many tasks are in the note and how many elsewhere link it, then moves it to the [Trash](app:trash). **Undo** in the toast, or restoring it, brings it back; until then, tasks elsewhere link a missing note.
 
 ## Find projects in your notes
 At the top of the **Active** projects, **Find tasks and projects** has an assistant read your last 90 days of notes for work they keep coming back to that isn't a project yet. Each suggestion has a name, what done looks like, the notes it rests on and up to three next actions. Suggested tasks show at the top of [Tasks](app:tasks).

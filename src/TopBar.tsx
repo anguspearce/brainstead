@@ -65,6 +65,8 @@ export interface MoreItem {
   title: string;
   run: () => void;
   disabled?: boolean;
+  /** Shown in red: it moves something to the Trash. */
+  danger?: boolean;
 }
 
 /** A top bar's "…": the screen's less used actions, so the bar keeps one or two of its own. */
@@ -91,6 +93,7 @@ export function MoreMenu({ items, title }: { items: MoreItem[]; title: string })
                 key={i.label}
                 type="button"
                 role="menuitem"
+                className={i.danger ? "danger" : undefined}
                 title={i.title}
                 disabled={i.disabled}
                 onClick={() => {

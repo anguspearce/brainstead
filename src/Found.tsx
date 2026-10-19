@@ -132,7 +132,7 @@ export function FoundTasks() {
   const s = useStore(found);
   const rows = (s?.suggestions ?? []).filter((g) => g.kind === "task");
   return (
-    <section className="card found">
+    <section className="found">
       <div className="foundhead">
         <Icon name="zap" size={14} />
         <span className="pt grow">{rows.length ? `${rows.length} suggested from your notes` : "Tasks in your notes"}</span>
@@ -209,7 +209,7 @@ export function FoundProjects() {
   const s = useStore(found);
   const rows = (s?.suggestions ?? []).filter((g) => g.kind === "project");
   return (
-    <section className="card found">
+    <section className="found">
       <div className="foundhead">
         <Icon name="zap" size={14} />
         <span className="pt grow">{rows.length ? `${rows.length} suggested from your notes` : "Projects in your notes"}</span>
