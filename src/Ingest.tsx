@@ -151,7 +151,6 @@ export function RunCard({ r, on }: { r: IngestRun; on?: boolean }) {
   return (
     <div className={`card run ${r.status} ${on ? "on" : ""}`} data-run={r.id}>
       <div className="row">
-        <span className="lb source" />
         <DocButton path={r.source} gone={gone} className="blink grow ell">
           {pageName(r.source)}
         </DocButton>
