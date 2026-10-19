@@ -1099,11 +1099,8 @@ input {
 .srow .nowrap {
   white-space: nowrap;
 }
-.sysf {
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.sysf dt {
+  color: var(--ink2);
 }
 .sysf dl,
 .kv {
@@ -6044,17 +6041,20 @@ code.noscript {
 }
 
 /* Settings › Jobs & schedule (src/Jobs.tsx) */
+
+/* A note between a screen's settings: plain grey text, not a coloured box. */
 .jobnote {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: flex-start;
-  padding: 12px 14px;
-  background: var(--accent-soft);
-  border-color: transparent;
-  color: var(--accent-ink);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink2);
 }
 .jobnote svg {
+  flex: none;
   margin-top: 2px;
+  color: var(--ink3);
 }
 
 /* The switch last, on the right, as in every other settings row. */
@@ -6974,7 +6974,7 @@ select.sel {
 }
 .body.queue {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-columns: 380px minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -7112,8 +7112,43 @@ select.sel {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px 2px 12px;
+  min-height: 38px;
+  padding: 2px 12px 2px 6px;
   color: var(--ink3);
+}
+.qrunhead.qrunacts {
+  min-height: 0;
+  padding-top: 0;
+}
+
+/* A run's heading: a chevron that turns when its changes are shown. */
+.qrunt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font: 500 13px var(--sans);
+  text-align: left;
+  cursor: pointer;
+}
+.qrunt:hover {
+  background: var(--hover);
+}
+.qrunt svg {
+  flex: none;
+  color: var(--ink3);
+}
+.qrunt .qchev {
+  transition: transform 0.15s;
+}
+.qrunt.open .qchev {
+  transform: rotate(90deg);
 }
 
 /* A change's one status: why it's held or flagged, and whether it can still be made. */
@@ -8204,7 +8239,7 @@ select.sel {
   flex: 1;
 }
 .actheat {
-  padding: 14px 18px;
+  padding: 0 0 6px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -8292,7 +8327,7 @@ button.hc {
   height: 11px;
 }
 .actday {
-  padding: 12px 18px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -8346,8 +8381,20 @@ button.hc {
   flex-wrap: wrap;
   gap: 6px;
 }
+
+/* Activity's log, its heat map and side: no boxes, as the other screens (times in the text face). */
 .actlog {
   overflow: hidden;
+  border-top: 1px solid var(--line);
+}
+.actside .card {
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+.tnum {
+  font-variant-numeric: tabular-nums;
 }
 .actlog .ar {
   display: grid;

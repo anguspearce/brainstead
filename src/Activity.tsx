@@ -17,19 +17,7 @@ import { useGlance, VaultGlance } from "./Glance";
 import { TopBar } from "./TopBar";
 import { fmtCount, SearchBox, Seg, TableBand, useDebounced } from "./ui";
 import { settings, useStore } from "./store";
-import {
-  actionLabel,
-  actionsIn,
-  actionTone,
-  buildGrid,
-  cellTip,
-  filterLog,
-  fmtDate,
-  iso,
-  linkTarget,
-  marks,
-  rankLog,
-} from "./activityModel";
+import { actionLabel, actionsIn, buildGrid, cellTip, filterLog, fmtDate, iso, linkTarget, marks, rankLog } from "./activityModel";
 
 const PAGE = 200;
 
@@ -241,7 +229,7 @@ export function ActivityScreen() {
 function Heatmap({ days, day, onDay }: { days: ActivityDay[]; day: string | null; onDay: (d: string) => void }) {
   const files = useMemo(() => days.reduce((n, d) => n + d.notes + d.wiki + d.sources, 0), [days]);
   return (
-    <div className="card actheat">
+    <div className="actheat">
       <div className="acthead">
         <span className="eyebrow">Files by the day they last changed</span>
         {/* Templates aren't counted, so this can be fewer than the sidebar's count of files. */}
@@ -361,7 +349,7 @@ function DayFiles({ day, onClear }: { day: string; onClear: () => void }) {
     };
   }, [day, version]);
   return (
-    <div className="card actday">
+    <div className="actday">
       <div className="acthead">
         <b>{fmtDate(day)}</b>
         <span className="faint">
@@ -379,7 +367,7 @@ function DayFiles({ day, onClear }: { day: string; onClear: () => void }) {
             <button key={f.path} type="button" className="actfile" onClick={() => openDoc(f.path)} title={f.path}>
               <span className={`lb ${f.layer}`}>{LAYER_LABEL[f.layer]}</span>
               <span className="t">{f.title}</span>
-              <span className="faint mono">{new Date(f.mtime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span>
+              <span className="faint tnum">{new Date(f.mtime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span>
             </button>
           ))}
         </div>
@@ -450,7 +438,7 @@ function LogTable({
       else days.push({ date: e.date, at: i, entries: [e] });
     });
   return (
-    <div className={`card actlog ${perDay ? "banded" : ""}`} role="table" aria-label="The vault's log">
+    <div className={`actlog ${perDay ? "banded" : ""}`} role="table" aria-label="The vault's log">
       <div className="ar tb-head" role="row">
         <span role="columnheader">{perDay ? "Time" : "When"}</span>
         <span role="columnheader">Action</span>
@@ -551,10 +539,10 @@ const LogRow = memo(function LogRow({
             {dayLabel(e.date)}
           </button>
         )}
-        {e.time && <span className="mono faint">{e.time}</span>}
+        {e.time && <span className="faint tnum">{e.time}</span>}
       </span>
       <span>
-        <span className={`chip ${actionTone(e.action)}`}>{actionLabel(e.action)}</span>
+        <span className="chip">{actionLabel(e.action)}</span>
       </span>
       <span className="item" title={e.description ? fieldsAsWords(e.description) : undefined}>
         {path ? (

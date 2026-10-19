@@ -32,7 +32,7 @@ Assistants' task, Inbox and project edits are listed and held by the same rules;
 To have the summaries always held for you, turn on **Hold the summaries for me** in [Settings › Jobs & schedule](app:settings/jobs).
 
 ## Read the feed
-The feed groups changes by run, newest first: "Daily check, 5 Oct: 6 changes to 4 pages", an ingest, an Ask chat. Each row shows the title, page, source, model and age, with **Flagged**, **Reverted** or a kind such as **New page**. `J` and `K` move between changes.
+The feed groups changes by run, newest first: "Daily check, 5 Oct: 6 changes to 4 pages", an ingest, an Ask chat. Each run is folded to its heading: click its chevron to show its changes, which folds the one that was open. Moving to a change (`J` and `K`, or a search) opens its run. Each row shows the title, page, source, model and age, with **Flagged**, **Reverted** or a kind such as **New page**. `J` and `K` move between changes.
 
 **Search changes** above the list narrows held changes and the feed to those with every word you type in their title, page, source or model. The box shows which match you're on out of how many (`3/12`); `↓` and `↑` step through them, and `Esc` or ✕ clears it.
 

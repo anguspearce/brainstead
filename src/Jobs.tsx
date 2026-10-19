@@ -120,7 +120,7 @@ export function Jobs() {
         </div>
         <WeekPrep here={here} />
       </div>
-      <div className="card jobnote">
+      <div className="jobnote">
         <Icon name="info" size={16} />
         <span>
           Jobs run while Brainstead is running, even with its window closed; a run missed while it was closed or asleep catches up when it

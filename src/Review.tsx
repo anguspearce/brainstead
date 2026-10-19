@@ -41,19 +41,20 @@ export function DiffText({ text }: { text: string }) {
   );
 }
 
+// What kind of change, as a plain pill: only Held (amber) asks for you.
 const kindChip = (c: ChangeRow) =>
   c.kind === "new" ? (
-    <span className="chip acc">New page</span>
+    <span className="chip">New page</span>
   ) : c.kind === "task" ? (
     <span className="chip">Task</span>
   ) : c.kind === "rename" ? (
     <span className="chip">Rename</span>
   ) : c.kind === "trash" ? (
-    <span className="chip amber">Moved to the Trash</span>
+    <span className="chip">Moved to the Trash</span>
   ) : c.kind === "restore" ? (
     <span className="chip">Restored from the Trash</span>
   ) : c.kind === "image" ? (
-    <span className="chip acc">Image added</span>
+    <span className="chip">Image added</span>
   ) : null;
 
 function when(iso: string): string {
@@ -194,6 +195,11 @@ export function ReviewScreen() {
   const order = useMemo(() => [...heldRuns, ...shownRuns].flatMap((g) => g.rows), [heldRuns, shownRuns]);
   const [sel, setSel] = useViewState<string | null>("review:sel", null);
   const cur = order.find((c) => c.id === sel) ?? waiting[0] ?? order[0] ?? null;
+  // One run open at a time, the current change's; opening another closes it, and moving to a
+  // change (J / K, ↑ ↓, a search) opens its run.
+  const [openRun, setOpenRun] = useState<string | null>(null);
+  useEffect(() => setOpenRun(cur?.group ?? null), [cur?.group]);
+  const toggle = (g: string) => setOpenRun((o) => (o === g ? null : g));
   const idx = cur ? order.indexOf(cur) : -1;
   const move = (d: number) => {
     const next = order[Math.min(order.length - 1, Math.max(0, idx + d))];
@@ -361,7 +367,7 @@ export function ReviewScreen() {
               {heldRuns.map((g) => (
                 <div key={g.group} className="qrun">
                   <div className="qrunhead">
-                    <span className="grow small">{runHeading(g.label, g.rows)}</span>
+                    <RunToggle open={openRun === g.group} onToggle={() => toggle(g.group)} label={runHeading(g.label, g.rows)} />
                     <span
                       title={
                         readOnly
@@ -394,23 +400,23 @@ export function ReviewScreen() {
                       Reject all
                     </button>
                   </div>
-                  {g.rows.map((c) => (
-                    <Row key={c.id} c={c} sel={cur?.id === c.id} onSel={() => setSel(c.id)} />
-                  ))}
+                  {openRun === g.group && g.rows.map((c) => <Row key={c.id} c={c} sel={cur?.id === c.id} onSel={() => setSel(c.id)} />)}
                 </div>
               ))}
             </div>
           )}
           {shownRuns.map((g) => (
-            <div key={g.group} className="tb-group" role="rowgroup">
-              <TableBand
-                icon={g.rows[0].origin.kind === "chat" ? "ask" : "wiki"}
-                label={runHeading(g.label, g.rows)}
-                n={g.rows.length}
-                tip={`${plural(g.rows.length, "change")} in this run`}
-              />
-              {g.rows.filter((c) => c.status === "applied").length > 1 && (
-                <div className="qrunhead">
+            <div key={g.group} className="qrun" role="rowgroup">
+              <div className="qrunhead">
+                <RunToggle
+                  open={openRun === g.group}
+                  onToggle={() => toggle(g.group)}
+                  icon={g.rows[0].origin.kind === "chat" ? "ask" : "wiki"}
+                  label={runHeading(g.label, g.rows)}
+                />
+              </div>
+              {openRun === g.group && g.rows.filter((c) => c.status === "applied").length > 1 && (
+                <div className="qrunhead qrunacts">
                   <span className="grow" />
                   <span
                     title={
@@ -434,9 +440,8 @@ export function ReviewScreen() {
                   </span>
                 </div>
               )}
-              {g.rows.map((c) => (
-                <Row key={c.id} c={c} sel={cur?.id === c.id} gone={gone(c.to ?? c.page)} onSel={() => setSel(c.id)} />
-              ))}
+              {openRun === g.group &&
+                g.rows.map((c) => <Row key={c.id} c={c} sel={cur?.id === c.id} gone={gone(c.to ?? c.page)} onSel={() => setSel(c.id)} />)}
             </div>
           ))}
           {feedRuns.length > shownRuns.length && (
@@ -467,6 +472,23 @@ export function ReviewScreen() {
         )}
       </div>
     </main>
+  );
+}
+
+/** A run's heading in the Changes list: a chevron and its name, opening or closing its changes. */
+function RunToggle({ open, onToggle, label, icon }: { open: boolean; onToggle: () => void; label: string; icon?: string }) {
+  return (
+    <button
+      type="button"
+      className={`qrunt grow ${open ? "open" : ""}`}
+      aria-expanded={open}
+      title={open ? "Hide this run's changes" : "Show this run's changes (and hide the others)"}
+      onClick={onToggle}
+    >
+      <Icon name="chevright" size={12} className="qchev" />
+      {icon && <Icon name={icon} size={13} />}
+      <span className="ell">{label}</span>
+    </button>
   );
 }
 

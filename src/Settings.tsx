@@ -728,8 +728,8 @@ function Vault() {
         {err && <p className="err">{err}</p>}
       </section>
       <ExampleNotes />
-      <div className="card sysf">
-        <span className="eyebrow">System folders</span>
+      <section className="sgroup sysf">
+        <h2 className="h3">System folders</h2>
         <dl>
           <dt className="mono">sources/</dt>
           <dd className="muted">Imported files and captured emails and transcripts.</dd>
@@ -742,7 +742,7 @@ function Vault() {
           <dt className="mono">.trash/ and hidden folders</dt>
           <dd className="muted">Deleted items and other apps' settings. Not indexed.</dd>
         </dl>
-      </div>
+      </section>
     </>
   );
 }

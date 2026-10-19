@@ -118,14 +118,6 @@ export function actionLabel(a: string): string {
   return ACTIONS[a] ?? (a.charAt(0).toUpperCase() + a.slice(1)).replace(/-/g, " ");
 }
 
-/** The chip's colour class for an action. */
-export function actionTone(a: string): string {
-  if (a === "ingest") return "green";
-  if (a === "review") return "amber";
-  if (a === "trash" || a === "delete") return "red";
-  return "";
-}
-
 /** Actions in the log, the most used first. */
 export function actionsIn(log: LogEntry[]): string[] {
   const n = new Map<string, number>();
