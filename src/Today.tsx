@@ -119,12 +119,7 @@ export function TodayScreen() {
                 }).map((p, i) => (
                   <span key={i}>
                     {p.to ? (
-                      <button
-                        type="button"
-                        className={p.tone ?? ""}
-                        title={`Show the ${p.text}`}
-                        onClick={() => document.getElementById(p.to!)?.scrollIntoView({ block: "start", behavior: "smooth" })}
-                      >
+                      <button type="button" className={p.tone ?? ""} title={`Show the ${p.text}`} onClick={() => jumpTo(p.to!)}>
                         {p.text}
                       </button>
                     ) : (
@@ -242,6 +237,17 @@ export function TodayScreen() {
       </div>
     </main>
   );
+}
+
+/** Scrolls to a band and lights it for a moment, so the jump shows even when it was in view. */
+function jumpTo(id: string) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  el.classList.remove("flash");
+  void el.offsetWidth;
+  el.classList.add("flash");
+  window.setTimeout(() => el.classList.remove("flash"), 1200);
 }
 
 /** A part of Today's summary sentence: a count that jumps to its band (`to`), or plain words. */

@@ -2560,6 +2560,27 @@ details.callout[open] .callout-chev {
   flex-direction: column;
   min-width: 0;
 }
+
+/* A band jumped to from the summary sentence, lit for a moment. */
+.tb-group.flash {
+  animation: bandflash 1.2s ease-out;
+}
+
+@keyframes bandflash {
+  from {
+    background: var(--accent-soft);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tb-group.flash {
+    animation: none;
+    outline: 2px solid var(--ring);
+  }
+}
 .tcol:empty {
   display: none;
 }

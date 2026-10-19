@@ -6,7 +6,7 @@ order: 1
 summary: What needs you today: overdue and due tasks, deferred tasks that are back, what you're waiting for, and where you left off.
 ---
 ## Read the day at a glance
-Under the greeting, one sentence sums up the day: "8 overdue, nothing due today, 2 deferred until now and 4 waiting for others." Overdue and due today are always there; the others only when there are any. Overdue is red, and each count is a link that jumps to its band.
+Under the greeting, one sentence sums up the day: "8 overdue, nothing due today, 2 deferred until now and 4 waiting for others." Overdue and due today are always there; the others only when there are any. Overdue is red, and each count is a link that jumps to its band, which lights up for a moment.
 
 The bands below:
 
