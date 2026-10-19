@@ -4,7 +4,11 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MoreMenu } from "./TopBar";
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null), convertFileSrc: (p: string) => p }));
+
+import { settings } from "./store";
+import { MoreMenu, ReadOnlyBanner } from "./TopBar";
 
 afterEach(cleanup);
 
@@ -26,5 +30,15 @@ describe("MoreMenu", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Check now" }));
     expect(check).toHaveBeenCalledOnce();
     expect(screen.queryByRole("menu")).toBeNull();
+  });
+});
+
+describe("ReadOnlyBanner", () => {
+  it("says what read-only blocks, and turns it off", () => {
+    settings.update({ readOnly: true });
+    render(<ReadOnlyBanner blocks="nothing here can be accepted or reverted" />);
+    expect(screen.getByRole("status").textContent).toContain("The vault is read-only, so nothing here can be accepted or reverted.");
+    fireEvent.click(screen.getByRole("button", { name: "Turn off read-only" }));
+    expect(settings.get().readOnly).toBe(false);
   });
 });

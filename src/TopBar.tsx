@@ -6,7 +6,7 @@ import { ReactNode, useState } from "react";
 import { askWith } from "./askState";
 import { Icon } from "./icons";
 import { nav, place } from "./nav";
-import { useStore } from "./store";
+import { settings, useStore } from "./store";
 import { HelpButton } from "./help/HelpDrawer";
 import { Popover } from "./ui";
 
@@ -106,6 +106,25 @@ export function MoreMenu({ items, title }: { items: MoreItem[]; title: string })
         </Popover>
       )}
     </>
+  );
+}
+
+/** Across a screen whose actions read-only blocks (Changes' Accept and Revert): says so once, with
+ *  the switch that turns it off, rather than each button failing. */
+export function ReadOnlyBanner({ blocks }: { blocks: string }) {
+  return (
+    <div className="robanner" role="status">
+      <Icon name="lock" size={14} />
+      <span className="grow">The vault is read-only, so {blocks}.</span>
+      <button
+        type="button"
+        className="btn sm"
+        title="Let Brainstead change files in the vault again (Settings › Vault has the same switch)"
+        onClick={() => void settings.commit({ readOnly: false })}
+      >
+        Turn off read-only
+      </button>
+    </div>
   );
 }
 

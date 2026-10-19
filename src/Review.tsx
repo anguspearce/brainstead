@@ -16,7 +16,7 @@ import { byRun, changeMatches, changes, held, originLabel, pageName, reloadChang
 import { nav, openDoc, useViewState } from "./nav";
 import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
-import { askLink, askQuote, TopBar } from "./TopBar";
+import { askLink, askQuote, ReadOnlyBanner, TopBar } from "./TopBar";
 import { settings, Store, useStore } from "./store";
 import { Dialog, SearchBox, TableBand, useDebounced } from "./ui";
 import { offerFollowUp } from "./Ingest";
@@ -279,6 +279,7 @@ export function ReviewScreen() {
             : { about: "Changes", prompt: "About the changes assistants made: " }
         }
       />
+      {readOnly && <ReadOnlyBanner blocks="nothing here can be accepted or reverted" />}
       {confirm?.revert && (
         <Dialog onClose={() => setConfirm(null)} width={440} label="Revert the run's changes">
           <div className="confirm">
@@ -608,35 +609,18 @@ function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: num
         </div>
         {kindChip(v)}
       </div>
-      {v.flags.length > 0 && (
-        <div className={`card qflags ${isHeld ? "held" : ""}`}>
-          <span className="eyebrow">{isHeld ? "Held because" : "Flagged"}</span>
-          {v.flags.map((f) => (
-            <p key={f} className="small">
-              <Icon name="info" size={12} /> {f}
-            </p>
-          ))}
+      {/* One status: why it's held or flagged, and whether it can still be made; read-only is the
+          screen's banner. */}
+      {(v.flags.length > 0 || v.problem) && (
+        <div className={`qstatus ${isHeld ? "held" : ""}`} role="status">
+          <b>{v.problem ? "This can't be made as it stands" : isHeld ? "Held for you" : "Flagged"}</b>
+          <ul>
+            {v.problem && <li>{v.problem}</li>}
+            {v.flags.map((f) => (
+              <li key={f}>{f}</li>
+            ))}
+          </ul>
         </div>
-      )}
-      {v.problem && (
-        <p className="qnone">
-          <Icon name="info" size={14} />
-          <span className="grow">{v.problem} It can't be made as it stands: reject it, or edit the page yourself.</span>
-        </p>
-      )}
-      {readOnly && isHeld && (
-        <p className="qnone">
-          <Icon name="info" size={14} />
-          <span className="grow">Read-only is on, so this can't be accepted.</span>
-          <button
-            type="button"
-            className="btn sm"
-            title="Open Settings › Vault, where read-only is turned off"
-            onClick={() => nav.go({ screen: "settings", pane: "vault" })}
-          >
-            Settings › Vault
-          </button>
-        </p>
       )}
       {v.warnings.map((w) => (
         <p key={w} className="faint small">
@@ -678,11 +662,12 @@ function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: num
           )}
         </div>
       )}
+      {v.changes.length > 0 && <h2 className="eyebrow qsect">{v.problem ? "What it asked for" : "The change"}</h2>}
       {v.changes.map((h) => (
-        <HunkView key={h.index} h={h} total={v.changes.length} />
+        <HunkView key={h.index} h={h} total={v.changes.length} placed={!v.problem} />
       ))}
       {v.quotes.length > 0 && (
-        <div className="card qquotes">
+        <div className="qquotes">
           <span className="eyebrow">What it rests on</span>
           {v.quotes.map((q, i) => (
             <div key={i} className="qquote">
@@ -709,7 +694,19 @@ function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: num
         </div>
       )}
       <div className="qfoot">
-        {isHeld ? (
+        {isHeld && v.problem ? (
+          // It can't be made: no Accept, only what can be done instead.
+          <>
+            <DocButton path={page} gone={gone(page)} className="btn pri lg" title={`Open ${pageName(page)} to make the change yourself`}>
+              <Icon name="pencil" size={14} />
+              Edit the page
+            </DocButton>
+            <button type="button" className="btn lg" title="Turn this change down; the page is left as it is (R)" onClick={reject}>
+              Reject
+              <span className="kbd">R</span>
+            </button>
+          </>
+        ) : isHeld ? (
           <>
             <span
               title={
@@ -743,8 +740,6 @@ function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: num
               Reject
               <span className="kbd">R</span>
             </button>
-            <span className="grow" />
-            <span className="faint small">J / K · A accept · R reject · ⌘↩ accept the run</span>
           </>
         ) : (
           <>
@@ -767,8 +762,6 @@ function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: num
             <DocButton path={page} gone={gone(page)} className="btn lg ghost" title={`Open ${pageName(page)}`}>
               Open the page
             </DocButton>
-            <span className="grow" />
-            <span className="faint small">J / K changes</span>
           </>
         )}
       </div>
@@ -776,13 +769,17 @@ function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: num
   );
 }
 
-function HunkView({ h, total }: { h: Hunk; total: number }) {
+/** One hunk of a change's diff. `placed`: it's where the change falls on the page, so it's labelled
+ *  with the section; not for what a change that can't be made asked for, which has no place. */
+function HunkView({ h, total, placed = true }: { h: Hunk; total: number; placed?: boolean }) {
   return (
     <div className="diff">
-      <div className="hunk">
-        {h.section || "Start of the page"}
-        {total > 1 ? ` · change ${h.index + 1} of ${total}` : ""}
-      </div>
+      {(placed || total > 1) && (
+        <div className="hunk">
+          {placed ? h.section || "Start of the page" : ""}
+          {total > 1 ? `${placed ? " · c" : "C"}hange ${h.index + 1} of ${total}` : ""}
+        </div>
+      )}
       {h.ctxBefore.map((l, i) => (
         <div key={`b${i}`} className="ctxl">
           <DiffText text={l} />

@@ -53,13 +53,13 @@ Held changes are at the top, under **Held for you**, by run, each with why it wa
 
 **Accept all** and **Reject all** (after asking) do every held change in a run, or with a search on only those the search shows; `⌘↩` accepts the run you're on. A meeting note accepted this way gets its follow-up offer; one that couldn't be made stays held. The keys do nothing while a dialog is open or you're typing.
 
-A held change keeps what the assistant asked for (a section's new text, a find and replace, a task to add), not a copy of the page, so it still applies after other edits. If what it changes is gone, it says so: reject it or edit the page yourself.
+A held change keeps what the assistant asked for (a section's new text, a find and replace, a task to add), not a copy of the page, so it still applies after other edits. A held change shows one status: why it was held, and, if what it changes is gone, that it can't be made as it stands. Then there's no Accept: **Edit the page** opens it to make the change yourself, or **Reject** it. **What it asked for** shows the words it would have changed, before and after.
 
 A held change that rewrites a whole page won't overwrite edits made since it was held: Accept says so; use **Edit before accepting**, or reject it.
 
 An assistant can accept a held change only while you're there, and only one held because a check failed; the rest are yours to decide.
 
-While the vault is read-only, a note says so, with a button to [Settings › Vault](app:settings/vault), and nothing can be accepted or reverted.
+While the vault is read-only, a banner across the screen says so, with **Turn off read-only** (the same switch as [Settings › Vault](app:settings/vault)), and nothing can be accepted or reverted.
 
 ## How long history is kept
 Changes keeps 90 days or 500 MB of history, whichever comes first; held changes stay until you decide them. Set both in [Settings › AI assistants](app:settings/assistants). If your vault is in a OneDrive folder, older versions of a page are also in OneDrive's version history.

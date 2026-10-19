@@ -477,6 +477,18 @@ pub struct View {
     problem: Option<String>,
 }
 
+/// What a held change that can't be made any more asked for, as a diff of its own text: each
+/// find-and-replace's words before and after. Nothing for other kinds, whose text is the page's.
+fn asked(i: &Instruction) -> Vec<changes::Hunk> {
+    let Instruction::Replace { edits } = i else { return vec![] };
+    let mut out: Vec<changes::Hunk> = edits.iter().flat_map(|e| changes::hunks(&e.find, &e.replace)).collect();
+    for (n, h) in out.iter_mut().enumerate() {
+        h.index = n;
+        h.section = String::new();
+    }
+    out
+}
+
 fn view(app: &AppHandle, id: &str) -> Res<View> {
     let st = store();
     let c = st.get(id)?;
@@ -492,7 +504,10 @@ fn view(app: &AppHandle, id: &str) -> Res<View> {
             let current = read_opt(&root(app)?.join(&c.page));
             match preview(&c, current.as_deref()) {
                 Ok(after) => hunks = changes::hunks(current.as_deref().unwrap_or(""), &after),
-                Err(e) => problem = Some(e),
+                Err(e) => {
+                    problem = Some(e);
+                    hunks = asked(&c.instruction);
+                }
             }
         } else if let Some(a) = c.after.as_deref().and_then(|h| st.text(h)) {
             let b = c.before.as_deref().and_then(|h| st.text(h)).unwrap_or_default();
@@ -1001,6 +1016,19 @@ mod tests {
 
     fn kept(value: &str, source: &str) -> Kept {
         Kept { subject: "Orbit App".into(), attribute: "owner".into(), value: value.into(), source: source.into(), ..Default::default() }
+    }
+
+    #[test]
+    fn a_held_replace_that_cant_be_made_shows_what_it_asked_for() {
+        let edits = vec![brainstead_core::proposals::Edit {
+            find: "Soft launch to staff is planned for 14 November.".into(),
+            replace: "Soft launch to staff is planned for 28 November.".into(),
+        }];
+        let h = asked(&Instruction::Replace { edits });
+        assert_eq!(h.len(), 1);
+        assert_eq!(h[0].old, vec!["Soft launch to staff is planned for 14 November."]);
+        assert_eq!(h[0].new, vec!["Soft launch to staff is planned for 28 November."]);
+        assert!(asked(&Instruction::Page { content: "x".into() }).is_empty());
     }
 
     #[test]

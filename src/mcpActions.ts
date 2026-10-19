@@ -1358,7 +1358,9 @@ async function changesTool(a: Args): Promise<string | Listing> {
   if (action === "show") {
     const v = await api.changeGet(id);
     const changes = v.changes.map(
-      (h) => `${h.section || "Start of the page"}:\n${h.old.map((l) => `- ${l}`).join("\n")}\n${h.new.map((l) => `+ ${l}`).join("\n")}`,
+      // One that can't be made: what it asked for, which has no place on the page (as the screen labels it).
+      (h) =>
+        `${v.problem ? "What it asked for" : h.section || "Start of the page"}:\n${h.old.map((l) => `- ${l}`).join("\n")}\n${h.new.map((l) => `+ ${l}`).join("\n")}`,
     );
     const quotes = v.quotes.map(
       (q) =>

@@ -7081,18 +7081,46 @@ select.sel {
   padding: 8px 16px 2px 12px;
   color: var(--ink3);
 }
-.qflags {
+
+/* A change's one status: why it's held or flagged, and whether it can still be made. */
+.qstatus {
   padding: 12px 16px;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  border-radius: 10px;
+  background: var(--sunk);
+  font-size: 13px;
 }
-.qflags.held {
-  border-color: var(--amber);
+.qstatus.held {
   background: var(--amber-soft);
 }
-.qflags p {
+.qstatus.held b {
+  color: var(--amber);
+}
+.qstatus ul {
   margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: var(--ink);
+  line-height: 1.45;
+}
+.qsect {
+  margin: 6px 0 -6px;
+}
+
+/* Read-only, said once across a screen whose actions it blocks, with the switch to turn it off. */
+.robanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  background: var(--amber-soft);
+  border-bottom: 1px solid color-mix(in srgb, var(--amber) 25%, var(--line));
+  color: var(--amber);
+  font-size: 13px;
 }
 .agentrow {
   display: flex;
@@ -7113,7 +7141,7 @@ select.sel {
   font: 12px/1.5 var(--mono);
 }
 .qquotes {
-  padding: 14px 18px;
+  padding: 4px 0 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
