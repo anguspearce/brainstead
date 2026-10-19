@@ -401,6 +401,7 @@ input {
   background: var(--ink3);
   flex: none;
 }
+
 /* Up to date is the usual state, so it has no dot to catch the eye; indexing and a failure do. */
 .status.ok i {
   display: none;
