@@ -352,21 +352,13 @@ input {
   height: 12px;
 }
 
-/* A count that wants attention (Changes, the Inbox to clarify): a filled badge. */
+/* A count that wants attention (Changes, the Inbox to clarify): darker and bold, not a badge. */
 .navi .n.hot {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--on-accent);
-  font-size: 11px;
+  color: var(--ink);
   font-weight: 600;
-  line-height: 18px;
-  text-align: center;
 }
 .navi .n.hot.bad {
-  background: var(--amber);
+  color: var(--amber);
 }
 .sideempty {
   padding: 4px 8px;

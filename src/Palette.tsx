@@ -30,7 +30,7 @@ import { nav, openDoc, place } from "./nav";
 import { openRename, trashFile } from "./notes/actions";
 import { openNewNote } from "./notes/dialogs";
 import { useSearchOf } from "./Search";
-import { DAILY, FOOTER, HOTKEYS, hotkey, LIBRARY, TOOLS } from "./Sidebar";
+import { DAILY, ELSEWHERE, FOOTER, HOTKEYS, hotkey, LIBRARY, TOOLS } from "./Sidebar";
 
 /** What the Tools entries are found by besides their names (what ⌘K once called them). */
 const TOOL_WORDS: Partial<Record<string, string>> = {
@@ -61,8 +61,9 @@ const KBD: Partial<Record<string, string>> = {
 };
 
 export function commands(): Command[] {
-  // Every sidebar entry in the sidebar's order, Tools included (under their sidebar names, found by what they do too).
-  const screens: Command[] = [...DAILY, ...LIBRARY, ...TOOLS, ...FOOTER].map((i) => ({
+  // Every sidebar entry in the sidebar's order, the Tools menu's included (under their own names, found by what they do
+  // too), and Search, which has no row of its own.
+  const screens: Command[] = [...DAILY, ...LIBRARY, ...TOOLS, ...ELSEWHERE, ...FOOTER].map((i) => ({
     id: `go:${i.screen}`,
     group: "Go to",
     icon: i.icon,

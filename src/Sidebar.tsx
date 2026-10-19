@@ -15,7 +15,7 @@ import { docChecks, docChecksUnseen, startDocChecks } from "./docChecks";
 import { isActive, runs, startRuns } from "./Ingest";
 import { localToday } from "./md/taskQuery";
 import { reportEditError, tasksFailed, todayRows, undoLast, useAllTasks, viewRows, VIEWS } from "./taskModel";
-import { ago, fmtCount } from "./ui";
+import { ago, fmtCount, Popover } from "./ui";
 import { toast } from "./Toast";
 import { changes, decisions, health, held, startKnowledge } from "./knowledge";
 import type { IndexStats, Layer, VaultStatus } from "./api";
@@ -37,12 +37,10 @@ export const DAILY: Item[] = [
   { screen: "tasks", label: "Tasks", icon: "tasks" },
   { screen: "projects", label: "Projects", icon: "project" },
   { screen: "weekly", label: "Weekly review", icon: "calendar" },
-  { screen: "review", label: "Changes", icon: "review" },
   { screen: "ask", label: "Ask", icon: "ask" },
 ];
 
 export const LIBRARY: Item[] = [
-  { screen: "search", label: "Search", icon: "search" },
   { screen: "notes", label: "Notes", icon: "note", count: (s) => s.notes },
   { screen: "wiki", label: "Wiki", icon: "wiki", count: (s) => s.wiki },
   { screen: "sources", label: "Sources", icon: "source", count: (s) => s.sources },
@@ -50,7 +48,10 @@ export const LIBRARY: Item[] = [
   { screen: "graph", label: "Graph", icon: "graph" },
 ];
 
-/** The screens that do one job with the AI: the sidebar's Tools section. ⌘K lists them under Go to
+/** Screens with no row of their own: the search box at the top and ⌘K reach them. */
+export const ELSEWHERE: Item[] = [{ screen: "search", label: "Search", icon: "search" }];
+
+/** The screens that do one job with the AI: the sidebar's Tools menu. ⌘K lists them under Go to
  *  with the other screens, found by what they do too (Palette's TOOL_WORDS); they aren't in ALL_ITEMS. */
 export const TOOLS: Item[] = [
   { screen: "reply", label: "Draft reply", icon: "send", tip: "draft a reply to an email or Teams thread, captured or pasted" },
@@ -64,13 +65,14 @@ export const TOOLS: Item[] = [
 ];
 
 export const FOOTER: Item[] = [
+  { screen: "review", label: "Changes", icon: "review" },
   { screen: "health", label: "Knowledge health", icon: "health" },
   { screen: "activity", label: "Activity", icon: "activity" },
   { screen: "trash", label: "Trash", icon: "trash" },
   { screen: "settings", label: "Settings", icon: "settings" },
 ];
 
-export const ALL_ITEMS = [...DAILY, ...LIBRARY, ...FOOTER];
+export const ALL_ITEMS = [...DAILY, ...LIBRARY, ...ELSEWHERE, ...FOOTER];
 
 /** A vault path's layer, by its top folder (as the walker decides it). */
 export function layerOf(path: string): Layer {
@@ -118,6 +120,63 @@ function NavItem({ item, on, stats, extra }: { item: Item; on: boolean; stats: I
         n > 0 && <span className={`n ${extra?.hot ? "hot" : ""} ${extra?.bad ? "bad" : ""}`}>{fmtCount(n)}</span>
       )}
     </button>
+  );
+}
+
+/** Draft reply, Meeting notes and Compare behind one row, which opens a menu of the three. The
+ *  row shows their spinner or badge, and is lit while one of them is open. */
+function ToolsItem({ lit, extra }: { lit: Screen; extra: Partial<Record<Screen, Extra>> }) {
+  const [at, setAt] = useState<DOMRect | null>(null);
+  const mine = TOOLS.map((t) => extra[t.screen]).filter((x): x is Extra => !!x);
+  const n = mine.reduce((a, x) => a + x.n, 0);
+  const busy = mine.find((x) => x.busy)?.busy;
+  const on = TOOLS.some((t) => t.screen === lit);
+  return (
+    <>
+      <button
+        type="button"
+        className={`navi ${on ? "on" : ""}`}
+        aria-haspopup="menu"
+        aria-expanded={!!at}
+        title={`Draft reply, Meeting notes and Compare${busy ? `. ${busy}` : ""}`}
+        onClick={(e) => setAt(e.currentTarget.getBoundingClientRect())}
+      >
+        <Icon name="cpu" />
+        <span className="lbl">Tools</span>
+        {busy && !n ? (
+          <span className="n busy" aria-label={busy}>
+            <span className="spin" />
+          </span>
+        ) : (
+          n > 0 && <span className={`n hot ${mine.some((x) => x.bad) ? "bad" : ""}`}>{fmtCount(n)}</span>
+        )}
+      </button>
+      {at && (
+        <Popover anchor={at} onClose={() => setAt(null)} width={250} place="right">
+          <div className="menu" role="menu">
+            {TOOLS.map((t) => {
+              const x = extra[t.screen];
+              return (
+                <button
+                  key={t.screen}
+                  type="button"
+                  role="menuitem"
+                  title={x?.busy ?? `${t.label}: ${t.tip}`}
+                  onClick={() => {
+                    setAt(null);
+                    nav.go(t.screen);
+                  }}
+                >
+                  <Icon name={t.icon} size={14} />
+                  <span className="grow">{t.label}</span>
+                  {x?.busy && !x.n ? <span className="spin" /> : !!x?.n && <span className="faint">{fmtCount(x.n)}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </Popover>
+      )}
+    </>
   );
 }
 
@@ -315,9 +374,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
         {DAILY.map(item)}
         <Section id="library" title="Library">
           {LIBRARY.map(item)}
-        </Section>
-        <Section id="tools" title="Tools">
-          {TOOLS.map(item)}
+          <ToolsItem lit={lit} extra={extra} />
         </Section>
         <Section id="bookmarks" title="Bookmarks">
           <Bookmarks current={place.screen === "doc" ? place.path : undefined} />

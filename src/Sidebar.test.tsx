@@ -35,6 +35,7 @@ describe("Sidebar", () => {
       "Sources",
       "Templates",
       "Graph",
+      "Tools",
       "Knowledge health",
       "Activity",
       "Trash",
@@ -78,6 +79,23 @@ describe("Sidebar", () => {
     expect(badge?.textContent).toBe("2");
     expect(badge?.classList.contains("hot")).toBe(true);
     ask.set({ chats: [], active: null });
+  });
+
+  it("has no Search row: the search box at the top and ⌘K reach it", () => {
+    render(<Sidebar onSearch={() => {}} />);
+    expect(screen.queryByRole("button", { name: /^Search$/ })).toBeNull();
+  });
+
+  it("opens Draft reply, Meeting notes and Compare from the Tools menu", () => {
+    render(<Sidebar onSearch={() => {}} />);
+    expect(screen.queryByRole("menuitem", { name: /^Draft reply/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^Tools/ }));
+    expect(screen.getByRole("menuitem", { name: /^Meeting notes/ })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /^Compare/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Draft reply/ }));
+    expect(place.get().place.screen).toBe("reply");
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByRole("button", { name: /^Tools/ }).classList.contains("on")).toBe(true);
   });
 
   it("folds a section", () => {
