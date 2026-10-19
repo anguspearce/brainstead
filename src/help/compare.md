@@ -5,7 +5,7 @@ screens: [compare]
 order: 25
 summary: Compare any two documents side by side: where they differ, or what changed between two versions.
 ---
-Compare reads two documents, A and B, with neither taking precedence, and lists how they differ. It's the **Any two documents** tab of **Compare** in the sidebar; the other tab, [Doc check](app:doccheck), checks a document against the version in force. Open it from the sidebar, **Compare with…** on a file's right-click menu or a source's ▾ on [Sources](app:sources) (that file is A), or **Compare two documents…** in ⌘K. It changes nothing unless you save the findings as a note.
+Compare reads two documents, A and B, with neither taking precedence, and lists how they differ. It's the **Any two documents** tab of **Tools › Compare** in the sidebar; the other tab, [Doc check](app:doccheck), checks a document against the version in force. Open it from the sidebar, **Compare with…** on a file's right-click menu or a source's ▾ on [Sources](app:sources) (that file is A), or **Compare two documents…** in ⌘K. It changes nothing unless you save the findings as a note.
 
 ## Choose the two documents
 Pick **A** and **B** by typing part of their names, or **Choose a file…** for any file on disk (PDF, Word, PowerPoint, Excel, markdown or text). **Swap** exchanges them. Then choose what to look for:

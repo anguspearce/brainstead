@@ -5,7 +5,7 @@ screens: [meeting]
 order: 21
 summary: Turn a Teams meeting transcript in your sources into a meeting or 1-1 note.
 ---
-The AI writes a meeting or 1-1 note from a Teams transcript in `sources/`, using your meeting template. Open this screen from **Meeting notes** in the sidebar or on [Sources](app:sources), or from ⌘K.
+The AI writes a meeting or 1-1 note from a Teams transcript in `sources/`, using your meeting template. Open this screen from **Tools › Meeting notes** in the sidebar or on [Sources](app:sources), or from ⌘K.
 
 **Make and ingest a meeting note** (**Make a meeting note** when ingesting a made note is off in [Settings › AI assistants](app:settings/assistants)) does it all in one step when Brainstead is sure of the note's type, name and date and no note of that name exists yet: it writes the note, ingests it and moves the transcript to the Trash. Otherwise it opens this screen at the question. Start it from:
 
