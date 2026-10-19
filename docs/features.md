@@ -60,7 +60,7 @@ Counts that need you, such as the Inbox and changes held for you, are filled bad
 | ⌘N | New note |
 | ⇧⌘P | Read the open note aloud, then play or pause |
 | ⌘. | Focus mode for the open note, wiki page or source; Esc leaves it |
-| ⌥⌘1 … ⌥⌘9, ⌥⌘0 | Today, Inbox, Tasks, Projects, Changes, Search, Ask, Notes, Wiki, Sources |
+| ⌘1 … ⌘9, ⌘0 | Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki, Sources |
 | ⌘[ ⌘] | Back, forward |
 | ⌘Z | Undo the last change |
 | ⌘, | Settings |

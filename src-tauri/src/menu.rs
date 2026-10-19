@@ -23,9 +23,9 @@ pub struct NoteMenu(Mutex<Vec<MenuItem<Wry>>>);
 const ITEMS: &[(&str, &str, Option<&str>)] = &[
     ("note:save", "Save", Some("CmdOrCtrl+S")),
     ("-", "", None),
-    ("note:view", "View", Some("CmdOrCtrl+1")),
-    ("note:edit", "Edit", Some("CmdOrCtrl+2")),
-    ("note:source", "Source", Some("CmdOrCtrl+3")),
+    ("note:view", "View", Some("Alt+CmdOrCtrl+1")),
+    ("note:edit", "Edit", Some("Alt+CmdOrCtrl+2")),
+    ("note:source", "Source", Some("Alt+CmdOrCtrl+3")),
     ("note:focus", "Focus Mode", Some("CmdOrCtrl+.")),
     ("-", "", None),
     ("note:copy-markdown", "Copy Markdown", None),

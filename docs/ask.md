@@ -10,7 +10,7 @@ Ask chats with the AI assistants already on your Mac, Claude Code, Codex, Copilo
 
 Most screens have an **Ask** button beside `?`. It starts a chat about what you're looking at (the selected task, project, Inbox item, change or page, or else the screen itself; its tooltip says which), with the question begun for you to finish.
 
-Ask (⌥⌘7) keeps each chat in a tab (⌘T for a new one). A chat stays in Brainstead's app data until you click **Save**. That puts it in the vault as `Chat. <title>.md` and keeps the note up to date from then on. Background runs' chats stay out of the vault the same way.
+Ask (⌘6) keeps each chat in a tab (⌘T for a new one). A chat stays in Brainstead's app data until you click **Save**. That puts it in the vault as `Chat. <title>.md` and keeps the note up to date from then on. Background runs' chats stay out of the vault the same way.
 
 **History** finds, renames, pins, saves or moves old chats to the Trash. Closed chats that aren't saved or pinned are deleted once 20 newer ones are in History.
 

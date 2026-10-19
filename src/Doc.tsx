@@ -171,6 +171,14 @@ export function DocScreen() {
   // ⌘S.
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
+      // ⌥⌘1 View, ⌥⌘2 Edit, ⌥⌘3 Source (also in the Note menu, which usually takes them first); by the
+      // key's place, as ⌥ changes what's typed.
+      const m = ({ Digit1: "read", Digit2: "live", Digit3: "source" } as Record<string, DocMode>)[e.code];
+      if (e.metaKey && e.altKey && !e.ctrlKey && !e.shiftKey && m && canEdit) {
+        e.preventDefault();
+        setMode(m);
+        return;
+      }
       if (!e.metaKey || e.altKey || e.ctrlKey || e.shiftKey) return;
       if (e.key === "s") {
         e.preventDefault();
@@ -180,12 +188,6 @@ export function DocScreen() {
         e.preventDefault();
         setFinding((n) => n + 1);
         return;
-      }
-      // ⌘1 View, ⌘2 Edit, ⌘3 Source (also in the Note menu, which usually takes them first).
-      const m = ({ "1": "read", "2": "live", "3": "source" } as Record<string, DocMode>)[e.key];
-      if (m && canEdit) {
-        e.preventDefault();
-        setMode(m);
       }
     };
     window.addEventListener("keydown", k);
@@ -652,9 +654,9 @@ export function DocScreen() {
               value={mode}
               onChange={setMode}
               options={[
-                ["read", "View", "View (⌘1)"],
-                ["live", "Edit", "Edit (⌘2)"],
-                ["source", "Source", "Source markdown (⌘3)"],
+                ["read", "View", "View (⌥⌘1)"],
+                ["live", "Edit", "Edit (⌥⌘2)"],
+                ["source", "Source", "Source markdown (⌥⌘3)"],
               ]}
             />
           )}

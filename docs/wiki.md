@@ -10,7 +10,7 @@ It follows Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf
 
 <a href="images/index.md#the-wiki-and-sources"><picture><source media="(prefers-color-scheme: dark)" srcset="images/sources-dark.png"><img alt="Sources: captured emails and documents with their status, and the ingest runs" src="images/sources-light.png"></picture></a>
 
-Sources (⌥⌘0) are the files in `sources/`: emails, Teams chats and transcripts captured from the browser, PDFs, Word, PowerPoint and Excel files, images, and notes. They are the record, so Brainstead doesn't edit them, except to correct misheard names (a change you can revert).
+Sources (⌘0) are the files in `sources/`: emails, Teams chats and transcripts captured from the browser, PDFs, Word, PowerPoint and Excel files, images, and notes. They are the record, so Brainstead doesn't edit them, except to correct misheard names (a change you can revert).
 
 - Drag files onto Sources, or click **Import**, to copy them in.
 - The **Outlook** and **Teams** Chrome extensions capture a thread, chat or meeting transcript into `sources/` with one click. Set them up in Settings › Capture extensions. Each capture also waits in the Inbox.
@@ -45,7 +45,7 @@ An ingest you start makes its changes at once. One the daily check starts holds 
 
 <a href="images/index.md#the-wiki-and-sources"><picture><source media="(prefers-color-scheme: dark)" srcset="images/review-dark.png"><img alt="Changes: what assistants and runs changed, grouped by run, one open with its diff and the quotes it rests on" src="images/review-light.png"></picture></a>
 
-Changes (⌥⌘5) lists every change assistants and runs made to the vault, newest first, grouped by run ("Daily check, 5 Oct: 6 changes to 4 pages"). Each has its diff, why, who made it, the quotes it rests on and **Revert**. **Search changes** narrows the list by title, page, source or model; `↑` `↓` step through what it found and `Esc` clears it.
+Changes lists every change assistants and runs made to the vault, newest first, grouped by run ("Daily check, 5 Oct: 6 changes to 4 pages"). Each has its diff, why, who made it, the quotes it rests on and **Revert**. **Search changes** narrows the list by title, page, source or model; `↑` `↓` step through what it found and `Esc` clears it.
 
 - A change you started (Ask, a terminal, a run started by hand) is made at once, and flagged if a check fails.
 - A scheduled run's change (the daily check and its ingests, the scheduled summaries) is made only when it passes every check, and held otherwise: a quote not found or read from an image, text rewritten or removed in one of your own notes, unsaved edits to the page, an open contradiction on it, or properties that wouldn't read.
@@ -60,7 +60,7 @@ Changes (⌥⌘5) lists every change assistants and runs made to the vault, newe
 
 Every entity and concept page has one layout: opening text, **Current state**, topical sections, a **Timeline** of dated entries (`### YYYY-MM-DD — title`, or a month, quarter or half) newest first, each with a `Source:` line, and **See also**. Summaries are left as they are.
 
-The Wiki (⌥⌘9) lists the pages by type and tag with their health: **Held**, **Stale**, **Check** or **Healthy**. On a page:
+The Wiki (⌘9) lists the pages by type and tag with their health: **Held**, **Stale**, **Check** or **Healthy**. On a page:
 
 - A link to a source shows as a small number that opens the source at the passage cited; the **Sources** card lists them.
 - The **Facts** card lists the page's checked facts: the latest value of each, what it replaced, and its source. Older pages may have none until they're next ingested.

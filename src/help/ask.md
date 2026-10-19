@@ -5,7 +5,7 @@ screens: [ask]
 order: 6
 summary: Chat with an AI assistant on this computer about your vault, in tabs; it never writes a file itself.
 ---
-Ask is a chat about your vault with an AI assistant installed on this computer, signed in with your own account. It reads and searches the vault but never edits a file itself. Go to Ask with `⌥⌘7`.
+Ask is a chat about your vault with an AI assistant installed on this computer, signed in with your own account. It reads and searches the vault but never edits a file itself. Go to Ask with `⌘6`.
 
 ## Ask from any screen
 Most screens have an **Ask** button beside `?`. It starts a new chat about what you're looking at: the selected task, project, Inbox item, change, clash or page, or the screen itself when nothing is selected. Its tooltip says which. The question is begun for you ("About the task “Call Sam…”: ") to finish and send.

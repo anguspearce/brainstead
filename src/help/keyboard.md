@@ -9,12 +9,12 @@ Each key works where its heading says. Quick capture's shortcut is set in [Setti
 
 ## Anywhere
 - `⌘K` — Search or jump anywhere
-- `⌘⇧F` — Search page (also `⌥⌘6`)
+- `⌘⇧F` — Search page (also `⌘7`)
 - `⌃⌥Space` — Quick capture, from any app
 - `⌘N` — New note; `⌘↩` creates it
 - `⌘Z` — Undo the last change
 - `⌘[` `⌘]` — Back, forward
-- `⌥⌘1 … ⌥⌘9` `⌥⌘0` — Today, Inbox, Tasks, Projects, Changes, Search, Ask, Notes, Wiki, Sources
+- `⌘1 … ⌘9` `⌘0` — Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki, Sources
 - `⌘,` — Settings
 - `?` — Help for this screen
 - `Esc` — Clear the screen's search box
@@ -22,7 +22,7 @@ Each key works where its heading says. Quick capture's shortcut is set in [Setti
 - `⌘Q` — Quit (asks first, and about unsaved changes before that)
 
 ## A note
-- `⌘1` `⌘2` `⌘3` — View, Edit, Source
+- `⌥⌘1` `⌥⌘2` `⌥⌘3` — View, Edit, Source
 - `⌘.` — Focus mode; `Esc` leaves it
 - `⌘S` — Save
 - `⌘F` — Find (and replace in Edit and Source); `↩` `⇧↩` next, previous

@@ -81,13 +81,14 @@ export function layerOf(path: string): Layer {
   return "note";
 }
 
-/** ⌥⌘1 to ⌥⌘9, then ⌥⌘0, go to the screens used most (⌘1 to ⌘3 are a note's View, Edit and Source). */
-export const HOTKEYS: Screen[] = ["today", "inbox", "tasks", "projects", "review", "search", "ask", "notes", "wiki", "sources"];
+/** ⌘1 to ⌘9, then ⌘0, go to the sidebar's first ten rows, in its order (a note's View, Edit and
+ *  Source are ⌥⌘1 to ⌥⌘3). */
+export const HOTKEYS: Screen[] = ["today", "inbox", "tasks", "projects", "weekly", "ask", "search", "notes", "wiki", "sources"];
 
-/** A screen's hotkey: ⌥⌘1 … ⌥⌘9, and ⌥⌘0 for the tenth. */
+/** A screen's hotkey: ⌘1 … ⌘9, and ⌘0 for the tenth. */
 export const hotkey = (s: Screen): string | null => {
   const k = HOTKEYS.indexOf(s);
-  return k < 0 ? null : `⌥⌘${(k + 1) % 10}`;
+  return k < 0 ? null : `⌘${(k + 1) % 10}`;
 };
 
 /** A count beside an item; `err` when it couldn't be counted, shown as a warning rather than 0. */
@@ -272,7 +273,7 @@ export function ReadOnlyPill({ onOpen }: { onOpen?: () => void }) {
 /** The list a document belongs to, lit in the sidebar while it's open. */
 const LAYER_SCREEN: Record<Layer, Screen> = { note: "notes", wiki: "wiki", source: "sources", template: "templates" };
 
-/** The index line at the bottom: green when current, amber while indexing, red when it failed. */
+/** The index line at the bottom: no dot when current, amber while indexing, red when it failed. */
 export function statusLine(st: VaultStatus, now: number): { tone: "ok" | "busy" | "bad" | "none"; text: string; tip?: string } {
   switch (st.state) {
     case "indexing":

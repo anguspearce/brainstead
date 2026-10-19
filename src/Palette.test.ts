@@ -30,11 +30,11 @@ describe("palette layout", () => {
   it("shows each screen's hotkey", () => {
     const key = (label: string) => all.find((c) => c.group === "Go to" && c.label === label)?.kbd;
     expect([key("Today"), key("Changes"), key("Search"), key("Ask"), key("Sources"), key("Settings"), key("Graph")]).toEqual([
-      "⌥⌘1",
-      "⌥⌘5",
-      "⌥⌘6",
-      "⌥⌘7",
-      "⌥⌘0",
+      "⌘1",
+      undefined,
+      "⌘7",
+      "⌘6",
+      "⌘0",
       "⌘,",
       undefined,
     ]);

@@ -223,7 +223,7 @@ export function TodayScreen() {
               <button
                 type="button"
                 className="btn sm ghost"
-                title="Go to Tasks, every open task in the vault (⌥⌘3)"
+                title="Go to Tasks, every open task in the vault (⌘3)"
                 onClick={() => nav.go("tasks")}
               >
                 All tasks
@@ -525,7 +525,7 @@ function ProcessCard() {
             <button
               type="button"
               className="btn sm ghost ract"
-              title="Go to the Inbox to decide what each item is (⌥⌘2)"
+              title="Go to the Inbox to decide what each item is (⌘2)"
               onClick={() => nav.go("inbox")}
             >
               Clarify
@@ -604,7 +604,7 @@ function HeldCard() {
           key={p.id}
           type="button"
           className="rrow rlink"
-          title={`${pageName(p.page)}: ${p.title}\n${p.flags[0] ?? ""}\nOpen Changes to accept or reject it (⌥⌘5)`}
+          title={`${pageName(p.page)}: ${p.title}\n${p.flags[0] ?? ""}\nOpen Changes to accept or reject it`}
           onClick={() => nav.go("review")}
         >
           <span className={`lb ${p.page.startsWith("wiki/") ? "wiki" : "note"}`}>
@@ -617,7 +617,7 @@ function HeldCard() {
         <button
           type="button"
           className="btn sm ghost ract"
-          title="Open Changes to accept or reject the held changes (⌥⌘5)"
+          title="Open Changes to accept or reject the held changes"
           onClick={() => nav.go("review")}
         >
           Review {fmtCount(rows.length)}

@@ -136,9 +136,9 @@ export default function App({ scene }: { scene: Scene | null }) {
   // ⌘K palette, ⌘⇧F Search, ⌘, Settings, ⌘[ ⌘] back and forward.
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      // ⌥⌘1 to ⌥⌘9, then ⌥⌘0: the sidebar's screens used most. By the key's place: ⌥ changes what's typed.
+      // ⌘1 to ⌘9, then ⌘0: the sidebar's first ten rows (⌥⌘1 to ⌥⌘3 are a note's View, Edit and Source).
       const digit = /^Digit([0-9])$/.exec(e.code);
-      if (e.metaKey && e.altKey && !e.ctrlKey && !e.shiftKey && digit) {
+      if (e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey && digit) {
         nav.go(HOTKEYS[(Number(digit[1]) + 9) % 10]);
         e.preventDefault();
         return;

@@ -6,7 +6,7 @@ order: 11
 page: Read a wiki page
 summary: Browse and edit the wiki, the pages about people, products and ideas that are built from your sources.
 ---
-The wiki is the `wiki/` folder of your vault. Each page is about one entity (a person, team, product or company) or concept (an idea, process or topic), and cites its sources. Go to it with `⌥⌘9`. A page can also hold live `tasks` and `dataview` queries, such as a project's open tasks; see [Task and Dataview queries](help:queries).
+The wiki is the `wiki/` folder of your vault. Each page is about one entity (a person, team, product or company) or concept (an idea, process or topic), and cites its sources. Go to it with `⌘9`. A page can also hold live `tasks` and `dataview` queries, such as a project's open tasks; see [Task and Dataview queries](help:queries).
 
 ## Find a page
 The list shows each page's type, source count, health and tags, with aliases under the title as "also …". Narrow it down with:

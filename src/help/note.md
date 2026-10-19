@@ -10,9 +10,9 @@ A note opens in View; switch to Edit or Source to change it. Brainstead saves on
 ## Switch between View, Edit and Source
 The switch in the top bar has three modes:
 
-- **View** (`⌘1`) shows the note rendered: properties, links, tables, task queries, callouts, diagrams and maths. Diagrams have zoom, fit and full-screen buttons. Click an image to see it fitted to the window, click again for actual size, and press Escape to close. Maths in `$…$` or `$$…$$` is drawn as formulas; amounts like $5 stay as written.
-- **Edit** (`⌘2`) shows the markdown hidden except on the line you're editing: headings sized, links as labels, checkboxes and images drawn.
-- **Source** (`⌘3`) is plain markdown in a monospaced font, with no toolbar.
+- **View** (`⌥⌘1`) shows the note rendered: properties, links, tables, task queries, callouts, diagrams and maths. Diagrams have zoom, fit and full-screen buttons. Click an image to see it fitted to the window, click again for actual size, and press Escape to close. Maths in `$…$` or `$$…$$` is drawn as formulas; amounts like $5 stay as written.
+- **Edit** (`⌥⌘2`) shows the markdown hidden except on the line you're editing: headings sized, links as labels, checkboxes and images drawn.
+- **Source** (`⌥⌘3`) is plain markdown in a monospaced font, with no toolbar.
 
 A note made from a template opens in Edit, with the caret where the template put it. Sources only open in View. To edit, turn off **Read-only** in [Settings › Vault](app:settings/vault).
 

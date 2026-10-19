@@ -77,7 +77,7 @@
     --ink2: #b3bac5;
     --ink3: #858d99;
     --accent: #2f6fdb;
-    --accent-ink: #8ab8ff;
+    --accent-ink: #5f96f2;
     --accent-soft: #1b2535;
     --on-accent: #fff;
     --ring: #3a6bc0;
@@ -129,7 +129,7 @@
   --ink2: #b3bac5;
   --ink3: #858d99;
   --accent: #2f6fdb;
-  --accent-ink: #8ab8ff;
+  --accent-ink: #5f96f2;
   --accent-soft: #1b2535;
   --on-accent: #fff;
   --ring: #3a6bc0;
@@ -401,8 +401,9 @@ input {
   background: var(--ink3);
   flex: none;
 }
+/* Up to date is the usual state, so it has no dot to catch the eye; indexing and a failure do. */
 .status.ok i {
-  background: var(--green);
+  display: none;
 }
 .status.busy i {
   background: var(--amber);
@@ -3938,7 +3939,7 @@ button.rnhead {
   --ink2: #b3bac5;
   --ink3: #858d99;
   --accent: #2f6fdb;
-  --accent-ink: #8ab8ff;
+  --accent-ink: #5f96f2;
   --accent-soft: #1b2535;
   --on-accent: #fff;
   --ring: #3a6bc0;

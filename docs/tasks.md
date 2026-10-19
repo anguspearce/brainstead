@@ -8,7 +8,7 @@ Brainstead runs [Getting Things Done](https://gettingthingsdone.com) (GTD) over 
 
 <a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/today-dark.png"><img alt="Today: the day in a sentence, the capture box, the Overdue, Due today, Coming up this week, Waiting for and Deferred until now bands, and the right-hand cards" src="images/today-light.png"></picture></a>
 
-Today (⌥⌘1) is what needs you now:
+Today (⌘1) is what needs you now:
 
 - The day in one sentence under the greeting, each count a link to its band, then bands for **Overdue**, **Due today**, **Coming up this week** (due in the next seven days), **Waiting for** and **Deferred until now**. On a wide window the last three sit beside the first two. A task deferred to a later day stays off Today until then, even if it's due. Tick, date and change tasks in place; ⌘Z undoes.
 - `@context` chips to show one context.
@@ -33,7 +33,7 @@ Both kinds wait in the Inbox.
 
 <a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/inbox-dark.png"><img alt="The Inbox: captures, Scratchpad thoughts and tasks to clarify, one open with its choices" src="images/inbox-light.png"></picture></a>
 
-The Inbox (⌥⌘2) lists what you've captured but not decided: emails and Teams chats from the browser extensions, sources added to `sources/` and not yet ingested, Scratchpad thoughts, and tasks under Other on the To Do list. Pick one (`J` and `K` move) and choose what it becomes. A suggestion from the AI shows first, and `↩` accepts it; the choices are in two lists, **It needs doing** and **It doesn't need doing**:
+The Inbox (⌘2) lists what you've captured but not decided: emails and Teams chats from the browser extensions, sources added to `sources/` and not yet ingested, Scratchpad thoughts, and tasks under Other on the To Do list. Pick one (`J` and `K` move) and choose what it becomes. A suggestion from the AI shows first, and `↩` accepts it; the choices are in two lists, **It needs doing** and **It doesn't need doing**:
 
 | Key | Choice |
 |---|---|
@@ -53,7 +53,7 @@ A capture offers only the choices that fit its kind. A transcript: make a meetin
 
 <a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/task-pane-dark.png"><img alt="Tasks: Next actions with a task open in the pane on the right, showing its dates, priority, context, effort and project" src="images/task-pane-light.png"></picture></a>
 
-Tasks (⌥⌘3) has the GTD lists: **Next actions**, **Follow-ups**, **Waiting for**, **Deferred**, **Someday / maybe**, and **Done this week** and **last week**. Next actions leaves out deferred tasks until their day, and Inbox tasks until you clarify them.
+Tasks (⌘3) has the GTD lists: **Next actions**, **Follow-ups**, **Waiting for**, **Deferred**, **Someday / maybe**, and **Done this week** and **last week**. Next actions leaves out deferred tasks until their day, and Inbox tasks until you clarify them.
 
 - Tick to finish a task; a recurring one gets its next occurrence. ⌘Z undoes.
 - The ⋯ menu, a right-click or the pane on the right renames a task, sets dates, priority, context, effort and project, marks a task in progress or waiting for, cancels, deletes or opens its note.
@@ -68,7 +68,7 @@ Tasks (⌥⌘3) has the GTD lists: **Next actions**, **Follow-ups**, **Waiting f
 
 <a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/projects-dark.png"><img alt="Projects: active projects by area with their next actions and waiting-fors, one open on the right" src="images/projects-light.png"></picture></a>
 
-A project is a note named `Project. <name>.md`, with its status, area and outcome as properties. Its tasks are the ones written in it plus any that link it. Projects (⌥⌘4) lists them by status and area.
+A project is a note named `Project. <name>.md`, with its status, area and outcome as properties. Its tasks are the ones written in it plus any that link it. Projects (⌘4) lists them by status and area.
 
 An active project is **Stuck** (red) with no next action, and **Quiet** (amber) when nothing has moved for two weeks. Add next actions, edit the outcome, area and status, and draft nudges for waiting-fors. **New project** writes the note with its headings.
 

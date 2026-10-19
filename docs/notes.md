@@ -8,9 +8,9 @@
 
 A note has three modes:
 
-- **View** (⌘1) shows it rendered: properties, links, tables, tasks, callouts, diagrams and maths.
-- **Edit** (⌘2) is the markdown, with the syntax hidden except on the lines you're on.
-- **Source** (⌘3) is the plain markdown in a monospaced font, with no toolbar.
+- **View** (⌥⌘1) shows it rendered: properties, links, tables, tasks, callouts, diagrams and maths.
+- **Edit** (⌥⌘2) is the markdown, with the syntax hidden except on the lines you're on.
+- **Source** (⌥⌘3) is the plain markdown in a monospaced font, with no toolbar.
 
 Beside the note are **Linked from** (every note that links here, with the line), its **open tasks** to tick, and its **outline**. On a 1-1 note, **Last time with** shows the previous 1-1 and the follow-ups still open with that person.
 
