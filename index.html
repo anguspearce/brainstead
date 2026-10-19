@@ -17,8 +17,8 @@
     </script>
     <style>
       :root { color-scheme: light dark; --splash-bg: #fafbfc; --splash-fg: #151a22; --splash-dim: #626c7a; --splash-line: #e3e7ed; --splash-accent: #1d5fd6; }
-      @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --splash-bg: #16181c; --splash-fg: #e9ecf1; --splash-dim: #8d95a1; --splash-line: #2a2e35; --splash-accent: #5b9bff; } }
-      :root[data-theme="dark"] { --splash-bg: #16181c; --splash-fg: #e9ecf1; --splash-dim: #8d95a1; --splash-line: #2a2e35; --splash-accent: #5b9bff; }
+      @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --splash-bg: #16181c; --splash-fg: #e8ebf0; --splash-dim: #858d99; --splash-line: #2c3038; --splash-accent: #2f6fdb; } }
+      :root[data-theme="dark"] { --splash-bg: #16181c; --splash-fg: #e8ebf0; --splash-dim: #858d99; --splash-line: #2c3038; --splash-accent: #2f6fdb; }
       html, body { margin: 0; background: var(--splash-bg); }
       #splash { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: var(--splash-bg); color: var(--splash-fg); font: 13px/1.4 "Geist Variable", -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; transition: opacity .2s ease-out; -webkit-user-select: none; user-select: none; }
       #splash.gone { opacity: 0; pointer-events: none; }
