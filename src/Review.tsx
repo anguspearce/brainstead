@@ -194,12 +194,30 @@ export function ReviewScreen() {
   // J / K follow the list: held changes first, then the feed.
   const order = useMemo(() => [...heldRuns, ...shownRuns].flatMap((g) => g.rows), [heldRuns, shownRuns]);
   const [sel, setSel] = useViewState<string | null>("review:sel", null);
-  const cur = order.find((c) => c.id === sel) ?? waiting[0] ?? order[0] ?? null;
+  // "" is nothing selected (a second click on the selected change, or folding its run); null, the
+  // first held change or else the newest.
+  const cur = sel === "" ? null : (order.find((c) => c.id === sel) ?? waiting[0] ?? order[0] ?? null);
   // One run open at a time, the current change's; opening another closes it, and moving to a
   // change (J / K, ↑ ↓, a search) opens its run.
   const [openRun, setOpenRun] = useState<string | null>(null);
-  useEffect(() => setOpenRun(cur?.group ?? null), [cur?.group]);
-  const toggle = (g: string) => setOpenRun((o) => (o === g ? null : g));
+  useEffect(() => {
+    if (cur) setOpenRun(cur.group);
+  }, [cur?.group]); // eslint-disable-line react-hooks/exhaustive-deps
+  const toggle = (g: string) => {
+    if (openRun === g && cur?.group === g) setSel("");
+    setOpenRun((o) => (o === g ? null : g));
+  };
+  const pick = (id: string) => setSel(cur?.id === id ? "" : id);
+  // Older runs are drawn as the end of the list comes into view, as the other lists do.
+  const end = useRef<HTMLDivElement>(null);
+  const older = feedRuns.length > shownRuns.length;
+  useEffect(() => {
+    const el = end.current;
+    if (!el || !older) return;
+    const io = new IntersectionObserver((es) => es.some((e) => e.isIntersecting) && setMore((m) => m + 1), { rootMargin: "400px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [older, more]);
   const idx = cur ? order.indexOf(cur) : -1;
   const move = (d: number) => {
     const next = order[Math.min(order.length - 1, Math.max(0, idx + d))];
@@ -400,7 +418,7 @@ export function ReviewScreen() {
                       Reject all
                     </button>
                   </div>
-                  {openRun === g.group && g.rows.map((c) => <Row key={c.id} c={c} sel={cur?.id === c.id} onSel={() => setSel(c.id)} />)}
+                  {openRun === g.group && g.rows.map((c) => <Row key={c.id} c={c} sel={cur?.id === c.id} onSel={() => pick(c.id)} />)}
                 </div>
               ))}
             </div>
@@ -441,18 +459,22 @@ export function ReviewScreen() {
                 </div>
               )}
               {openRun === g.group &&
-                g.rows.map((c) => <Row key={c.id} c={c} sel={cur?.id === c.id} gone={gone(c.to ?? c.page)} onSel={() => setSel(c.id)} />)}
+                g.rows.map((c) => <Row key={c.id} c={c} sel={cur?.id === c.id} gone={gone(c.to ?? c.page)} onSel={() => pick(c.id)} />)}
             </div>
           ))}
-          {feedRuns.length > shownRuns.length && (
-            <button type="button" className="btn ghost pad" title="Show older runs" onClick={() => setMore((m) => m + 1)}>
-              Show older changes
-            </button>
+          {older && (
+            <div ref={end} className="faint pad">
+              Loading older changes…
+            </div>
           )}
           {rows !== null && !rows.length && <p className="faint pad">{dq ? `No changes match “${dq}”.` : "No changes yet."}</p>}
         </div>
         {cur ? (
           <Detail key={cur.id} row={cur} q={dq} onMove={move} />
+        ) : order.length ? (
+          <div className="iopen">
+            <p className="faint">Select a change to see what it did.</p>
+          </div>
         ) : (
           <div className="iopen">
             <div className="soon">
