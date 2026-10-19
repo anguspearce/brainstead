@@ -2441,9 +2441,10 @@ details.callout[open] .callout-chev {
 .ttable .tempty {
   border-bottom: 1px solid var(--line);
 }
+
+/* Right-hand panes sit on the page's ground, as the side columns do; a rule on their left parts them. */
 .tpane {
   border-left: 1px solid var(--line);
-  background: var(--surface);
   padding: 20px;
   overflow-y: auto;
 }
@@ -7599,7 +7600,6 @@ select.sel {
 }
 .runs {
   border-left: 1px solid var(--line);
-  background: var(--side);
   padding: 14px;
   display: flex;
   flex-direction: column;
@@ -7806,11 +7806,10 @@ select.sel {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  background: var(--side);
 }
 
-/* The label and search, pinned at the top of the pane on its own colour, so runs scroll out of
-   sight under them. */
+/* The label and search, pinned at the top of the pane on the page's ground, so runs scroll out
+   of sight under them. */
 .runs .runshead {
   position: sticky;
   top: -14px;
@@ -7821,7 +7820,7 @@ select.sel {
   gap: 10px;
   margin: -14px -14px 0;
   padding: 14px 14px 10px;
-  background: var(--side);
+  background: var(--ground);
 }
 .runs .runsq {
   width: 100%;
@@ -8151,7 +8150,6 @@ select.sel {
 }
 .gpane {
   border-left: 1px solid var(--line);
-  background: var(--surface);
   padding: 18px 20px;
   overflow: auto;
   display: flex;
