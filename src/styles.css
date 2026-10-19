@@ -2486,8 +2486,8 @@ details.callout[open] .callout-chev {
   margin: 0;
 }
 
-/* today: the greeting with a row of counts, the capture box, one table of bands (Overdue, Due today,
-   Deferred until now, Waiting for), and a right rail of cards drawn the same way. */
+/* today: the greeting with its counts in a sentence, the capture box, the bands (Overdue and Due
+   today; Coming up this week, Waiting for and Deferred until now), and a right rail. */
 .body.today {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
@@ -2500,68 +2500,60 @@ details.callout[open] .callout-chev {
   flex-direction: column;
   gap: 20px;
   min-width: 0;
-  max-width: 820px;
+  max-width: 1100px;
+  container: today / inline-size;
 }
 .hello {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 8px;
 }
-.tstats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+
+/* Today's counts as a sentence under the greeting; each count jumps to its band. */
+.tsum {
+  margin: 0;
+  font-size: 15.5px;
+  line-height: 1.5;
+  color: var(--ink2);
 }
-.tstat {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  min-width: 0;
-  padding: 10px 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--ink);
+.tsum button {
+  padding: 0;
+  border: 0;
+  background: none;
   font: inherit;
-  text-align: left;
+  font-weight: 500;
+  color: var(--accent-ink);
   cursor: pointer;
 }
-.tstat:hover {
-  border-color: var(--line2);
-  background: var(--hover);
-}
-.tstat b {
-  font: 600 22px/1.15 var(--display);
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
-.tstat span {
-  font-size: 12px;
-  color: var(--ink2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-.tstat.red b,
-.tstat.red span {
+.tsum button.red {
   color: var(--red);
 }
-.tstat.red {
-  border-color: color-mix(in srgb, var(--red) 30%, var(--line));
-  background: var(--red-soft);
+.tsum button:hover {
+  text-decoration: underline;
 }
-.tstat.zero {
-  cursor: default;
+
+/* Today's bands: one column, or two once there's room (what's due beside what's coming, waiting
+   and back from deferral), so a row never grows past an easy line length (D-20261019-02). */
+.tcols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
 }
-.tstat.zero:hover {
-  border-color: var(--line);
-  background: var(--surface);
+.tcol {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
-.tstat.zero b,
-.tstat.zero span {
-  color: var(--ink3);
+.tcol:empty {
+  display: none;
+}
+
+@container today (min-width: 1000px) {
+  .tcols {
+    grid-template-columns: minmax(0, 620px) minmax(0, 1fr);
+    gap: 56px;
+    align-items: start;
+  }
 }
 .todaytable .tb-band {
   position: static;

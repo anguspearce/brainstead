@@ -87,12 +87,17 @@ describe("task views", () => {
         t("x", { done: true, due: "2026-09-01" }),
         t("not today", { due: FRI, scheduled: "2026-10-07" }),
         t("not yet", { due: "2026-09-30", scheduled: "2026-10-03" }),
+        t("next week", { due: "2026-10-09" }),
+        t("too far", { due: "2026-10-10" }),
+        t("later but deferred", { due: "2026-10-05", scheduled: "2026-10-04" }),
       ],
       FRI,
     );
     expect(r.overdue.map((x) => x.text)).toEqual(["late"]);
     expect(r.due.map((x) => x.text)).toEqual(["now", "both"]);
     expect(r.scheduled.map((x) => x.text)).toEqual(["def"]);
+    // Coming up this week: due within seven days, soonest first; not one deferred to a later day.
+    expect(r.soon.map((x) => x.text)).toEqual(["soon", "next week"]);
   });
 });
 

@@ -80,11 +80,12 @@ export function TodayScreen() {
   const dateLine = now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
   // The @context chips: only contexts on today's tasks and Waiting for; a chosen one filters every band.
   const [ctx, setCtx] = useViewState<string | null>("today.context", null);
-  const contexts = useMemo(() => (t ? contextsInUse([...t.overdue, ...t.due, ...t.scheduled, ...waiting]) : []), [t, waiting]);
+  const contexts = useMemo(() => (t ? contextsInUse([...t.overdue, ...t.due, ...t.scheduled, ...t.soon, ...waiting]) : []), [t, waiting]);
   const inCtx = (r: TaskRow) => !ctx || (r.contexts ?? []).includes(ctx);
   const overdue = t ? t.overdue.filter(inCtx) : [];
   const dueToday = t ? t.due.filter(inCtx) : [];
   const deferred = t ? t.scheduled.filter(inCtx) : [];
+  const soon = t ? t.soon.filter(inCtx) : [];
   const waitingHere = waiting.filter(inCtx);
   const failed = useStore(tasksFailed);
   const nothingDue = !!t && !failed && !overdue.length && !dueToday.length && !deferred.length;
@@ -109,28 +110,30 @@ export function TodayScreen() {
           <div className="hello">
             <h1 className="h1">{greeting(now.getHours(), s.ownerName)}.</h1>
             {t && !failed && (
-              <div className="tstats">
-                <Stat
-                  to="today-overdue"
-                  n={overdue.length}
-                  label="Overdue"
-                  tone="red"
-                  tip={`${tasks(overdue.length)} past their due date`}
-                />
-                <Stat to="today-due" n={dueToday.length} label="Due today" tip={`${tasks(dueToday.length)} due today`} />
-                <Stat
-                  to="today-deferred"
-                  n={deferred.length}
-                  label="Deferred"
-                  tip={`${tasks(deferred.length)} deferred until today or earlier`}
-                />
-                <Stat
-                  to="today-waiting"
-                  n={waitingHere.length}
-                  label="Waiting"
-                  tip={`${tasks(waitingHere.length)} waiting for someone else`}
-                />
-              </div>
+              <p className="tsum">
+                {todaySummary({
+                  overdue: overdue.length,
+                  due: dueToday.length,
+                  deferred: deferred.length,
+                  waiting: waitingHere.length,
+                }).map((p, i) => (
+                  <span key={i}>
+                    {p.to ? (
+                      <button
+                        type="button"
+                        className={p.tone ?? ""}
+                        title={`Show the ${p.text}`}
+                        onClick={() => document.getElementById(p.to!)?.scrollIntoView({ block: "start", behavior: "smooth" })}
+                      >
+                        {p.text}
+                      </button>
+                    ) : (
+                      p.text
+                    )}
+                    {p.after}
+                  </span>
+                ))}
+              </p>
             )}
           </div>
           <div className="card cardcap">
@@ -171,36 +174,51 @@ export function TodayScreen() {
                 </div>
               </div>
             )}
-            <Band
-              id="today-overdue"
-              icon="calendar"
-              label="Overdue"
-              tone="red"
-              rows={overdue}
-              tip={`${tasks(overdue.length)} past their due date`}
-            />
-            <Band id="today-due" icon="calendar" label="Due today" rows={dueToday} tip={`${tasks(dueToday.length)} due today`} />
-            <Band
-              id="today-deferred"
-              icon="defer"
-              label="Deferred until now"
-              rows={deferred}
-              tip={`${tasks(deferred.length)} deferred until today or earlier`}
-            />
-            <Band
-              id="today-waiting"
-              icon="waiting"
-              label="Waiting for"
-              rows={waitingHere}
-              tip={`${tasks(waitingHere.length)} waiting for someone else`}
-              hideTags={["waiting-for"]}
-              rowAction={(w) => (
-                <>
-                  <WaitingSince t={w} today={today} />
-                  <DraftNudge t={w} compact />
-                </>
-              )}
-            />
+            {/* Two columns on a wide window: what's due beside what's coming, waiting and back from
+                deferral; one under the other on a narrower one (D-20261019-02). */}
+            <div className="tcols">
+              <div className="tcol">
+                <Band
+                  id="today-overdue"
+                  icon="calendar"
+                  label="Overdue"
+                  tone="red"
+                  rows={overdue}
+                  tip={`${tasks(overdue.length)} past their due date`}
+                />
+                <Band id="today-due" icon="calendar" label="Due today" rows={dueToday} tip={`${tasks(dueToday.length)} due today`} />
+              </div>
+              <div className="tcol">
+                <Band
+                  id="today-soon"
+                  icon="calendar"
+                  label="Coming up this week"
+                  rows={soon}
+                  tip={`${tasks(soon.length)} due in the next seven days`}
+                />
+                <Band
+                  id="today-waiting"
+                  icon="waiting"
+                  label="Waiting for"
+                  rows={waitingHere}
+                  tip={`${tasks(waitingHere.length)} waiting for someone else`}
+                  hideTags={["waiting-for"]}
+                  rowAction={(w) => (
+                    <>
+                      <WaitingSince t={w} today={today} />
+                      <DraftNudge t={w} compact />
+                    </>
+                  )}
+                />
+                <Band
+                  id="today-deferred"
+                  icon="defer"
+                  label="Deferred until now"
+                  rows={deferred}
+                  tip={`${tasks(deferred.length)} deferred until today or earlier`}
+                />
+              </div>
+            </div>
             <div className="tfoot">
               <button
                 type="button"
@@ -226,20 +244,27 @@ export function TodayScreen() {
   );
 }
 
-/** A count at the top of Today: jumps to its band below. */
-function Stat({ to, n, label, tone, tip }: { to: string; n: number; label: string; tone?: "red"; tip: string }) {
-  return (
-    <button
-      type="button"
-      className={`tstat ${n ? (tone ?? "") : "zero"}`}
-      aria-disabled={!n}
-      title={n ? `${tip}: show them` : tip}
-      onClick={() => n && document.getElementById(to)?.scrollIntoView({ block: "start", behavior: "smooth" })}
-    >
-      <b>{fmtCount(n)}</b>
-      <span>{label}</span>
-    </button>
-  );
+/** A part of Today's summary sentence: a count that jumps to its band (`to`), or plain words. */
+export interface SummaryPart {
+  text: string;
+  to?: string;
+  tone?: "red";
+  /** What follows it: ", ", " and " or ".". */
+  after: string;
+}
+
+/** Today's counts as one sentence, under the greeting: "8 overdue, nothing due today, 2 deferred
+ *  until now and 4 waiting for others." Overdue and due today are always said; the others only
+ *  when there are any. */
+export function todaySummary(n: { overdue: number; due: number; deferred: number; waiting: number }): SummaryPart[] {
+  const parts: Omit<SummaryPart, "after">[] = [
+    n.overdue ? { text: `${fmtCount(n.overdue)} overdue`, to: "today-overdue", tone: "red" } : { text: "nothing overdue" },
+    n.due ? { text: `${fmtCount(n.due)} due today`, to: "today-due" } : { text: "nothing due today" },
+  ];
+  if (n.deferred) parts.push({ text: `${fmtCount(n.deferred)} deferred until now`, to: "today-deferred" });
+  if (n.waiting) parts.push({ text: `${fmtCount(n.waiting)} waiting for others`, to: "today-waiting" });
+  parts[0] = { ...parts[0], text: parts[0].text[0].toUpperCase() + parts[0].text.slice(1) };
+  return parts.map((p, i) => ({ ...p, after: i === parts.length - 1 ? "." : i === parts.length - 2 ? " and " : ", " }));
 }
 
 /** One of Today's bands, with its rows; nothing when it's empty. */

@@ -1040,10 +1040,15 @@ pub fn run() {
             }
             let s = lock(&app.state::<AppState>().settings).clone();
             if let Some(w) = app.get_webview_window("main") {
-                // Screenshots are taken at one size, whatever size the window was left at.
-                // They're taken unseen and out of the Dock, without taking the focus.
-                if scene().is_some() {
-                    let _ = w.set_size(tauri::LogicalSize::new(1440.0, 900.0));
+                // Screenshots are taken at one size, whatever size the window was left at (a scene's
+                // "window": [w, h] for another, a large display's). They're taken unseen and out of
+                // the Dock, without taking the focus.
+                if let Some(sc) = scene() {
+                    let size = serde_json::from_str::<serde_json::Value>(&sc)
+                        .ok()
+                        .and_then(|v| Some((v["window"][0].as_f64()?, v["window"][1].as_f64()?)))
+                        .unwrap_or((1440.0, 900.0));
+                    let _ = w.set_size(tauri::LogicalSize::new(size.0, size.1));
                     let _ = w.center();
                     platform::make_unseen(&w);
                     platform::set_in_dock(app.handle(), false);

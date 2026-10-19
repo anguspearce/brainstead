@@ -51,6 +51,12 @@
     "docs": true
   },
   {
+    "name": "today-wide",
+    "screen": "today",
+    "window": [1800, 1125],
+    "width": 1800
+  },
+  {
     "name": "today-summary",
     "screen": "today",
     "view": {

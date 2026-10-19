@@ -6,16 +6,17 @@ order: 1
 summary: What needs you today: overdue and due tasks, deferred tasks that are back, what you're waiting for, and where you left off.
 ---
 ## Read the day at a glance
-Under the greeting, four counts show **Overdue**, **Due today**, **Deferred** and **Waiting**. Overdue turns red when there are any, and a zero is muted. Click a count to jump to its band.
+Under the greeting, one sentence sums up the day: "8 overdue, nothing due today, 2 deferred until now and 4 waiting for others." Overdue and due today are always there; the others only when there are any. Overdue is red, and each count is a link that jumps to its band.
 
-The table below has a band for each:
+The bands below:
 
 - **Overdue**: a due date before today.
 - **Due today**.
+- **Coming up this week**: due in the next seven days, soonest first.
+- **Waiting for**: tasks tagged `#waiting-for`, with how long each has waited (amber after a week).
 - **Deferred until now**: a defer date of today or earlier. A task deferred to a later day stays off Today until then, even when it's due or overdue.
-- **Waiting for**: tasks tagged `#waiting-for`.
 
-Empty bands are hidden, and "Nothing due today" shows when nothing is due or deferred. **All tasks** at the foot opens [Tasks](app:tasks). An assistant reading today's tasks gets the same bands and labels.
+On a wide window, Overdue and Due today are on the left and the other three beside them, so rows stay an easy length; on a narrower one they're one under the other. Empty bands are hidden, and "Nothing due today" shows when nothing is due or deferred. **All tasks** at the foot opens [Tasks](app:tasks). An assistant reading today's tasks gets the same bands and labels.
 
 The first time, reading the vault can take a minute: a banner says so and the cards show "Loading …". If something can't be read, it says "Couldn't load …" with **Retry**.
 

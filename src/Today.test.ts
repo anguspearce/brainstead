@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, it } from "vitest";
-import { greeting, isReviewDay } from "./Today";
+import { greeting, isReviewDay, todaySummary } from "./Today";
 
 describe("Today's greeting", () => {
   it("follows the hour", () => {
@@ -15,6 +15,25 @@ describe("Today's greeting", () => {
     expect(greeting(9, "Maya Patel")).toBe("Good morning, Maya");
     expect(greeting(9, "  ")).toBe("Good morning");
     expect(greeting(20, undefined)).toBe("Good evening");
+  });
+});
+
+describe("Today's summary sentence", () => {
+  const say = (n: Parameters<typeof todaySummary>[0]) =>
+    todaySummary(n)
+      .map((p) => p.text + p.after)
+      .join("");
+  it("says overdue and due today always, the others when there are any", () => {
+    expect(say({ overdue: 8, due: 0, deferred: 2, waiting: 4 })).toBe(
+      "8 overdue, nothing due today, 2 deferred until now and 4 waiting for others.",
+    );
+    expect(say({ overdue: 0, due: 0, deferred: 0, waiting: 0 })).toBe("Nothing overdue and nothing due today.");
+    expect(say({ overdue: 0, due: 3, deferred: 0, waiting: 1 })).toBe("Nothing overdue, 3 due today and 1 waiting for others.");
+  });
+  it("makes each count a jump to its band, overdue in red", () => {
+    const p = todaySummary({ overdue: 2, due: 0, deferred: 0, waiting: 1 });
+    expect(p.map((x) => x.to)).toEqual(["today-overdue", undefined, "today-waiting"]);
+    expect(p[0].tone).toBe("red");
   });
 });
 

@@ -1045,14 +1045,22 @@ describe("MCP actions", () => {
           tags: ["waiting-for"],
           due: today,
         }),
+        row({
+          line: 5,
+          text: "Book the room",
+          lineText: "- [ ] Book the room",
+          due: new Date(Date.now() + 3 * 86_400_000).toLocaleDateString("en-CA"),
+        }),
       ];
       answers.inbox_list = () => [];
       const items = (await data("tasks.list", { view: "today" })).items as Record<string, unknown>[];
       expect(items[0]).toMatchObject({ tags: ["budget"], priority: "high", status: "in_progress", created: "2026-10-01", band: "Overdue" });
-      expect(items.map((t) => t.band)).toEqual(["Overdue", "Due today", "Waiting for"]);
+      expect(items.map((t) => t.band)).toEqual(["Overdue", "Due today", "Coming up this week", "Waiting for"]);
       const out = (await run("tasks.list", { view: "today" })) as string;
       expect(out).toContain("Overdue:\n- [/] Call Sam about the launch · due 2000-01-01 · @calls · priority high · #budget");
-      expect(out).toMatch(/Due today:\n- \[ \] Hear back from Lena .*\nWaiting for:\n- \[ \] Hear back from Lena/);
+      expect(out).toMatch(
+        /Due today:\n- \[ \] Hear back from Lena .*\nComing up this week:\n- \[ \] Book the room .*\nWaiting for:\n- \[ \] Hear back from Lena/,
+      );
       expect(((await data("tasks.list", { view: "today", group: "project" })).items as Record<string, unknown>[])[0].band).toBeUndefined();
     });
 

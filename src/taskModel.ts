@@ -115,12 +115,15 @@ export const deferredPast = (t: TaskRow, today: string) => !!t.scheduled && t.sc
 /** Today: overdue, due today, and deferred until today or earlier (the previous app's GTD counts).
  *  A task deferred past today is left out even when it's due or overdue: deferring it is saying
  *  "not today" (D-20261006-02). */
-export function todayRows(all: TaskRow[], today: string): { overdue: TaskRow[]; due: TaskRow[]; scheduled: TaskRow[] } {
+export function todayRows(all: TaskRow[], today: string): { overdue: TaskRow[]; due: TaskRow[]; scheduled: TaskRow[]; soon: TaskRow[] } {
   const open = all.filter((t) => !t.done && !deferredPast(t, today));
   const overdue = open.filter((t) => t.due && t.due < today).sort((a, b) => a.due!.localeCompare(b.due!));
   const due = open.filter((t) => t.due === today);
   const scheduled = open.filter((t) => t.scheduled && t.scheduled <= today && !(t.due && t.due <= today));
-  return { overdue, due, scheduled };
+  // Coming up this week: due in the next seven days, soonest first.
+  const week = moment(today, "YYYY-MM-DD").add(7, "days").format("YYYY-MM-DD");
+  const soon = open.filter((t) => t.due && t.due > today && t.due <= week).sort((a, b) => a.due!.localeCompare(b.due!));
+  return { overdue, due, scheduled, soon };
 }
 
 /** Why the tasks couldn't be read, or null. Screens show it with Retry rather than an empty list. */
