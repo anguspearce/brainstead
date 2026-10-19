@@ -33,6 +33,7 @@ import { useVaultVersion } from "./state";
 import { reportEditError, undoLast, useAllTasks } from "./taskModel";
 import { toast } from "./Toast";
 import { askLink, askQuote, MoreMenu, TopBar } from "./TopBar";
+import { iconizeEmoji } from "./md/fieldEmoji";
 import { ago, Dialog, fmtCount, Seg } from "./ui";
 
 /** ⌘K's New project: the Projects screen opens with New project showing. */
@@ -710,7 +711,7 @@ function RecentActivity({ links, done }: { links: string[]; done: TaskRow[] }) {
         <button key={i.key} type="button" className="blink" title={`Open ${i.path}`} onClick={() => openDoc(i.path)}>
           <span className={i.kind === "note" ? "lb note" : "pdone ell"}>
             {i.kind === "done" && <Icon name="check" size={12} style={{ color: "var(--green)" }} />}
-            {i.kind === "cancelled" && <Icon name="cancelled" size={12} style={{ color: "var(--ink3)" }} />} {i.text}
+            {i.kind === "cancelled" && <Icon name="cancelled" size={12} style={{ color: "var(--ink3)" }} />} {iconizeEmoji(i.text)}
           </span>
           <span className="faint">
             {i.kind === "done" ? "Done" : i.kind === "cancelled" ? "Cancelled" : "Changed"} {ago(i.at)}

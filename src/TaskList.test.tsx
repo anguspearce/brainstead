@@ -14,7 +14,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 
 import type { TaskRow } from "./api";
 import { threadLabel } from "./skills/Reply";
-import { TaskList, TasksFailed } from "./TaskList";
+import { TaskList, TasksFailed, TaskText } from "./TaskList";
 import { retitled, retryTasks, tasksFailed } from "./taskModel";
 import { toast, Toasts } from "./Toast";
 
@@ -80,6 +80,15 @@ describe("task list keys", () => {
     cleanup();
     const plain = render(<TaskList rows={rows} manual={false} onSelect={onSelect} selected="A.md:1" />);
     expect(plain.container.querySelector("ul")!.tabIndex).toBe(-1);
+  });
+});
+
+describe("a task's words", () => {
+  it("draw a Tasks-format emoji as its field's icon, never the emoji", () => {
+    const { container } = render(<TaskText text="Book the venue 📅 2026-10-20 **soon**" />);
+    expect(container.textContent).not.toContain("📅");
+    expect(container.querySelector(".femoji")).toBeTruthy();
+    expect(container.querySelector("b")?.textContent).toBe("soon");
   });
 });
 

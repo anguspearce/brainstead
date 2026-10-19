@@ -346,9 +346,9 @@ async function listTasks(a: Args): Promise<Listing> {
     const bands: [string, TaskRow[]][] = [
       ["Overdue", r.overdue],
       ["Due today", r.due],
+      ["Deferred until now", r.scheduled],
       ["Coming up this week", r.soon],
       ["Waiting for", waiting],
-      ["Deferred until now", r.scheduled],
     ];
     for (const [label, rs] of bands) for (const t of rs) band.set(t, label);
     rows = bands.flatMap(([, rs]) => rs);

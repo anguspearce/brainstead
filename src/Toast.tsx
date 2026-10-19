@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useEffect } from "react";
+import { iconizeEmoji } from "./md/fieldEmoji";
 import { Icon } from "./icons";
 import { Store, useStore } from "./store";
 
@@ -31,7 +32,7 @@ export function Toasts() {
   }, [m]);
   return m ? (
     <div className={`toast ${m.tone ?? ""}`} role={m.tone === "bad" ? "alert" : "status"}>
-      <span>{m.text}</span>
+      <span>{iconizeEmoji(m.text)}</span>
       {m.action && (
         <button
           type="button"

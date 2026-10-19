@@ -23,6 +23,7 @@ import { deferredPast, tasksFailed, todayRows, useAllTasks, viewRows, VIEWS } fr
 import { useVaultOpening, useVaultVersion, vaultStatus } from "./state";
 import { TopBar } from "./TopBar";
 import { ago, fmtCount, TableBand } from "./ui";
+import { iconizeEmoji } from "./md/fieldEmoji";
 
 export function greeting(h: number, name?: string) {
   const g = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
@@ -169,8 +170,8 @@ export function TodayScreen() {
                 </div>
               </div>
             )}
-            {/* Two columns on a wide window: what's due beside what's coming, waiting and back from
-                deferral; one under the other on a narrower one (D-20261019-02). */}
+            {/* Two columns on a wide window: what's due beside what's back from deferral, coming and
+                waiting; one under the other on a narrower one (D-20261019-02). */}
             <div className="tcols">
               <div className="tcol">
                 <Band
@@ -184,6 +185,13 @@ export function TodayScreen() {
                 <Band id="today-due" icon="calendar" label="Due today" rows={dueToday} tip={`${tasks(dueToday.length)} due today`} />
               </div>
               <div className="tcol">
+                <Band
+                  id="today-deferred"
+                  icon="defer"
+                  label="Deferred until now"
+                  rows={deferred}
+                  tip={`${tasks(deferred.length)} deferred until today or earlier`}
+                />
                 <Band
                   id="today-soon"
                   icon="calendar"
@@ -204,13 +212,6 @@ export function TodayScreen() {
                       <DraftNudge t={w} compact />
                     </>
                   )}
-                />
-                <Band
-                  id="today-deferred"
-                  icon="defer"
-                  label="Deferred until now"
-                  rows={deferred}
-                  tip={`${tasks(deferred.length)} deferred until today or earlier`}
                 />
               </div>
             </div>
@@ -616,7 +617,7 @@ function HeldCard() {
           <span className={`lb ${p.page.startsWith("wiki/") ? "wiki" : "note"}`}>
             <span className="ell">{pageName(p.page)}</span>
           </span>
-          <span className="ell grow">{p.title}</span>
+          <span className="ell grow">{iconizeEmoji(p.title)}</span>
         </button>
       ))}
       <div className="rfoot">

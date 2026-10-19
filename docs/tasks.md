@@ -6,11 +6,11 @@ Brainstead runs [Getting Things Done](https://gettingthingsdone.com) (GTD) over 
 
 ## Today
 
-<a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/today-dark.png"><img alt="Today: the day in a sentence, the capture box, the Overdue, Due today, Coming up this week, Waiting for and Deferred until now bands, and the right-hand cards" src="images/today-light.png"></picture></a>
+<a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/today-dark.png"><img alt="Today: the day in a sentence, the capture box, the Overdue, Due today, Deferred until now, Coming up this week and Waiting for bands, and the right-hand cards" src="images/today-light.png"></picture></a>
 
 Today (⌘1) is what needs you now:
 
-- The day in one sentence under the greeting, each count a link to its band, then bands for **Overdue**, **Due today**, **Coming up this week** (due in the next seven days), **Waiting for** and **Deferred until now**. On a wide window the last three sit beside the first two. A task deferred to a later day stays off Today until then, even if it's due. Tick, date and change tasks in place; ⌘Z undoes.
+- The day in one sentence under the greeting, each count a link to its band, then bands for **Overdue**, **Due today**, **Deferred until now**, **Coming up this week** (due in the next seven days) and **Waiting for**. On a wide window the last three sit beside the first two. A task deferred to a later day stays off Today until then, even if it's due. Tick, date and change tasks in place; ⌘Z undoes.
 - `@context` chips to show one context.
 - A capture box, the same as Quick capture.
 - **To process**: the Inbox, bookmarks to triage, wiki issues to decide, and the weekly review on its day.

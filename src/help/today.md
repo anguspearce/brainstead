@@ -12,9 +12,9 @@ The bands below:
 
 - **Overdue**: a due date before today.
 - **Due today**.
+- **Deferred until now**: a defer date of today or earlier. A task deferred to a later day stays off Today until then, even when it's due or overdue.
 - **Coming up this week**: due in the next seven days, soonest first.
 - **Waiting for**: tasks tagged `#waiting-for`, with how long each has waited (amber after a week).
-- **Deferred until now**: a defer date of today or earlier. A task deferred to a later day stays off Today until then, even when it's due or overdue.
 
 On a wide window, Overdue and Due today are on the left and the other three beside them, so rows stay an easy length; on a narrower one they're one under the other. Empty bands are hidden, and "Nothing due today" shows when nothing is due or deferred. **All tasks** at the foot opens [Tasks](app:tasks). An assistant reading today's tasks gets the same bands and labels.
 

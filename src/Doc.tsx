@@ -58,6 +58,7 @@ import { ago, Dialog, Popover, Seg, useDebounced } from "./ui";
 import { scriptsAllowed } from "./md/scripts";
 import { getList, getScalar } from "./wiki/props";
 import { FactsCard, SourcesCard, WikiFields } from "./wiki/WikiFields";
+import { iconizeEmoji } from "./md/fieldEmoji";
 
 export const LAYER_LABEL: Record<string, string> = { note: "Note", wiki: "Wiki", source: "Source", template: "Template" };
 const isMarkdown = (p: string) => /\.(md|txt)$/i.test(p);
@@ -1196,7 +1197,7 @@ function Backlinks({ doc, onFold }: { doc: Doc; onFold: () => void }) {
       {b.map((l) => (
         <button key={l.path} type="button" className="blink" title={`Open ${l.title}`} onClick={() => openDoc(l.path)}>
           <span className={`lb ${l.layer}`}>{l.title}</span>
-          {l.context && <span className="faint">{plainText(l.context)}</span>}
+          {l.context && <span className="faint">{iconizeEmoji(plainText(l.context))}</span>}
         </button>
       ))}
     </section>

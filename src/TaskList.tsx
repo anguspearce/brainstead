@@ -7,7 +7,8 @@
 
 import moment from "moment";
 import { askWith } from "./askState";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { iconizeEmoji } from "./md/fieldEmoji";
 import type { TaskDateKind, TaskRow } from "./api";
 import { DatePicker } from "./DatePicker";
 import { Icon } from "./icons";
@@ -44,7 +45,8 @@ export function TaskText({ text }: { text: string }) {
   return (
     <>
       {parts.map((p, i) => {
-        if (i % 2 === 0) return p;
+        // Plain words, with any Tasks-format emoji drawn as their field's icon.
+        if (i % 2 === 0) return <Fragment key={i}>{iconizeEmoji(p)}</Fragment>;
         if (p.startsWith("`")) return <code key={i}>{p.slice(1, -1)}</code>;
         if (p.startsWith("**")) return <b key={i}>{p.slice(2, -2)}</b>;
         if (p.startsWith("*")) return <i key={i}>{p.slice(1, -1)}</i>;

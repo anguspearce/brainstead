@@ -14,6 +14,7 @@ import { nav, openDoc } from "./nav";
 import { Store, useStore } from "./store";
 import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
+import { iconizeEmoji } from "./md/fieldEmoji";
 
 export const found = new Store<FindState | null>(null);
 let started = false;
@@ -167,7 +168,7 @@ function FoundRow({ g }: { g: FindSuggestion }) {
             />
           </label>
         ) : (
-          <div className="pt">{g.text}</div>
+          <div className="pt">{iconizeEmoji(g.text)}</div>
         )}
         <div className="faint small">
           {g.project ? `${g.project} · ` : "To Do list · "}
@@ -251,7 +252,7 @@ function FoundProject({ g }: { g: FindSuggestion }) {
           </>
         ) : (
           <>
-            <div className="pt">{g.text}</div>
+            <div className="pt">{iconizeEmoji(g.text)}</div>
             {g.outcome && <div className="small">{g.outcome}</div>}
           </>
         )}

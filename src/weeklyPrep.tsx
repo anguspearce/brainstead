@@ -17,6 +17,7 @@ import { nav, openDoc } from "./nav";
 import { inQuote, tagToggled } from "./tasksq/edits";
 import { changeTaskEdit, reportEditError, retitled, toggleTaskEdit, undoAction } from "./taskModel";
 import { toast } from "./Toast";
+import { iconizeEmoji } from "./md/fieldEmoji";
 
 export type Handled = Record<string, "accepted" | "skipped">;
 
@@ -251,7 +252,7 @@ export function PrepRows({
         <ul className="wprompts">
           {open.map((s) => (
             <li key={s.id}>
-              {s.text} <Source s={s} />
+              {iconizeEmoji(s.text)} <Source s={s} />
             </li>
           ))}
         </ul>
@@ -274,7 +275,7 @@ export function PrepRows({
         return (
           <div key={s.id} className="wsugg" data-id={s.id}>
             <div className="t">
-              <span>{s.text}</span>
+              <span>{iconizeEmoji(s.text)}</span>
               {more && <span className="faint small">{more}</span>}
             </div>
             <Source s={s} />

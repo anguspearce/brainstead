@@ -21,6 +21,7 @@ import { settings, Store, useStore } from "./store";
 import { Dialog, SearchBox, TableBand, useDebounced } from "./ui";
 import { offerFollowUp } from "./Ingest";
 import { DocButton, useGone } from "./docButton";
+import { iconizeEmoji } from "./md/fieldEmoji";
 
 /** A line of the page as the diff shows it: task fields as their icons, never the file's emoji. */
 export function DiffText({ text }: { text: string }) {
@@ -525,7 +526,7 @@ function Row({ c, sel, gone, onSel }: { c: ChangeRow; sel: boolean; gone?: boole
       onClick={onSel}
     >
       <span className="qtop">
-        <span className="tt">{c.title}</span>
+        <span className="tt">{iconizeEmoji(c.title)}</span>
         {c.status === "reverted" ? (
           <span className="chip sm">Reverted</span>
         ) : c.status === "rejected" ? (
@@ -643,8 +644,8 @@ function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: num
             {page}
             {v.changes.length === 1 && v.changes[0].section ? ` · ${v.changes[0].section}` : ""}
           </div>
-          <h1 className="h2">{v.title}</h1>
-          {v.reason && <p className="muted small">{v.reason}</p>}
+          <h1 className="h2">{iconizeEmoji(v.title)}</h1>
+          {v.reason && <p className="muted small">{iconizeEmoji(v.reason)}</p>}
           <p className="faint small">
             {originLabel(v)}
             {v.model ? ` · ${v.model.replace(/^[a-z]+:/, "")}` : ""} · {when(v.created)}
@@ -659,9 +660,9 @@ function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: num
         <div className={`qstatus ${isHeld ? "held" : ""}`} role="status">
           <b>{v.problem ? "This can't be made as it stands" : isHeld ? "Held for you" : "Flagged"}</b>
           <ul>
-            {v.problem && <li>{v.problem}</li>}
+            {v.problem && <li>{iconizeEmoji(v.problem)}</li>}
             {v.flags.map((f) => (
-              <li key={f}>{f}</li>
+              <li key={f}>{iconizeEmoji(f)}</li>
             ))}
           </ul>
         </div>
@@ -865,7 +866,7 @@ export function AgentChangesCard({ path }: { path: string }) {
       {shown.map((c) => (
         <div key={c.id} className="agentrow">
           <button type="button" className="blink grow" title="Show this change in Changes" onClick={() => nav.go("review")}>
-            <span className="ell">{c.title}</span>
+            <span className="ell">{iconizeEmoji(c.title)}</span>
             <span className="faint small">
               {originLabel(c)} · {when(c.created)}
               {c.status === "held"
