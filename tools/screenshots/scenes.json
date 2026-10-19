@@ -51,6 +51,57 @@
     "docs": true
   },
   {
+    "name": "projects-narrow",
+    "screen": "projects",
+    "path": "Project. Orbit App launch.md",
+    "window": [1000, 760],
+    "width": 1000
+  },
+  {
+    "name": "today-narrow",
+    "screen": "today",
+    "window": [1000, 760],
+    "width": 1000
+  },
+  {
+    "name": "tasks-narrow",
+    "screen": "tasks",
+    "view": {
+      "tasks:sel": "Project. Orbit App launch.md:9"
+    },
+    "window": [1000, 760],
+    "width": 1000
+  },
+  {
+    "name": "note-narrow",
+    "screen": "doc",
+    "path": "Meeting. Orbit App Steerco - 2026-09-30.md",
+    "window": [1000, 760],
+    "width": 1000
+  },
+  {
+    "name": "weekly-narrow",
+    "screen": "weekly",
+    "view": {
+      "weekly:begun": true
+    },
+    "weekprep": true,
+    "window": [1000, 760],
+    "width": 1000
+  },
+  {
+    "name": "inbox-narrow",
+    "screen": "inbox",
+    "window": [1000, 760],
+    "width": 1000
+  },
+  {
+    "name": "health-narrow",
+    "screen": "health",
+    "window": [1000, 760],
+    "width": 1000
+  },
+  {
     "name": "today-wide",
     "screen": "today",
     "window": [1800, 1125],

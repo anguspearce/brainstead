@@ -251,7 +251,7 @@ export function WeeklyScreen() {
         sub={ctx ? `week ${week.slice(-2)} · ${ctx.range}` : week}
         ask={{ about: `this week's review: ${step.title.toLowerCase()}`, prompt: `For my weekly review, ${step.title.toLowerCase()}: ` }}
       >
-        <span className="faint small">
+        <span className="faint small wprog">
           Step {st.step + 1} of {STEPS.length}
           {left > 0 ? ` · about ${left * 3} min left` : ""}
         </span>
@@ -564,7 +564,7 @@ function Step({ id, ctx, log }: { id: string; ctx: WeeklyContext | null; log: (l
     case "inbox": {
       const n = (inbox ?? []).filter(unclarified).length;
       return (
-        <div className="card wkcard">
+        <div className="wkcard">
           <b>{n ? `${n} to clarify` : "The inbox is empty."}</b>
           {n > 0 && (
             <button type="button" className="btn" title="Go to the Inbox to clarify what's in it" onClick={() => nav.go("inbox")}>
@@ -594,9 +594,11 @@ function Step({ id, ctx, log }: { id: string; ctx: WeeklyContext | null; log: (l
     }
     case "ahead":
       return (
-        <div className="card wkcard">
+        <div className="wkcard">
           <p className="muted">Brainstead can't read your calendar, so open it yourself and capture what you find here.</p>
-          <CaptureBox compact />
+          <div className="card cardcap">
+            <CaptureBox compact />
+          </div>
         </div>
       );
     case "next":
