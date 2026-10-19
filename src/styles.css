@@ -256,11 +256,11 @@ input {
 }
 .bmrow .navi.bm {
   width: 100%;
-  padding-right: 26px;
+  padding-right: 34px;
 }
 .bmrow .bmx {
   position: absolute;
-  right: 4px;
+  right: 10px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--ink3);
@@ -8477,7 +8477,7 @@ button.hc {
 .bmlist {
   overflow: hidden;
 }
-.bmrow + .bmrow {
+.bmlist .bmrow + .bmrow {
   border-top: 1px solid var(--line);
 }
 .bmhead {
