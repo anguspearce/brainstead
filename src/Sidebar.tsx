@@ -41,15 +41,13 @@ export const DAILY: Item[] = [
 ];
 
 export const LIBRARY: Item[] = [
+  { screen: "search", label: "Search", icon: "search" },
   { screen: "notes", label: "Notes", icon: "note", count: (s) => s.notes },
   { screen: "wiki", label: "Wiki", icon: "wiki", count: (s) => s.wiki },
   { screen: "sources", label: "Sources", icon: "source", count: (s) => s.sources },
   { screen: "templates", label: "Templates", icon: "template", count: (s) => s.templates },
   { screen: "graph", label: "Graph", icon: "graph" },
 ];
-
-/** Screens with no row of their own: the search box at the top and ⌘K reach them. */
-export const ELSEWHERE: Item[] = [{ screen: "search", label: "Search", icon: "search" }];
 
 /** The screens that do one job with the AI: the sidebar's Tools menu. ⌘K lists them under Go to
  *  with the other screens, found by what they do too (Palette's TOOL_WORDS); they aren't in ALL_ITEMS. */
@@ -72,7 +70,7 @@ export const FOOTER: Item[] = [
   { screen: "settings", label: "Settings", icon: "settings" },
 ];
 
-export const ALL_ITEMS = [...DAILY, ...LIBRARY, ...ELSEWHERE, ...FOOTER];
+export const ALL_ITEMS = [...DAILY, ...LIBRARY, ...FOOTER];
 
 /** A vault path's layer, by its top folder (as the walker decides it). */
 export function layerOf(path: string): Layer {

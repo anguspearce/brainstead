@@ -30,6 +30,7 @@ describe("Sidebar", () => {
       "Projects",
       "Changes",
       "Ask",
+      "Search",
       "Notes",
       "Wiki",
       "Sources",
@@ -41,7 +42,8 @@ describe("Sidebar", () => {
       "Trash",
       "Settings",
     ]) {
-      expect(screen.getByRole("button", { name: new RegExp(`^${l}`) })).toBeTruthy();
+      // Search exactly: the search box above is "Search or jump to…".
+      expect(screen.getByRole("button", { name: new RegExp(l === "Search" ? "^Search$" : `^${l}`) })).toBeTruthy();
     }
     expect(screen.getByRole("button", { name: /^Notes/ }).textContent).toContain("1,561");
     expect(screen.getByRole("status").textContent).toBe("2,210 files · just now");
@@ -79,11 +81,6 @@ describe("Sidebar", () => {
     expect(badge?.textContent).toBe("2");
     expect(badge?.classList.contains("hot")).toBe(true);
     ask.set({ chats: [], active: null });
-  });
-
-  it("has no Search row: the search box at the top and ⌘K reach it", () => {
-    render(<Sidebar onSearch={() => {}} />);
-    expect(screen.queryByRole("button", { name: /^Search$/ })).toBeNull();
   });
 
   it("opens Draft reply, Meeting notes and Compare from the Tools menu", () => {
