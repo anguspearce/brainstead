@@ -56,6 +56,11 @@
   --sans: "Geist Variable", -apple-system, "SF Pro Text", system-ui, sans-serif;
   --display: "Geist Variable", -apple-system, "SF Pro Display", system-ui, sans-serif;
   --mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* The left panes, one width each kind: a nav or list beside a page (Inbox, Tasks, Search, Wiki,
+     Settings, Meeting notes, the weekly steps), and a list beside a record (Projects, Changes). */
+  --pane-left: 260px;
+  --pane-list: 400px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1040,7 +1045,7 @@ input {
 /* settings */
 .body.settings {
   display: grid;
-  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-columns: var(--pane-left) minmax(0, 1fr);
   overflow: hidden;
 }
 .spanes {
@@ -1212,7 +1217,7 @@ input {
 /* lists */
 .body.split {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: var(--pane-left) minmax(0, 1fr);
   overflow: hidden;
 }
 .tagtree {
@@ -1230,12 +1235,19 @@ input {
 .sect.static {
   cursor: default;
 }
+
+/* A left pane's nav item (Tasks' lists, Search's and the Wiki's tags, Settings' panes): one size
+   and one selected look everywhere. */
+.tnode,
+.spanes .navi {
+  font-size: 13px;
+}
 .tnode {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 8px;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
   border: 0;
   background: none;
   border-radius: 6px;
@@ -1247,9 +1259,15 @@ input {
 .tnode:hover {
   background: var(--hover);
 }
-.tnode.on {
+.tnode.on,
+.spanes .navi.on {
   background: var(--accent-soft);
-  color: var(--accent-ink);
+  color: var(--ink);
+  font-weight: 500;
+  box-shadow: none;
+}
+.spanes .navi {
+  font-weight: 400;
 }
 .tnode .n {
   margin-left: auto;
@@ -2389,7 +2407,7 @@ details.callout[open] .callout-chev {
 }
 .body.tasks3 {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr) 340px;
+  grid-template-columns: var(--pane-left) minmax(0, 1fr) 340px;
   overflow: hidden;
 }
 .tpage {
@@ -6199,7 +6217,7 @@ select.sel {
 /* Projects */
 .body.projects {
   display: grid;
-  grid-template-columns: 480px minmax(0, 1fr);
+  grid-template-columns: var(--pane-list) minmax(0, 1fr);
   overflow: hidden;
 }
 .plistcol {
@@ -6463,7 +6481,7 @@ select.sel {
 /* Inbox */
 .body.inbox {
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-columns: var(--pane-left) minmax(0, 1fr);
   overflow: hidden;
 }
 .ilist {
@@ -6749,7 +6767,7 @@ select.sel {
 /* Weekly review */
 .body.weekly {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr) 340px;
+  grid-template-columns: var(--pane-left) minmax(0, 1fr) 340px;
   overflow: hidden;
 }
 .wsteps {
@@ -6999,7 +7017,7 @@ select.sel {
 }
 .body.queue {
   display: grid;
-  grid-template-columns: 380px minmax(0, 1fr);
+  grid-template-columns: var(--pane-list) minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -7732,7 +7750,7 @@ select.sel {
 }
 .body.meeting {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr) 360px;
+  grid-template-columns: var(--pane-left) minmax(0, 1fr) 360px;
   overflow: hidden;
 }
 .mrow {
@@ -9938,20 +9956,18 @@ html.tray-view body {
 }
 
 @media (width <= 1280px) {
-  .body.projects {
-    grid-template-columns: minmax(300px, 34%) minmax(0, 1fr);
+  :root {
+    --pane-left: 220px;
+    --pane-list: 340px;
   }
   .body.tasks3 {
-    grid-template-columns: 180px minmax(0, 1fr) 300px;
+    grid-template-columns: var(--pane-left) minmax(0, 1fr) 300px;
   }
   .body.weekly {
-    grid-template-columns: 210px minmax(0, 1fr) 280px;
+    grid-template-columns: var(--pane-left) minmax(0, 1fr) 280px;
   }
   .body.meeting {
-    grid-template-columns: 260px minmax(0, 1fr) 320px;
-  }
-  .body.queue {
-    grid-template-columns: 320px minmax(0, 1fr);
+    grid-template-columns: var(--pane-left) minmax(0, 1fr) 320px;
   }
   .body.health,
   .body.activity {
@@ -9973,11 +9989,14 @@ html.tray-view body {
   .body.today {
     grid-template-columns: minmax(0, 1fr);
   }
+  :root {
+    --pane-left: 200px;
+  }
   .body.tasks3 {
-    grid-template-columns: 160px minmax(0, 1fr) 260px;
+    grid-template-columns: var(--pane-left) minmax(0, 1fr) 260px;
   }
   .body.weekly {
-    grid-template-columns: 190px minmax(0, 1fr);
+    grid-template-columns: var(--pane-left) minmax(0, 1fr);
   }
   .body.weekly .wside {
     display: none;

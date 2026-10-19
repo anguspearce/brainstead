@@ -378,3 +378,4 @@
 {"commit": "5cdad479", "detail": "D-20261019-04 - Dark tokens retuned to match the light look", "id": "j-20261019-212757-9d46", "kind": "decision-ref", "ts": "2026-10-19T21:27:57Z", "who": "waynetd777@users.noreply.github.com"}
 {"commit": "56687044", "detail": "D-20261019-05 - Search keeps its sidebar row", "id": "j-20261019-213006-c903", "kind": "decision-ref", "ts": "2026-10-19T21:30:06Z", "who": "waynetd777@users.noreply.github.com"}
 {"commit": "1a3cb14d", "detail": "D-20261019-06 - ⌘1 to ⌘0 go to the sidebar's first ten rows", "id": "j-20261019-213707-3613", "kind": "decision-ref", "ts": "2026-10-19T21:37:07Z", "who": "waynetd777@users.noreply.github.com"}
+{"commit": "c858d3a0", "detail": "D-20261019-07 - Two left-pane widths, one nav-item look", "id": "j-20261019-214937-cb2a", "kind": "decision-ref", "ts": "2026-10-19T21:49:37Z", "who": "waynetd777@users.noreply.github.com"}
