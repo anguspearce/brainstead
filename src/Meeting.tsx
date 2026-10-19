@@ -17,7 +17,7 @@ import { changes, pageName, startKnowledge } from "./knowledge";
 import { Markdown } from "./md/Markdown";
 import { reportEditError } from "./taskModel";
 import { toast } from "./Toast";
-import { TopBar } from "./TopBar";
+import { ReadOnlyBanner, TopBar } from "./TopBar";
 import { useVaultVersion } from "./state";
 import { nav, openDoc, place, useViewState } from "./nav";
 import { Dialog, Seg } from "./ui";
@@ -52,7 +52,8 @@ export function cardFor(
   const p = o.progress;
   const spec = specOf(t, edits);
   if (o.readOnly)
-    return { say: "Read-only is on, so no note can be made. Turn it off in Settings › Vault.", tone: "warn", actions: ["openVault"] };
+    // The screen's banner has the switch that turns it off.
+    return { say: "Read-only is on, so no note can be made.", tone: "warn", actions: [] };
   if (o.sending || p?.busy)
     return {
       say: `${p?.label ?? "Writing note…"} It carries on by itself; ${o.ingest ? "once the note is made and ingested" : "once the note is made"}, the transcript leaves this list.`,
@@ -299,7 +300,7 @@ export function MeetingScreen() {
   return (
     <main className="main">
       <TopBar
-        title="Meeting note from a transcript"
+        title="Meeting notes"
         sub={list ? `${list.length} transcript${list.length === 1 ? "" : "s"}${show === "todo" ? " to do" : ""}` : undefined}
       >
         <Seg
@@ -322,6 +323,7 @@ export function MeetingScreen() {
           </button>
         )}
       </TopBar>
+      {readOnly && <ReadOnlyBanner blocks="no meeting note can be made" />}
       <div className="body meeting">
         <div className="ilist">
           {list?.length === 0 &&
@@ -382,7 +384,7 @@ export function MeetingScreen() {
         <div className="mtext selectable">{cur && <Markdown content={text} path={cur.path} root="" />}</div>
         <div className="mside">
           {cur && spec && (
-            <div className="card mdetails">
+            <div className="mdetails">
               <span className="eyebrow">The note</span>
               <label className="nnf">
                 <span className="faint">Type</span>

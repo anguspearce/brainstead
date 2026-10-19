@@ -184,6 +184,41 @@ export function ReplyScreen() {
     }
   };
 
+  // The tone and Draft: in the empty reply's card until there's a draft, then above it.
+  const controls = (
+    <>
+      <Seg<Tone>
+        label="Tone"
+        value={tone}
+        onChange={(t) => {
+          setTone(t);
+          if (r) void run(t);
+        }}
+        options={[
+          ["brief", "Brief"],
+          ["warm", "Warm"],
+          ["formal", "Formal"],
+        ]}
+      />
+      <span
+        title={
+          busy
+            ? "The model is drafting the reply"
+            : !chosen && !pasted.trim()
+              ? "Pick a captured thread or paste one first"
+              : r
+                ? "Draft the reply again, replacing this one"
+                : "Have the model draft a reply to the thread, drawing on your vault"
+        }
+      >
+        <button type="button" className="btn pri" disabled={busy || (!chosen && !pasted.trim())} onClick={() => void run()}>
+          <Icon name={r ? "refresh" : "ask"} size={14} />
+          {busy ? "Drafting…" : r ? "Redraft" : "Draft"}
+        </button>
+      </span>
+    </>
+  );
+
   return (
     <main className="main">
       <TopBar title="Draft reply" sub={title ?? undefined} />
@@ -245,35 +280,7 @@ export function ReplyScreen() {
         <section className="rdraft">
           <div className="row">
             <span className="eyebrow grow">Drafted reply</span>
-            <Seg<Tone>
-              label="Tone"
-              value={tone}
-              onChange={(t) => {
-                setTone(t);
-                if (r) void run(t);
-              }}
-              options={[
-                ["brief", "Brief"],
-                ["warm", "Warm"],
-                ["formal", "Formal"],
-              ]}
-            />
-            <span
-              title={
-                busy
-                  ? "The model is drafting the reply"
-                  : !chosen && !pasted.trim()
-                    ? "Pick a captured thread or paste one first"
-                    : r
-                      ? "Draft the reply again, replacing this one"
-                      : "Have the model draft a reply to the thread, drawing on your vault"
-              }
-            >
-              <button type="button" className="btn pri" disabled={busy || (!chosen && !pasted.trim())} onClick={() => void run()}>
-                <Icon name={r ? "refresh" : "ask"} size={14} />
-                {busy ? "Drafting…" : r ? "Redraft" : "Draft"}
-              </button>
-            </span>
+            {r && controls}
           </div>
           {error && <p className="err">{error}</p>}
           {/* The reply's card, level with the thread's, both as tall as the window lets them be. */}
@@ -281,11 +288,18 @@ export function ReplyScreen() {
             <textarea className="card rbody" value={draft} onChange={(e) => setDraft(e.target.value)} aria-label="The reply" />
           ) : (
             <div className="card rbody rempty">
-              <p className="faint">
-                {busy
-                  ? "Drafting the reply…"
-                  : "The draft reads the thread, checks what it asked, and looks up the people and topics in your vault."}
-              </p>
+              {busy ? (
+                <p className="faint">
+                  <span className="spin" /> Drafting the reply…
+                </p>
+              ) : (
+                <div className="rstart">
+                  <p className="muted">
+                    The draft reads the thread, checks what it asked, and looks up the people and topics in your vault. Choose a tone:
+                  </p>
+                  <div className="row">{controls}</div>
+                </div>
+              )}
             </div>
           )}
           {r && (

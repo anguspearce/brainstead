@@ -274,6 +274,20 @@ export function CompareScreen() {
             </div>
           )}
         </section>
+        {/* Before anything's compared: what the two ways do, so the page isn't just a form. */}
+        {!r && !run && !error && (
+          <div className="dcempty">
+            <p>
+              <b>Differences</b> shows where two documents disagree, what's only in one of them, and what they agree on.
+            </p>
+            <p>
+              <b>What changed</b> reads B as the earlier version and A as the newer one, and lists what was added, removed and changed.
+            </p>
+            <p className="faint">
+              Choose the documents above, from the vault or a file. Brainstead first checks they're about the same thing.
+            </p>
+          </div>
+        )}
         {r && r.unrelated && (
           <div className="doc-banner warn" role="status">
             <Icon name="info" size={14} />

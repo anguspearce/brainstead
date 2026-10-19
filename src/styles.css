@@ -2795,6 +2795,25 @@ button.rrow.rlink:hover {
   margin-top: 8px;
 }
 
+/* Draft reply before a draft: what it does, the tone and Draft, in the middle of the reply's card. */
+.rbody.rempty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rstart {
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+.rstart p {
+  margin: 0;
+  line-height: 1.5;
+}
+
 /* A titled group of tasks (Projects: Next actions, Waiting for…) */
 .ghead {
   display: flex;
@@ -7749,9 +7768,27 @@ select.sel {
   border-left: 0;
   overflow: visible;
 }
+
+/* Compare before anything's compared: what its two ways do. */
+.dcempty {
+  max-width: 620px;
+  padding: 8px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink2);
+}
+.dcempty p {
+  margin: 0;
+}
+.dcempty b {
+  color: var(--ink);
+}
 .mdetails {
-  margin: 14px 14px 0;
-  padding: 14px 16px;
+  margin: 20px 20px 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;

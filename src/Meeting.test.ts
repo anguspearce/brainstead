@@ -96,6 +96,6 @@ describe("the Meeting notes card", () => {
   });
 
   it("can't make anything while the vault is read-only", () => {
-    expect(cardFor(ok, {}, { readOnly: true }).actions).toEqual(["openVault"]);
+    expect(cardFor(ok, {}, { readOnly: true }).actions).toEqual([]);
   });
 });

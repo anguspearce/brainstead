@@ -1,5 +1,5 @@
 ---
-title: Meeting note from a transcript
+title: Meeting notes
 kind: screen
 screens: [meeting]
 order: 21
