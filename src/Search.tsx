@@ -200,73 +200,76 @@ export function SearchScreen() {
           ))}
         </nav>
         <div className="spage">
-          <div className="sbar">
-            <SearchBox
-              value={typed}
-              onChange={setQ}
-              onKeyDown={key}
-              inputRef={input}
-              placeholder='Search everything — +must -not "exact phrase" tag:x'
-              className="grow lg"
-            />
-            <div className="chips">
-              {LAYERS.map((l) => (
-                <button
-                  key={l}
-                  type="button"
-                  className={`chip f ${layers.includes(l) ? "on" : ""}`}
-                  aria-pressed={layers.includes(l)}
-                  title={
-                    layers.includes(l)
-                      ? `Leave ${LAYER_LABEL[l].toLowerCase()}s out of the results`
-                      : `Include ${LAYER_LABEL[l].toLowerCase()}s in the results`
-                  }
-                  onClick={() => toggle(l)}
-                >
-                  {LAYER_LABEL[l]}
+          {/* The box, its filters and the count stay put; only the results scroll. */}
+          <div className="shead">
+            <div className="sbar">
+              <SearchBox
+                value={typed}
+                onChange={setQ}
+                onKeyDown={key}
+                inputRef={input}
+                placeholder='Search everything — +must -not "exact phrase" tag:x'
+                className="grow lg"
+              />
+              <div className="chips">
+                {LAYERS.map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    className={`chip f ${layers.includes(l) ? "on" : ""}`}
+                    aria-pressed={layers.includes(l)}
+                    title={
+                      layers.includes(l)
+                        ? `Leave ${LAYER_LABEL[l].toLowerCase()}s out of the results`
+                        : `Include ${LAYER_LABEL[l].toLowerCase()}s in the results`
+                    }
+                    onClick={() => toggle(l)}
+                  >
+                    {LAYER_LABEL[l]}
+                  </button>
+                ))}
+              </div>
+              <select
+                className="sel"
+                aria-label="When"
+                title="Only notes dated (or changed) in this time"
+                value={when}
+                onChange={(e) => setWhen(e.target.value)}
+              >
+                {WHEN.map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+              <Seg<"best" | "newest" | "oldest">
+                label="Order"
+                value={sort}
+                onChange={setSort}
+                options={[
+                  ["best", "Best match", "The best matches first"],
+                  ["newest", "Latest", "The latest first, by the note's date or the day it last changed"],
+                  ["oldest", "Oldest", "The oldest first, by the note's date or the day it last changed"],
+                ]}
+              />
+            </div>
+            {found?.error && (
+              <div className="scount err" role="alert">
+                The search didn't run: {found.error}{" "}
+                <button type="button" className="btn sm" title="Run the search again" onClick={found.retry}>
+                  Retry
                 </button>
-              ))}
-            </div>
-            <select
-              className="sel"
-              aria-label="When"
-              title="Only notes dated (or changed) in this time"
-              value={when}
-              onChange={(e) => setWhen(e.target.value)}
-            >
-              {WHEN.map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
-            <Seg<"best" | "newest" | "oldest">
-              label="Order"
-              value={sort}
-              onChange={setSort}
-              options={[
-                ["best", "Best match", "The best matches first"],
-                ["newest", "Latest", "The latest first, by the note's date or the day it last changed"],
-                ["oldest", "Oldest", "The oldest first, by the note's date or the day it last changed"],
-              ]}
-            />
+              </div>
+            )}
+            {r && !found?.error && (
+              <div className="faint scount">
+                {r.total === 0
+                  ? "No matches"
+                  : `${fmtCount(r.total)} ${r.total === 1 ? "file" : "files"}${r.total > hits.length ? `, the best ${hits.length} shown` : ""}`}{" "}
+                · {r.ms.toFixed(0)} ms
+              </div>
+            )}
           </div>
-          {found?.error && (
-            <div className="scount err" role="alert">
-              The search didn't run: {found.error}{" "}
-              <button type="button" className="btn sm" title="Run the search again" onClick={found.retry}>
-                Retry
-              </button>
-            </div>
-          )}
-          {r && !found?.error && (
-            <div className="faint scount">
-              {r.total === 0
-                ? "No matches"
-                : `${fmtCount(r.total)} ${r.total === 1 ? "file" : "files"}${r.total > hits.length ? `, the best ${hits.length} shown` : ""}`}{" "}
-              · {r.ms.toFixed(0)} ms
-            </div>
-          )}
           {!r && (
             <div className="shelp faint">
               <p>
