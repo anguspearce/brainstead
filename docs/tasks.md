@@ -70,7 +70,7 @@ Tasks (⌘3) has the GTD lists: **Next actions**, **Follow-ups**, **Waiting for*
 
 A project is a note named `Project. <name>.md`, with its status, area and outcome as properties. Its tasks are the ones written in it plus any that link it. Projects (⌘4) lists them by status and area.
 
-An active project is **Stuck** (red) with no next action, and **Quiet** (amber) when nothing has moved for two weeks. Add next actions, edit the outcome, area and status, and draft nudges for waiting-fors. **New project** writes the note with its headings.
+An active project with no next action says **No next action** in red, and one where nothing has moved for two weeks says **Quiet** in amber. Add next actions, edit the outcome, area and status, and draft nudges for waiting-fors. **New project** writes the note with its headings.
 
 - Click an area to fold its projects away; what's folded is remembered. Its pencil renames the area on every project under it; it keeps its place in the order, and undoing the rename (the toast's Undo, ⌘Z, Revert in Changes) puts it back where it was.
 - Drag an area, or a project within its area, by its grip to put them in order. The order is a Brainstead setting, not written to your notes; ones never moved come after, A to Z.

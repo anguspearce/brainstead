@@ -44,13 +44,12 @@ Moving over from another notes app? When its files are in the vault, the **Movin
 
 The sidebar, top to bottom:
 
-- **Today**, **Inbox**, **Tasks**, **Projects**, **Weekly review**, **Changes** and **Ask**;
-- the library: **Search**, **Notes**, **Wiki**, **Sources**, **Templates**, **Graph**;
-- the tools: **Draft reply**, **Meeting notes** and **Compare**; a spinner beside Meeting notes or Compare means it's at work;
+- **Today**, **Inbox**, **Tasks**, **Projects**, **Weekly review** and **Ask**;
+- the library: **Search**, **Notes**, **Wiki**, **Sources**, **Templates**, **Graph**, then **Tools**, a menu of **Draft reply**, **Meeting notes** and **Compare** (a spinner beside it means one is at work);
 - your **Bookmarks**;
-- at the foot, **Knowledge health**, **Activity**, **Trash**, **Settings**, and whether the index is up to date.
+- at the foot, **Changes**, **Knowledge health**, **Activity**, **Trash**, **Settings**, and the index's line (a dot only while it's indexing, or if it failed).
 
-Counts that need you, such as the Inbox and changes held for you, are filled badges.
+Counts that need you, such as overdue tasks, the Inbox and changes held for you, are in bold.
 
 | Keys | What they do |
 |---|---|
@@ -60,6 +59,7 @@ Counts that need you, such as the Inbox and changes held for you, are filled bad
 | ⌘N | New note |
 | ⇧⌘P | Read the open note aloud, then play or pause |
 | ⌘. | Focus mode for the open note, wiki page or source; Esc leaves it |
+| ⌥⌘1 ⌥⌘2 ⌥⌘3 | View, Edit or Source for the open note |
 | ⌘1 … ⌘9, ⌘0 | Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki, Sources |
 | ⌘[ ⌘] | Back, forward |
 | ⌘Z | Undo the last change |

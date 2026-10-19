@@ -20,11 +20,11 @@ Brainstead opens a vault you choose read-only (a new one it makes for you opens 
 
 Brainstead checks for a new version once a day and offers to install it; Brainstead › Check for Updates… checks now.
 
-<a href="docs/images/index.md#the-readme"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/today-dark.png"><img alt="Today: overdue, due and deferred tasks, what you're waiting for, the capture box, and where you left off" src="docs/images/today-light.png"></picture></a>
+<a href="docs/images/index.md#the-readme"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/today-dark.png"><img alt="Today: the day in a sentence, the capture box, overdue and deferred tasks, what you're waiting for, and where you left off" src="docs/images/today-light.png"></picture></a>
 
 ## What it does
 
-- **Today and [GTD](https://gettingthingsdone.com).** Today shows what's overdue, due and waiting. Quick capture (⌃⌥Space) works from any app. The Inbox, Tasks, Projects and a guided weekly review do the rest. [Tasks and GTD](docs/tasks.md)
+- **Today and [GTD](https://gettingthingsdone.com).** Today sums up your day in a sentence and shows what's overdue, due, coming up this week and waiting. Quick capture (⌃⌥Space) works from any app. The Inbox, Tasks, Projects and a guided weekly review do the rest. [Tasks and GTD](docs/tasks.md)
 - **Notes.** Read in View, write in Edit or Source. Wikilinks, tags, callouts, maths, diagrams, Tasks queries, Dataview and Templater all work. Saving never reformats what you didn't change, and won't overwrite a file changed elsewhere. [Notes](docs/notes.md)
 - **A wiki built from your sources.** Ingest emails, Teams chats, PDFs, Office files and images, and the assistant writes wiki pages with every claim quoted from its source. Brainstead checks each quote. [The wiki and sources](docs/wiki.md)
 - **Ask.** Chat with your assistant about your vault, or let it drive Brainstead from Terminal. It can do almost anything you can do in the app. It can add images for the notes it writes, too. Every change is listed in Changes, where you can revert it. [Ask and assistants](docs/ask.md)
