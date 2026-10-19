@@ -7,7 +7,7 @@
 // Trash. On an open document (when it passes `doc`) also copy as rich text and export PDF. Copying happens in Rust, so it isn't lost
 // when WebKit decides the click was too long ago.
 
-import { useEffect, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { api, FileSummary } from "./api";
 import { Icon } from "./icons";
 import { nav } from "./nav";
@@ -60,7 +60,18 @@ export function useFileMenu(): MenuState {
 
 /** `doc`: the open document's rendered element, for Copy rich text and Export PDF. `readFrom`: on a
  *  paragraph of the open note, reads it aloud from there. */
-export function FileMenu({ menu, doc, readFrom }: { menu: MenuState; doc?: () => HTMLElement | null; readFrom?: () => void }) {
+export function FileMenu({
+  menu,
+  doc,
+  readFrom,
+  extra,
+}: {
+  menu: MenuState;
+  doc?: () => HTMLElement | null;
+  readFrom?: () => void;
+  /** Items first, before the file's own (an open note's Graph, Read aloud, Text size and Focus mode). */
+  extra?: (close: () => void) => ReactNode;
+}) {
   const f = menu.file;
   const [hasDraft, setHasDraft] = useState(false);
   useEffect(() => {
@@ -95,6 +106,7 @@ export function FileMenu({ menu, doc, readFrom }: { menu: MenuState; doc?: () =>
   return (
     <Popover anchor={menu.at} onClose={menu.close} width={230}>
       <div className="menu" role="menu">
+        {extra?.(menu.close)}
         {/* The note's own actions first; then copying; then out to a file or Finder; then changing
             the file; Move to the Trash on its own at the bottom. */}
         {readFrom && (

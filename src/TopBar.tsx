@@ -2,12 +2,13 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { askWith } from "./askState";
 import { Icon } from "./icons";
 import { nav, place } from "./nav";
 import { useStore } from "./store";
 import { HelpButton } from "./help/HelpDrawer";
+import { Popover } from "./ui";
 
 /** Back and forward, on every screen's top bar. */
 export function HistButtons() {
@@ -54,6 +55,57 @@ export function AskButton({ ask }: { ask: AskAbout }) {
       <Icon name="ask" size={ask.sm ? 13 : 14} />
       Ask
     </button>
+  );
+}
+
+/** One of a top bar's less used actions, in its More menu. */
+export interface MoreItem {
+  label: string;
+  icon: string;
+  title: string;
+  run: () => void;
+  disabled?: boolean;
+}
+
+/** A top bar's "…": the screen's less used actions, so the bar keeps one or two of its own. */
+export function MoreMenu({ items, title }: { items: MoreItem[]; title: string }) {
+  const [at, setAt] = useState<DOMRect | null>(null);
+  return (
+    <>
+      <button
+        type="button"
+        className="ibtn"
+        aria-label="More"
+        aria-haspopup="menu"
+        aria-expanded={!!at}
+        title={title}
+        onClick={(e) => setAt(e.currentTarget.getBoundingClientRect())}
+      >
+        <Icon name="more" />
+      </button>
+      {at && (
+        <Popover anchor={at} onClose={() => setAt(null)} width={240}>
+          <div className="menu" role="menu">
+            {items.map((i) => (
+              <button
+                key={i.label}
+                type="button"
+                role="menuitem"
+                title={i.title}
+                disabled={i.disabled}
+                onClick={() => {
+                  setAt(null);
+                  i.run();
+                }}
+              >
+                <Icon name={i.icon} size={14} />
+                {i.label}
+              </button>
+            ))}
+          </div>
+        </Popover>
+      )}
+    </>
   );
 }
 

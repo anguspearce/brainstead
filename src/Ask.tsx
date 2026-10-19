@@ -846,7 +846,9 @@ function Composer({ c, found }: { c: Chat; found: CliInfo[] | null }) {
               No direct edits
             </span>
             <span className="sp" />
-            <span title={locked ? "Each chat keeps its model: start a new chat for another." : "Choose the model"}>
+            <span
+              title={`${locked ? "Each chat keeps its model: start a new chat for another." : "Choose the model."} It runs ${CLI_LABEL[cliOf(model)]} on this computer through Brainstead's tools; a chat stays in Brainstead until you Save it.`}
+            >
               <button
                 type="button"
                 className="btn sm"
@@ -863,10 +865,7 @@ function Composer({ c, found }: { c: Chat; found: CliInfo[] | null }) {
             </button>
           </div>
         </div>
-        <div className="faint askhint">
-          Runs {CLI_LABEL[cliOf(model)]} on this computer through Brainstead's tools; a chat stays in Brainstead until you Save it · / skill
-          · [[ note · # tag · ↑ earlier · ↩ send · ⇧↩ new line
-        </div>
+        <div className="faint askhint">/ skill · [[ note · # tag · ↑ earlier · ⇧↩ new line</div>
       </div>
       {models && (
         <Popover anchor={models} onClose={() => setModels(null)} width={300} place="above">

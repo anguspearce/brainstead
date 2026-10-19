@@ -311,14 +311,17 @@ export function CaptureBox({
               role="radio"
               aria-checked={kind === k}
               className={kind === k ? "on" : ""}
-              title={k === "task" ? "Capture as a task on the To Do list" : "Capture as a thought in the Scratchpad"}
+              title={
+                k === "task"
+                  ? "Capture as a task on the To Do list (Tab switches)"
+                  : "Capture as a thought in the Scratchpad (Tab switches)"
+              }
               onClick={() => setKind(k)}
             >
               {k === "task" ? "Task" : "Thought"}
             </button>
           ))}
         </div>
-        {!narrow && <span className="faint">Tab to switch</span>}
         <span className="sp" />
         <span className="faint kbdhint">
           <span className="kbd">↩</span>

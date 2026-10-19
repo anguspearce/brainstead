@@ -42,7 +42,7 @@ import {
 import { nav, openDoc, useViewState } from "./nav";
 import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
-import { TopBar } from "./TopBar";
+import { MoreMenu, TopBar } from "./TopBar";
 import { Dialog } from "./ui";
 import { Store, useStore } from "./store";
 import { vaultVersion } from "./state";
@@ -154,6 +154,7 @@ export function HealthScreen() {
   const ghosts = useMemo(() => ghostHelps(r, paths, trashed), [r, paths, trashed]);
   const need = decisions(r);
 
+  const rechecking = useStore(busy).has("recheck");
   const recheck = () =>
     act(
       "recheck",
@@ -176,21 +177,9 @@ export function HealthScreen() {
     <main className="main">
       <TopBar
         title="Knowledge health"
-        sub={r ? `${r.wikiPages} wiki pages · ${r.sources} sources · rechecks when the vault changes` : "Checking…"}
+        sub={r ? `${r.wikiPages} wiki pages · ${r.sources} sources` : "Checking…"}
         ask={{ about: "the wiki's health", prompt: "About my wiki's health: " }}
       >
-        <button
-          type="button"
-          className="btn"
-          title="Show places where wiki pages disagree with each other"
-          onClick={() => nav.go("contradictions")}
-        >
-          <Icon name="info" size={14} />
-          Contradictions
-        </button>
-        <BusyButton id="recheck" icon="refresh" className="btn" title="Run the checks again now" onClick={recheck}>
-          Check now
-        </BusyButton>
         <BusyButton
           id="fix-all"
           icon="check"
@@ -211,6 +200,24 @@ export function HealthScreen() {
           <Icon name="ask" size={14} />
           Fix with Ask
         </button>
+        <MoreMenu
+          title="Check now, Contradictions"
+          items={[
+            {
+              label: rechecking ? "Checking…" : "Check now",
+              icon: "refresh",
+              title: "Run the checks again now (they run by themselves when the vault changes)",
+              disabled: rechecking,
+              run: recheck,
+            },
+            {
+              label: "Contradictions",
+              icon: "info",
+              title: "Show places where wiki pages disagree with each other",
+              run: () => nav.go("contradictions"),
+            },
+          ]}
+        />
       </TopBar>
       <div className="body health">
         <div className="hmain">

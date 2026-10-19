@@ -875,11 +875,7 @@ export function TemplatesScreen() {
   ];
   return (
     <main className="main">
-      <TopBar
-        title="Templates"
-        sub="Open one to edit it; Test run shows the note it makes"
-        ask={{ about: "your templates", prompt: "About my templates: " }}
-      >
+      <TopBar title="Templates" ask={{ about: "your templates", prompt: "About my templates: " }}>
         <button type="button" className="btn pri" title="Make a new template in the Templates folder" onClick={() => setMaking(true)}>
           <Icon name="plus" size={14} />
           New template

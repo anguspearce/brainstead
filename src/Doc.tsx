@@ -359,7 +359,6 @@ export function DocScreen() {
     setNoteMenu((a) => actRef.current(a));
     return () => setNoteMenu(null);
   }, [open]);
-  const [copyAt, setCopyAt] = useState<DOMRect | null>(null);
 
   // Sources (and anything that isn't markdown) only read.
   const shown: DocMode = !s || !canEdit ? "read" : mode;
@@ -501,6 +500,66 @@ export function DocScreen() {
   const textSizeButton = s ? (
     <TextSizeButton off={isMarkdown(s.path) ? undefined : "Text size applies to notes and pages, not this kind of file"} />
   ) : null;
+  useTextSizeKeys(!!s && isMarkdown(s.path));
+  const [sizeAt, setSizeAt] = useState<DOMRect | null>(null);
+  // The note's view actions, at the top of its More menu (the bar keeps View/Edit, Bookmark and More).
+  const viewItems = (close: () => void) =>
+    s && (
+      <>
+        <button
+          type="button"
+          role="menuitem"
+          disabled={s.layer === "template"}
+          title={s.layer === "template" ? "Templates aren't in the graph" : "Open the graph around this page"}
+          onClick={() => (close(), openGraph(s.path))}
+        >
+          <Icon name="graph" size={14} />
+          Graph around this page
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          disabled={!isMarkdown(s.path) || !voiceList.length}
+          title={
+            !isMarkdown(s.path)
+              ? "Read aloud reads notes and pages, not this kind of file"
+              : !voiceList.length
+                ? "Read aloud needs a system voice, and none was found"
+                : "Read the note aloud from the top (⇧⌘P)"
+          }
+          onClick={() => (close(), readAloud())}
+        >
+          <Icon name="speaker" size={14} />
+          Read aloud
+          <span className="kbd">⇧⌘P</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          disabled={!isMarkdown(s.path)}
+          title={
+            isMarkdown(s.path)
+              ? "Make the text larger or smaller (⌘+ ⌘− ⌘0)"
+              : "Text size applies to notes and pages, not this kind of file"
+          }
+          onClick={() => (close(), setSizeAt(menu.at))}
+        >
+          <Icon name="textsize" size={14} />
+          Text size…
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          title="Focus mode: just the text, full window (⌘.)"
+          onClick={() => (close(), focusMode.set(true))}
+        >
+          <Icon name="expand" size={14} />
+          Focus mode
+          <span className="kbd">⌘.</span>
+        </button>
+        <div className="sep" />
+      </>
+    );
 
   return (
     <main className={`main${focus ? " focused" : ""}`} ref={mainEl}>
@@ -611,54 +670,14 @@ export function DocScreen() {
               <Icon name="pin" />
             </button>
           )}
-          {s && (
-            <button
-              type="button"
-              className="ibtn"
-              aria-label="Copy"
-              title="Copy"
-              onClick={(e) => setCopyAt(e.currentTarget.getBoundingClientRect())}
-            >
-              <Icon name="copy" />
-            </button>
-          )}
-          {s && (
-            <button type="button" className="ibtn" aria-label="Rename" title="Rename… (⇧⌘R)" onClick={() => void fileAction("rename", s)}>
-              <Icon name="rename" />
-            </button>
-          )}
-          {/* The same buttons in the same order on every kind of file; one that doesn't apply is greyed, saying why. */}
-          {s &&
-            (s.layer !== "template" ? (
-              <button type="button" className="ibtn" aria-label="Graph" title="Graph around this page" onClick={() => openGraph(s.path)}>
-                <Icon name="graph" />
-              </button>
-            ) : (
-              <span title="Templates aren't in the graph">
-                <button type="button" className="ibtn" aria-label="Graph" disabled>
-                  <Icon name="graph" />
-                </button>
-              </span>
-            ))}
-          {s && readAloudButton}
-          {s && textSizeButton}
-          {s && (
-            <button
-              type="button"
-              className="ibtn"
-              aria-label="Focus mode"
-              title="Focus mode: just the text, full window (⌘.)"
-              onClick={() => focusMode.set(true)}
-            >
-              <Icon name="expand" />
-            </button>
-          )}
+          {/* While it's being read: the reading's pause and carry on, beside More. */}
+          {s && reading.on && reading.path === s.path && readAloudButton}
           {s && (
             <button
               type="button"
               className="ibtn"
               aria-label="More"
-              title="More actions for this file"
+              title="Graph, read aloud, text size, focus mode, copy, rename and more for this file"
               onClick={(e) => menu.open(e.currentTarget.getBoundingClientRect(), s)}
             >
               <Icon name="more" />
@@ -847,39 +866,9 @@ export function DocScreen() {
           onShow={() => speechRef.current[player.get().index]?.el.scrollIntoView({ block: "center", behavior: "smooth" })}
         />
       )}
-      <FileMenu menu={menu} doc={richEl} readFrom={readFromEl ? () => readAloud(readFromEl) : undefined} />
+      <FileMenu menu={menu} doc={richEl} readFrom={readFromEl ? () => readAloud(readFromEl) : undefined} extra={viewItems} />
+      {sizeAt && <TextSizePanel anchor={sizeAt} onClose={() => setSizeAt(null)} />}
       {testing && s && <TestRun path={s.path} src={liveText ?? doc?.content ?? ""} onClose={() => setTesting(false)} />}
-      {copyAt && s && (
-        <Popover anchor={copyAt} onClose={() => setCopyAt(null)} width={200}>
-          <div className="menu" role="menu">
-            {(
-              [
-                ["copy-markdown", "Markdown", isMarkdown(s.path)],
-                ["copy-rich", "Rich text", isMarkdown(s.path)],
-                ["copy-path", "Path", true, "⌥⌘C"],
-                ["copy-title", "Title", true],
-              ] as [FileAction, string, boolean, string?][]
-            )
-              .filter(([, , ok]) => ok)
-              .map(([a, label, , key]) => (
-                <button
-                  key={a}
-                  type="button"
-                  role="menuitem"
-                  title={`${COPY_TIPS[a] ?? `Copy the ${label.toLowerCase()}`}${key ? ` (${key})` : ""}`}
-                  onClick={() => {
-                    setCopyAt(null);
-                    void fileAction(a, s, richEl());
-                  }}
-                >
-                  <Icon name="copy" size={14} />
-                  {label}
-                  {key && <span className="kbd">{key}</span>}
-                </button>
-              ))}
-          </div>
-        </Popover>
-      )}
       {picking && (
         <Popover anchor={picking.at} onClose={() => setPicking(null)} width={252}>
           <DatePicker
@@ -1091,14 +1080,13 @@ function Compare({ theirs, mine, onClose }: { theirs: string; mine: string; onCl
   );
 }
 
-/** A sibling app's text size control: a slider in a popover, saved in settings, ⌘+ / ⌘− / ⌘0 too.
- *  With `off`, greyed, and `off` says why. */
-export function TextSizeButton({ off }: { off?: string } = {}) {
-  const [a, setA] = useState<DOMRect | null>(null);
-  const size = useStore(settings).readSize ?? READ_SIZE.default;
-  const set = (px: number) => settings.update({ readSize: applyReadSize(px) });
+const setReadSize = (px: number) => settings.update({ readSize: applyReadSize(px) });
+
+/** ⌘+ / ⌘− / ⌘0 change the text size while `on` (a note or page is open). */
+function useTextSizeKeys(on: boolean) {
   useEffect(() => {
-    if (off) return;
+    if (!on) return;
+    const set = setReadSize;
     const k = (e: KeyboardEvent) => {
       if (!e.metaKey || e.altKey || e.ctrlKey) return;
       const cur = settings.get().readSize ?? READ_SIZE.default;
@@ -1110,7 +1098,44 @@ export function TextSizeButton({ off }: { off?: string } = {}) {
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
-  }, [off]);
+  }, [on]);
+}
+
+/** The text size slider, in a popover under `anchor`: saved in settings. */
+function TextSizePanel({ anchor, onClose }: { anchor: DOMRect; onClose: () => void }) {
+  const size = useStore(settings).readSize ?? READ_SIZE.default;
+  const set = setReadSize;
+  return (
+    <Popover anchor={anchor} onClose={onClose} width={260}>
+      <div className="textsize">
+        <div className="eyebrow">Text size · {size}px</div>
+        <div className="row">
+          <span style={{ fontSize: 12 }}>A</span>
+          <input
+            type="range"
+            min={READ_SIZE.min}
+            max={READ_SIZE.max}
+            value={size}
+            onChange={(e) => set(+e.target.value)}
+            aria-label="Text size"
+            style={{ flex: 1 }}
+          />
+          <span style={{ fontSize: 18 }}>A</span>
+        </div>
+        <span title={size === READ_SIZE.default ? "The text is already the default size" : "Set the text back to the default size (⌘0)"}>
+          <button type="button" className="btn sm" disabled={size === READ_SIZE.default} onClick={() => set(READ_SIZE.default)}>
+            Reset to {READ_SIZE.default}px
+          </button>
+        </span>
+      </div>
+    </Popover>
+  );
+}
+
+/** A sibling app's text size control: a button opening the slider (focus mode's bar has it; the
+ *  note's own bar has it in More). With `off`, greyed, and `off` says why. */
+export function TextSizeButton({ off }: { off?: string } = {}) {
+  const [a, setA] = useState<DOMRect | null>(null);
   if (off)
     return (
       <span title={off}>
@@ -1130,33 +1155,7 @@ export function TextSizeButton({ off }: { off?: string } = {}) {
       >
         <Icon name="textsize" />
       </button>
-      {a && (
-        <Popover anchor={a} onClose={() => setA(null)} width={260}>
-          <div className="textsize">
-            <div className="eyebrow">Text size · {size}px</div>
-            <div className="row">
-              <span style={{ fontSize: 12 }}>A</span>
-              <input
-                type="range"
-                min={READ_SIZE.min}
-                max={READ_SIZE.max}
-                value={size}
-                onChange={(e) => set(+e.target.value)}
-                aria-label="Text size"
-                style={{ flex: 1 }}
-              />
-              <span style={{ fontSize: 18 }}>A</span>
-            </div>
-            <span
-              title={size === READ_SIZE.default ? "The text is already the default size" : "Set the text back to the default size (⌘0)"}
-            >
-              <button type="button" className="btn sm" disabled={size === READ_SIZE.default} onClick={() => set(READ_SIZE.default)}>
-                Reset to {READ_SIZE.default}px
-              </button>
-            </span>
-          </div>
-        </Popover>
-      )}
+      {a && <TextSizePanel anchor={a} onClose={() => setA(null)} />}
     </>
   );
 }
@@ -1298,13 +1297,6 @@ export function h1RepeatsTitle(src: string, title: string): boolean {
   const norm = (t: string) => plainText(t).toLowerCase();
   return !!h && norm(h[1]) === norm(title);
 }
-
-const COPY_TIPS: Partial<Record<FileAction, string>> = {
-  "copy-markdown": "Copy the note's markdown source",
-  "copy-rich": "Copy the note formatted, to paste into an email or document",
-  "copy-path": "Copy the file's full path",
-  "copy-title": "Copy the note's title",
-};
 
 /** The document's light/dark switch, and its theme and colour (defaults in Settings › Notes). */
 function DocLookControls({ look }: { look: ReturnType<typeof useDocLook> }) {

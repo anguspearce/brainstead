@@ -17,7 +17,7 @@ A system note's header is the "This is a system note" callout at the top of note
 
 Stale pages, claims with no citation and pages with no Current state are worth a look but aren't counted (their icon is grey). Claims with no citation are listed one row per page: click it to open the page with those lines highlighted, or **Ignore** them all.
 
-Hover a check for what it looks for; click it to see its issues, and an issue to open its page. **Check now** runs every check again.
+Hover a check for what it looks for; click it to see its issues, and an issue to open its page. The checks run again by themselves when the vault changes; **Check now** on the top bar's ⋯ runs them at once.
 
 ## Fix the safe issues
 Some issues have one right answer, so Brainstead fixes them without asking:
@@ -69,7 +69,7 @@ A page that needs you says why: a heading whose year it can't tell, two summing-
 **Fix with Ask** starts a chat asking the assistant to fix the issues that need judgement. Its edits are listed in [Changes](app:review) with Revert; safe fixes are made at once and `⌘Z` undoes them. The button is greyed out when nothing needs a decision.
 
 ## Side cards and contradictions
-On the right, **Wiki pages by type** and **Wiki pages by tag** are pie charts; click a slice or row to open the [Wiki](app:wiki) filtered to it. **Pending sources** lists sources not yet cited and those changed since. **Contradictions** in the top bar opens the report of wiki pages that disagree.
+On the right, **Wiki pages by type** and **Wiki pages by tag** are pie charts; click a slice or row to open the [Wiki](app:wiki) filtered to it. **Pending sources** lists sources not yet cited and those changed since. **Contradictions** on the top bar's ⋯ opens the report of wiki pages that disagree.
 
 ## The daily check
 Turn on **Daily check** in [Settings › Jobs & schedule](app:settings/jobs) to have Brainstead, at the time you set (09:00 to start), look for contradictions in pages that changed and update the list of pages in `index.md`. It catches up after sleep. **Also refresh pages whose sources changed**, in [Settings › AI assistants](app:settings/assistants), has it ingest those sources again. Its notification also says how many pages have left the page shape, for **Reshape pages**. **Run now** runs it straight away and becomes **Stop** while it runs.

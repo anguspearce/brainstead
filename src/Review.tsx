@@ -278,9 +278,7 @@ export function ReviewScreen() {
             ? { about: `the change ${askQuote(cur.title)}`, prompt: `About the change “${cur.title}” to ${askLink(cur.page)}: ` }
             : { about: "Changes", prompt: "About the changes assistants made: " }
         }
-      >
-        <span className="faint small">What assistants and runs changed; a scheduled change that fails a check waits here</span>
-      </TopBar>
+      />
       {confirm?.revert && (
         <Dialog onClose={() => setConfirm(null)} width={440} label="Revert the run's changes">
           <div className="confirm">

@@ -67,7 +67,7 @@ The row under the note's details has two buttons:
 - The sun or moon shows all documents light or dark.
 - **Look:** sets this note's theme and colour. **Use the defaults** drops it, and **Defaults…** opens [Settings › Notes](app:settings/notes). The look is kept in Brainstead's settings, not in the note.
 
-Notes, wiki pages, sources and templates share the top-bar buttons: Bookmark, Copy, Rename (a pencil), Graph, Read aloud, Text size, Focus mode and ⋯, then Ask and help. One that doesn't apply is greyed, and its tooltip says why.
+Notes, wiki pages, sources and templates share the top bar: View, Edit and Source, Bookmark and ⋯, then Ask and help. ⋯ (or right-clicking the page) has **Graph around this page**, **Read aloud**, **Text size…** and **Focus mode** first, then copying, Export PDF, Reveal in Finder, Rename and Move to the Trash. One that doesn't apply is greyed, and its tooltip says why. While a note is being read aloud, its speaker shows beside ⋯ to pause and carry on.
 
 Some pages add buttons before these: a wiki page has **Refresh from sources**; a captured email or Teams thread has **Draft a reply**; another source has **Doc check**; a template has **Test run** and **Templater docs ↗**.
 
@@ -79,10 +79,10 @@ Rename edits the type, title and date, and shows the new filename and every link
 **Export PDF…** (`⌘P`) saves a light PDF in the note's look, images included, with the title and page numbers in the footer. **Copy rich text** pastes formatted into email or a document. **Move to the Trash** is on the ⋯ menu and the Note menu, with Undo.
 
 ## Focus mode
-Press `⌘.` (or the focus button, or **Focus Mode** on the Note menu) to give the page the whole window: the sidebar, side pane and details go, the text is centred a size larger, and the top bar keeps only the title, Read aloud, Text size and **Exit focus**. All three modes work. `Esc`, `⌘.` again, or another screen leaves it.
+Press `⌘.` (or **Focus mode** on ⋯, or **Focus Mode** on the Note menu) to give the page the whole window: the sidebar, side pane and details go, the text is centred a size larger, and the top bar keeps only the title, Read aloud, Text size and **Exit focus**. All three modes work. `Esc`, `⌘.` again, or another screen leaves it.
 
 ## Read aloud
-Click the speaker, or press `⇧⌘P`, to hear the note in View, with each word highlighted. To start from a paragraph, `⌥`-click it or right-click and choose **Read aloud from here**. The player bar at the foot has the controls, speed and voice; reading stops when you leave the note. Set the default voice and speed in [Settings › Notes](app:settings/notes).
+Choose **Read aloud** on ⋯, or press `⇧⌘P`, to hear the note in View, with each word highlighted. To start from a paragraph, `⌥`-click it or right-click and choose **Read aloud from here**. The player bar at the foot has the controls, speed and voice; reading stops when you leave the note. Set the default voice and speed in [Settings › Notes](app:settings/notes).
 
 - `⇧⌘P` or `F8`: start reading, or play and pause
 - `Space`: play or pause
