@@ -1,0 +1,37 @@
+// Copyright © 2026 Wayne Davies. Free software under the GNU General Public License, version 3 or later.
+// See LICENSE for the full text.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+import { act, cleanup, render } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null), convertFileSrc: (p: string) => p }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
+
+import { HelpDrawer, helpOpen } from "./HelpDrawer";
+
+afterEach(() => {
+  cleanup();
+  helpOpen.set(null);
+});
+
+describe("the help drawer's sections", () => {
+  it("open one at a time: opening one closes the one that was open", () => {
+    act(() => helpOpen.set({ topic: "tasks" }));
+    const { container } = render(<HelpDrawer />);
+    const secs = [...container.querySelectorAll<HTMLDetailsElement>("details.help-sec")];
+    expect(secs.length).toBeGreaterThan(2);
+    // They share a group, so the web view closes the others itself.
+    expect(new Set(secs.map((d) => d.getAttribute("name"))).size).toBe(1);
+    act(() => {
+      secs[1].open = true;
+      secs[1].dispatchEvent(new Event("toggle"));
+    });
+    act(() => {
+      secs[2].open = true;
+      secs[2].dispatchEvent(new Event("toggle"));
+    });
+    expect(secs.filter((d) => d.open)).toEqual([secs[2]]);
+  });
+});

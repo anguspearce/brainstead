@@ -77,9 +77,23 @@ function HelpText({ text }: { text: string }) {
   );
 }
 
-function Section({ s, open }: { s: HelpSection; open?: boolean }) {
+/** A topic's section, folded to its title. `group`: the sections that open one at a time (opening
+ *  one closes the one that was open, as <details name> does). */
+function Section({ s, open, group }: { s: HelpSection; open?: boolean; group?: string }) {
   return (
-    <details className="help-sec" open={open}>
+    <details
+      className="help-sec"
+      open={open}
+      name={group}
+      onToggle={(e) => {
+        // Where the web view doesn't close the group's others itself.
+        const d = e.currentTarget;
+        if (!group || !d.open) return;
+        d.parentElement
+          ?.querySelectorAll<HTMLDetailsElement>("details.help-sec[open]")
+          .forEach((x) => x !== d && x.getAttribute("name") === group && (x.open = false));
+      }}
+    >
       <summary>
         <Icon name="chevright" size={13} className="help-chev" />
         {s.title}
@@ -259,7 +273,7 @@ export function HelpDrawer() {
           <section className="help-block">
             {topic.intro && <HelpText text={topic.intro} />}
             {topic.sections.map((s) => (
-              <Section key={`${topic.id}:${s.title}`} s={s} open={s.title === first} />
+              <Section key={`${topic.id}:${s.title}`} s={s} open={s.title === first} group={`help:${topic.id}`} />
             ))}
           </section>
         )}
