@@ -482,6 +482,21 @@ function StartPage({
               </>
             )}
           </dl>
+          {/* What it goes through, phase by phase, numbered as the steps are. */}
+          <div className="wphases">
+            {[...new Set(STEPS.map((s) => s.phase))].map((ph) => (
+              <section key={ph}>
+                <h2 className="eyebrow">{ph}</h2>
+                <ol start={STEPS.findIndex((s) => s.phase === ph) + 1}>
+                  {STEPS.filter((s) => s.phase === ph).map((s) => (
+                    <li key={s.id} className={st.done.includes(STEPS.indexOf(s)) ? "done" : ""}>
+                      {s.title}
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            ))}
+          </div>
           <div className="row">
             {paused ? (
               <>

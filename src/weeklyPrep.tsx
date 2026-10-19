@@ -246,7 +246,7 @@ export function PrepRows({
   if (!open.length) return null;
   if (PROMPTS.includes(step))
     return (
-      <div className="card wprep" aria-label="Suggestions">
+      <div className="wprep" aria-label="Suggestions">
         <div className="eyebrow">To think about</div>
         <ul className="wprompts">
           {open.map((s) => (
@@ -258,7 +258,7 @@ export function PrepRows({
       </div>
     );
   return (
-    <div className="card wprep" aria-label="Suggestions">
+    <div className="wprep" aria-label="Suggestions">
       <div className="eyebrow">Suggested{open.length < rows.length ? ` · ${rows.length - open.length} dealt with` : ""}</div>
       {open.map((s) => {
         const c = choice(s, week, projects);
