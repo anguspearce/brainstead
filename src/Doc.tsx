@@ -701,7 +701,7 @@ export function DocScreen() {
                     <span className={`lb ${s.layer}`}>{LAYER_LABEL[s.layer]}</span>
                     {s.type && <span className="chip">{s.type}</span>}
                     {s.date && <span className="faint">{s.date}</span>}
-                    <span className="faint mono ell" title={s.path}>
+                    <span className="faint mono ell docpath" title={s.path}>
                       {s.path}
                     </span>
                     {dirty && (

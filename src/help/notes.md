@@ -16,7 +16,7 @@ Type two or more characters in **Search notes** to search text, titles and tags,
 - If the search fails, the error shows with **Retry**.
 
 ## Sort and filter
-Click a column header (Type, Title, Date, File, Modified, Size) to sort; click again to reverse. The list starts newest-modified first. Date comes from the file name, or the `date` or `created` property.
+Click a column header (Type, Title, Date, Modified, Size) to sort; click again to reverse. Hover over a title to see its file. The list starts newest-modified first. Date comes from the file name, or the `date` or `created` property.
 
 The chips filter by type: **All**, the five commonest types with counts, and **Other** for the rest and untyped notes. A type picked elsewhere, such as from an Activity pie, gets its own chip. **Group by type** bands the notes by type, untyped last. The count shown is on the right.
 

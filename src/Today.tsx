@@ -136,7 +136,7 @@ export function TodayScreen() {
           <div className="card cardcap">
             <CaptureBox compact />
           </div>
-          <section className="card ttable todaytable" role="table" aria-label="Today's tasks">
+          <section className="ttable todaytable" role="table" aria-label="Today's tasks">
             <TasksFailed />
             {contexts.length > 0 && !failed && (
               <div className="tctx">
@@ -287,7 +287,7 @@ function WaitingSince({ t, today }: { t: TaskRow; today: string }) {
 /** A right-rail card: a band for its title, then rows with dividers. */
 function SideCard({ title, right, children }: { title: string; right?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="card rcard" aria-label={title}>
+    <section className="rcard" aria-label={title}>
       <div className="tb-band rhead">
         <span>{title}</span>
         {right}
@@ -377,7 +377,7 @@ function SummaryCard({ kind }: { kind: "daily" | "weekly" }) {
   const when = block ? summaryDate(block.label, today) : "Not written yet";
   const anchor = block?.heading.replace(/^#+\s*/, "");
   return (
-    <section className="card rcard sumcard" aria-label={name}>
+    <section className="rcard sumcard" aria-label={name}>
       <button
         type="button"
         className="tb-band rhead sumhead"

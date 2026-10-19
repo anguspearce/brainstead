@@ -274,10 +274,8 @@ input {
   color: var(--ink);
 }
 .sect {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--ink3);
   padding: 14px 8px 4px;
   display: flex;
@@ -497,10 +495,8 @@ input {
   min-height: 0;
   background: var(--surface);
   border-bottom: 1px solid var(--line2);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--ink3);
   cursor: default;
 }
@@ -517,15 +513,14 @@ input {
   gap: 8px;
   height: 30px;
   padding: 0 16px 0 12px;
-  background: var(--sunk);
-  border-bottom: 1px solid var(--line2);
-  font-size: 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
   font-weight: 600;
-  letter-spacing: 0.02em;
   color: var(--ink2);
 }
 .tb-group + .tb-group .tb-band {
-  border-top: 1px solid var(--line2);
+  margin-top: 12px;
 }
 .tb-band > :first-child {
   display: flex;
@@ -545,15 +540,10 @@ input {
 .tb-band .n {
   flex: none;
   min-width: 20px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0;
-  text-align: center;
+  text-align: right;
   color: var(--ink3);
 }
 .tb-row {
@@ -608,11 +598,9 @@ input {
   margin: 0;
 }
 .eyebrow {
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--ink3);
+  color: var(--ink2);
 }
 .muted {
   color: var(--ink2);
@@ -939,10 +927,8 @@ input {
 }
 
 .pg {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--ink3);
   padding: 12px 20px 4px;
 }
@@ -1352,10 +1338,8 @@ input {
   padding-bottom: 0;
 }
 .fhead .fcell {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--ink3);
   border: 0;
   background: none;
@@ -1578,17 +1562,29 @@ mark.search-hit {
   align-self: start;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 28px;
   min-width: 0;
 }
+
+/* A side panel's section: no box of its own, its heading and the space around it group it. */
 .side-card {
-  padding: 14px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 .side-card p {
   margin: 0;
+}
+.dochead .docpath {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.dochead:hover .docpath {
+  opacity: 1;
 }
 
 .blink {
@@ -2544,11 +2540,10 @@ details.callout[open] .callout-chev {
 .tstat.zero span {
   color: var(--ink3);
 }
-.todaytable {
-  overflow: hidden;
-}
 .todaytable .tb-band {
   position: static;
+  padding-left: 0;
+  background: none;
 }
 .todaytable .tb-group {
   scroll-margin-top: 16px;
@@ -2561,7 +2556,7 @@ details.callout[open] .callout-chev {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  padding: 10px 16px 10px 12px;
+  padding: 10px 16px 10px 0;
   border-bottom: 1px solid var(--line);
   font-size: 12px;
 }
@@ -2589,8 +2584,7 @@ details.callout[open] .callout-chev {
 }
 .todaytable .tfoot {
   display: flex;
-  padding: 6px 8px;
-  background: var(--surface);
+  padding: 6px 0;
 }
 
 /* Waiting for rows: how long, and Draft nudge as an icon that shows on hover, focus or selection. */
@@ -2626,19 +2620,23 @@ details.callout[open] .callout-chev {
   top: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 28px;
   min-width: 0;
 }
 .rcard {
-  overflow: hidden;
   min-width: 0;
 }
 .rcard .rhead {
   position: static;
-  padding: 0 12px;
+  height: auto;
+  padding: 0 0 6px;
+  background: none;
+  border: 0;
+  font-size: 13px;
 }
-.rcard .rhead .n {
-  background: var(--surface);
+.rcard .rrow {
+  padding-left: 0;
+  border-bottom: 0;
 }
 .rrow {
   display: flex;
@@ -2666,20 +2664,14 @@ details.callout[open] .callout-chev {
 .rrow .n {
   flex: none;
   min-width: 20px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--sunk);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 12.5px;
   font-variant-numeric: tabular-nums;
-  text-align: center;
-  color: var(--ink2);
+  text-align: right;
+  color: var(--ink3);
 }
 .rcard .n.hot {
-  background: var(--accent);
-  border-color: transparent;
-  color: var(--on-accent);
+  font-weight: 600;
+  color: var(--ink);
 }
 .rrow .rstat {
   flex: none;
@@ -2718,17 +2710,14 @@ button.rrow.rlink:hover {
   color: var(--amber);
 }
 .rsub {
-  padding: 8px 12px 4px;
-  font-size: 11px;
+  padding: 10px 0 4px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--ink3);
-  border-bottom: 1px solid var(--line);
 }
 .rfoot {
   display: flex;
-  padding: 4px 6px;
+  padding: 4px 0;
 }
 
 /* Today's daily and weekly summary cards: the band folds and opens the block. */
@@ -5927,16 +5916,12 @@ code.noscript {
   overflow: auto;
 }
 .mg {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--ink3);
   padding: 8px 9px 4px;
 }
 .mg .v {
-  text-transform: none;
-  letter-spacing: 0;
   font-weight: 400;
 }
 .mpad {
@@ -6417,7 +6402,7 @@ select.sel {
 .pside {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 28px;
 }
 .pdone {
   display: flex;
@@ -6649,10 +6634,8 @@ select.sel {
   overflow-y: auto;
 }
 .wph {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--ink3);
   padding: 16px 10px 6px;
 }
@@ -7068,8 +7051,14 @@ select.sel {
 .hside {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 28px;
   min-width: 0;
+}
+.hside .card {
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
 }
 .hsum {
   padding: 16px 18px;
@@ -8333,10 +8322,8 @@ button.hc {
 }
 .asgroup {
   padding: 8px 10px 2px;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
   color: var(--ink3);
 }
 
@@ -8528,10 +8515,8 @@ button.hc {
   border-top: 1px solid var(--line);
 }
 .dcr.th {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--ink3);
   background: var(--sunk);
 }
@@ -8660,6 +8645,7 @@ button.hc {
 
 /* Cards beside a note: outline, open tasks */
 .blink.outline {
+  padding: 3px 0;
   font-size: 12.5px;
   color: var(--ink2);
 }

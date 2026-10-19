@@ -59,7 +59,7 @@ const titleCol = <T extends FileSummary>(drafts?: Set<string>): Column<T> => ({
   value: (r) => r.title,
   render: (r, hit) => (
     <div className="ftitle">
-      <span className="ell">
+      <span className="ell" title={r.path}>
         {r.title}
         {drafts?.has(r.path) && (
           <span className="chip amber draftmark" title="Unsaved changes are kept as a draft: open the note to save or discard them">
@@ -129,7 +129,6 @@ export function NotesScreen() {
     },
     titleCol(drafts),
     dateCol(),
-    { key: "path", label: "File", width: "2", value: (r) => r.path, render: (r) => <span className="faint ell mono">{r.path}</span> },
     modCol(),
     sizeCol(),
   ];
@@ -871,7 +870,6 @@ export function TemplatesScreen() {
           </span>
         ) : null,
     },
-    { key: "path", label: "File", width: "2", value: (r) => r.path, render: (r) => <span className="faint mono ell">{r.path}</span> },
     modCol(),
     sizeCol(),
   ];
