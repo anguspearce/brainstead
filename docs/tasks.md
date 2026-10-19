@@ -112,4 +112,4 @@ Tasks follow the widely used Tasks format, so other markdown editors read them:
 - A task belongs to a project when it's in the project's note or links it.
 - Tasks inside quotes and callouts (`> - [ ] …`) count too.
 
-The app shows dates and fields as icons and chips, never the emoji.
+The app shows dates and fields as icons and plain text under the task, never the emoji.

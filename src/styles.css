@@ -2296,17 +2296,42 @@ details.callout[open] .callout-chev {
 .trow .ts {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 8px;
+  gap: 2px 14px;
   align-items: center;
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: var(--ink3);
 }
+
+/* A task's details are one line of plain grey text, not pills: only an overdue date is coloured,
+   and one due in the next few days is darker. */
 .trow .ts .chip {
-  height: 20px;
-  font-size: 11px;
+  height: auto;
+  padding: 0;
+  gap: 4px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-size: inherit;
+  font-weight: 400;
+  color: inherit;
+}
+.trow .ts .chip.red {
+  color: var(--red);
+}
+.trow .ts .chip.amber {
+  color: var(--ink);
+}
+.trow .ts .tlink {
+  color: inherit;
+  font-size: inherit;
+}
+.trow .ts .chip.proj:hover,
+.trow .ts .tlink:hover {
+  color: var(--ink);
+  text-decoration: underline;
 }
 .trow .tag {
-  color: var(--accent-ink);
+  color: inherit;
 }
 
 /* Always there, muted until the row is hovered or selected, so the menu can be found. */
@@ -2328,8 +2353,14 @@ details.callout[open] .callout-chev {
 .tempty {
   padding: 14px 12px;
 }
+
+/* A project's task lists: under their heading, with no box round them. */
 .tcard {
   padding: 0;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
 }
 .mlabel {
   display: flex;
@@ -6383,7 +6414,7 @@ select.sel {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 8px 10px;
   border-top: 1px solid var(--line);
   color: var(--ink3);
 }

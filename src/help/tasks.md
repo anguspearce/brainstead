@@ -84,6 +84,6 @@ Tasks are plain markdown, so other editors read them too.
 - A recurring task carries a rule such as `🔁 every week`. Tick it and the next one is added above, with its dates moved on.
 - Tasks inside quotes and callouts (`> - [ ] Call Maya`) work like any other.
 
-Rows show these as chips, not emoji; in its project's own note a row shows the project chip, not the note's name. If the tasks can't be read, the list says **Couldn't load the tasks.** with **Retry**.
+Rows show these under the task as one line of grey text with small icons, not emoji: an overdue date is red and one due in the next three days is darker. In its project's own note a row shows the project, not the note's name. If the tasks can't be read, the list says **Couldn't load the tasks.** with **Retry**.
 
 An assistant can change tasks as you can here; each change is listed in [Changes](app:review) with Revert. A task it adds gets the list's tag, as **New task** does, and one with no project waits in the [Inbox](app:inbox).
