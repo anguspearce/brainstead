@@ -187,12 +187,6 @@ export function ProjectsScreen() {
           )}
           {!!shown.length && (
             <div className="ptable" role="table" aria-label={`${STATUS_LABEL[tab]} projects`}>
-              <div className="prow tb-head" role="row">
-                <span role="columnheader">Project</span>
-                <span role="columnheader">Next</span>
-                <span role="columnheader">Waiting</span>
-                <span role="columnheader">Last change</span>
-              </div>
               {asDragged("areas", areas, ([a]) => a).map(([area, ps]) => (
                 <div
                   key={area}
@@ -229,36 +223,26 @@ export function ProjectsScreen() {
                             pick(p);
                           }}
                         >
+                          {/* As Today's task rows: the name, then its counts as one grey line. */}
+                          <span
+                            className="pgrip"
+                            title="Drag to put it in order"
+                            aria-hidden="true"
+                            onPointerDown={(e) =>
+                              startDrag(
+                                e,
+                                "projects",
+                                `projects:${area}`,
+                                p.path,
+                                ps.map((x) => x.path),
+                              )
+                            }
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Icon name="grip" size={12} />
+                          </span>
                           <span className="nm" role="cell">
-                            <span
-                              className="pgrip"
-                              title="Drag to put it in order"
-                              aria-hidden="true"
-                              onPointerDown={(e) =>
-                                startDrag(
-                                  e,
-                                  "projects",
-                                  `projects:${area}`,
-                                  p.path,
-                                  ps.map((x) => x.path),
-                                )
-                              }
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Icon name="grip" size={12} />
-                            </span>
-                            <span className="flag">
-                              {flag && <Icon name="alert" size={13} style={{ color: flag === "none" ? "var(--red)" : "var(--amber)" }} />}
-                            </span>
                             <span className="ell">{p.name}</span>
-                            {flag && (
-                              <span
-                                className={`pflag ${flag === "none" ? "red" : "amber"}`}
-                                title={flag === "none" ? "Stuck: it has no next action" : "Quiet: nothing has happened for two weeks"}
-                              >
-                                {flag === "none" ? "Stuck" : "Quiet"}
-                              </span>
-                            )}
                             <button
                               type="button"
                               className="ibtn sm pedit"
@@ -272,14 +256,21 @@ export function ProjectsScreen() {
                               <Icon name="pencil" size={13} />
                             </button>
                           </span>
-                          <span role="cell" className={`m ${p.status === "active" && !p.next ? "red" : ""}`}>
-                            {p.next || (p.status === "active" ? "None" : "–")}
-                          </span>
-                          <span role="cell" className="m">
-                            {p.waiting || "–"}
-                          </span>
-                          <span role="cell" className={`m ${flag === "quiet" ? "amber" : ""}`}>
-                            {ago(p.lastTouched)}
+                          <span className="pmeta" role="cell">
+                            {p.status === "active" && !p.next ? (
+                              <span className="red" title="Stuck: it has no next action">
+                                No next action
+                              </span>
+                            ) : (
+                              <span>{p.next ? `${p.next} next` : "Nothing next"}</span>
+                            )}
+                            {p.waiting > 0 && <span>{p.waiting} waiting</span>}
+                            {flag === "quiet" && (
+                              <span className="amber" title="Quiet: nothing has happened for two weeks">
+                                Quiet
+                              </span>
+                            )}
+                            <span>Changed {ago(p.lastTouched)}</span>
                           </span>
                         </div>
                       );

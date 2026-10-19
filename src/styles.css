@@ -6184,26 +6184,20 @@ select.sel {
 
 /* The list is a table (.tb-head, .tb-band, .tb-row): a band per area, a row per project. */
 .ptable {
-  --tb-head: 34px;
+  --tb-head: 0px;
 
   padding-bottom: 24px;
 }
+
+/* A project's row, as Today's task rows: its name, then its counts as one grey line. */
 .prow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 52px 60px 84px;
-  gap: 12px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   width: 100%;
-  min-height: 38px;
-  padding: 0 16px 0 12px;
+  padding: 9px 16px 9px 12px;
   text-align: left;
   cursor: pointer;
-}
-.prow.tb-head {
-  min-height: 0;
-}
-.prow.tb-head span:first-child {
-  padding-left: 22px;
 }
 .prow .nm {
   display: flex;
@@ -6212,11 +6206,18 @@ select.sel {
   min-width: 0;
   font-weight: 500;
 }
-.prow .flag {
-  display: inline-flex;
-  flex: none;
-  justify-content: center;
-  width: 18px;
+.prow .pmeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  font-size: 12.5px;
+  color: var(--ink3);
+}
+.prow .pmeta .red {
+  color: var(--red);
+}
+.prow .pmeta .amber {
+  color: var(--amber);
 }
 
 /* An area's band folds its projects away; its pencil renames the area. */
@@ -6270,6 +6271,7 @@ select.sel {
 }
 .ptable .prow .pgrip {
   left: 28px;
+  top: 19px;
 }
 .pband:hover .pgrip,
 .prow:hover .pgrip {
@@ -6297,36 +6299,6 @@ select.sel {
 }
 .ptable .pedit:hover {
   color: var(--ink);
-}
-.prow .m,
-.prow.tb-head span + span {
-  font-size: 12px;
-  color: var(--ink2);
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.prow.tb-head span + span {
-  color: var(--ink3);
-  font-size: 11px;
-}
-.prow .m.red {
-  color: var(--red);
-  font-weight: 500;
-}
-.prow .m.amber {
-  color: var(--amber);
-}
-.prow .pflag {
-  flex: none;
-  font-size: 11px;
-  font-weight: 500;
-  margin-left: 4px;
-}
-.prow .pflag.red {
-  color: var(--red);
-}
-.prow .pflag.amber {
-  color: var(--amber);
 }
 .pdone.cancelled .ell {
   text-decoration: line-through;
