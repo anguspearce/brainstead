@@ -6771,9 +6771,8 @@ select.sel {
   overflow: hidden;
 }
 .wsteps {
-  background: var(--side);
   border-right: 1px solid var(--line);
-  padding: 4px 12px;
+  padding: 4px 8px;
   overflow-y: auto;
 }
 .wph {
@@ -6794,7 +6793,7 @@ select.sel {
   border: 0;
   border-radius: 7px;
   background: none;
-  font: 500 13px/1.35 var(--sans);
+  font: 400 13px/1.35 var(--sans);
   color: var(--ink2);
   cursor: pointer;
   text-align: left;
@@ -6817,10 +6816,12 @@ select.sel {
   background: var(--green-soft, var(--accent-soft));
   color: var(--green);
 }
+
+/* The step you're on, as the other left panes show their selection. */
 .wst.now {
-  background: var(--surface);
+  background: var(--accent-soft);
   color: var(--ink);
-  box-shadow: 0 0 0 1px var(--line);
+  font-weight: 500;
 }
 .wst.now .sd {
   border-color: transparent;
