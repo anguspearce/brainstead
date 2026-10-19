@@ -12,7 +12,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 
 import type { InboxItem } from "./api";
-import { doneNow, eachItem, eachSaid, inboxChoices, inboxItemKind, leadChoice, suggestKind } from "./inboxActions";
+import { choiceGroups, doneNow, eachItem, eachSaid, inboxChoices, inboxItemKind, leadChoice, suggestKind } from "./inboxActions";
 import table from "../tests/fixtures/inbox-choices.json";
 
 const item = (lineText: string): InboxItem =>
@@ -57,6 +57,18 @@ describe("each kind of Inbox item's choices", () => {
     const t = { kind: "task", path: "To Do.md", line: 3, text: "Call Maya", lineText: "- [ ] Call Maya", stamp: null } as InboxItem;
     expect(inboxChoices(t)).toEqual(["next", "project", "waiting", "done", "someday", "reference", "delete"]);
     expect(suggestKind(t)).toBe("task");
+  });
+  it("groups them as GTD asks: does it need doing? Ask is in neither", () => {
+    const mail = cap("sources/Email. Thread. Re Launch - 2026-10-02.md");
+    expect(choiceGroups(mail)).toEqual({
+      doing: ["reply", "next", "project", "waiting"],
+      notDoing: ["ingest", "someday", "reference", "delete"],
+      ask: true,
+    });
+    const t = cap("sources/Teams. Transcript. Steerco - 2026-10-02.md");
+    expect(choiceGroups(t)).toEqual({ doing: [], notDoing: ["meeting", "ingest", "reference", "delete"], ask: true });
+    const task = { kind: "task", path: "To Do.md", line: 3, text: "Call Maya", lineText: "- [ ] Call Maya", stamp: null } as InboxItem;
+    expect(choiceGroups(task).doing).toEqual(["next", "project", "waiting", "done"]);
   });
   it("knows a source's type in a subfolder of sources/ too, by its name", () => {
     expect(suggestKind(cap("sources/emails/Email. Steerco minutes - 2026-09-28.md"))).toBe("thread");

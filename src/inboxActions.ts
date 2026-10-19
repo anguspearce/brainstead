@@ -27,6 +27,22 @@ export function inboxChoices(i: InboxItem): string[] {
   return [...own, "next", "project", "someday", "reference", "delete"];
 }
 
+/** The choices that make it something to do (GTD's "is it actionable?"); the rest file, park or
+ *  drop it. */
+const NEEDS_DOING = new Set(["reply", "next", "waiting", "project", "done"]);
+
+/** An item's choices as the Inbox groups them: those that make it something to do, those that
+ *  don't, in inboxChoices' order, and whether it can be asked about (Ask leaves it in the Inbox,
+ *  so it's in neither group). */
+export function choiceGroups(i: InboxItem): { doing: string[]; notDoing: string[]; ask: boolean } {
+  const all = inboxChoices(i);
+  return {
+    doing: all.filter((c) => NEEDS_DOING.has(c)),
+    notDoing: all.filter((c) => !NEEDS_DOING.has(c) && c !== "ask"),
+    ask: all.includes("ask"),
+  };
+}
+
 /** The choice an item's buttons lead with, highlighted: a capture's leading source action (a
  *  transcript's meeting note, a thread's reply, else Ingest). */
 export const leadChoice = (i: InboxItem): string | null => (i.kind === "capture" ? (sourceActions(i.path)[0] ?? null) : null);

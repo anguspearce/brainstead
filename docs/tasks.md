@@ -33,7 +33,7 @@ Both kinds wait in the Inbox.
 
 <a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/inbox-dark.png"><img alt="The Inbox: captures, Scratchpad thoughts and tasks to clarify, one open with its choices" src="images/inbox-light.png"></picture></a>
 
-The Inbox (⌥⌘2) lists what you've captured but not decided: emails and Teams chats from the browser extensions, sources added to `sources/` and not yet ingested, Scratchpad thoughts, and tasks under Other on the To Do list. Pick one (`J` and `K` move) and choose what it becomes:
+The Inbox (⌥⌘2) lists what you've captured but not decided: emails and Teams chats from the browser extensions, sources added to `sources/` and not yet ingested, Scratchpad thoughts, and tasks under Other on the To Do list. Pick one (`J` and `K` move) and choose what it becomes. A suggestion from the AI shows first, and `↩` accepts it; the choices are in two lists, **It needs doing** and **It doesn't need doing**:
 
 | Key | Choice |
 |---|---|

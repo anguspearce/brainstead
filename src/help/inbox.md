@@ -17,7 +17,7 @@ There's a band per source:
 The sidebar shows how many items are waiting.
 
 ## Clarify an item
-Click an item, or move with `J` and `K` (or `↑` and `↓`), to open it. Then choose with a button or its key:
+Click an item, or move with `J` and `K` (or `↑` and `↓`), to open it. The choices come in two lists, GTD's question: **It needs doing** (Draft a reply, Next action, New project, Waiting for, Done now) and **It doesn't need doing** (a meeting note, Ingest into the wiki, Someday / maybe, File as reference or Keep in Sources, Delete or Move to the Trash). **Ask about this source** sits under them, as it leaves the item in the Inbox. Choose with a button or its key:
 
 - `N` **Next action**: a form for the text, project, context, effort and due date. It needs a project or a context, or it would land back in the Inbox; until then **Save** stays off.
 - `P` **New project**: opens New project with the item as its name.
@@ -52,7 +52,7 @@ The first choices on a capture are its source's own, the same as its row on [Sou
 As a task, a capture starts as `Follow up on [[the capture]]`.
 
 ## Let the AI suggest
-**Suggest** on an open item asks the AI what it should become, with a project, context, effort, due date and why. **Suggest for all** asks about the first 20 items at once. A Teams transcript is always suggested **a meeting note**, without asking the AI; a captured email or chat can also be suggested **ingest into the wiki** or, for a thread, **a reply**. The AI only suggests what the Inbox offers for that item: never Done now for a capture, and Waiting for only for a thread, thought or task. Nothing happens until you accept: press `↩` or **Accept suggestion** (a next action or waiting-for opens the form first). The model is set under Models by job in [Settings › AI assistants](app:settings/assistants).
+**Suggest** on an open item asks the AI what it should become, with a project, context, effort, due date and why. **Suggest for all** asks about the first 20 items at once. A Teams transcript is always suggested **a meeting note**, without asking the AI; a captured email or chat can also be suggested **ingest into the wiki** or, for a thread, **a reply**. The AI only suggests what the Inbox offers for that item: never Done now for a capture, and Waiting for only for a thread, thought or task. The suggestion shows first, above the choices, with its project, context, effort and due date in grey and why under them. Nothing happens until you accept: press `↩` or **Accept** (a next action or waiting-for opens the form first). While there's a suggestion, the item's usual first choice isn't highlighted. The model is set under Models by job in [Settings › AI assistants](app:settings/assistants).
 
 An assistant can ask for the same suggestions and accept one by clarifying the item. Like the form, it makes a next action only with a project or a context, and only in an active project.
 

@@ -14,7 +14,7 @@ import { fixNameOpen } from "./FixName";
 import { shortcutsOpen } from "./Shortcuts";
 import { helpOpen, HelpView } from "./help/HelpDrawer";
 import { readingScene } from "./speech/player";
-import type { Theme, WeekPrepStatus } from "./api";
+import type { ClarifySuggestion, Theme, WeekPrepStatus } from "./api";
 import { ask, blankChat } from "./askState";
 import { nav, Screen, SettingsPane } from "./nav";
 import { noteDialog } from "./notes/dialogs";
@@ -61,6 +61,8 @@ export interface Scene {
   image?: string;
   /** For "weekly": sample suggestions for the week, instead of preparing them. */
   weekprep?: boolean;
+  /** For "inbox": a sample suggestion for the open item, as Suggest would make. */
+  inboxSuggest?: boolean;
   /** A task's menu open, by its `path:line` (the task list's key). */
   taskMenu?: string;
   /** A toast to show, with an Undo button. */
@@ -99,6 +101,21 @@ function sampleChat() {
     queue: ["Draft three talking points for the steerco"],
   };
 }
+
+/** The Inbox scene's suggestion is on (`inboxSuggest`). */
+export const sceneInboxSuggest = new Store(false);
+
+/** The Inbox scene's suggestion, for the item `id`: the fixture's launch-date email, waited on. */
+export const sampleSuggestion = (id: string): ClarifySuggestion => ({
+  id,
+  becomes: "waiting",
+  text: "Theo to update the comms plan for the new launch date",
+  project: "Orbit App launch",
+  context: null,
+  effort: null,
+  due: "2026-11-07",
+  why: "The steerco moved the launch, and Theo is updating the comms plan: nothing for you to do until he has.",
+});
 
 /** The weekly review's scene suggestions are on (`weekprep`). */
 export const scenePrep = new Store(false);
@@ -174,6 +191,7 @@ export function applyScene(sc: Scene) {
   if (sc.dialog === "shortcuts") shortcutsOpen.set(true);
   if (sc.dialog === "fix-name") fixNameOpen.set({ wrong: sc.q, right: sc.title });
   if (sc.weekprep) scenePrep.set(true);
+  if (sc.inboxSuggest) sceneInboxSuggest.set(true);
   if (sc.image) imageView.set({ url: convertFileSrc(`${(settings.get().vaultPath ?? "").replace(/\/$/, "")}/${sc.image}`), alt: sc.image });
   if (sc.chat) ask.set({ chats: [sampleChat()], active: "scene" });
   if (sc.help) helpOpen.set(sc.help);

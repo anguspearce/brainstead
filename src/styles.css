@@ -6584,18 +6584,96 @@ select.sel {
   font-size: 14px;
   color: var(--ink2);
 }
+
+/* The AI's suggestion, first: what it becomes, its details in grey, why, and Accept (↩). */
 .isugg {
-  padding: 14px 18px;
+  padding: 14px 16px 14px 18px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
+  align-self: stretch;
+  border-color: var(--ring);
+}
+.isugg-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.isugg-what {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--accent-ink);
+}
+.isugg-text {
+  margin-top: 3px;
+  font-size: 15px;
+}
+.isugg-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  font-size: 12.5px;
+  color: var(--ink3);
+}
+.isugg-why {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink2);
+}
+.isugg .btn .kbd {
+  margin-left: 4px;
+  background: none;
+  border-color: color-mix(in srgb, var(--on-accent) 45%, transparent);
+  color: inherit;
+}
+
+/* Clarifying one item: GTD's question, does it need doing? A list of choices under each answer. */
+.igroups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
   align-self: stretch;
 }
-.isugg .row {
-  gap: 8px;
+.igroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
-.isugg .kv {
-  grid-template-columns: 90px 1fr;
+.igroup .eyebrow {
+  margin: 0;
+}
+.ilist-keys {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.ilist-keys .key {
+  height: 40px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-weight: 400;
+}
+.ilist-keys .key + .key {
+  border-top: 1px solid var(--line);
+}
+.ilist-keys .key:hover {
+  background: var(--hover);
+}
+.ilist-keys .key.rec {
+  box-shadow: none;
+  background: var(--accent-soft);
+  font-weight: 500;
+}
+.iask {
+  align-self: flex-start;
 }
 .ikeys {
   display: grid;

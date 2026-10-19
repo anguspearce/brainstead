@@ -11,6 +11,7 @@
 import { ask as askChats, askedFromInbox } from "./askState";
 import { nav, openDoc, useViewState } from "./nav";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { sampleSuggestion, sceneInboxSuggest } from "./scene";
 import { api, ClarifySuggestion, InboxItem, ProjectRow } from "./api";
 import { prepareCapture } from "./Capture";
 import { captureDone, contextName, fmtEffort, effortMinutes, projectLink, projectName, unclarified, useInbox, useProjects } from "./gtd";
@@ -38,6 +39,7 @@ import {
   doneNow,
   eachItem,
   eachSaid,
+  choiceGroups,
   inboxChoices,
   inboxItemKind,
   leadChoice,
@@ -226,6 +228,12 @@ export function InboxScreen() {
     items.findIndex((i) => key(i) === sel),
   );
   const cur = items[idx] ?? null;
+  // Screenshots: the open item shows a sample suggestion, as Suggest would make.
+  useEffect(() => {
+    if (!sceneInboxSuggest.get() || !cur || isTranscript(cur)) return;
+    const id = key(cur);
+    setSugg((m) => (m[id] ? m : { ...m, [id]: sampleSuggestion(id) }));
+  }, [cur]); // eslint-disable-line react-hooks/exhaustive-deps
   // A transcript whose meeting note is under way (or failed): its row says so, and while it's
   // under way it can't be ticked or chosen, so it isn't made twice.
   useEffect(startRuns, []);
@@ -565,7 +573,7 @@ export function InboxScreen() {
                 </div>
               )}
               {isTranscript(cur) ? null : sugg[key(cur)] ? (
-                <SuggestionCard s={sugg[key(cur)]} />
+                <SuggestionCard s={sugg[key(cur)]} onAccept={busy(cur) ? undefined : () => outcome(cur, sugg[key(cur)])} />
               ) : (
                 <span
                   title={
@@ -581,36 +589,52 @@ export function InboxScreen() {
                 </span>
               )}
               {!busy(cur) && (
-                <div className="ikeys">
-                  {sugg[key(cur)] && !isTranscript(cur) && (
-                    <button
-                      type="button"
-                      className="key rec"
-                      title={`Do what the AI suggests: ${LABEL[sugg[key(cur)].becomes]} (↩)`}
-                      onClick={() => outcome(cur, sugg[key(cur)])}
-                    >
-                      <span className="kbd">↩</span>Accept suggestion
-                    </button>
-                  )}
-                  {inboxChoices(cur).map((b) => {
-                    const c = CHOICE[b];
-                    const k = c.key;
-                    return (
-                      <button
-                        key={b}
-                        type="button"
-                        className={`key ${b === leadChoice(cur) ? "rec" : ""}`}
-                        title={`${c.tip(cur)} (${k})`}
-                        onClick={() => outcome(cur, { becomes: b })}
-                      >
-                        <span className="kbd">{k}</span>
-                        {c.label(cur)}
-                      </button>
-                    );
-                  })}
+                // GTD's question, does it need doing? The choices that make it a task or a reply, and
+                // those that file, park or drop it; each with its key.
+                <div className="igroups">
+                  {(
+                    [
+                      ["It needs doing", choiceGroups(cur).doing],
+                      ["It doesn't need doing", choiceGroups(cur).notDoing],
+                    ] as [string, string[]][]
+                  )
+                    .filter(([, list]) => list.length)
+                    .map(([label, list]) => (
+                      <section key={label} className="igroup" aria-label={label}>
+                        <h3 className="eyebrow">{label}</h3>
+                        <div className="ilist-keys">
+                          {list.map((b) => {
+                            const c = CHOICE[b];
+                            return (
+                              <button
+                                key={b}
+                                type="button"
+                                className={`key ${b === leadChoice(cur) && !sugg[key(cur)] ? "rec" : ""}`}
+                                title={`${c.tip(cur)} (${c.key})`}
+                                onClick={() => outcome(cur, { becomes: b })}
+                              >
+                                <span className="grow">{c.label(cur)}</span>
+                                <span className="kbd">{c.key}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    ))}
                 </div>
               )}
-              <p className="faint small">Nothing changes until you choose. J / K move between items; ⌘Z undoes.</p>
+              {!busy(cur) && choiceGroups(cur).ask && (
+                <button
+                  type="button"
+                  className="btn sm ghost iask"
+                  title={`${CHOICE.ask.tip(cur)} (${CHOICE.ask.key})`}
+                  onClick={() => outcome(cur, { becomes: "ask" })}
+                >
+                  <Icon name="ask" size={13} />
+                  {CHOICE.ask.label(cur)}
+                  <span className="kbd">{CHOICE.ask.key}</span>
+                </button>
+              )}
             </>
           ) : (
             raw && (
@@ -757,50 +781,39 @@ const LABEL: Record<string, string> = {
   reply: "a reply",
 };
 
-function SuggestionCard({ s }: { s: ClarifySuggestion }) {
+/** What the AI suggests the item becomes, first, with Accept (↩): one press does it. */
+function SuggestionCard({ s, onAccept }: { s: ClarifySuggestion; onAccept?: () => void }) {
   return (
     <div className="card isugg">
-      <div className="row">
-        <Icon name="cpu" size={14} style={{ color: "var(--accent)" }} />
-        <b>Suggested</b>
+      <div className="isugg-head">
+        <div className="grow">
+          <div className="isugg-what">
+            <Icon name="cpu" size={13} />
+            Suggested: {LABEL[s.becomes] ?? s.becomes}
+          </div>
+          {s.text && s.becomes !== "delete" && <div className="isugg-text">{s.text}</div>}
+        </div>
+        {onAccept && (
+          <button
+            type="button"
+            className="btn pri"
+            title={`Do what the AI suggests: ${LABEL[s.becomes] ?? s.becomes} (↩)`}
+            onClick={onAccept}
+          >
+            Accept
+            <span className="kbd">↩</span>
+          </button>
+        )}
       </div>
-      <dl className="kv">
-        <dt>Becomes</dt>
-        <dd>
-          <b>{LABEL[s.becomes] ?? s.becomes}</b>
-          {s.text && s.becomes !== "delete" && <> — {s.text}</>}
-        </dd>
-        {s.project && (
-          <>
-            <dt>Project</dt>
-            <dd>{s.project}</dd>
-          </>
-        )}
-        {s.context && (
-          <>
-            <dt>Context</dt>
-            <dd>@{s.context}</dd>
-          </>
-        )}
-        {s.effort && effortMinutes(s.effort) !== null && (
-          <>
-            <dt>Effort</dt>
-            <dd>{fmtEffort(effortMinutes(s.effort)!)}</dd>
-          </>
-        )}
-        {s.due && (
-          <>
-            <dt>Due</dt>
-            <dd>{fmtShortDate(s.due)}</dd>
-          </>
-        )}
-        {s.why && (
-          <>
-            <dt>Why</dt>
-            <dd className="muted">{s.why}</dd>
-          </>
-        )}
-      </dl>
+      {(s.project || s.context || s.effort || s.due) && (
+        <div className="isugg-meta">
+          {s.project && <span>{s.project}</span>}
+          {s.context && <span>@{s.context}</span>}
+          {s.effort && effortMinutes(s.effort) !== null && <span>{fmtEffort(effortMinutes(s.effort)!)}</span>}
+          {s.due && <span>Due {fmtShortDate(s.due)}</span>}
+        </div>
+      )}
+      {s.why && <p className="isugg-why">{s.why}</p>}
     </div>
   );
 }

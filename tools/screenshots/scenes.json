@@ -265,6 +265,7 @@
   {
     "name": "inbox",
     "screen": "inbox",
+    "inboxSuggest": true,
     "docs": true
   },
   {
