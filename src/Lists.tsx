@@ -623,18 +623,19 @@ export function SourcesScreen() {
     .map((r) => r.path);
   const dropping = useDropToSources();
   const columns: Column<SourceRow>[] = [
+    titleCol(),
+    // A pill as Notes and Wiki show a type, after the title.
     {
       key: "kind",
       label: "Kind",
       width: "0 0 64px",
       value: (r) => sourceBadge(r.path),
-      render: (r) => <span className="badge">{sourceBadge(r.path)}</span>,
+      render: (r) => <span className="chip">{sourceBadge(r.path)}</span>,
     },
-    titleCol(),
     {
       key: "ingested",
       label: "Status",
-      width: "0 0 96px",
+      width: "0 0 88px",
       value: (r) => sourceStatus(r, changed),
       render: (r) => {
         const [label, tone] = STATUS_CHIP[sourceStatus(r, changed)];
@@ -652,7 +653,7 @@ export function SourcesScreen() {
       // Only the folder: the title already names the file.
       key: "path",
       label: "Folder",
-      width: "0 0 140px",
+      width: "0 0 90px",
       value: (r) => sourceFolder(r.path),
       render: (r) => (
         <span className="faint ell" title={r.path}>

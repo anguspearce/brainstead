@@ -9,8 +9,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { CaptureBox } from "./Capture";
 import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from "./taskGroups";
 import { fieldIcon, fieldValue, taskFieldsOf } from "./taskFields";
-import type { TaskDateKind, TaskRow } from "./api";
-import { DateField } from "./DatePicker";
+import type { TaskRow } from "./api";
 import { contextsInUse, useInbox } from "./gtd";
 import { Icon } from "./icons";
 import { fmtShortDate } from "./md/dates";
@@ -18,9 +17,9 @@ import { taskLabel } from "./md/TaskBlock";
 import { localToday } from "./md/taskQuery";
 import { nav, openDoc, useViewState } from "./nav";
 import { askWith } from "./askState";
-import { InfoTip, lineDate, TaskAttrs, taskKey, TaskList, TasksFailed, TaskText, useTaskListKeys } from "./TaskList";
-import { taskDate, TaskDateId } from "./taskDates";
-import { changeTask, retitled, retitleTask, setTaskDate, tasksFailed, toggleTask, useAllTasks, viewRows, VIEWS, ViewId } from "./taskModel";
+import { InfoTip, TaskEditor, taskKey, TaskList, TasksFailed, useTaskListKeys } from "./TaskList";
+import { taskDate } from "./taskDates";
+import { tasksFailed, useAllTasks, viewRows, VIEWS, ViewId } from "./taskModel";
 import { askLink, askQuote, TopBar } from "./TopBar";
 import { fmtCount, Popover, SearchBox, Seg, TableBand, useDebounced } from "./ui";
 import { settings, useStore } from "./store";
@@ -269,7 +268,8 @@ export function TasksScreen() {
                       manual={view.manual && groupBy === "none"}
                       selected={sel}
                       onSelect={(t) => setSel(taskKey(t))}
-                      onOpen={() => document.querySelector<HTMLElement>(".tdetail .tdtitle")?.click()}
+                      onDeselect={() => setSel(null)}
+                      onOpen={() => document.querySelector<HTMLElement>(".trow.sel .trename")?.click()}
                       keys
                       empty={
                         dq
@@ -318,67 +318,18 @@ export function TasksScreen() {
   );
 }
 
-/** A task date's name in the detail pane, with its icon and what it means. */
-function DateLabel({ id }: { id: TaskDateId }) {
-  const d = taskDate(id);
-  return (
-    <dt className="datelabel">
-      <Icon name={d.icon} size={13} />
-      {d.label}
-      <InfoTip name={d.label.toLowerCase()} text={d.explain} />
-    </dt>
-  );
-}
+/** A task's fields the editor doesn't set (a recurrence, an id, what it depends on…), shown as written. */
+const otherFields = (t: TaskRow) =>
+  taskFieldsOf(t.text).filter((p) => !["due", "scheduled", "start", "created", "done", "priority"].includes(p.field.id));
 
 function TaskDetail({ t }: { t: TaskRow }) {
   return (
     <div className="tdetail">
-      <div className="row tdhead">
-        <button
-          type="button"
-          className={`cb lg ${t.done ? "on" : ""} ${t.status === "/" && !t.done ? "inprog" : ""}`}
-          role="checkbox"
-          aria-checked={t.done}
-          aria-label={t.done ? "Untick" : "Tick"}
-          title={t.done ? "Mark the task not done" : "Mark the task done"}
-          onClick={() => void toggleTask(t, !t.done)}
-        >
-          {t.status === "-" ? (
-            <Icon name="minus" size={12} />
-          ) : t.done ? (
-            <Icon name="check" size={12} />
-          ) : t.status === "/" ? (
-            <span className="dot" aria-hidden="true" />
-          ) : null}
-        </button>
-        <TaskTitle t={t} />
-      </div>
-      <dl className="kv">
-        <DateLabel id="due" />
-        <dd>
-          <TaskDateField t={t} kind="due" value={t.due} />
-        </dd>
-        <DateLabel id="scheduled" />
-        <dd>
-          <TaskDateField t={t} kind="scheduled" value={t.scheduled} />
-        </dd>
-        <DateLabel id="start" />
-        <dd>
-          <TaskDateField t={t} kind="start" value={t.start ?? lineDate(t.lineText, "start")} />
-        </dd>
-        <DateLabel id="created" />
-        <dd>
-          <TaskDateField t={t} kind="created" value={t.created ?? lineDate(t.lineText, "created")} />
-        </dd>
-        {t.doneOn && (
-          <>
-            <DateLabel id="done" />
-            <dd>{fmtShortDate(t.doneOn)}</dd>
-          </>
-        )}
-        {taskFieldsOf(t.text)
-          .filter((p) => !["due", "scheduled", "start", "created", "done", "priority"].includes(p.field.id))
-          .map((p, i) => (
+      {/* The task menu's own editor, so the pane offers everything the menu does. */}
+      <TaskEditor t={t} onClose={() => {}} wide={false} />
+      {(otherFields(t).length > 0 || t.tags.some((g) => !g.startsWith("context/"))) && (
+        <dl className="kv">
+          {otherFields(t).map((p, i) => (
             <Fragment key={i}>
               <dt className="datelabel">
                 <Icon name={fieldIcon(p)} size={13} />
@@ -388,25 +339,25 @@ function TaskDetail({ t }: { t: TaskRow }) {
               <dd>{fieldValue(p, fmtShortDate)}</dd>
             </Fragment>
           ))}
-        <TaskAttrs t={t} />
-        {t.tags.some((g) => !g.startsWith("context/")) && (
-          <>
-            <dt className="datelabel">
-              Tags
-              <InfoTip name="tags" text="The task's other #tags, as written on its line" />
-            </dt>
-            <dd className="chips">
-              {t.tags
-                .filter((g) => !g.startsWith("context/"))
-                .map((g) => (
-                  <span key={g} className="chip">
-                    #{g}
-                  </span>
-                ))}
-            </dd>
-          </>
-        )}
-      </dl>
+          {t.tags.some((g) => !g.startsWith("context/")) && (
+            <>
+              <dt className="datelabel">
+                Tags
+                <InfoTip name="tags" text="The task's other #tags, as written on its line" />
+              </dt>
+              <dd className="chips">
+                {t.tags
+                  .filter((g) => !g.startsWith("context/"))
+                  .map((g) => (
+                    <span key={g} className="chip">
+                      #{g}
+                    </span>
+                  ))}
+              </dd>
+            </>
+          )}
+        </dl>
+      )}
       <div className="eyebrow">Lives in</div>
       <button
         type="button"
@@ -439,134 +390,7 @@ function TaskDetail({ t }: { t: TaskRow }) {
           <Icon name="ask" size={12} />
           Ask about this
         </button>
-        {!t.done && (
-          <button
-            type="button"
-            className="btn sm"
-            title={t.tags.includes("waiting-for") ? "Take the task off the Waiting for list" : "Move the task to Waiting for"}
-            onClick={() => void changeTask(t, "waiting")}
-          >
-            <Icon name="waiting" size={12} />
-            {t.tags.includes("waiting-for") ? "No longer waiting" : "Waiting for someone"}
-          </button>
-        )}
-        <TaskMore t={t} />
       </div>
     </div>
   );
-}
-
-/** The task's words, in the pane: click (or ↩ in the list) to change them, ↩ to keep, Esc to leave
- *  them. Only where the words can be found on the line once, so its dates and tags stay as they are. */
-function TaskTitle({ t }: { t: TaskRow }) {
-  const words = taskLabel(t.text);
-  const [draft, setDraft] = useState<string | null>(null);
-  const editable = !!retitled(t.lineText, words, words || "x");
-  if (draft !== null)
-    return (
-      <input
-        className="h2 tdtitle-in grow"
-        autoFocus
-        aria-label="The task's words"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onFocus={(e) => e.currentTarget.select()}
-        onBlur={() => {
-          void retitleTask(t, words, draft);
-          setDraft(null);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") e.currentTarget.blur();
-          if (e.key === "Escape") {
-            e.stopPropagation();
-            setDraft(null);
-          }
-        }}
-      />
-    );
-  return editable ? (
-    <button type="button" className="h2 tdtitle" title="Change the task's words (its dates and tags stay)" onClick={() => setDraft(words)}>
-      <TaskText text={words} />
-    </button>
-  ) : (
-    <h2 className="h2">
-      <TaskText text={words} />
-    </h2>
-  );
-}
-
-/** The pane's ⋯ menu: cancel or delete the task, or open its note. */
-function TaskMore({ t }: { t: TaskRow }) {
-  const [at, setAt] = useState<DOMRect | null>(null);
-  const run = (f: () => void) => () => {
-    setAt(null);
-    f();
-  };
-  return (
-    <>
-      <button
-        type="button"
-        className="btn sm"
-        aria-label="More"
-        title="Cancel or delete the task, or open its note"
-        onClick={(e) => setAt(e.currentTarget.getBoundingClientRect())}
-      >
-        <Icon name="more" size={12} />
-      </button>
-      {at && (
-        <Popover anchor={at} onClose={() => setAt(null)} width={220}>
-          <div className="menu" role="menu">
-            <button
-              type="button"
-              role="menuitem"
-              title={`Open ${t.title}${t.heading ? `, at ${t.heading}` : ""}`}
-              onClick={run(() => openDoc(t.path, t.heading ? { anchor: t.heading } : {}))}
-            >
-              <Icon name="note" size={14} />
-              Open note
-            </button>
-            {t.status === "-" ? (
-              <button
-                type="button"
-                role="menuitem"
-                title="Make the cancelled task open again"
-                onClick={run(() => void changeTask(t, "reopen"))}
-              >
-                <Icon name="refresh" size={14} />
-                Reopen
-              </button>
-            ) : (
-              !t.done && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  title="Mark it cancelled; it stays in its note"
-                  onClick={run(() => void changeTask(t, "cancel"))}
-                >
-                  <Icon name="cancelled" size={14} />
-                  Cancel task
-                </button>
-              )
-            )}
-            <div className="sep" />
-            <button
-              type="button"
-              role="menuitem"
-              className="danger"
-              title="Takes the line out of its note; ⌘Z puts it back"
-              onClick={run(() => void changeTask(t, "delete"))}
-            >
-              <Icon name="trash" size={14} />
-              Delete task
-            </button>
-          </div>
-        </Popover>
-      )}
-    </>
-  );
-}
-
-function TaskDateField({ t, kind, value }: { t: TaskRow; kind: TaskDateKind; value: string | null }) {
-  const label = { due: "Due date", scheduled: "Defer until", start: "Start date", created: "Created date" }[kind];
-  return <DateField value={value} label={label} onChange={(d) => void setTaskDate(t, kind, d)} />;
 }

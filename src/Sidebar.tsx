@@ -139,7 +139,10 @@ function ToolsItem({ lit, extra }: { lit: Screen; extra: Partial<Record<Screen, 
         aria-haspopup="menu"
         aria-expanded={!!at}
         title={`Draft reply, Meeting notes and Compare${busy ? `. ${busy}` : ""}`}
-        onClick={(e) => setAt(e.currentTarget.getBoundingClientRect())}
+        // Open, a click on the row closes it: kept from the menu's click-outside, which would
+        // close it on the press only for the click to open it again.
+        onMouseDown={(e) => at && e.nativeEvent.stopPropagation()}
+        onClick={(e) => setAt(at ? null : e.currentTarget.getBoundingClientRect())}
       >
         <Icon name="cpu" />
         <span className="lbl">Tools</span>
@@ -150,6 +153,8 @@ function ToolsItem({ lit, extra }: { lit: Screen; extra: Partial<Record<Screen, 
         ) : (
           n > 0 && <span className={`n hot ${mine.some((x) => x.bad) ? "bad" : ""}`}>{fmtCount(n)}</span>
         )}
+        {/* It opens a menu, not a screen. */}
+        <Icon name="chevright" size={12} className="navchev" />
       </button>
       {at && (
         <Popover anchor={at} onClose={() => setAt(null)} width={250} place="right">

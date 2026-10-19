@@ -81,7 +81,9 @@ export function MoreMenu({ items, title }: { items: MoreItem[]; title: string })
         aria-haspopup="menu"
         aria-expanded={!!at}
         title={title}
-        onClick={(e) => setAt(e.currentTarget.getBoundingClientRect())}
+        // Open, a click on ⋯ closes it (kept from the menu's click-outside, which would reopen it).
+        onMouseDown={(e) => at && e.nativeEvent.stopPropagation()}
+        onClick={(e) => setAt(at ? null : e.currentTarget.getBoundingClientRect())}
       >
         <Icon name="more" />
       </button>

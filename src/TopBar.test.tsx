@@ -33,6 +33,20 @@ describe("MoreMenu", () => {
   });
 });
 
+describe("MoreMenu's button", () => {
+  it("closes the menu when it's clicked again", async () => {
+    render(<MoreMenu title="More" items={[{ label: "Check now", icon: "refresh", title: "Run the checks", run: () => {} }]} />);
+    const more = screen.getByRole("button", { name: "More" });
+    fireEvent.click(more);
+    expect(screen.getByRole("menu")).toBeTruthy();
+    // The click-outside listener is armed after a tick.
+    await new Promise((r) => setTimeout(r, 0));
+    fireEvent.mouseDown(more);
+    fireEvent.click(more);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+});
+
 describe("ReadOnlyBanner", () => {
   it("says what read-only blocks, and turns it off", () => {
     settings.update({ readOnly: true });

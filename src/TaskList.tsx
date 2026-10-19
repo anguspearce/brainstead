@@ -202,7 +202,23 @@ const PRIORITY_CHOICES: [PriorityName, string][] = [
 ];
 const priorityOf = (t: TaskRow) => parseTask(t.lineText)?.priority ?? "none";
 
+/** A task's menu: its editor (TaskEditor) in a popover by the row. */
 function TaskMenu({ t, at, onClose }: { t: TaskRow; at: DOMRect; onClose: () => void }) {
+  // Two columns when the window can take them beside the row; one on a narrow window.
+  const wide = window.innerWidth >= 600;
+  return (
+    <Popover anchor={at} onClose={onClose} width={wide ? 540 : 276}>
+      <TaskEditor t={t} onClose={onClose} wide={wide} menu />
+    </Popover>
+  );
+}
+
+/** Everything that can be changed about a task: its dates with quick picks, priority, context,
+ *  effort and project, rename, in progress, waiting, cancel, its note and delete. The task menu
+ *  shows it in a popover (`menu`, closing after each change); the Tasks screen's pane shows the
+ *  same, so the two can't drift. */
+export function TaskEditor({ t, onClose, wide, menu }: { t: TaskRow; onClose: () => void; wide: boolean; menu?: boolean }) {
+  const item = menu ? "menuitem" : undefined;
   const [pick, setPick] = useState<TaskDateKind | null>(null);
   // Renaming: its words in a box at the top of the menu, ↩ to keep them, Esc to go back. Only where
   // the words are on the line once, so its dates and tags stay as they are (as the task pane does).
@@ -213,8 +229,6 @@ function TaskMenu({ t, at, onClose }: { t: TaskRow; at: DOMRect; onClose: () => 
   // date, stamped on capture, so that alone doesn't open them).
   const [more, setMore] = useState(!!t.start);
   const today = localToday();
-  // Two columns when the window can take them beside the row; one on a narrow window.
-  const wide = window.innerWidth >= 600;
   const set = (kind: TaskDateKind, d: string | null) => {
     onClose();
     void setTaskDate(t, kind, d);
@@ -261,304 +275,174 @@ function TaskMenu({ t, at, onClose }: { t: TaskRow; at: DOMRect; onClose: () => 
     );
   };
   return (
-    <Popover anchor={at} onClose={onClose} width={wide ? 540 : 276}>
-      <div className={`menu tmenu${wide ? " wide" : ""}`} role="menu">
-        {pick ? (
-          <DatePicker value={valueOf(t, pick)} label={HEAD[pick][1]} onPick={(d) => set(pick, d)} onCancel={() => setPick(null)} />
-        ) : renaming ? (
-          <div className="mrename">
-            <div className="mlabel">
-              <Icon name="pencil" size={14} />
-              Rename task
-            </div>
-            <input
-              className="pin"
-              autoFocus
-              defaultValue={words}
-              aria-label="The task's words"
-              onFocus={(e) => e.currentTarget.select()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  const to = e.currentTarget.value;
-                  onClose();
-                  void retitleTask(t, words, to);
-                } else if (e.key === "Escape") {
-                  e.stopPropagation();
-                  setRenaming(false);
-                }
-              }}
-            />
-            <span className="faint small">↩ to rename; its dates and tags stay as they are.</span>
+    <div className={`menu tmenu${wide ? " wide" : ""}${menu ? "" : " inpane"}`} role={menu ? "menu" : undefined}>
+      {pick ? (
+        <DatePicker value={valueOf(t, pick)} label={HEAD[pick][1]} onPick={(d) => set(pick, d)} onCancel={() => setPick(null)} />
+      ) : renaming ? (
+        <div className="mrename">
+          <div className="mlabel">
+            <Icon name="pencil" size={14} />
+            Rename task
           </div>
-        ) : (
-          <>
-            {/* Two columns where the window has room: dates, then the task's fields; its actions below. */}
-            <div className="tmcols">
-              <div className="tmcol">
-                {section("due")}
-                {section("scheduled")}
-                {more ? (
-                  <>
-                    {section("start")}
-                    {section("created")}
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="faint"
-                    title="Show the start and created dates too"
-                    onClick={() => setMore(true)}
-                  >
-                    <Icon name="chevdown" size={14} />
-                    More dates…
-                  </button>
-                )}
-                <div className="sep" />
-                <div className="mlabel" title={TASK_FIELDS.priority.explain}>
-                  <Icon name="priority" size={14} />
-                  Priority
-                </div>
-                <div className="qchips">
-                  {PRIORITY_CHOICES.map(([p, label]) => (
-                    <button
-                      key={p}
-                      type="button"
-                      className={`chip f ${priorityOf(t) === p ? "on" : ""}`}
-                      aria-pressed={priorityOf(t) === p}
-                      title={p === "none" ? "Remove the priority" : `Set the priority to ${label.toLowerCase()}`}
-                      onClick={() => {
-                        onClose();
-                        void changeTask(t, { priority: p });
-                      }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="tmcol">
-                <GtdMenu t={t} onClose={onClose} />
-              </div>
-            </div>
-            {/* Its words and state; a done task it can't rename has none of these, so no empty group. */}
-            {(canRename || !t.done || t.status === "-") && <div className="sep" />}
-            <div className="tmacts">
-              {canRename && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  title="Change the task's words (its dates and tags stay)"
-                  onClick={() => setRenaming(true)}
-                >
-                  <Icon name="pencil" size={14} />
-                  Rename…
-                </button>
-              )}
-              {t.status !== "/" && !t.done && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  title="Mark it as started but not finished"
-                  onClick={() => (onClose(), void changeTask(t, "start"))}
-                >
-                  <Icon name="in-progress" size={14} />
-                  Mark in progress
-                </button>
-              )}
-              {!t.done && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  title={
-                    t.tags.includes("waiting-for")
-                      ? "Remove the waiting-for tag"
-                      : "Tag it waiting-for, so it shows on the Waiting for list"
-                  }
-                  onClick={() => (onClose(), void changeTask(t, "waiting"))}
-                >
-                  <Icon name="waiting" size={14} />
-                  {t.tags.includes("waiting-for") ? "No longer waiting for it" : "Waiting for someone"}
-                </button>
-              )}
-              {t.status === "-" || t.status === "/" ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  title={t.status === "-" ? "Make the cancelled task open again" : "Mark it as not started"}
-                  onClick={() => (onClose(), void changeTask(t, "reopen"))}
-                >
-                  <Icon name="refresh" size={14} />
-                  {t.status === "-" ? "Reopen" : "Back to to-do"}
-                </button>
-              ) : (
-                !t.done && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    title="Mark it cancelled; it stays in its note"
-                    onClick={() => (onClose(), void changeTask(t, "cancel"))}
-                  >
-                    <Icon name="cancelled" size={14} />
-                    Cancel task
-                  </button>
-                )
-              )}
-            </div>
-            <div className="sep" />
-            <button
-              type="button"
-              role="menuitem"
-              title={`Open the note this task is in${t.heading ? `, at ${t.heading}` : ""}`}
-              onClick={() => {
+          <input
+            className="pin"
+            autoFocus
+            defaultValue={words}
+            aria-label="The task's words"
+            onFocus={(e) => e.currentTarget.select()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const to = e.currentTarget.value;
                 onClose();
-                openDoc(t.path, t.heading ? { anchor: t.heading } : {});
-              }}
-            >
-              <Icon name="note" size={14} />
-              Open {t.title}
-            </button>
-            <div className="sep" />
-            <button
-              type="button"
-              role="menuitem"
-              className="danger"
-              title="Takes the line out of its note; ⌘Z puts it back"
-              onClick={() => (onClose(), void changeTask(t, "delete"))}
-            >
-              <Icon name="trash" size={14} />
-              Delete task
-            </button>
-          </>
-        )}
-      </div>
-    </Popover>
+                void retitleTask(t, words, to);
+              } else if (e.key === "Escape") {
+                e.stopPropagation();
+                setRenaming(false);
+              }
+            }}
+          />
+          <span className="faint small">↩ to rename; its dates and tags stay as they are.</span>
+        </div>
+      ) : (
+        <>
+          {/* Two columns where the window has room: dates, then the task's fields; its actions below. */}
+          <div className="tmcols">
+            <div className="tmcol">
+              {section("due")}
+              {section("scheduled")}
+              {more ? (
+                <>
+                  {section("start")}
+                  {section("created")}
+                </>
+              ) : (
+                <button
+                  type="button"
+                  role={item}
+                  className="faint"
+                  title="Show the start and created dates too"
+                  onClick={() => setMore(true)}
+                >
+                  <Icon name="chevdown" size={14} />
+                  More dates…
+                </button>
+              )}
+              <div className="sep" />
+              <div className="mlabel" title={TASK_FIELDS.priority.explain}>
+                <Icon name="priority" size={14} />
+                Priority
+              </div>
+              <div className="qchips">
+                {PRIORITY_CHOICES.map(([p, label]) => (
+                  <button
+                    key={p}
+                    type="button"
+                    className={`chip f ${priorityOf(t) === p ? "on" : ""}`}
+                    aria-pressed={priorityOf(t) === p}
+                    title={p === "none" ? "Remove the priority" : `Set the priority to ${label.toLowerCase()}`}
+                    onClick={() => {
+                      onClose();
+                      void changeTask(t, { priority: p });
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="tmcol">
+              <GtdMenu t={t} onClose={onClose} />
+            </div>
+          </div>
+          {/* Its words and state; a done task it can't rename has none of these, so no empty group. */}
+          {(canRename || !t.done || t.status === "-") && <div className="sep" />}
+          <div className="tmacts">
+            {canRename && (
+              <button type="button" role={item} title="Change the task's words (its dates and tags stay)" onClick={() => setRenaming(true)}>
+                <Icon name="pencil" size={14} />
+                Rename…
+              </button>
+            )}
+            {t.status !== "/" && !t.done && (
+              <button
+                type="button"
+                role={item}
+                title="Mark it as started but not finished"
+                onClick={() => (onClose(), void changeTask(t, "start"))}
+              >
+                <Icon name="in-progress" size={14} />
+                Mark in progress
+              </button>
+            )}
+            {!t.done && (
+              <button
+                type="button"
+                role={item}
+                title={
+                  t.tags.includes("waiting-for") ? "Remove the waiting-for tag" : "Tag it waiting-for, so it shows on the Waiting for list"
+                }
+                onClick={() => (onClose(), void changeTask(t, "waiting"))}
+              >
+                <Icon name="waiting" size={14} />
+                {t.tags.includes("waiting-for") ? "No longer waiting for it" : "Waiting for someone"}
+              </button>
+            )}
+            {t.status === "-" || t.status === "/" ? (
+              <button
+                type="button"
+                role={item}
+                title={t.status === "-" ? "Make the cancelled task open again" : "Mark it as not started"}
+                onClick={() => (onClose(), void changeTask(t, "reopen"))}
+              >
+                <Icon name="refresh" size={14} />
+                {t.status === "-" ? "Reopen" : "Back to to-do"}
+              </button>
+            ) : (
+              !t.done && (
+                <button
+                  type="button"
+                  role={item}
+                  title="Mark it cancelled; it stays in its note"
+                  onClick={() => (onClose(), void changeTask(t, "cancel"))}
+                >
+                  <Icon name="cancelled" size={14} />
+                  Cancel task
+                </button>
+              )
+            )}
+          </div>
+          <div className="sep" />
+          <button
+            type="button"
+            role={item}
+            title={`Open the note this task is in${t.heading ? `, at ${t.heading}` : ""}`}
+            onClick={() => {
+              onClose();
+              openDoc(t.path, t.heading ? { anchor: t.heading } : {});
+            }}
+          >
+            <Icon name="note" size={14} />
+            Open {t.title}
+          </button>
+          <div className="sep" />
+          <button
+            type="button"
+            role={item}
+            className="danger"
+            title="Takes the line out of its note; ⌘Z puts it back"
+            onClick={() => (onClose(), void changeTask(t, "delete"))}
+          >
+            <Icon name="trash" size={14} />
+            Delete task
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 
 const EFFORTS = ["5m", "15m", "30m", "1h", "2h", "4h"];
 const COMMON_CONTEXTS = ["calls", "computer", "errands", "office", "personal"];
-
-/** The task pane's own fields, editable in place: priority, context, effort and project (the
- *  same changes as the task menu's). Rows of a `dl.kv`. */
-export function TaskAttrs({ t }: { t: TaskRow }) {
-  const all = useAllTasks();
-  const projects = useProjects();
-  const [typing, setTyping] = useState(false);
-  const [q, setQ] = useState("");
-  const mine = t.contexts ?? [];
-  const known = [...new Set([...mine, ...(all ? contextsInUse(all) : []), ...COMMON_CONTEXTS])].slice(0, 8);
-  const toggle = (c: string) => void setTaskGtd(t, { contexts: mine.includes(c) ? mine.filter((x) => x !== c) : [...mine, c] });
-  const active = (projects ?? []).filter((p) => p.status === "active" || p.path === t.project);
-  const efforts = t.effort && !EFFORTS.includes(t.effort) ? [t.effort, ...EFFORTS] : EFFORTS;
-  return (
-    <>
-      <dt className="datelabel">
-        <Icon name="priority" size={13} />
-        Priority
-        <InfoTip name="priority" text={TASK_FIELDS.priority.explain} />
-      </dt>
-      <dd>
-        <select
-          title="How important the task is"
-          className="sel sm"
-          aria-label="Priority"
-          value={priorityOf(t)}
-          onChange={(e) => void changeTask(t, { priority: e.target.value as PriorityName })}
-        >
-          {PRIORITY_CHOICES.map(([p, label]) => (
-            <option key={p} value={p}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </dd>
-      <dt className="datelabel">
-        <Icon name="tag" size={13} />
-        Context
-        <InfoTip name="context" text="Where or how it can be done, written as #context/name" />
-      </dt>
-      <dd className="chips">
-        {known.map((c) => (
-          <button
-            key={c}
-            type="button"
-            className={`chip f ${mine.includes(c) ? "on" : ""}`}
-            aria-pressed={mine.includes(c)}
-            title={mine.includes(c) ? `Remove the context @${c}` : `Add the context @${c} (#context/${c})`}
-            onClick={() => toggle(c)}
-          >
-            @{c}
-          </button>
-        ))}
-        {typing ? (
-          <input
-            className="qin"
-            autoFocus
-            placeholder="New context"
-            aria-label="New context"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onBlur={() => setTyping(false)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setTyping(false);
-              if (e.key === "Enter" && contextName(q)) {
-                toggle(contextName(q));
-                setTyping(false);
-              }
-            }}
-          />
-        ) : (
-          <button type="button" className="chip f" title="Type a new context to add" onClick={() => (setTyping(true), setQ(""))}>
-            Other…
-          </button>
-        )}
-      </dd>
-      <dt className="datelabel">
-        <Icon name="stopwatch" size={13} />
-        Effort
-        <InfoTip name="effort" text="About how long it takes, written as [effort:: 15m]" />
-      </dt>
-      <dd>
-        <select
-          title="How long the task takes"
-          className="sel sm"
-          aria-label="Effort"
-          value={t.effort ?? ""}
-          onChange={(e) => void setTaskGtd(t, { effort: e.target.value || null })}
-        >
-          <option value="">None</option>
-          {efforts.map((e) => (
-            <option key={e} value={e}>
-              {effortMinutes(e) != null ? fmtEffort(effortMinutes(e)!) : e}
-            </option>
-          ))}
-        </select>
-      </dd>
-      <dt className="datelabel">
-        <Icon name="project" size={13} />
-        Project
-        <InfoTip name="project" text="The project it moves forward: a link to its Project. note" />
-      </dt>
-      <dd>
-        <select
-          title="The project this task is part of"
-          className="sel sm grow"
-          aria-label="Project"
-          value={t.project ?? ""}
-          onChange={(e) => void setTaskGtd(t, { project: e.target.value || null })}
-        >
-          <option value="">None</option>
-          {active.map((p) => (
-            <option key={p.path} value={p.path}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-      </dd>
-    </>
-  );
-}
 
 /** The task menu's GTD part: context, effort and project. */
 function GtdMenu({ t, onClose }: { t: TaskRow; onClose: () => void }) {
@@ -720,6 +604,7 @@ export function TaskList({
   manual,
   selected,
   onSelect,
+  onDeselect,
   showNote = true,
   empty = "Nothing here.",
   display,
@@ -734,6 +619,8 @@ export function TaskList({
   manual: boolean;
   selected?: string | null;
   onSelect?: (t: TaskRow) => void;
+  /** Clicking the selected row again: nothing selected. */
+  onDeselect?: () => void;
   showNote?: boolean;
   empty?: string;
   /** A task query's layout options (`hide`, `show`, short mode). */
@@ -875,7 +762,10 @@ export function TaskList({
               key={k}
               data-key={k}
               className={`trow ${table ? "tb-row" : ""} ${t.done ? "done" : ""} ${statusClass(t)} ${selected === k ? "sel" : ""} ${!onSelect && cursor === k ? "kcur" : ""} ${dragging === k ? "dragging" : ""}`}
-              onClick={() => (onSelect ? onSelect(t) : keys && setCursor(k))}
+              onClick={() =>
+                // A second click on the row it's on lets it go.
+                onSelect ? (selected === k && onDeselect ? onDeselect() : onSelect(t)) : keys && setCursor(cursor === k ? null : k)
+              }
               onContextMenu={(e) => {
                 // The task's menu only, not also the note's around it (a task query or Dataview in a note).
                 e.preventDefault();
@@ -911,7 +801,7 @@ export function TaskList({
               </button>
               <div className="t">
                 <div className="tt">
-                  <TaskText text={taskLabel(t.text)} />
+                  <RowTitle t={t} />
                 </div>
                 <div className="ts">
                   <FieldChips t={t} display={display} />
@@ -966,6 +856,55 @@ export function TaskList({
         })}
       </ul>
       {menu && <TaskMenu t={menu.t} at={menu.at} onClose={() => setMenu(null)} />}
+    </>
+  );
+}
+
+/** A row's words, with a pencil (on hover, or the selected row) that turns them into a box to
+ *  rename the task: ↩ keeps, Esc leaves them. Only where its words are on the line once, so its
+ *  dates and tags stay as they are. */
+function RowTitle({ t }: { t: TaskRow }) {
+  const words = taskLabel(t.text);
+  const [draft, setDraft] = useState<string | null>(null);
+  const editable = !!retitled(t.lineText, words, words || "x");
+  if (draft !== null)
+    return (
+      <input
+        className="trename-in"
+        autoFocus
+        aria-label="The task's words"
+        value={draft}
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => setDraft(e.target.value)}
+        onFocus={(e) => e.currentTarget.select()}
+        onBlur={() => {
+          if (draft !== words) void retitleTask(t, words, draft);
+          setDraft(null);
+        }}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") setDraft(null);
+        }}
+      />
+    );
+  return (
+    <>
+      <TaskText text={words} />
+      {editable && (
+        <button
+          type="button"
+          className="ibtn trename"
+          aria-label="Rename the task"
+          title="Rename the task (its dates and tags stay)"
+          onClick={(e) => {
+            e.stopPropagation();
+            setDraft(words);
+          }}
+        >
+          <Icon name="pencil" size={12} />
+        </button>
+      )}
     </>
   );
 }

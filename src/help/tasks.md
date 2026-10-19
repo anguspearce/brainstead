@@ -21,7 +21,7 @@ In Next actions, Follow-ups, Waiting for and Someday / maybe, drag rows by their
 
 ## Use the keys
 - `↑` and `↓` choose a task, carrying on into the next list.
-- `↩` puts the task's words in the pane to change.
+- `↩` puts the task's words in a box on its row to change.
 - `Space` ticks or unticks it.
 - `⌫` deletes it (`⌘Z` puts it back).
 - `/` goes to **Search tasks**.
@@ -44,9 +44,11 @@ Right-click a row, or click its ⋯ button, for the task's menu:
 - **Open** with the note's name, and **Delete task**, which ⌘Z puts back.
 
 ## Use the task pane
-Click a task to show it in the pane on the right. Click its words to change them (`↩` keeps, `Esc` drops; dates and tags stay). You can also tick it and set its dates, priority, context, effort and project, as in the menu. Hover the ⓘ beside a field for what it means. Context offers the ones in use plus calls, computer, errands, office and personal, or **Other…** for a new one.
+Click a task to show it in the pane on the right; click it again to let it go. The pane is the task's ⋯ menu, laid out in one column: its dates with quick picks, priority, context, effort and project, then **Rename…**, **Mark in progress**, **Waiting for someone**, **Cancel task**, its note and **Delete task**. Fields the menu doesn't set (a recurrence, an id) and its other tags are listed under them. Context offers the ones in use plus calls, computer, errands, office and personal, or **Other…** for a new one.
 
-**Lives in** shows the note, line and heading; click it to open the note there. The ⋯ button at the foot has **Open note**, **Cancel task** (or **Reopen**) and **Delete task** (⌘Z undoes). **Ask about this** opens [Ask](app:ask) about the task. **Waiting for someone** adds `#waiting-for`; **No longer waiting** removes it.
+To change a task's words in any list, point at it and click the pencil after them, or press `↩` on the selected one (`↩` keeps, `Esc` drops; dates and tags stay).
+
+**Lives in** shows the note, line and heading; click it to open the note there. **Ask about this** opens [Ask](app:ask) about the task. ⌘Z undoes any change.
 
 ## Group, filter and save lists
 **Group by** in the top bar (**None**, **Project**, **Context** or **Due**) groups the list, with a band and count per group. Grouped lists can't be dragged.

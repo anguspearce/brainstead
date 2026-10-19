@@ -83,6 +83,19 @@ describe("task list keys", () => {
   });
 });
 
+describe("selecting a row", () => {
+  it("selects it on a click, and lets it go on a second", () => {
+    const rows = [t("One"), t("Two", { line: 1 })];
+    const onSelect = vi.fn();
+    const onDeselect = vi.fn();
+    render(<TaskList rows={rows} manual={false} selected="A.md:0" onSelect={onSelect} onDeselect={onDeselect} />);
+    fireEvent.click(screen.getByText("Two"));
+    expect(onSelect).toHaveBeenCalledWith(rows[1]);
+    fireEvent.click(screen.getByText("One"));
+    expect(onDeselect).toHaveBeenCalledOnce();
+  });
+});
+
 describe("task rows", () => {
   it("leave out the note link for the project's own note, and the chip inside the project", () => {
     const own = t("Book the venue", {
