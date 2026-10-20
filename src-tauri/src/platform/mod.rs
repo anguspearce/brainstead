@@ -11,6 +11,8 @@ use std::process::{Child, Command};
 
 #[cfg(target_os = "macos")]
 mod about;
+#[cfg(windows)]
+mod image_win;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
@@ -20,6 +22,9 @@ mod quick_look;
 #[cfg(target_os = "macos")]
 mod speech;
 #[cfg(target_os = "macos")]
+mod spell;
+#[cfg(windows)]
+#[path = "spell_win.rs"]
 mod spell;
 #[cfg(target_os = "macos")]
 use macos as imp;
@@ -285,12 +290,14 @@ pub fn pdf_text(path: &Path) -> Result<Vec<String>, String> {
 }
 
 /// The text in an image (OCR), one line per line found: Vision's text recognition on macOS, which
-/// reads HEIC too. Elsewhere it isn't available yet. The index takes it as its image reader
+/// reads HEIC too, and Windows' own on Windows (image_win.rs). Elsewhere it isn't available yet. The index takes it as its image reader
 /// (`brainstead_core::extract::ImageReader`).
 pub fn image_text(path: &Path) -> Result<String, String> {
     #[cfg(target_os = "macos")]
     return macos::image_text(path);
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    return image_win::image_text(path);
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         let _ = path;
         Err("Reading the text in images isn't available on this system yet.".into())
@@ -298,7 +305,8 @@ pub fn image_text(path: &Path) -> Result<String, String> {
 }
 
 /// The image as a model is shown it: a JPEG at most 2000 pixels across, kept as
-/// `ask/img/<sha>.jpg` in the app data folder (`image_dir`). Elsewhere it isn't available yet.
+/// `ask/img/<sha>.jpg` in the app data folder (`image_dir`): sips on macOS, Windows' imaging on
+/// Windows. Elsewhere it isn't available yet.
 pub fn image_for_model(path: &Path, sha: &str) -> Result<PathBuf, String> {
     let dest = image_dir().join(format!("{sha}.jpg"));
     if dest.is_file() {
@@ -307,7 +315,9 @@ pub fn image_for_model(path: &Path, sha: &str) -> Result<PathBuf, String> {
     std::fs::create_dir_all(image_dir()).map_err(|e| e.to_string())?;
     #[cfg(target_os = "macos")]
     return macos::image_for_model(path, &dest).map(|_| dest);
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    return image_win::image_for_model(path, &dest).map(|_| dest);
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         let _ = path;
         Err("Showing images to a model isn't available on this system yet.".into())
@@ -539,7 +549,8 @@ fn locate(name: &str, extra: &[&str]) -> Option<PathBuf> {
     }
 }
 
-/// Spelling and grammar (the editor's marks): macOS's checker; nothing elsewhere yet.
+/// Spelling and grammar (the editor's marks): macOS's checker, or on Windows its spell checker
+/// with Harper's grammar (spell_win.rs); nothing elsewhere yet.
 #[derive(serde::Serialize)]
 pub struct GrammarIssue {
     pub start: usize,
@@ -550,16 +561,16 @@ pub struct GrammarIssue {
 
 /// The English spelling languages the computer has, and the system's own.
 pub fn spell_languages() -> (Vec<String>, String) {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     return (spell::english_languages(), spell::system_language());
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     (vec![], String::new())
 }
 
 pub fn spell_check(text: &str, lang: Option<&str>) -> Vec<(usize, usize)> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     return spell::check(text, lang);
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         let _ = (text, lang);
         vec![]
@@ -567,12 +578,12 @@ pub fn spell_check(text: &str, lang: Option<&str>) -> Vec<(usize, usize)> {
 }
 
 pub fn spell_grammar(text: &str, lang: Option<&str>) -> Vec<GrammarIssue> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     return spell::grammar(text, lang)
         .into_iter()
         .map(|g| GrammarIssue { start: g.start, len: g.len, description: g.description, corrections: g.corrections })
         .collect();
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         let _ = (text, lang);
         vec![]
@@ -580,24 +591,35 @@ pub fn spell_grammar(text: &str, lang: Option<&str>) -> Vec<GrammarIssue> {
 }
 
 pub fn spell_guesses(word: &str, lang: Option<&str>) -> Vec<String> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     return spell::guesses(word, lang);
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         let _ = (word, lang);
         vec![]
     }
 }
 
+/// Gets grammar ready off the main thread, where the window asks for it: on Windows, Harper's
+/// checks take a few seconds to make the first time. Nothing elsewhere.
+pub fn spell_warm(lang: Option<String>) {
+    #[cfg(windows)]
+    std::thread::spawn(move || {
+        let _ = spell::grammar("", lang.as_deref());
+    });
+    #[cfg(not(windows))]
+    let _ = lang;
+}
+
 /// Learn (true) or ignore until the app quits (false).
 pub fn spell_accept(word: &str, learn: bool) {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     if learn {
         spell::learn(word)
     } else {
         spell::ignore(word)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     let _ = (word, learn);
 }
 

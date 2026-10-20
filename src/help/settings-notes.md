@@ -8,7 +8,7 @@ summary: Spelling and grammar checks, reading aloud, how documents look by defau
 Notes sets how you write and how notes and wiki pages look.
 
 ## Check spelling and grammar
-Spelling and grammar checks are Mac only for now, and are hidden on Windows.
+On Windows, spelling is Windows' own spell checker, the one Edge and Office use, and grammar is checked by Harper, which runs on the PC: nothing you write leaves it.
 
 **Check spelling** underlines unknown words in red as you write; click one for guesses, Learn or Ignore. **Check grammar** underlines grammar problems in blue; click one for the explanation and fixes. Both are on by default.
 

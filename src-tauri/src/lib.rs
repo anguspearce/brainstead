@@ -1081,6 +1081,9 @@ pub fn run() {
             if let Err(e) = menu::install(app.handle()) {
                 crate::applog!("menu: {e}");
             }
+            platform::spell_warm(
+                lock(&app.state::<AppState>().settings).ui.get("spellLanguage").and_then(|v| v.as_str()).map(String::from),
+            );
             let s = lock(&app.state::<AppState>().settings).clone();
             if let Some(w) = app.get_webview_window("main") {
                 // Screenshots are taken at one size, whatever size the window was left at (a scene's

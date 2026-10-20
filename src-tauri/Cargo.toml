@@ -76,6 +76,13 @@ arboard = { version = "3.6", default-features = false }
 webview2-com = "0.39"
 windows-core = "0.62"
 windows-sys = { version = "0.61", features = ["Win32_Globalization"] }
+# Spelling (Windows' spell checker) and grammar (Harper, on the PC), as Two-edged Sword's journal
+# has them (platform/spell_win.rs).
+# The text in images and the copy a model is shown, through Windows' imaging and text
+# recognition (platform/image_win.rs).
+windows = { version = "0.62", features = ["Foundation", "Foundation_Collections", "Graphics_Imaging", "Media_Ocr", "Storage_Streams", "Win32_Foundation", "Win32_Globalization", "Win32_System_Com"] }
+windows-future = "0.3"
+harper-core = { version = "2", default-features = false, features = ["concurrent"] }
 
 [dev-dependencies]
 tempfile = "3"

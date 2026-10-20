@@ -39,7 +39,7 @@ Brainstead, not the AI, decides where text goes on a page:
 - The checked facts behind a change (what, its value, as of when, and the quote) are kept with the page. They're part of the change, so Revert takes them back too.
 - A change that would rewrite a section the AI saw only part of is dropped, so nothing is lost on a long page.
 
-An image is ingested from the text read from it. Claude Code and Codex also see the picture; Copilot and Antigravity don't, so an image with no text needs one of the first two. Its changes are kept even when a quote isn't in that text, each flagged in Changes to check against the picture. On Windows, reading text in images and showing images to a model aren't available yet, so the text in an image is not read yet: a note about an image should carry what it says.
+An image is ingested from the text read from it. Claude Code and Codex also see the picture; Copilot and Antigravity don't, so an image with no text needs one of the first two. Its changes are kept even when a quote isn't in that text, each flagged in Changes to check against the picture. On Windows the text is read by Windows' own text recognition, in the first of your languages it has it for (Settings › Time & language › Language adds one); HEIC and WebP pictures need their free extensions from the Microsoft Store.
 
 An ingest you start makes its changes at once. One the daily check starts holds any change that fails a check for you instead. To ingest each capture as it lands, turn on **Ingest new sources as they arrive** in Settings › AI assistants.
 

@@ -53,7 +53,17 @@ pub fn platform_features() -> PlatformFeatures {
             image_text: true,
         }
     } else if cfg!(windows) {
-        PlatformFeatures { platform: "windows", rich_copy: true, open_at_login: true, read_aloud: true, export_pdf: true, ..none }
+        PlatformFeatures {
+            platform: "windows",
+            rich_copy: true,
+            open_at_login: true,
+            read_aloud: true,
+            export_pdf: true,
+            spelling: true,
+            grammar: true,
+            image_text: true,
+            ..none
+        }
     } else {
         none
     }
@@ -112,16 +122,19 @@ mod tests {
         assert_eq!(f.rich_copy, mac || cfg!(windows));
         assert_eq!(f.read_aloud, mac || cfg!(windows));
         assert_eq!(f.export_pdf, mac || cfg!(windows));
+        assert_eq!((f.spelling, f.grammar), (mac || cfg!(windows), mac || cfg!(windows)));
         let text = f.describe();
         if mac {
             assert_eq!(text, "System: macOS, with every feature.");
         } else if cfg!(windows) {
-            assert!(text.starts_with("System: Windows. Not on this system, so not in the window: Quick Look, spelling"), "{text}");
+            assert!(text.starts_with("System: Windows. Not on this system, so not in the window: Quick Look, Full Disk Access"), "{text}");
             assert!(
                 !text.contains("rich copy")
                     && !text.contains("Open at login")
                     && !text.contains("Read aloud")
-                    && !text.contains("Export PDF"),
+                    && !text.contains("Export PDF")
+                    && !text.contains("spelling")
+                    && !text.contains("images"),
                 "{text}"
             );
         }
