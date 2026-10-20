@@ -74,6 +74,9 @@ const grammarMark = Decoration.mark({ class: "cm-grammar" });
 class Spelling {
   decorations: DecorationSet = Decoration.none;
   hits: SpellHit[] = [];
+  /** The grammar problems not marked because the caret is in them: pressing on a mark puts the
+   *  caret there before the release that opens its menu, so the menu looks here too. */
+  underCaret: SpellHit[] = [];
   private timer: number | undefined;
   private off: () => void;
 
@@ -85,7 +88,9 @@ class Spelling {
   update(u: ViewUpdate) {
     if (u.docChanged) {
       this.decorations = this.decorations.map(u.changes);
-      this.hits = this.hits.map((h) => ({ ...h, from: u.changes.mapPos(h.from), to: u.changes.mapPos(h.to, -1) }));
+      const map = (h: SpellHit) => ({ ...h, from: u.changes.mapPos(h.from), to: u.changes.mapPos(h.to, -1) });
+      this.hits = this.hits.map(map);
+      this.underCaret = this.underCaret.map(map);
       this.schedule(600);
     } else if (u.viewportChanged) this.schedule(150);
     else if (u.selectionSet) this.build(false);
@@ -178,6 +183,7 @@ class Spelling {
     const masked = this.masked();
     const caret = st.selection.main.empty ? st.selection.main.head : -1;
     const hits: SpellHit[] = [];
+    const under: SpellHit[] = [];
     for (let n = first; n <= last; n++) {
       const l = d.line(n);
       const f = cache.get(masked[n - 1]);
@@ -194,8 +200,10 @@ class Spelling {
         for (const g of f.grammar ?? []) {
           const text = l.text.slice(g.start, g.start + g.len);
           const from = l.from + g.start;
-          if (!text.trim() || acceptedGrammar.has(grammarKey(text, g.description)) || (caret > from && caret <= from + g.len)) continue;
-          hits.push({ from, to: from + g.len, text, kind: "grammar", description: g.description, corrections: g.corrections });
+          if (!text.trim() || acceptedGrammar.has(grammarKey(text, g.description))) continue;
+          const hit: SpellHit = { from, to: from + g.len, text, kind: "grammar", description: g.description, corrections: g.corrections };
+          if (caret > from && caret <= from + g.len) under.push(hit);
+          else hits.push(hit);
         }
     }
     hits.sort((a, b) => a.from - b.from || a.to - b.to);
@@ -207,6 +215,7 @@ class Spelling {
       end = h.to;
     }
     this.hits = hits;
+    this.underCaret = under;
     this.decorations = b.finish();
     if (redraw) this.view.dispatch({});
   }
@@ -215,11 +224,14 @@ class Spelling {
 const plugin = ViewPlugin.fromClass(Spelling, {
   decorations: (p) => p.decorations,
   eventHandlers: {
-    click(e, view) {
-      if (isMod(e) || e.altKey || e.shiftKey || e.button !== 0) return false;
+    // On mouseup, not click: pressing on a grammar mark puts the caret in it, which takes the mark
+    // away, so the release lands on another element and the browser sends no click. A drag that
+    // selected text opens nothing.
+    mouseup(e, view) {
+      if (isMod(e) || e.altKey || e.shiftKey || e.button !== 0 || !view.state.selection.main.empty) return false;
       const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
       if (pos == null) return false;
-      const hit = this.hits.find((h) => pos >= h.from && pos <= h.to);
+      const hit = [...this.hits, ...this.underCaret].find((h) => pos >= h.from && pos <= h.to);
       if (!hit) return false;
       const c = view.coordsAtPos(hit.from);
       const rect = c ? new DOMRect(c.left, c.top, 0, c.bottom - c.top) : new DOMRect(e.clientX, e.clientY, 0, 0);
