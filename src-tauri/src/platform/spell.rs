@@ -165,10 +165,30 @@ pub fn ignore(word: &str) {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
+    /// The tests share macOS's one spell checker, which isn't made for two threads at once.
+    static CHECKER: Mutex<()> = Mutex::new(());
+
+    /// `f`'s answer once `ok` takes it, asking again for up to two seconds: a cold spell checker
+    /// (a first call in a busy test run) can answer before its dictionaries are in.
+    fn settled<T>(f: impl Fn() -> T, ok: impl Fn(&T) -> bool) -> T {
+        let mut got = f();
+        for _ in 0..20 {
+            if ok(&got) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            got = f();
+        }
+        got
+    }
+
     #[test]
     fn finds_misspellings_in_utf16_offsets() {
+        let _g = CHECKER.lock().unwrap_or_else(|e| e.into_inner());
         // "–" is one UTF-16 unit, so "Recieve" starts at 8.
-        let found = super::check("Notes – Recieve this.", None);
+        let found = settled(|| super::check("Notes – Recieve this.", None), |f| f.contains(&(8, 7)));
         assert!(found.contains(&(8, 7)), "{found:?}");
         assert!(super::check("All words here are fine.", None).is_empty());
         // In the user's language, not "automatic": that lets through words of any other language
@@ -178,10 +198,12 @@ mod tests {
 
     #[test]
     fn grammar_finds_a_doubled_word_and_skips_fragments() {
+        let _g = CHECKER.lock().unwrap_or_else(|e| e.into_inner());
         let text = "This is fine. He went to the the store.";
-        let found = super::grammar(text, None);
         let u: Vec<u16> = text.encode_utf16().collect();
-        let g = found.iter().find(|g| String::from_utf16_lossy(&u[g.start..g.start + g.len]) == "the the").expect("the doubled word");
+        let doubled = |g: &super::GrammarIssue| String::from_utf16_lossy(&u[g.start..g.start + g.len]) == "the the";
+        let found = settled(|| super::grammar(text, None), |f| f.iter().any(doubled));
+        let g = found.iter().find(|g| doubled(g)).expect("the doubled word");
         assert_eq!(g.corrections, vec!["the".to_string()]);
         assert!(super::grammar("A full week behind me and a fuller one ahead.", None).is_empty());
         let en = super::english_languages();
