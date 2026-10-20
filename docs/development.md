@@ -110,14 +110,15 @@ On Windows the command is the installed exe, for example `claude mcp add -s user
 
 ## Read aloud
 
-macOS only for now (hidden on Windows). Uses macOS's AVSpeechSynthesizer, not WebKit's `speechSynthesis`, which hides downloaded Premium and Enhanced voices and pauses unreliably.
+On macOS it uses AVSpeechSynthesizer, not WebKit's `speechSynthesis`, which hides downloaded Premium and Enhanced voices and pauses unreliably. On Windows it uses WebView2's `speechSynthesis` (`src/speech/webSpeech.ts`), which has the system's voices; `player.ts` picks the backend by platform, and both send the same word and end events. Linux has neither yet, so the feature is off there.
 
 - `src-tauri/src/platform/speech.rs`: the synthesiser, on the main thread, delegate kept alive (it holds it weakly).
 - `src-tauri/src/speech.rs`: `tts_*` commands, synchronous so a stop and the next speak arrive in order.
 - `src/speech/player.ts`: each utterance's id is its generation; older ones are ignored. Holds a paused utterance and remembers the next block if a pause lands at a block's end. Says title and date first and "That concludes …" last, outside the word positions so the highlight skips them.
 - `src/speech/blocks.ts`: spoken text and the highlight's character map in one walk of the rendered note (UTF-16 offsets both ends).
 - `platform/now_playing.rs`: media keys via Now Playing, cleared on stop. `caffeinate` keeps the screen awake while playing.
-- `src/speech/*.test.*`: extraction and playback races, with a fake synthesiser.
+- `src/speech/webSpeech.ts`: voices after `voiceschanged` (natural ones ranked as Premium), a paragraph said a few sentences at a time (under 220 characters, as Chromium's speech can stop a long utterance part-way) with the paragraph's word positions and one end event, and events from a cancelled utterance dropped. No Now Playing or keeping awake on Windows yet (`media_state` and `keep_awake` do nothing there).
+- `src/speech/*.test.*`: extraction and playback races, with a fake synthesiser; `webSpeech.test.ts` with a fake `speechSynthesis`.
 
 ## Signing and permissions
 

@@ -24,8 +24,8 @@ pub struct PlatformFeatures {
     pub image_text: bool,
 }
 
-/// This system's features: all of them on macOS, rich copy and Open at login on Windows, none of
-/// these on Linux yet.
+/// This system's features: all of them on macOS; rich copy, Open at login and Read aloud (through
+/// the web view's speech, src/speech/webSpeech.ts) on Windows; none of these on Linux yet.
 pub fn platform_features() -> PlatformFeatures {
     let none = PlatformFeatures {
         platform: "linux",
@@ -53,7 +53,7 @@ pub fn platform_features() -> PlatformFeatures {
             image_text: true,
         }
     } else if cfg!(windows) {
-        PlatformFeatures { platform: "windows", rich_copy: true, open_at_login: true, ..none }
+        PlatformFeatures { platform: "windows", rich_copy: true, open_at_login: true, read_aloud: true, ..none }
     } else {
         none
     }
@@ -110,12 +110,13 @@ mod tests {
         );
         assert_eq!(f.quick_look, mac);
         assert_eq!(f.rich_copy, mac || cfg!(windows));
+        assert_eq!(f.read_aloud, mac || cfg!(windows));
         let text = f.describe();
         if mac {
             assert_eq!(text, "System: macOS, with every feature.");
         } else if cfg!(windows) {
             assert!(text.starts_with("System: Windows. Not on this system, so not in the window: Quick Look, spelling"), "{text}");
-            assert!(!text.contains("rich copy") && !text.contains("Open at login"), "{text}");
+            assert!(!text.contains("rich copy") && !text.contains("Open at login") && !text.contains("Read aloud"), "{text}");
         }
         // The window and the MCP server's structured output read it in camelCase.
         let v = serde_json::to_value(f).unwrap();

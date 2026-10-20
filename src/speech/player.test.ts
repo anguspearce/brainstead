@@ -22,6 +22,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 
+import { setPlatform } from "../platform";
 import { settings } from "../store";
 import {
   _reset,
@@ -44,6 +45,8 @@ const end = (id: number) => onSpeechEvent({ id, kind: "end", char: 0, len: 0 });
 
 describe("reading aloud", () => {
   beforeEach(() => {
+    // macOS's synthesiser, through the backend (webSpeech.test.ts has the web view's).
+    setPlatform("macos");
     calls.length = 0;
     _reset();
     settings.loadFrom({ ...settings.get(), speechVoice: undefined, speechRate: 1 });

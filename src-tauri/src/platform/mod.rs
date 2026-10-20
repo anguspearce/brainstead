@@ -548,7 +548,8 @@ pub fn spell_accept(word: &str, learn: bool) {
 
 // Reading aloud (src/speech.ts): the system's voices, speaking, pausing and stopping, Now Playing
 // with the media keys, and keeping the screen awake while reading. macOS has them; elsewhere they
-// do nothing and there are no voices, so the window shows no Read aloud button.
+// do nothing and there are no voices: on Windows the window reads aloud through the web view's own
+// speech instead (src/speech/webSpeech.ts), without Now Playing or keeping awake.
 
 /// A voice the system can speak with.
 #[derive(serde::Serialize)]

@@ -82,7 +82,7 @@ Rename edits the type, title and date, and shows the new filename and every link
 Press `⌘.` (or **Focus mode** on ⋯, or **Focus Mode** on the Note menu) to give the page the whole window: the sidebar, side pane and details go, the text is centred a size larger, and the top bar keeps only the title, Read aloud, Text size and **Exit focus**. All three modes work. `Esc`, `⌘.` again, or another screen leaves it.
 
 ## Read aloud
-Read aloud is Mac only for now, and is hidden on Windows. Choose **Read aloud** on ⋯, or press `⇧⌘P`, to hear the note in View, with each word highlighted. To start from a paragraph, `⌥`-click it or right-click and choose **Read aloud from here**. The player bar at the foot has the controls, speed and voice; reading stops when you leave the note. Set the default voice and speed in [Settings › Notes](app:settings/notes).
+Choose **Read aloud** on ⋯, or press `⇧⌘P`, to hear the note in View, with each word highlighted. To start from a paragraph, `⌥`-click it or right-click and choose **Read aloud from here**. The player bar at the foot has the controls, speed and voice; reading stops when you leave the note. Set the default voice and speed in [Settings › Notes](app:settings/notes).
 
 - `⇧⌘P` or `F8`: start reading, or play and pause
 - `Space`: play or pause

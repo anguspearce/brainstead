@@ -20,7 +20,7 @@ The top bar has View, Edit and Source, a bookmark, ⋯ and **Ask** (a chat about
 
 <a href="images/index.md#notes"><picture><source media="(prefers-color-scheme: dark)" srcset="images/read-aloud-dark.png"><img alt="A wiki page being read aloud: the word being said highlighted, and the player bar at the foot of the page" src="images/read-aloud-light.png"></picture></a>
 
-Choose **Read aloud** on the top bar's ⋯, or press ⇧⌘P, to hear the note or wiki page in macOS's voices. Read aloud is Mac only for now: it's hidden on Windows. Each word is highlighted as it's said. Space plays and pauses; Esc stops. Choose the voice and speed in Settings › Notes.
+Choose **Read aloud** on the top bar's ⋯, or press ⇧⌘P, to hear the note or wiki page in the system's voices (on Windows, its natural voices first where it has them). Each word is highlighted as it's said. Space plays and pauses; Esc stops. Choose the voice and speed in Settings › Notes.
 
 ## Writing
 

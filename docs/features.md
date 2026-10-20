@@ -59,7 +59,7 @@ Counts that need you, such as overdue tasks, the Inbox and changes held for you,
 | ⌘⇧F | The Search page |
 | ⌃⌥Space (Ctrl+Shift+Space on Windows) | Quick capture, from any app |
 | ⌘N | New note |
-| ⇧⌘P | Read the open note aloud, then play or pause (Mac only) |
+| ⇧⌘P | Read the open note aloud, then play or pause |
 | ⌘. | Focus mode for the open note, wiki page or source; Esc leaves it |
 | ⌥⌘1 ⌥⌘2 ⌥⌘3 (Ctrl+Shift+1 … 3 on Windows) | View, Edit or Source for the open note |
 | ⌘1 … ⌘9, ⌘0 (Ctrl+1 … 0 on Windows) | Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki, Sources |
@@ -68,7 +68,7 @@ Counts that need you, such as overdue tasks, the Inbox and changes held for you,
 | ⌘, | Settings |
 | ? | Help for this screen |
 
-On Windows, ⌘ is Ctrl, ⌥ is Alt and ⇧ is Shift, so ⌘K is Ctrl+K. The window has a normal title bar. A few extras are Mac only for now: Quick Look, spelling and grammar marks, Read aloud, Export PDF, and reading text in images and showing images to a model.
+On Windows, ⌘ is Ctrl, ⌥ is Alt and ⇧ is Shift, so ⌘K is Ctrl+K. The window has a normal title bar. A few extras are Mac only for now: Quick Look, spelling and grammar marks, Export PDF, and reading text in images and showing images to a model.
 
 Every screen remembers its list, filter and selection across restarts. Back and forward go through where you've been. Closing the window leaves Brainstead running in the [menu bar](day-to-day.md#the-menu-bar) (on Windows, if **Show in the menu bar** is on; otherwise closing the window quits). ⌘Q quits (on Windows, **File › Exit** or the tray's **Quit Brainstead**), asking first about unsaved edits.
 

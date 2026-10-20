@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Reading a note aloud: the player's state and what it does, one block per utterance, through the
-// system's own synthesiser (src-tauri/src/speech.rs; WebKit's speech hides downloaded Premium
-// voices). The word about to be spoken drives the highlight. The rules that keep it right:
+// system's own synthesiser on macOS (src-tauri/src/speech.rs; WebKit's speech hides downloaded
+// Premium voices), and the web view's speech elsewhere (./webSpeech.ts, Windows' voices). The word about to be spoken drives the highlight. The rules that keep it right:
 //
 // - Every speak, stop, skip and pause between blocks bumps the generation, and each utterance's
 //   id is the generation it was spoken in. An event, timer or load from an older generation does
@@ -17,7 +17,9 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { platform } from "../platform";
 import { settings, Store } from "../store";
+import { SpeechEvent, webPause, webSpeak, webStop, webVoices } from "./webSpeech";
 
 export interface Voice {
   id: string;
@@ -26,13 +28,6 @@ export interface Voice {
   /** 1 default, 2 Enhanced, 3 Premium. */
   quality: number;
   default: boolean;
-}
-
-interface SpeechEvent {
-  id: number;
-  kind: "word" | "end";
-  char: number;
-  len: number;
 }
 
 export interface PlayerState {
@@ -69,11 +64,22 @@ export const rankVoices = (vs: Voice[]) =>
 export const voiceLabel = (v: Voice) =>
   /\(/.test(v.name) || v.quality < 2 ? v.name : `${v.name} (${v.quality === 3 ? "Premium" : "Enhanced"})`;
 
+// The synthesiser: macOS's through the backend, the web view's anywhere else. Both send the same
+// word and end events, to onSpeechEvent.
+const native = () => platform() === "macos";
+const tts = {
+  voices: () => (native() ? invoke<Voice[]>("tts_voices") : webVoices()),
+  speak: async (id: number, text: string, voice: string | null, rate: number) =>
+    native() ? invoke<void>("tts_speak", { id, text, voice, rate }) : webSpeak(id, text, voice, rate, onSpeechEvent),
+  pause: async (on: boolean) => (native() ? invoke<void>("tts_pause", { on }) : webPause(on)),
+  stop: async () => (native() ? invoke<void>("tts_stop") : webStop()),
+};
+
 /** The English voices installed, best first; read again when the window comes back, so a voice
  *  downloaded in System Settings appears without a restart. */
 export const voices = new Store<Voice[]>([]);
 export async function loadVoices() {
-  const all = await invoke<Voice[]>("tts_voices").catch(() => [] as Voice[]);
+  const all = await tts.voices().catch(() => [] as Voice[]);
   voices.set(rankVoices(all.filter((v) => v.lang.toLowerCase().startsWith("en"))));
 }
 
@@ -122,7 +128,7 @@ function speakFrom(i: number) {
   intro = "";
   utt = { id: g, index: i, prefix: head.length };
   set({ ...s, paused: false, index: i, char: -1, len: text.length });
-  invoke("tts_speak", { id: g, text: head + text + tail, voice: voiceFor(), rate: rate() }).catch(() => {
+  tts.speak(g, head + text + tail, voiceFor(), rate()).catch(() => {
     if (g === gen) stop();
   });
 }
@@ -164,16 +170,16 @@ export function toggleReading() {
     if (held && utt?.id === gen) {
       held = false;
       set({ ...s, paused: false });
-      void invoke("tts_pause", { on: false });
+      void tts.pause(false);
     } else speakFrom(resumeAt ?? s.index);
   } else {
     if (utt?.id === gen) {
       held = true;
-      void invoke("tts_pause", { on: true });
+      void tts.pause(true);
     } else {
       // Between blocks: nothing is held, so play starts the block again.
       gen++;
-      void invoke("tts_stop");
+      void tts.stop();
     }
     set({ ...s, paused: true });
   }
@@ -197,7 +203,7 @@ function stop() {
   held = false;
   resumeAt = null;
   texts = [];
-  if (player.get().on) void invoke("tts_stop");
+  if (player.get().on) void tts.stop();
   set(IDLE);
 }
 
@@ -217,7 +223,7 @@ export function speechSettingsChanged() {
 export function sayTest(text: string) {
   const s = player.get();
   if (s.on && !s.paused) toggleReading();
-  void invoke("tts_speak", { id: 0, text, voice: voiceFor(), rate: rate() }).catch(() => {});
+  tts.speak(0, text, voiceFor(), rate()).catch(() => {});
 }
 
 /** Screenshot mode: the block and spoken character to show the player at (src/scene.ts). */

@@ -27,7 +27,7 @@ import { ago, fmtCount, Popover, Seg, Switch } from "./ui";
 import { sayTest, speechSettingsChanged, voices } from "./speech/player";
 import { SpeedSlider, VoiceSelect } from "./speech/ReadAloud";
 import { DocButton, useIsGone } from "./docButton";
-import { accelLabel, captureDefault, fileManager, isMac, keyLabel, terminalApp } from "./platform";
+import { accelLabel, captureDefault, fileManager, isMac, isWindows, keyLabel, terminalApp } from "./platform";
 import { useFeatures } from "./features";
 
 const PANES: [SettingsPane, string, string][] = [
@@ -446,7 +446,9 @@ function ReadAloudSettings() {
             <div className="faint">
               {isMac
                 ? "More voices: System Settings › Accessibility › Spoken Content › System voice › Manage Voices. Premium voices sound the most natural (Zoe or Ava for US English, Jamie for British); download one there and it's listed here. Siri's voices can't be used by other apps."
-                : "More voices: install one in the system's speech settings and it's listed here."}
+                : isWindows
+                  ? "More voices: Windows Settings › Time & language › Speech › Manage voices; add one there and it's listed here. Natural voices, where Windows has them, are listed first."
+                  : "More voices: install one in the system's speech settings and it's listed here."}
             </div>
           </div>
           <VoiceSelect onChange={speechSettingsChanged} />

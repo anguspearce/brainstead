@@ -7,7 +7,7 @@ summary: Every key the app answers to, by where it works.
 ---
 Each key works where its heading says; opened from a screen, this topic unfolds that screen's keys. Quick capture's shortcut is set in [Settings › General](app:settings/general); `⌃⌥Space` is the default.
 
-Keys are shown for this computer: Windows uses Ctrl, Alt and Shift where the Mac uses its own modifier keys, so the screen shortcuts are Ctrl+1 to 0 and a note's View, Edit and Source are Ctrl+Shift+1 to 3 on Windows. Read aloud, Export PDF and Quick Look are Mac only for now.
+Keys are shown for this computer: Windows uses Ctrl, Alt and Shift where the Mac uses its own modifier keys, so the screen shortcuts are Ctrl+1 to 0 and a note's View, Edit and Source are Ctrl+Shift+1 to 3 on Windows. Export PDF and Quick Look are Mac only for now.
 
 ## Anywhere
 - `⌘K` — Search or jump anywhere
