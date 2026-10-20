@@ -199,6 +199,12 @@ fn reading_tools() {
     let lint = ok(&f.ctx, "lint", json!({"page": "Hub Platform"}));
     assert!(lint.contains("[[Missing Concept]]"), "{lint}");
     // Each check names its id; the grey ones say they aren't counted, and safe fixes are marked.
+    // A page written after the log's last change is an unlogged write, a safe fix. Set here, as a
+    // fresh checkout (CI's) gives every file the same moment in no particular order.
+    let log = std::fs::metadata(f.ctx.vault.join("log.md")).unwrap().modified().unwrap();
+    let page = std::fs::OpenOptions::new().write(true).open(f.ctx.vault.join("wiki/entities/Acme Pilot.md")).unwrap();
+    page.set_modified(log + std::time::Duration::from_secs(3600)).unwrap();
+    drop(page);
     let all = ok(&f.ctx, "lint", json!({}));
     assert!(all.contains("; check missing-pages)"), "{all}");
     assert!(all.lines().any(|l| l.contains("[safe fix]")), "{all}");
