@@ -20,7 +20,7 @@ Sources (⌘0) are the files in `sources/`: emails, Teams chats and transcripts 
 - A row's button is what the source usually becomes: **Meeting note** for a Teams transcript, **Draft reply** for an email or chat thread, otherwise **Ingest**. Its ▾ has the rest: **Make and ingest a meeting note** or **Draft a reply** where they fit, **Ingest into the wiki**, **Ask about this source** and **Compare with…**. A file's right-click menu offers the same.
 - Transcripts, emails and chats are known by their names (`Teams. Transcript. …`, `Email. …`, `Teams. Chat. …`), in `sources/` or any folder under it.
 - The **Ingest runs** pane lists each run's steps, the latest first and older ones as you scroll. **Search runs** finds them by name, state, model or day, and **See N changes** opens Changes at the run's first change.
-- PDFs open with page navigation, zoom and find. Word, PowerPoint and Excel files show their text; **Quick Look** (`Space`, Mac only) shows how they look. Images show the text read from them, which search uses too (Mac only for now).
+- PDFs open with page navigation, zoom and find. Word, PowerPoint and Excel files show their text; **Quick Look** (`Space`) on a Mac, or **Open in its app**, shows how they look. Images show the text read from them, which search uses too (Mac only for now).
 
 <a href="images/index.md#the-wiki-and-sources"><picture><source media="(prefers-color-scheme: dark)" srcset="images/source-provenance-dark.png"><img alt="A source's provenance: when it was ingested and by which model, and the wiki pages that cite it with the passages they cite" src="images/source-provenance-light.png"></picture></a>
 

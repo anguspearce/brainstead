@@ -258,7 +258,8 @@ export function TrashScreen() {
                   </span>
                   <span className="faint r">{fmtBytes(r.sizeBytes)}</span>
                   <span className="tracts">
-                    {canLook && (
+                    {/* Where there's no Quick Look (Windows), the same call opens the file in its own app. */}
+                    {canLook ? (
                       <button
                         type="button"
                         className="ibtn"
@@ -267,6 +268,16 @@ export function TrashScreen() {
                         onClick={() => void quickLook(r)}
                       >
                         <Icon name="eye" size={14} />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="ibtn"
+                        aria-label={`Open ${r.basename} in its app`}
+                        title="Open the file in the app the system uses for it, where it lies in the Trash"
+                        onClick={() => void quickLook(r)}
+                      >
+                        <Icon name="export" size={14} />
                       </button>
                     )}
                     {stuck ? (

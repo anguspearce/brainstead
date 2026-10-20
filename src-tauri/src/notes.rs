@@ -264,7 +264,8 @@ pub async fn trash_move(app: AppHandle, path: String) -> Res<TrashEntry> {
     .await
 }
 
-/// Previews a file in the trash with Quick Look, where it lies in `.trash/<id>/`.
+/// Previews a file in the trash with Quick Look, where it lies in `.trash/<id>/`; on Windows,
+/// which has none, opens it in its own app there.
 #[tauri::command]
 pub fn trash_quick_look(app: AppHandle, svc: State<VaultService>, id: String) -> Res<()> {
     let root = root(&svc)?;

@@ -55,7 +55,7 @@ The **Ingest runs** pane on the right shows each run's steps, with **Stop** whil
 Open a source to read it.
 
 - **PDF**: a bar with page n of N, previous and next, and zoom from 50% to 300% (click the percentage to fit the width again). **Find in this file** lists the pages that match; `↩` goes to the next match and `⇧↩` the one before.
-- **Word, PowerPoint and Excel**: the text Brainstead reads from them, which search, ingest and quotes use. To see the file as it looks in its app, press **Quick Look** or `Space` (Mac only for now).
+- **Word, PowerPoint and Excel**: the text Brainstead reads from them, which search, ingest and quotes use. To see the file as it looks in its app, press **Quick Look** or `Space` on a Mac, or **Open in its app**.
 - **Image**: shown with **Text in the image** folded under it; click it to see the text Brainstead read, which search and ingest use.
 - **Open in its app** opens the file in its usual app. A file Brainstead can't show has both buttons.
 

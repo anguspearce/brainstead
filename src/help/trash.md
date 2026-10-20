@@ -18,7 +18,7 @@ Unsaved changes in a trashed note go into the Trash with it, and come back as it
 Newest deletions come first. Each row shows the layer, name, the folder it **Was in**, when it was deleted and its size.
 - **Search the Trash** filters by name or folder.
 - **Show** in the top bar limits the list to notes, wiki pages, sources or templates.
-- Click the eye button, or select one item and press `Space`, to preview a file with Quick Look (Mac only for now).
+- Click the eye button, or select one item and press `Space`, to preview a file with Quick Look. On Windows, which has no Quick Look, the button opens the file in its own app instead, where it lies in the Trash.
 
 ## Put files back
 **Restore** on a row puts the file back where it was. To restore several, tick them (the header box ticks all) and click **Restore** above the list.

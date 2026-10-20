@@ -86,4 +86,4 @@ Other apps can still change these files.
 
 ## The Trash
 
-Moving a note to the Trash puts it in the vault's `.trash` folder, with Undo. Trashing a transcript first points its links at its meeting note, when it has one. A capture restored from the Trash goes back to the Inbox. The Trash screen lists and searches what's there, puts files back where they were, and deletes them for good. **Quick Look** (`Space`) previews a file on a Mac; Windows has no preview yet.
+Moving a note to the Trash puts it in the vault's `.trash` folder, with Undo. Trashing a transcript first points its links at its meeting note, when it has one. A capture restored from the Trash goes back to the Inbox. The Trash screen lists and searches what's there, puts files back where they were, and deletes them for good. **Quick Look** (`Space`) previews a file on a Mac; on Windows the same button opens it in its own app.
