@@ -245,7 +245,9 @@ export function HelpDrawer() {
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, []);
-  useEffect(() => setQ(view?.q ?? ""), [view?.topic, view?.guide, view?.start, view?.q]);
+  useEffect(() => {
+    setQ(view?.q ?? "");
+  }, [view?.topic, view?.guide, view?.start, view?.q]);
 
   if (!view) return null;
   const guide = view.guide ? GUIDES.find((g) => g.id === view.guide) : undefined;

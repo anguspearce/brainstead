@@ -94,7 +94,9 @@ export default function App({ scene }: { scene: Scene | null }) {
   const { place: here } = useStore(place);
   const [palette, setPalette] = useState(!!scene?.palette);
   const focused = useStore(focusMode) && here.screen === "doc";
-  useEffect(() => startFocus(), []);
+  useEffect(() => {
+    return startFocus();
+  }, []);
 
   useEffect(() => {
     if (p) hideSplash();
@@ -118,10 +120,14 @@ export default function App({ scene }: { scene: Scene | null }) {
   }, []);
 
   // The update dialog: offers from src-tauri/src/updates.rs and what follows them.
-  useEffect(() => startUpdates(), []);
+  useEffect(() => {
+    return startUpdates();
+  }, []);
 
   // Read aloud: the synthesiser's events, the media keys and the voices (src/speech/player.ts).
-  useEffect(() => startSpeech(), []);
+  useEffect(() => {
+    return startSpeech();
+  }, []);
 
   // Actions from the MCP server, through the running app (src/mcpActions.ts).
   useEffect(() => {

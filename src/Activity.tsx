@@ -85,7 +85,9 @@ export function ActivityScreen() {
 
   // Each title that names a file links to it.
   const [paths, setPaths] = useState<Map<string, string | null>>(new Map());
-  useEffect(() => setPaths(new Map()), [version]);
+  useEffect(() => {
+    setPaths(new Map());
+  }, [version]);
   useEffect(() => {
     const want = [...new Set(visible.map((e) => linkTarget(e.title)))].filter((t) => !paths.has(t));
     if (!want.length) return;

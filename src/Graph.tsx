@@ -63,7 +63,9 @@ export function GraphScreen() {
     };
   }, [mode, center, depth, version]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => setPicked(null), [center, mode]);
+  useEffect(() => {
+    setPicked(null);
+  }, [center, mode]);
 
   const shown = useMemo(() => (g ? visible(g, hidden, around ? center : null) : null), [g, hidden, around, center]);
   const kinds = useMemo(() => (g ? kindsIn(g) : []), [g]);
@@ -265,7 +267,9 @@ function CentrePicker({ onPick }: { onPick: (path: string) => void }) {
   const [rect, setRect] = useState<DOMRect | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const version = useVaultVersion();
-  useEffect(() => setFiles(null), [version]);
+  useEffect(() => {
+    setFiles(null);
+  }, [version]);
   useEffect(() => {
     if (q && !files) void api.filesList(null).then((f) => setFiles(f.filter((x) => x.layer !== "template")));
   }, [q, files]);
@@ -428,7 +432,7 @@ function GraphCanvas({
       const cy = n.y! * k + y;
       const rr = n.r * k;
       const big = n.id === center;
-      ctx.font = `${big ? 600 : 500} ${big ? 12.5 : 11}px "Geist Variable", -apple-system, system-ui, sans-serif`;
+      ctx.font = `${big ? 600 : 500} ${big ? 12.5 : 11}px "Geist Variable", -apple-system, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif`;
       const label = n.title.length > 42 ? `${n.title.slice(0, 40)}…` : n.title;
       // From the edge at the upper right, out along the diagonal, then the box.
       const ex = cx + rr * 0.71;
@@ -487,7 +491,7 @@ function GraphCanvas({
     for (const n of ns) {
       if (!always.has(n.id) || !ctx) continue;
       const big = n.id === center;
-      ctx.font = `${big ? 600 : 500} ${big ? 12.5 : 11}px "Geist Variable", -apple-system, system-ui, sans-serif`;
+      ctx.font = `${big ? 600 : 500} ${big ? 12.5 : 11}px "Geist Variable", -apple-system, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif`;
       const label = n.title.length > 42 ? `${n.title.slice(0, 40)}…` : n.title;
       labelW.set(n.id, ctx.measureText(label).width + 12);
     }

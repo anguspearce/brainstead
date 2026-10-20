@@ -20,6 +20,7 @@ import { ask, blankChat } from "./askState";
 import { nav, Screen, SettingsPane } from "./nav";
 import { noteDialog } from "./notes/dialogs";
 import { applyTheme, settings, Store } from "./store";
+import { vaultFile } from "./platform";
 
 export interface Scene {
   name?: string;
@@ -195,7 +196,7 @@ export function applyScene(sc: Scene) {
   if (sc.dialog === "fix-name") fixNameOpen.set({ wrong: sc.q, right: sc.title });
   if (sc.weekprep) scenePrep.set(true);
   if (sc.inboxSuggest) sceneInboxSuggest.set(true);
-  if (sc.image) imageView.set({ url: convertFileSrc(`${(settings.get().vaultPath ?? "").replace(/\/$/, "")}/${sc.image}`), alt: sc.image });
+  if (sc.image) imageView.set({ url: convertFileSrc(vaultFile(settings.get().vaultPath ?? "", sc.image)), alt: sc.image });
   if (sc.chat) ask.set({ chats: [sampleChat()], active: "scene" });
   if (sc.help) helpOpen.set(sc.help);
   if (sc.guideOffer) guideOffer.set(true);

@@ -832,7 +832,7 @@ pub fn migrate(data_dir: &Path, vault: &Path, today: chrono::NaiveDate, days: i6
     if backup.exists() {
         let _ = std::fs::remove_dir_all(&backup);
     }
-    std::fs::rename(&old, &backup).map_err(|e| e.to_string())?;
+    crate::write::rename(&old, &backup).map_err(|e| e.to_string())?;
     Ok(n)
 }
 

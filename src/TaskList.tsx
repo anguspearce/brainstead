@@ -649,7 +649,9 @@ export function TaskList({
   const [order, setOrder] = useState<TaskRow[] | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const list = useRef<HTMLUListElement>(null);
-  useEffect(() => setOrder(null), [rows]);
+  useEffect(() => {
+    setOrder(null);
+  }, [rows]);
   // Screenshot mode: a task's menu open (scene.ts `taskMenu`), once its row is there.
   useEffect(() => {
     const want = document.documentElement.dataset.taskMenu;

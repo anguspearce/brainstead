@@ -15,8 +15,7 @@ import { localToday } from "../md/taskQuery";
 import { openDoc } from "../nav";
 import { reportEditError } from "../taskModel";
 import type { EditorHooks } from "./Editor";
-
-const join = (root: string, rel: string) => `${root.replace(/[\\/]$/, "")}/${rel.replace(/^\/+/, "")}`;
+import { vaultFile } from "../platform";
 
 /** The embed for an image saved at a vault path, as markdown vault editors write it. */
 export const imageEmbed = (rel: string) => `![[${rel}]]`;
@@ -47,11 +46,11 @@ export function appHooks(path: string, root: string, pickDate?: EditorHooks["pic
       if ("url" in w) return w.url;
       if ("name" in w) {
         // `![[images/pic.png]]` is a path; `![[pic.png]]` a name to look up.
-        if (w.name.includes("/")) return convertFileSrc(join(root, w.name));
+        if (w.name.includes("/")) return convertFileSrc(vaultFile(root, w.name));
         const p = await api.assetFind(w.name).catch(() => null);
-        return p ? convertFileSrc(join(root, p)) : null;
+        return p ? convertFileSrc(vaultFile(root, p)) : null;
       }
-      return convertFileSrc(join(root, dir && !w.path.includes("/") ? `${dir}/${w.path}` : w.path));
+      return convertFileSrc(vaultFile(root, dir && !w.path.includes("/") ? `${dir}/${w.path}` : w.path));
     },
     openImage(url, alt) {
       imageView.set({ url, alt });

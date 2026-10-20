@@ -546,7 +546,9 @@ function DayButton({ value, max, onChange }: { value: string; max: string; onCha
 
 function TimeField({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
   const [v, setV] = useState(value);
-  useEffect(() => setV(value), [value]);
+  useEffect(() => {
+    setV(value);
+  }, [value]);
   const ok = /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
   return (
     <input

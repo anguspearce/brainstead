@@ -23,6 +23,18 @@ export default tseslint.config(
       // edited, a list while the next one loads) is deliberate here, and valid React.
       "react-hooks/set-state-in-effect": "off",
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+      // An effect written `() => el.scrollTo(…)` returns the call's result, and React calls what an
+      // effect returns as its clean-up. In WebView2 (Windows) `scrollTo` returns a promise, so the
+      // clean-up throws and the page goes blank. Braces, or `return` where a clean-up is meant.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.name=/^use(Layout|Insertion)?Effect$/] > ArrowFunctionExpression.arguments:first-child[body.type=/^(CallExpression|ChainExpression|AwaitExpression|ConditionalExpression|LogicalExpression)$/]",
+          message:
+            "An effect's arrow body is returned and run as its clean-up: put it in braces (or write `return` if a clean-up is meant).",
+        },
+      ],
     },
   },
   // The product page's script runs in the browser.

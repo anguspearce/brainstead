@@ -14,6 +14,7 @@ import { Icon, Mark } from "./icons";
 import { permissions, recheckPermissions } from "./state";
 import { settings, useStore } from "./store";
 import { useFeatures } from "./features";
+import { dragRegion } from "./platform";
 
 /** Checks again whenever the window comes back to the front (from System Settings, say). */
 export function useRecheckOnFocus() {
@@ -144,7 +145,7 @@ export function Welcome() {
   const [creating, setCreating] = useState(false);
   const needsFda = !!p?.applies && p.fullDiskAccess === false && !s.skippedFullDiskAccess;
   return (
-    <div className="welcome drag" data-tauri-drag-region>
+    <div className="welcome drag" {...dragRegion()}>
       <div className="wcard">
         <div className="brand">
           <Mark size={34} />

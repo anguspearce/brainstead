@@ -43,6 +43,7 @@ import { calloutLook, defaultTitle, remarkCallouts } from "./callouts";
 import { imageSize, parseWikilink, remarkWikilinks, WikiTarget } from "./wikilinks";
 import { ErrorBoundary } from "../ErrorBoundary";
 import { useVaultVersion } from "../state";
+import { vaultFile } from "../platform";
 
 const WIKI_IN_TEXT = /!?\\?\[\\?\[([^[\]\n]+?)\\?\]\\?\]/g;
 
@@ -98,8 +99,6 @@ function attrJson<T>(raw: string): T | null {
   }
 }
 
-const join = (root: string, rel: string) => `${root.replace(/[\\/]$/, "")}/${rel.replace(/^\/+/, "")}`;
-
 /** Where an image's src points: a URL to use as it is, a name to look up, or a vault path.
  *  the previous app's own URLs (`/api/vault-assets/<path>`, `/api/vault-assets/by-name/<name>`), which
  *  notes written there contain in raw `<img>` tags, map back to the vault. */
@@ -139,9 +138,9 @@ function VaultImage({
     else if ("name" in w)
       api
         .assetFind(w.name)
-        .then((p) => live && (p ? setUrl(convertFileSrc(join(root, p))) : setFailed(true)))
+        .then((p) => live && (p ? setUrl(convertFileSrc(vaultFile(root, p))) : setFailed(true)))
         .catch(() => live && setFailed(true));
-    else setUrl(convertFileSrc(join(root, w.path)));
+    else setUrl(convertFileSrc(vaultFile(root, w.path)));
     return () => {
       live = false;
     };
@@ -167,7 +166,7 @@ function VaultImage({
       onClick={(e) => imageView.set({ url: e.currentTarget.currentSrc || url, alt })}
       onError={(e) => {
         // Not under the vault: try beside the note.
-        const beside = "path" in where && dir ? convertFileSrc(join(root, `${dir}/${where.path}`)) : null;
+        const beside = "path" in where && dir ? convertFileSrc(vaultFile(root, `${dir}/${where.path}`)) : null;
         if (beside && e.currentTarget.src !== beside) e.currentTarget.src = beside;
         else setFailed(true);
       }}

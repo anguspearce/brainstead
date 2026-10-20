@@ -324,13 +324,13 @@ pub fn commit(root: &Path, shown: &RenamePlan, linkers: &[String], resolves: &dy
         // A change of case only: on a case-insensitive disk a direct rename does nothing. If the
         // second step fails the note goes back to its name, not left under the hidden one.
         let tmp = src.with_file_name(format!(".rename-{}", std::process::id()));
-        fs::rename(&src, &tmp).and_then(|_| {
-            fs::rename(&tmp, &dst).inspect_err(|_| {
-                let _ = fs::rename(&tmp, &src);
+        crate::write::rename(&src, &tmp).and_then(|_| {
+            crate::write::rename(&tmp, &dst).inspect_err(|_| {
+                let _ = crate::write::rename(&tmp, &src);
             })
         })
     } else {
-        fs::rename(&src, &dst)
+        crate::write::rename(&src, &dst)
     };
     // The note itself may have been rewritten (links to its own headings); a failed move leaves
     // it at `src`, where `undo` puts it back.

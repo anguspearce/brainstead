@@ -137,7 +137,7 @@ pub fn save(path: &Path, s: &Settings) -> Result<(), String> {
     let tmp = path.with_extension("json.tmp");
     let json = serde_json::to_vec_pretty(s).map_err(|e| e.to_string())?;
     std::fs::write(&tmp, json).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, path).map_err(|e| e.to_string())
+    brainstead_core::write::rename(&tmp, path).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

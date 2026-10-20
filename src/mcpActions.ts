@@ -135,7 +135,7 @@ import { LABEL as TRIAGE } from "./skills/Triage";
 import { ANSWERED, replyTask } from "./skills/Reply";
 import { actionLabel, actionsIn, filterLog, rankLog } from "./activityModel";
 import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from "./taskGroups";
-import { captureDefault, isMac, keyLabel, terminalApp } from "./platform";
+import { captureDefault, isMac, keyLabel, terminalApp, vaultFile } from "./platform";
 
 const TODO_LIST = "Me. To Do List.md";
 const SCRATCHPAD = "Me. Scratchpad.md";
@@ -3454,7 +3454,7 @@ async function openApp(a: Args): Promise<string> {
     const p = IMAGE_EXT.test(name) ? await api.assetFind(name).catch(() => null) : null;
     if (!p) throw new Error(`There's no image called ${image} in the vault.`);
     await invoke("main_show", { screen: null });
-    imageView.set({ url: convertFileSrc(`${(settings.get().vaultPath ?? "").replace(/[\\/]$/, "")}/${p}`), alt: pageName(p) });
+    imageView.set({ url: convertFileSrc(vaultFile(settings.get().vaultPath ?? "", p)), alt: pageName(p) });
     return `Brainstead shows ${p} full size.`;
   }
   const page = str(a, "page")?.trim();

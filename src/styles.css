@@ -57,9 +57,9 @@
   --code-name: #8b5cf6;
   --pop: 0 1px 2px rgb(15 20 30 / 6%), 0 12px 40px rgb(15 20 30 / 14%);
   --scrim: rgb(20 18 15 / 28%);
-  --sans: "Geist Variable", -apple-system, "SF Pro Text", system-ui, sans-serif;
-  --display: "Geist Variable", -apple-system, "SF Pro Display", system-ui, sans-serif;
-  --mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+  --sans: "Geist Variable", -apple-system, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --display: "Geist Variable", -apple-system, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, "Cascadia Mono", Consolas, monospace;
 
   /* The left panes, one width each kind: a nav or list beside a page (Inbox, Tasks, Search, Wiki,
      Settings, Meeting notes, the weekly steps), and a list beside a record (Projects, Changes). */
@@ -223,8 +223,8 @@ input {
   flex: none;
 }
 
-/* Windows has a native title bar, so there are no traffic lights to leave room for. */
-html[data-platform="windows"] .tlspace {
+/* Windows and Linux have a native title bar, so there are no traffic lights to leave room for. */
+html[data-platform]:not([data-platform="macos"]) .tlspace {
   height: 0;
 }
 .brand {
@@ -1576,7 +1576,7 @@ mark.search-hit {
   padding-left: 88px;
   border-bottom: 0;
 }
-html[data-platform="windows"] .top.focusbar {
+html[data-platform]:not([data-platform="macos"]) .top.focusbar {
   padding-left: 0;
 }
 .top.focusbar .focustitle {
@@ -4373,7 +4373,7 @@ button.rnhead {
 
 /* Modern: large, tight headings, an accent bar on sections, soft rounded tables. */
 .docsurf[data-doc-style="modern"] {
-  --doc-font: "Geist Variable", -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --doc-font: "Geist Variable", -apple-system, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
 }
 .docsurf.styled[data-doc-style="modern"] :is(.prose :is(h1, h2, h3, h4), .doc-page-title) {
   letter-spacing: -0.025em;
@@ -4414,7 +4414,7 @@ button.rnhead {
 
 /* Minimal: system type in ink; colour only on links and the title's rule. */
 .docsurf[data-doc-style="minimal"] {
-  --doc-font: -apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif;
+  --doc-font: -apple-system, "SF Pro Text", "Helvetica Neue", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
 }
 .docsurf.styled[data-doc-style="minimal"] :is(.prose :is(h1, h2, h3, h4, h5, h6), .doc-page-title) {
   color: var(--doc-ink);
@@ -4477,7 +4477,7 @@ button.rnhead {
 
 /* Technical: monospaced headings, gridded tables, code given room. */
 .docsurf[data-doc-style="technical"] {
-  --doc-font: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  --doc-font: -apple-system, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
 }
 .docsurf.styled[data-doc-style="technical"] :is(.prose :is(h1, h2, h3, h4), .doc-page-title) {
   font-family: var(--mono);
@@ -4674,6 +4674,7 @@ button.rnhead {
     font:
       8.3pt "SF Mono",
       Menlo,
+      "Cascadia Mono",
       Consolas,
       monospace;
     padding: 0.2mm 1mm;

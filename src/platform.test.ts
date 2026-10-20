@@ -5,7 +5,20 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { accelLabel, captureDefault, fileManager, isMod, isOptCmd, keyLabel, modLabel, platform, setPlatform, strayCtrl } from "./platform";
+import {
+  accelLabel,
+  captureDefault,
+  dragRegion,
+  fileManager,
+  isMod,
+  isOptCmd,
+  keyLabel,
+  modLabel,
+  platform,
+  setPlatform,
+  strayCtrl,
+  vaultFile,
+} from "./platform";
 
 const start = platform();
 afterEach(() => setPlatform(start));
@@ -84,5 +97,24 @@ describe("key label fixture", () => {
     expect(accelLabel("Control+Alt+KeyK")).toBe("⌃⌥KeyK");
     setPlatform("windows");
     expect(accelLabel("Control+Alt+KeyK")).toBe("Ctrl+Alt+K");
+  });
+});
+
+describe("vaultFile", () => {
+  it("joins with the root's own separator", () => {
+    expect(vaultFile("/srv/Notes", "img/a.png")).toBe("/srv/Notes/img/a.png");
+    expect(vaultFile("/srv/Notes/", "/img/a.png")).toBe("/srv/Notes/img/a.png");
+    expect(vaultFile("C:\\Users\\maya\\Notes", "img/a b.png")).toBe("C:\\Users\\maya\\Notes\\img\\a b.png");
+    expect(vaultFile("C:\\Notes\\", "a.png")).toBe("C:\\Notes\\a.png");
+    expect(vaultFile("\\\\server\\share\\Notes", "x/y.md")).toBe("\\\\server\\share\\Notes\\x\\y.md");
+  });
+});
+
+describe("dragRegion", () => {
+  it("is on macOS only", () => {
+    setPlatform("macos");
+    expect(dragRegion()).toEqual({ "data-tauri-drag-region": true });
+    setPlatform("windows");
+    expect(dragRegion()).toEqual({});
   });
 });

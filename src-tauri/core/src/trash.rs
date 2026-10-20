@@ -71,9 +71,9 @@ fn new_id() -> String {
 
 /// Renames, or copies and deletes across volumes, keeping the modification time.
 fn move_file(from: &Path, to: &Path) -> Result<()> {
-    match fs::rename(from, to) {
+    match crate::write::rename(from, to) {
         Ok(()) => Ok(()),
-        Err(e) if e.raw_os_error() == Some(18) => {
+        Err(e) if e.kind() == std::io::ErrorKind::CrossesDevices => {
             let mtime = fs::metadata(from).and_then(|m| m.modified()).map_err(io)?;
             fs::copy(from, to).map_err(io)?;
             if let Ok(f) = fs::File::options().write(true).open(to) {

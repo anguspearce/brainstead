@@ -167,7 +167,9 @@ export function FileList<T extends FileSummary>({
   const idx = Math.min(active, Math.max(0, shown.length - 1));
   // Rows are drawn PAGE at a time: more as the end comes into view, or as the arrow keys reach it.
   const [limit, setLimit] = useState(PAGE);
-  useEffect(() => setLimit(PAGE), [shown]);
+  useEffect(() => {
+    setLimit(PAGE);
+  }, [shown]);
   if (idx >= limit) setLimit(idx + PAGE);
   const end = useRef<HTMLDivElement>(null);
   const more = limit < shown.length;

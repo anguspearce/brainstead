@@ -13,7 +13,7 @@
 //! (kind "review"), saved like any other, which the window opens as a tab while it runs; its
 //! write can be undone while the files are as the run left them.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use brainstead_core::ask::Event;
@@ -138,28 +138,38 @@ pub async fn automated_suggest(app: AppHandle) -> Result<Vec<reviews::sessions::
         let automations = reviews::sessions::automations(listed.as_deref());
         let end = now();
         let sessions = reviews::sessions::sessions_for_window(&projects, end - chrono::Duration::days(14), end, &automations);
-        // Folders are compared with `/` for `\` and no trailing separator; Windows' are case-blind.
-        let norm = |p: &str| {
-            let p = p.replace('\\', "/").trim_end_matches('/').to_string();
-            if cfg!(windows) {
-                p.to_lowercase()
-            } else {
-                p
-            }
-        };
-        let (vault, temp) = (vault.as_deref().map(norm), norm(&std::env::temp_dir().to_string_lossy()));
-        let skip = |cwd: &str| {
-            let cwd = norm(cwd);
-            vault.as_deref().is_some_and(|v| cwd == v)
-                || cwd.starts_with(&temp)
-                || cwd.starts_with("/tmp/")
-                || cwd.starts_with("/private/")
-                || cwd.starts_with("/var/folders/")
-        };
+        let vault = vault.map(PathBuf::from);
+        let skip = |cwd: &str| skipped_folder(Path::new(cwd), vault.as_deref(), &std::env::temp_dir());
         reviews::sessions::suggestions(&sessions).into_iter().filter(|g| !skip(&g.cwd)).take(20).collect()
     })
     .await
     .map_err(|e| e.to_string())
+}
+
+/// The folders a suggestion is never made for: the vault itself, and temporary folders (the
+/// system's, and on macOS `/tmp`, `/private` and `/var/folders`), compared by path components, so
+/// `/` against `\` and a trailing separator don't matter. Case-blind on Windows.
+fn skipped_folder(cwd: &Path, vault: Option<&Path>, temp: &Path) -> bool {
+    let parts = |p: &Path| -> Vec<String> {
+        p.components()
+            .filter(|c| !matches!(c, std::path::Component::CurDir))
+            .map(|c| {
+                let c = c.as_os_str().to_string_lossy();
+                if cfg!(windows) {
+                    c.to_lowercase()
+                } else {
+                    c.into_owned()
+                }
+            })
+            .collect()
+    };
+    let cwd = parts(cwd);
+    let inside = |dir: &Path| {
+        let d = parts(dir);
+        !d.is_empty() && cwd.starts_with(&d)
+    };
+    let unix_temp = cfg!(unix) && ["/tmp", "/private", "/var/folders"].iter().any(|d| inside(Path::new(d)));
+    vault.is_some_and(|v| parts(v) == cwd) || inside(temp) || unix_temp
 }
 
 fn now() -> NaiveDateTime {
@@ -670,5 +680,22 @@ mod tests {
         assert_eq!(current_file("Me. Daily Reviews - 2026-09.md", |_| true), "Me. Daily Reviews - 2026-09.md");
         assert_eq!(current_file("Me. Daily Reviews - 2026-09.md", |_| false), "Me. Daily Reviews - 2026-09.md");
         assert_eq!(current_file("Me. Daily Summaries - 2026-10.md", |_| false), "Me. Daily Summaries - 2026-10.md");
+    }
+
+    /// Temporary folders and the vault by their parts: a trailing separator doesn't matter, and a
+    /// folder that only starts with the temporary folder's name isn't in it.
+    #[test]
+    fn temporary_folders_and_the_vault_are_skipped() {
+        let real = std::env::temp_dir();
+        assert!(skipped_folder(&real.join("run-1"), None, &real));
+        let temp = Path::new("/srv/scratch");
+        let vault = Path::new("/srv/Notes");
+        let skip = |p: &str| skipped_folder(Path::new(p), Some(vault), temp);
+        assert!(skip("/srv/scratch/run-1") && skip("/srv/scratch/run-1/") && skip("/srv/scratch"));
+        assert!(!skip("/srv/scratchpad/run-1"));
+        assert!(skip("/srv/Notes") && skip("/srv/Notes/"));
+        assert!(!skip("/srv/Notes/Projects") && !skip("/srv/Orbit App"));
+        assert_eq!(skip("/tmp/a") && skip("/private/var/a") && skip("/var/folders/a/T"), cfg!(unix));
+        assert!(!skip("/tmpfiles/a"));
     }
 }
