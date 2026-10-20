@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use tauri::menu::{Menu, MenuItem, MenuItemBuilder, MenuItemKind, PredefinedMenuItem, SubmenuBuilder};
-use tauri::{AppHandle, Emitter, Manager, Runtime, State, Wry};
+use tauri::{AppHandle, Emitter, Manager, State, Wry};
 
 /// The Note menu's items that need an open note.
 #[derive(Default)]
@@ -97,35 +97,14 @@ fn accel(a: &'static str) -> &'static str {
     }
 }
 
-/// Windows' File › Exit, in place of the predefined Quit (`windows_file`).
-pub const EXIT: &str = "app:exit";
-
-/// Windows' File menu: Close Window, then Exit. tauri's default File menu ends with the
-/// predefined Quit, which muda carries out as `PostQuitMessage(0)`: tao's event loop ends at the
-/// `WM_QUIT` (`GetMessageW` returns 0) and tauri sends `RunEvent::Exit` with no `ExitRequested`
-/// before it, so the window never asks about unsaved edits (Save, Discard, Stay), its size and
-/// place aren't saved and assistant runs aren't stopped. Exit is an item of the app's own, which
-/// goes the way the tray's Quit does (`tray::tray_quit`).
-pub fn windows_file<R: Runtime>(app: &AppHandle<R>, menu: &Menu<R>) -> tauri::Result<()> {
-    let file = SubmenuBuilder::new(app, "File")
-        .item(&PredefinedMenuItem::close_window(app, None)?)
-        .separator()
-        .item(&MenuItemBuilder::with_id(EXIT, "E&xit").build(app)?)
-        .build()?;
-    match menu.items()?.iter().position(|i| matches!(i, MenuItemKind::Submenu(s) if s.text().is_ok_and(|t| t == "File"))) {
-        Some(at) => {
-            menu.remove_at(at)?;
-            menu.insert(&file, at)
-        }
-        None => menu.prepend(&file),
-    }
-}
-
-/// Puts the menu bar up and routes its Note items to the window.
+/// Puts the menu bar up and routes its Note items to the window. Not on Windows, which has none,
+/// as Two-edged Sword and Tidemark have none there: the window takes the Note and Help menus' keys
+/// itself (src/noteMenu.ts), and Check for Updates… is in Settings › About.
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
+    if cfg!(windows) {
+        return Ok(());
+    }
     let menu = Menu::default(app)?;
-    #[cfg(windows)]
-    windows_file(app, &menu)?;
     let new = MenuItemBuilder::with_id("note:new", "New Note…").accelerator("CmdOrCtrl+N").build(app)?;
     let mut sub = SubmenuBuilder::new(app, "Note").item(&new).separator();
     let mut doc_items = Vec::new();
@@ -195,9 +174,9 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
                 }
             }
             "app:about" => about(app),
-            // macOS's Quit Brainstead and Windows' File › Exit quit as the tray's Quit does: the
-            // window asks about unsaved edits, then "Quit Brainstead?".
-            "app:quit" | EXIT => crate::tray::tray_quit(app.clone()),
+            // macOS's Quit Brainstead quits as the tray's Quit does: the window asks about unsaved
+            // edits, then "Quit Brainstead?".
+            "app:quit" => crate::tray::tray_quit(app.clone()),
             "app:updates" => crate::updates::check_now(app),
             // The window acts on the Note and Help items (src/noteMenu.ts, src/help/HelpDrawer.tsx).
             _ if id.starts_with("note:") || id.starts_with("help:") => {

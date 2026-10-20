@@ -1550,6 +1550,11 @@ describe("MCP actions", () => {
       expect(calls.some(([c]) => c === "rebuild_index")).toBe(false);
     });
 
+    it("checks for updates as Check for Updates… does", async () => {
+      expect(await run("updates.check")).toMatch(/^Checking for a new version/);
+      expect(calls.some(([c]) => c === "update_check")).toBe(true);
+    });
+
     it("fixes a name only in the files given, as ticking them does", async () => {
       const r = (file: string, action = "rewrite") => ({ file, layer: "note", inFilename: false, count: 1, lines: [], action });
       answers.fixname_plan = () => ({ rows: [r("Idea. A.md"), r("Idea. B.md"), r("Idea. C.md", "guarded")], rightPage: null });

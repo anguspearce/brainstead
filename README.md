@@ -29,7 +29,7 @@ For Windows 11 (64-bit). WebView2 is already part of Windows 11.
 
 Brainstead opens a vault you choose read-only (a new one it makes for you opens writable). When you're ready for it to change files (ticking tasks, saving notes), turn off **Read-only** in Settings › Vault. See [First run](docs/features.md#first-run). To build it yourself instead, see [Building it](#building-it).
 
-Brainstead checks for a new version once a day and offers to install it; Brainstead › Check for Updates… (Help › Check for Updates… on Windows) checks now.
+Brainstead checks for a new version once a day and offers to install it; Brainstead › Check for Updates… (Settings › About › Check for Updates… on Windows) checks now.
 
 <a href="docs/images/index.md#the-readme"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/today-dark.png"><img alt="Today: the day in a sentence, the capture box, overdue and deferred tasks, what you're waiting for, and where you left off" src="docs/images/today-light.png"></picture></a>
 

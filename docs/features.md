@@ -70,7 +70,7 @@ Counts that need you, such as overdue tasks, the Inbox and changes held for you,
 
 On Windows, ⌘ is Ctrl, ⌥ is Alt and ⇧ is Shift, so ⌘K is Ctrl+K. The window has a normal title bar. A few extras are Mac only for now: Quick Look, spelling and grammar marks, Export PDF, and reading text in images and showing images to a model.
 
-Every screen remembers its list, filter and selection across restarts. Back and forward go through where you've been. Closing the window leaves Brainstead running in the [menu bar](day-to-day.md#the-menu-bar) (on Windows, if **Show in the menu bar** is on; otherwise closing the window quits). ⌘Q quits (on Windows, **File › Exit** or the tray's **Quit Brainstead**), asking first about unsaved edits.
+Every screen remembers its list, filter and selection across restarts. Back and forward go through where you've been. Closing the window leaves Brainstead running in the [menu bar](day-to-day.md#the-menu-bar) (on Windows, if **Show in the menu bar** is on; otherwise closing the window quits). ⌘Q quits (on Windows, which has no menu bar, the tray's **Quit Brainstead**), asking first about unsaved edits.
 
 ## Licence and credits
 

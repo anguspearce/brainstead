@@ -1077,6 +1077,7 @@ export const api = {
   updateOffered: () => invoke<UpdateOffer | null>("update_offered"),
   updateInstall: () => invoke<void>("update_install"),
   updateLater: () => invoke<void>("update_later"),
+  updateCheck: () => invoke<void>("update_check"),
   updateSkip: () => invoke<void>("update_skip"),
   fixnamePlan: (req: FixNameRequest) => invoke<{ rightPage: string | null; rows: FixNameRow[] }>("fixname_plan", { req }),
   fixnameApply: (req: FixNameRequest, rows: FixNameRow[]) => invoke<string>("fixname_apply", { req, rows }),

@@ -842,6 +842,9 @@ pub fn tools() -> Vec<Value> {
         tool("rebuild_index", "Rebuild the index", Run,
             "Reads every file in the vault again and rebuilds Brainstead's index from scratch, as Settings › Vault's Rebuild index does (needs the app); the files aren't changed. It returns once started; app_status says how the index stands. For when search, tasks or links seem out of date with the files; only when the user asks.",
             schema(json!({}), &[])),
+        tool("check_updates", "Check for updates", Run,
+            "Checks for a new version of Brainstead now, as Check for Updates… does (the Brainstead menu on a Mac, Settings › About on Windows) (needs the app). It returns once started; the window says what it found and offers any update there, for the user to install. Only when the user asks.",
+            schema(json!({}), &[])),
     ];
     let outputs = outputs();
     for t in &mut all {
@@ -1276,6 +1279,7 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
             Ok(out)
         }
         "rebuild_index" => act("index.rebuild", obj),
+        "check_updates" => act("updates.check", obj),
         "list_automated_tools" => {
             act("automated", acting(obj, name, &["list"], "list", &["name", "folder_contains", "first_message_starts_with"])?)
         }

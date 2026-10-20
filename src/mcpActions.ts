@@ -2320,6 +2320,13 @@ async function provenance(a: Args): Promise<string> {
 }
 
 /** Settings › Vault's Rebuild index: every file read again; the files aren't changed. */
+/** Check for Updates…, as Settings › About (Windows) and the Brainstead menu (macOS) do. */
+async function checkUpdates(): Promise<string> {
+  await api.updateCheck();
+  noted("checked for updates");
+  return "Checking for a new version: Brainstead says in its window what it found, and offers any update there.";
+}
+
 async function rebuildIndex(): Promise<string> {
   const v = await api.vaultStatus();
   if (v.state === "indexing") return "The index is being built already; app_status says how it stands.";
@@ -2647,6 +2654,7 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   graph: graph,
   status: status,
   "index.rebuild": rebuildIndex,
+  "updates.check": checkUpdates,
   "assistants.found": assistantsFound,
   "source.provenance": provenance,
   "capture.status": captureExtensions,

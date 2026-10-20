@@ -874,6 +874,9 @@ fn rebuilding_the_index_and_pinning_a_chat_go_to_the_app() {
     let app = fake_app(f.ctx.data.clone(), |_| bridge::Reply { ok: true, result: json!("Rebuilding the index"), error: None });
     ok(&f.ctx, "rebuild_index", json!({}));
     assert_eq!(app.join().unwrap().action, "index.rebuild");
+    let app = fake_app(f.ctx.data.clone(), |_| bridge::Reply { ok: true, result: json!("Checking for a new version"), error: None });
+    ok(&f.ctx, "check_updates", json!({}));
+    assert_eq!(app.join().unwrap().action, "updates.check");
     let app = fake_app(f.ctx.data.clone(), |_| bridge::Reply { ok: true, result: json!("Pinned"), error: None });
     ok(&f.ctx, "chats", json!({"action": "pin", "chat": "Orbit App plan"}));
     let req = app.join().unwrap();

@@ -124,6 +124,13 @@ pub fn check_now(app: &AppHandle) {
     tauri::async_runtime::spawn(async move { check(&app, true).await });
 }
 
+/// Settings › About's Check for Updates… (Windows, which has no menu bar) and the MCP server's
+/// check_updates: the menu's Check for Updates….
+#[tauri::command]
+pub fn update_check(app: AppHandle) {
+    check_now(&app);
+}
+
 /// The main window gained focus: offer an update a background check found.
 pub fn focused(app: &AppHandle) {
     let Some(state) = app.try_state::<Updates>() else { return };
