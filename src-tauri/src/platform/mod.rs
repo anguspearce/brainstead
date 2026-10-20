@@ -696,11 +696,30 @@ pub fn set_menu_bar(app: &tauri::AppHandle, menu: tauri::menu::Menu<tauri::Wry>)
     Ok(())
 }
 
-/// Whether releases carry an update for this system (`crate::updates`). A release has the macOS
-/// package and its signature alone (tools/update_files.py); anywhere else the updater would find no
-/// package for the platform, so it doesn't look.
+/// Whether releases carry an update for this system (`crate::updates`): the macOS package
+/// (tools/update_files.py) and the Windows installer (tools/update_windows.py, from
+/// .github/workflows/windows-release.yml). Linux has none, so the updater doesn't look there.
 pub fn release_updates() -> bool {
-    cfg!(target_os = "macos")
+    cfg!(any(target_os = "macos", windows))
+}
+
+/// Deletes the folders Windows' updater leaves in Temp, one per update installed
+/// ("Brainstead-1.3.0-updater-Zu7DmM", holding the installer it ran). By the next start that
+/// installer has done its work. Nothing to do elsewhere.
+pub fn remove_update_installers(name: &str) {
+    #[cfg(windows)]
+    {
+        let Ok(dir) = std::fs::read_dir(std::env::temp_dir()) else { return };
+        let prefix = format!("{name}-");
+        for e in dir.flatten() {
+            let n = e.file_name().to_string_lossy().into_owned();
+            if n.starts_with(&prefix) && n.contains("-updater-") && e.path().is_dir() {
+                let _ = std::fs::remove_dir_all(e.path());
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = name;
 }
 
 /// Which of the features that aren't on every system this one has: one table in core, which the

@@ -5,7 +5,9 @@
 """Publishes a release in one go: bumps the version (tools/bump_version.py, once the current one
 has a release), builds the app and the DMG with the update files, commits the bump as
 "<Name> <version>", pushes, creates the GitHub release with the DMG and the update files, then
-installs the app in /Applications and opens it again if it was running.
+installs the app in /Applications and opens it again if it was running. Publishing the release
+starts .github/workflows/windows-release.yml, which adds the Windows installer and its update entry
+(tools/update_windows.py) a few minutes later.
 
     make release NOTES="What's new"                 # shown in the app's update offer and on the release
     make release NOTES="…" VERSION=1.1.0            # a minor or major step
@@ -33,6 +35,19 @@ INSTALLED = f"/Applications/{NAME}.app"
 # What tools/bump_version.py changes, and all the release commits.
 BUMPED = ["src-tauri/tauri.conf.json", "package.json", "package-lock.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock"]
 DRY_RUN = os.environ.get("DRY_RUN", "") not in ("", "0")
+# Under each release's notes, for someone downloading it: the first-run warnings and how past them
+# (README.md, Install). Not in the update offer, which only people already past them see.
+FIRST_RUN = "\n\n".join(
+    [
+        "### Installing",
+        "**Mac** (Apple silicon, macOS 14 or later): open `Brainstead.dmg` and drag Brainstead onto Applications. "
+        "The first time you open it, macOS says it can't check the app for malicious software, as it isn't notarised by Apple: "
+        "click **Done**, then in System Settings › Privacy & Security click **Open Anyway**.",
+        "**Windows** (11, 64-bit): run `Brainstead_x64-setup.exe`, added a few minutes after the Mac's files. "
+        "If Windows says it protected your PC, click **More info**, then **Run anyway**: the installer isn't code-signed. "
+        "It installs for you alone, with no administrator password.",
+    ]
+)
 
 
 def run(*cmd):
@@ -76,7 +91,7 @@ def main():
     head = "HEAD" if DRY_RUN else output("git", "rev-parse", "HEAD").strip()
     dash = NAME.replace(" ", "-")
     files = [f"{OUT}/{dash}.dmg", f"{OUT}/{dash}.app.tar.gz", f"{OUT}/latest.json"]
-    run("gh", "release", "create", f"v{v}", *files, "--target", head, "--title", title, "--notes", notes)
+    run("gh", "release", "create", f"v{v}", *files, "--target", head, "--title", title, "--notes", notes + "\n\n" + FIRST_RUN)
     if os.environ.get("INSTALL", "1") != "0":
         was_running = running()
         run("make", "--no-print-directory", "-o", "app", "install-app")
