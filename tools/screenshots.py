@@ -50,6 +50,9 @@ DEMO = ROOT / ".demo"
 # Scenes the docs show ("docs": true) go to docs/images/ and are committed; the rest, for checking
 # screens while building, go to a gitignored folder.
 OUT = ROOT / "docs" / "images"
+# The product page's pictures: a scene with a picture there (site/img/<name>-light.webp) is saved
+# there too, from the same snapshot at its full (2x) size, so it stays sharp on a Retina screen.
+SITE = ROOT / "site" / "img"
 CHECK = ROOT / "tools" / "screenshots" / "out"
 BIN = ROOT / "src-tauri" / "target" / "debug" / "Brainstead"
 RELEASE_BIN = ROOT / "src-tauri" / "target" / "release" / "bundle" / "macos" / "Brainstead.app" / "Contents" / "MacOS" / "Brainstead"
@@ -321,20 +324,20 @@ def capture(scene, theme, data, settle):
             app.wait()
 
 
-def chrome(im, theme):
+def chrome(im, theme, s=1.0):
     """Draws back what a webview snapshot leaves out: the window's (unfocused) buttons and its
-    rounded corners, as a capture of the window showed them."""
+    rounded corners, as a capture of the window showed them. `s`: the shot's size over the docs'."""
     k = 4  # drawn large and scaled down, for smooth edges
     w, h = im.size
     over = Image.new("RGBA", (w * k, h * k))
     d = ImageDraw.Draw(over)
     fill, rim = ((230, 231, 233), (220, 221, 223)) if theme == "light" else ((126, 127, 129), (140, 141, 143))
     for cx in (23.5, 46, 68.5):
-        cy, r = 19, 7
-        d.ellipse([(cx - r) * k, (cy - r) * k, (cx + r) * k, (cy + r) * k], fill=fill + (255,), outline=rim + (255,), width=k)
+        cx, cy, r = cx * s, 19 * s, 7 * s
+        d.ellipse([(cx - r) * k, (cy - r) * k, (cx + r) * k, (cy + r) * k], fill=fill + (255,), outline=rim + (255,), width=round(k * s))
     im = Image.alpha_composite(im.convert("RGBA"), over.resize((w, h), Image.LANCZOS))
     mask = Image.new("L", (w * k, h * k))
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, w * k - 1, h * k - 1], radius=16 * k, fill=255)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, w * k - 1, h * k - 1], radius=round(16 * k * s), fill=255)
     im.putalpha(mask.resize((w, h), Image.LANCZOS))
     return im
 
@@ -382,18 +385,26 @@ def shoot(scene, theme, data):
         return False
     im.save(out, optimize=True)
     print(f"  {out.relative_to(ROOT)}  {im.width}x{im.height}")
+    site = SITE / f"{scene['name']}-{theme}.webp"
+    if site.exists():
+        big = finish(raw, scene, theme, full=True)
+        big.save(site, "WEBP", quality=90, method=6)
+        print(f"  {site.relative_to(ROOT)}  {big.width}x{big.height}")
     return True
 
 
-def finish(im, scene, theme):
-    """The snapshot as it's saved: at the scene's width, with the window's chrome, cropped."""
+def finish(im, scene, theme, full=False):
+    """The snapshot as it's saved: at the scene's width (or, `full`, its own size, never larger),
+    with the window's chrome, cropped."""
     # A scene may keep its own width (the menu-bar window, at its natural 2x size).
     width = scene.get("width", WIDTH)
-    im = im.resize((width, round(im.height * width / im.width)), Image.LANCZOS)
+    s = max(1.0, im.width / width) if full else 1.0
+    size = round(width * s)
+    im = im.resize((size, round(im.height * size / im.width)), Image.LANCZOS)
     if not scene.get("tray"):
-        im = chrome(im, theme)
+        im = chrome(im, theme, s)
     if "crop" in scene:
-        x, y, w, h = scene["crop"]
+        x, y, w, h = (round(v * s) for v in scene["crop"])
         im = im.crop((x, y, x + w, y + h))
     return im
 

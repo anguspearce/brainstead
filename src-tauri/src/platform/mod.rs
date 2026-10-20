@@ -142,7 +142,7 @@ pub fn make_unseen(w: &tauri::WebviewWindow) {
     let _ = w;
 }
 
-/// Saves what the window's webview shows to `dest` as a TIFF, for screenshots taken unseen
+/// Saves what the window's webview shows to `dest` as a TIFF at twice its size, for screenshots taken unseen
 /// (make_unseen: an invisible window's own capture is blank, its webview's snapshot isn't). The file
 /// appears when WebKit has drawn it. macOS only.
 pub fn snapshot(w: &tauri::WebviewWindow, dest: &Path) -> Result<(), String> {
@@ -162,7 +162,12 @@ pub fn snapshot(w: &tauri::WebviewWindow, dest: &Path) -> Result<(), String> {
                     let _: bool = objc2::msg_send![tiff, writeToFile: &*path, atomically: true];
                 }
             });
-            let config: *mut AnyObject = std::ptr::null_mut();
+            // Twice the view's width, as a Retina screen draws it: the docs scale it down, the
+            // product page keeps it.
+            let config: *mut AnyObject = objc2::msg_send![objc2::class!(WKSnapshotConfiguration), new];
+            let bounds: objc2_foundation::NSRect = objc2::msg_send![webview, bounds];
+            let width = objc2_foundation::NSNumber::new_f64(bounds.size.width * 2.0);
+            let _: () = objc2::msg_send![config, setSnapshotWidth: &*width];
             let _: () = objc2::msg_send![webview, takeSnapshotWithConfiguration: config, completionHandler: &*done];
         })
         .map_err(|e| e.to_string())
