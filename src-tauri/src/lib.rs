@@ -522,11 +522,25 @@ pub(crate) fn restart_for_update(app: &AppHandle) {
 }
 
 /// Restarts, after the window has asked about unsaved edits. Through the event loop, so the
-/// quit's own work (the window's place, stopping what's running) is done as for ⌘Q.
+/// quit's own work (the window's place, stopping what's running) is done as for ⌘Q. On Windows the
+/// update is installed only now (`updates::install_downloaded`): its installer closes the app and
+/// opens the new version itself.
 #[tauri::command]
 fn app_restart(app: AppHandle) {
     QUIT_OK.store(true, std::sync::atomic::Ordering::SeqCst);
+    if updates::install_downloaded(&app) {
+        // Still here: the installer didn't start, and the user was told.
+        QUIT_OK.store(false, std::sync::atomic::Ordering::SeqCst);
+        return;
+    }
     app.request_restart();
+}
+
+/// What quitting does before the app goes: the window's size and place saved, assistant runs
+/// stopped. On every quit, and before Windows' update installer closes the app without one.
+pub(crate) fn before_quit(app: &AppHandle) {
+    let _ = app.save_window_state(STATE_FLAGS);
+    app.state::<std::sync::Arc<ask::Running>>().kill_all();
 }
 
 /// What would be cut short by restarting into an update now, or None.
@@ -1163,8 +1177,7 @@ pub fn run() {
                     let _ = tauri::Emitter::emit(app, "quit-requested", ());
                     return;
                 }
-                let _ = app.save_window_state(STATE_FLAGS);
-                app.state::<std::sync::Arc<ask::Running>>().kill_all();
+                before_quit(app);
             }
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = ev {

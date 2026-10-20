@@ -5,15 +5,21 @@
 //! Checks GitHub for a newer release and offers to install it (tauri-plugin-updater: the
 //! endpoint, releases/latest/download/latest.json, and the public key that every package must
 //! be signed with are in tauri.conf.json under plugins.updater; tools/update_files.py writes
-//! the release's files).
+//! the release's Mac files, tools/update_windows.py adds the Windows installer to them).
 //!
 //! When: 20 seconds after launch, then once a day while the app runs (the last check's time is
 //! kept, so restarting doesn't check again), and whenever the user picks Check for Updates….
 //! An update found in the background waits until the main window is next focused, so the offer
 //! never pops up over another app. It offers Install and Restart, Later (asked again at the next
 //! day's check) or Skip This Version. Release builds only, on a system releases carry a package
-//! for (`platform::release_updates`). Installing restarts the app by the
+//! for (`platform::release_updates`: macOS and Windows). Installing restarts the app by the
 //! same road as ⌘Q (`crate::restart_for_update`), so unsaved edits are asked about first.
+//!
+//! On Windows the update is an NSIS installer, which closes the app as it starts and opens the new
+//! version when it's done (`installMode: passive` in tauri.windows.conf.json: a progress window,
+//! no questions). So there it's downloaded first and installed only once the window has dealt with
+//! unsaved edits (`install_downloaded`, from app_restart), after what quitting does. The installers
+//! the updater leaves in Temp are deleted at the next start (`platform::remove_update_installers`).
 //!
 //! The offer and what follows are shown in the main window (src/Update.tsx): `update-offer`,
 //! then `update-progress` while it downloads, and `update-message` for what it has to say; the
@@ -48,6 +54,9 @@ pub struct Updates {
     pending: Mutex<Option<Update>>,
     /// On the window, waiting for an answer.
     offered: Mutex<Option<Update>>,
+    /// Windows: downloaded for Install and Restart, waiting for the window to deal with unsaved
+    /// edits (`install_downloaded`).
+    downloaded: Mutex<Option<(Update, Vec<u8>)>>,
     /// An offer is up or an update is installing: no second offer meanwhile.
     asking: AtomicBool,
     busy: Busy,
@@ -86,7 +95,14 @@ fn app_name(app: &AppHandle) -> String {
 
 /// Starts the background checks. Call once from setup, in the windowed app only.
 pub fn start(app: &AppHandle, busy: Busy) {
-    app.manage(Updates { pending: Mutex::new(None), offered: Mutex::new(None), asking: AtomicBool::new(false), busy });
+    app.manage(Updates {
+        pending: Mutex::new(None),
+        offered: Mutex::new(None),
+        downloaded: Mutex::new(None),
+        asking: AtomicBool::new(false),
+        busy,
+    });
+    crate::platform::remove_update_installers(&app_name(app));
     if cfg!(debug_assertions) || !crate::platform::release_updates() {
         return;
     }
@@ -149,7 +165,15 @@ async fn check(app: &AppHandle, asked: bool) {
             // A failed background check is tried again within the hour.
             crate::applog!("update check failed: {e}");
             if asked {
-                tell(app, "Couldn't check for updates", &e.to_string()).await;
+                // The release has no package for this system yet: the Windows installer is added
+                // to each release a few minutes after the Mac's (.github/workflows/windows-release.yml).
+                let why = match e {
+                    tauri_plugin_updater::Error::TargetNotFound(_) | tauri_plugin_updater::Error::TargetsNotFound(_) => {
+                        "The newest release has no update for this system yet. Try again in a little while.".to_string()
+                    }
+                    e => e.to_string(),
+                };
+                tell(app, "Couldn't check for updates", &why).await;
             }
         }
     }
@@ -301,6 +325,19 @@ async fn install(app: &AppHandle, update: Update) {
             progress("downloading", got, total);
         }
     };
+    if cfg!(windows) {
+        // Installed by app_restart once the window has asked about unsaved edits, as the
+        // installer closes the app the moment it starts (`install_downloaded`).
+        match update.download(chunk, || progress("installing", 0, None)).await {
+            Ok(bytes) => {
+                progress("restarting", 0, None);
+                *state.downloaded.lock().unwrap() = Some((update, bytes));
+                crate::restart_for_update(app);
+            }
+            Err(e) => tell(app, "The update didn't download", &e.to_string()).await,
+        }
+        return;
+    }
     match update.download_and_install(chunk, || progress("installing", 0, None)).await {
         Ok(()) => {
             progress("restarting", 0, None);
@@ -308,6 +345,24 @@ async fn install(app: &AppHandle, update: Update) {
         }
         Err(e) => tell(app, "The update didn't install", &e.to_string()).await,
     }
+}
+
+/// Windows: runs the installer of the update downloaded for Install and Restart, after what
+/// quitting does (`crate::before_quit`), since it closes the app without a quit and opens the new
+/// version when it's done. Called by app_restart once the window has dealt with unsaved edits.
+/// False when nothing is waiting (always on macOS, where the update is in place before the restart).
+/// True and still running means the installer didn't start; the user is told why.
+pub fn install_downloaded(app: &AppHandle) -> bool {
+    let Some(state) = app.try_state::<Updates>() else { return false };
+    let Some((update, bytes)) = state.downloaded.lock().unwrap().take() else { return false };
+    crate::before_quit(app);
+    // Exits the app once the installer has started.
+    if let Err(e) = update.install(&bytes) {
+        crate::applog!("update install failed: {e}");
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move { tell(&app, "The update didn't install", &e.to_string()).await });
+    }
+    true
 }
 
 /// Says something about updates: in the window's dialog, or a system one without a window.

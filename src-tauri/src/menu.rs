@@ -6,8 +6,9 @@
 //! note. A choice is sent to the window as a `menu` event carrying the item's id (src/noteMenu.ts
 //! acts on it); the note's items are enabled only while a note is open. Help gets Brainstead Help
 //! and Keyboard Shortcuts (src/help/HelpDrawer.tsx acts on those). The app menu gets Brainstead's
-//! own About and Check for Updates… (src/updates.rs). On Windows File's Exit is the app's own item,
-//! which quits as the tray's Quit does.
+//! own About and Check for Updates… (src/updates.rs); elsewhere, with no app menu, Check for
+//! Updates… is in Help where releases carry updates (`platform::release_updates`). On Windows File's
+//! Exit is the app's own item, which quits as the tray's Quit does.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -149,17 +150,27 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let help_open = MenuItemBuilder::with_id("help:open", "Brainstead Help").accelerator("Shift+CmdOrCtrl+Slash").build(app)?;
     let help_keys = MenuItemBuilder::with_id("help:shortcuts", "Keyboard Shortcuts").build(app)?;
     let help_site = MenuItemBuilder::with_id("help:website", "Brainstead Website").build(app)?;
+    let mut help_items = vec![help_open, help_keys, help_site];
+    if !cfg!(target_os = "macos") && crate::platform::release_updates() {
+        help_items.push(MenuItemBuilder::with_id("app:updates", "Check for Updates…").build(app)?);
+    }
     let existing = menu.items()?.into_iter().find_map(|i| match i {
         MenuItemKind::Submenu(s) if s.text().is_ok_and(|t| t == "Help") => Some(s),
         _ => None,
     });
     match existing {
         Some(h) => {
-            h.append(&help_open)?;
-            h.append(&help_keys)?;
-            h.append(&help_site)?;
+            for i in &help_items {
+                h.append(i)?;
+            }
         }
-        None => menu.append(&SubmenuBuilder::new(app, "Help").item(&help_open).item(&help_keys).item(&help_site).build()?)?,
+        None => {
+            let mut h = SubmenuBuilder::new(app, "Help");
+            for i in &help_items {
+                h = h.item(i);
+            }
+            menu.append(&h.build()?)?
+        }
     }
     // The standard Quit quits at once (macOS's terminate:, which Tauri can't stop); this one asks
     // first, as the menu bar's Quit does (tray::tray_quit, src/Quit.tsx).

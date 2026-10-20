@@ -20,3 +20,22 @@
     DeleteRegKey HKCU "Software\Chromium\NativeMessagingHosts\com.wayned.brainstead"
   ${EndIf}
 !macroend
+
+; The uninstaller's "Delete the application data" box clears %APPDATA%\<identifier>, but Brainstead
+; keeps its own folder in %APPDATA%\Brainstead (core/src/paths.rs, data_dir): settings, the index,
+; Changes, unsaved chats. With the box ticked, and not for an update, that goes too, with the update
+; installers the updater left in Temp (src/platform/mod.rs, remove_update_installers). The vault is
+; never touched: it is the user's notes, wherever they keep them.
+!macro NSIS_HOOK_POSTUNINSTALL
+  ${If} $DeleteAppDataCheckboxState = 1
+  ${AndIf} $UpdateMode <> 1
+    SetShellVarContext current
+    RmDir /r "$APPDATA\${PRODUCTNAME}"
+    FindFirst $0 $1 "$TEMP\${PRODUCTNAME}-*-updater-*"
+    ${DoWhile} $1 != ""
+      RmDir /r "$TEMP\$1"
+      FindNext $0 $1
+    ${Loop}
+    FindClose $0
+  ${EndIf}
+!macroend
