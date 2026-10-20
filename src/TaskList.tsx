@@ -36,6 +36,7 @@ import { splitTaskDates, taskDate, TaskDateId } from "./taskDates";
 import { useStore } from "./store";
 import { useVaultOpening } from "./state";
 import { Popover } from "./ui";
+import { keyLabel } from "./platform";
 
 export const taskKey = (t: TaskRow) => `${t.path}:${t.line}`;
 
@@ -303,7 +304,7 @@ export function TaskEditor({ t, onClose, wide, menu }: { t: TaskRow; onClose: ()
               }
             }}
           />
-          <span className="faint small">↩ to rename; its dates and tags stay as they are.</span>
+          <span className="faint small">{keyLabel("↩")} to rename; its dates and tags stay as they are.</span>
         </div>
       ) : (
         <>
@@ -431,7 +432,7 @@ export function TaskEditor({ t, onClose, wide, menu }: { t: TaskRow; onClose: ()
             type="button"
             role={item}
             className="danger"
-            title="Takes the line out of its note; ⌘Z puts it back"
+            title={keyLabel("Takes the line out of its note; ⌘Z puts it back")}
             onClick={() => (onClose(), void changeTask(t, "delete"))}
           >
             <Icon name="trash" size={14} />

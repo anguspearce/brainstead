@@ -19,6 +19,7 @@ import { ago, fmtCount, Popover } from "./ui";
 import { toast } from "./Toast";
 import { changes, decisions, health, held, startKnowledge } from "./knowledge";
 import type { IndexStats, Layer, VaultStatus } from "./api";
+import { keyLabel } from "./platform";
 
 interface Item {
   screen: Screen;
@@ -96,7 +97,7 @@ type Extra = { n: number; hot?: boolean; err?: string; bad?: boolean; busy?: str
 
 function NavItem({ item, on, stats, extra }: { item: Item; on: boolean; stats: IndexStats; extra?: Extra }) {
   const n = extra?.n ?? item.count?.(stats) ?? 0;
-  const go = `Go to ${item.label}${hotkey(item.screen) ? ` (${hotkey(item.screen)})` : ""}`;
+  const go = `Go to ${item.label}${hotkey(item.screen) ? ` (${keyLabel(hotkey(item.screen)!)})` : ""}`;
   return (
     <button
       type="button"
@@ -239,7 +240,7 @@ function Bookmarks({ current }: { current?: string }) {
             type="button"
             className="ibtn xs bmx"
             aria-label={`Remove the bookmark for ${b.title}`}
-            title={`Remove the bookmark for ${b.title}; the note stays (⌘Z puts it back)`}
+            title={keyLabel(`Remove the bookmark for ${b.title}; the note stays (⌘Z puts it back)`)}
             onClick={() =>
               void api
                 .bookmarkRemove(b.target)
@@ -369,10 +370,15 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
         <Mark />
         <b>Brainstead</b>
       </div>
-      <button type="button" className="search-pill" title="Find a note, go to a screen or run a command (⌘K)" onClick={onSearch}>
+      <button
+        type="button"
+        className="search-pill"
+        title={keyLabel("Find a note, go to a screen or run a command (⌘K)")}
+        onClick={onSearch}
+      >
         <Icon name="search" size={14} />
         Search or jump to…
-        <span className="kbd">⌘K</span>
+        <span className="kbd">{keyLabel("⌘K")}</span>
       </button>
       <nav className="sidescroll">
         {DAILY.map(item)}

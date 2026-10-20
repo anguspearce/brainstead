@@ -21,6 +21,7 @@ import { IMAGE_EXT, imageSize, imgTag, parseWikilink, setImageWidth, wikiLabel }
 import { chipOf, FIELD_RE, splitTaskFields } from "../taskFields";
 import type { EditorHooks } from "./Editor";
 import { frontmatterEnd, frontmatterKeys, toggledLine } from "./text";
+import { isMod, keyLabel } from "../platform";
 
 const hide = Decoration.replace({});
 /** Inline HTML pairs Edit draws as their formatting, tags hidden. */
@@ -191,7 +192,7 @@ class LinkWidget extends WidgetType {
     a.className = `cm-wikilink${this.embed ? " embed" : ""}`;
     a.textContent = this.label;
     a.dataset.wiki = this.target;
-    a.title = `${this.target} — ⌘-click to open`;
+    a.title = `${this.target} — ${keyLabel("⌘-click")} to open`;
     return a;
   }
   ignoreEvent() {
@@ -627,7 +628,7 @@ function clicks(hooks: EditorHooks) {
         e.preventDefault();
         return true;
       }
-      if (!e.metaKey) {
+      if (!isMod(e)) {
         // A click on a drawn image leaves it drawn, for its handles; a double-click puts the
         // cursor in its markdown, which shows it.
         const im = el.closest(".cm-img");

@@ -21,7 +21,7 @@ The checks:
 - The vault was read-only when a scheduled change came. (A change you start while it's read-only isn't made at all.)
 
 Three kinds of change are always held, whoever started them:
-- a change to a template in `Templates/`
+- a change to a template in `Templates/`, however the assistant spells its path (on Windows, in any case, with `\` or by the folder's short name)
 - a change to a system note's header (the "This is a system note" callout)
 - a change that adds code that runs when a note is shown (a `dataviewjs` block, inline `$=`, a Tasks `by function` line or Templater's `<% %>`)
 

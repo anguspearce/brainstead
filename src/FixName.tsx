@@ -17,6 +17,7 @@ import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
 import { Dialog, Switch, useDebounced } from "./ui";
 import { Store, useStore } from "./store";
+import { keyLabel } from "./platform";
 
 /** Open with a name to start from, or null when closed. */
 export const fixNameOpen = new Store<{ wrong?: string; right?: string } | null>(null);
@@ -231,7 +232,7 @@ function FixName({ start, startRight, onClose }: { start: string; startRight: st
         <div className="row">
           <span className="faint small grow">
             {take.length
-              ? `${take.length} file${take.length === 1 ? "" : "s"} change. Modification times are kept; ⌘Z undoes it.`
+              ? `${take.length} file${take.length === 1 ? "" : "s"} change. Modification times are kept; ${keyLabel("⌘Z")} undoes it.`
               : "Nothing ticked."}
           </span>
           <button type="button" className="btn lg" title="Close without changing anything" onClick={onClose}>
@@ -242,7 +243,7 @@ function FixName({ start, startRight, onClose }: { start: string; startRight: st
               busy
                 ? "Fixing the name…"
                 : take.length
-                  ? `Correct the name in the ${take.length} ticked file${take.length === 1 ? "" : "s"}; ⌘Z undoes it`
+                  ? `Correct the name in the ${take.length} ticked file${take.length === 1 ? "" : "s"}; ${keyLabel("⌘Z")} undoes it`
                   : "Tick at least one file to change"
             }
           >

@@ -2,8 +2,9 @@
 # See LICENSE for the full text.
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-# macOS runs everything (make check). Windows and Linux only compile, so macOS-only code can't
-# creep in outside src-tauri/src/platform (the archived build plan, §2, Cross-platform).
+# macOS and Windows run every check (make check on macOS, python tools/check.py on Windows), so
+# the Windows port keeps its tests. Linux only compiles, so macOS-only code can't creep in outside
+# src-tauri/src/platform (the archived build plan, §2, Cross-platform).
 # It runs only when a push changes the app, not for docs, the product page or sift's records alone
 # (D-20261008-03), and can be started by hand from the Actions tab.
 name: CI
@@ -47,19 +48,31 @@ jobs:
       - run: pipx install ruff
       - run: make check
 
+  windows:
+    runs-on: windows-latest
+    env:
+      # The check tooling prints and reads UTF-8; the runner's default console code page is not.
+      PYTHONUTF8: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: "rustfmt, clippy" }
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: src-tauri }
+      - run: npm ci
+      - run: pipx install ruff
+      - run: python tools/check.py
+
   compile:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with: { workspaces: src-tauri }
       - name: WebKitGTK and friends
-        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
       # tauri::generate_context! wants the frontend's output folder to exist.
       - run: mkdir dist

@@ -25,8 +25,8 @@ pub fn user_scripts(root: &Path, folder: &str) -> Result<Vec<UserScript>, String
     if folder.trim().is_empty() || rel.is_absolute() || rel.components().any(|c| !matches!(c, Component::Normal(_))) {
         return Err(format!("Not a folder in the vault: {folder}"));
     }
-    let root = root.canonicalize().map_err(|e| e.to_string())?;
-    let dir = match root.join(rel).canonicalize() {
+    let root = crate::paths::canonical(root).map_err(|e| e.to_string())?;
+    let dir = match crate::paths::canonical(&root.join(rel)) {
         Ok(d) => d,
         Err(_) => return Ok(Vec::new()),
     };
@@ -38,7 +38,7 @@ pub fn user_scripts(root: &Path, folder: &str) -> Result<Vec<UserScript>, String
     while let Some(d) = stack.pop() {
         let Ok(rd) = fs::read_dir(&d) else { continue };
         for e in rd.flatten() {
-            let Ok(p) = e.path().canonicalize() else { continue };
+            let Ok(p) = crate::paths::canonical(&e.path()) else { continue };
             // A link that leads out of the folder is skipped.
             if !p.starts_with(&dir) {
                 continue;

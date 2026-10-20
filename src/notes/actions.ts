@@ -15,6 +15,8 @@ import { useVaultVersion } from "../state";
 import { reportEditError, undoLast } from "../taskModel";
 import { toast } from "../Toast";
 import { noteDialog } from "./dialogs";
+import { features } from "../features";
+import { fileManager } from "../platform";
 import { isTranscriptPath, trashTranscript } from "../meetingFlow";
 import { settings } from "../store";
 
@@ -31,6 +33,7 @@ export function richOf(el: HTMLElement): { html: string; text: string } {
 
 /** Copies a rendered document (the read view's element). Rust inlines its vault images. */
 export async function copyRich(el: HTMLElement): Promise<void> {
+  if (!features.get().richCopy) return toast("Copying as rich text isn't available on this computer", undefined, "bad");
   const { html, text } = richOf(el);
   try {
     await api.copyRich(html, text);
@@ -51,6 +54,7 @@ export async function loadImagesForPrint(root: ParentNode = document, ms = 10_00
 
 /** Asks where to save, then prints the window's document (its print styles) to a PDF there. */
 export async function exportPdf(title: string): Promise<void> {
+  if (!features.get().exportPdf) return toast("Export as PDF isn't available on this computer", undefined, "bad");
   const dest = await save({ defaultPath: `${title}.pdf`, filters: [{ name: "PDF", extensions: ["pdf"] }] });
   if (!dest) return;
   // Long tables repeat their header on each page (WebKit's print doesn't): split for the print,
@@ -97,10 +101,15 @@ export async function trashFile(path: string): Promise<void> {
   }
 }
 
-/** A vault path as the file's full path on disk, which is what Copy path copies. */
+/**
+ * A vault path as the file's full path on disk, which is what Copy path copies. A vault path
+ * always uses `/`; a Windows root (`C:\Users\…`) uses `\`, so the path takes the root's separator.
+ */
 export function fullPath(path: string): string {
-  const root = (settings.get().vaultPath ?? "").replace(/\/$/, "");
-  return root ? `${root}/${path}` : path;
+  const raw = settings.get().vaultPath ?? "";
+  const sep = /^([A-Za-z]:\\|\\\\)/.test(raw) ? "\\" : "/";
+  const root = raw.replace(/[\\/]$/, "");
+  return root ? `${root}${sep}${path.replaceAll("/", sep)}` : path;
 }
 
 /** The actions the Note menu, the toolbar and the file menu share. */
@@ -128,7 +137,7 @@ export async function fileAction(a: FileAction, f: { path: string; title: string
         return openRename(f.path);
       case "reveal":
         await api.reveal(f.path);
-        return toast("Shown in Finder");
+        return toast(`Shown in ${fileManager}`);
       case "trash":
         return await trashFile(f.path);
     }

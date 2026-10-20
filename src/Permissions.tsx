@@ -13,6 +13,7 @@ import { errText } from "./notes/actions";
 import { Icon, Mark } from "./icons";
 import { permissions, recheckPermissions } from "./state";
 import { settings, useStore } from "./store";
+import { useFeatures } from "./features";
 
 /** Checks again whenever the window comes back to the front (from System Settings, say). */
 export function useRecheckOnFocus() {
@@ -92,8 +93,10 @@ function NewVault({ close }: { close: () => void }) {
 
 export function FullDiskAccessCard({ compact }: { compact?: boolean }) {
   const p = useStore(permissions);
+  const features = useFeatures();
   const granted = p?.fullDiskAccess === true;
   const unknown = p?.fullDiskAccess == null;
+  if (!features.fullDiskAccess) return null;
   return (
     <div className="card perm">
       <div className="permhead">

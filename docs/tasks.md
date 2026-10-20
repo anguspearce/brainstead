@@ -6,6 +6,9 @@ Brainstead runs [Getting Things Done](https://gettingthingsdone.com) (GTD) over 
 
 ## Today
 
+On Windows, ⌘ is Ctrl, so Today's ⌘1 is Ctrl+1, and the other screen shortcuts follow it up to 0.
+
+<a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/today-dark.png"><img alt="Today: the counts, the capture box, one table with Overdue, Due today, Deferred and Waiting for bands, and the right-hand cards" src="images/today-light.png"></picture></a>
 <a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/today-dark.png"><img alt="Today: the day in a sentence, the capture box, the Overdue, Due today, Deferred until now, Coming up this week and Waiting for bands, and the right-hand cards" src="images/today-light.png"></picture></a>
 
 Today (⌘1) is what needs you now:

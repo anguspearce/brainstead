@@ -62,7 +62,7 @@ def wrappers(s: str) -> dict[str, str]:
 def main() -> int:
     missing = []
     files = [f for f in sorted((ROOT / "src").rglob("*.tsx")) if ".test." not in f.name]
-    texts = {f: f.read_text() for f in files}
+    texts = {f: f.read_text(encoding="utf-8") for f in files}
     comps = {}
     for s in texts.values():
         comps.update(wrappers(s))

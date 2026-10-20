@@ -12,6 +12,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons";
 import { SearchBox } from "./ui";
 import { api, FileSummary } from "./api";
+import { features, useFeatures } from "./features";
+import { isMac } from "./platform";
 
 const ext = (p: string) => p.slice(p.lastIndexOf(".") + 1).toLowerCase();
 const IMAGE = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "heic"]);
@@ -43,7 +45,7 @@ export function SourcePreview({ file, root, content }: { file: FileSummary; root
   if (kind === "text") return <pre className="srctext">{content}</pre>;
   return (
     <div className="srcnone">
-      <p className="muted">Brainstead can't show this kind of file; Quick Look may.</p>
+      <p className="muted">Brainstead can't show this kind of file{features.get().quickLook ? "; Quick Look may" : ""}.</p>
       <div className="officebar">
         <QuickLook path={file.path} />
         <OpenInApp path={file.path} />
@@ -97,7 +99,7 @@ function OpenInApp({ path }: { path: string }) {
       <button
         type="button"
         className="btn"
-        title="Open this file in the app macOS uses for it"
+        title={`Open this file in the app ${isMac ? "macOS" : "the system"} uses for it`}
         onClick={() => {
           setErr(null);
           invoke("file_open", { path }).catch((e) => setErr(String(e?.message ?? e)));
@@ -321,12 +323,14 @@ function PdfView({ url }: { url: string }) {
  *  from the same extraction ingest uses. */
 /** Shows a vault file in the Quick Look panel; Space does the same while the preview is showing. */
 function QuickLook({ path }: { path: string }) {
+  const available = useFeatures().quickLook;
   const [err, setErr] = useState<string | null>(null);
   const look = useCallback(() => {
     setErr(null);
     api.fileQuickLook(path).catch((e) => setErr(String(e?.message ?? e)));
   }, [path]);
   useEffect(() => {
+    if (!available) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== " " || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target as HTMLElement | null;
@@ -337,7 +341,8 @@ function QuickLook({ path }: { path: string }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [look]);
+  }, [look, available]);
+  if (!available) return null;
   return (
     <>
       <button type="button" className="btn pri" title="See the file as it looks in its app, in Quick Look (Space)" onClick={look}>

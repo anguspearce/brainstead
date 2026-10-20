@@ -25,16 +25,6 @@ const WIDTH: f64 = 360.0;
 #[derive(Default)]
 pub struct TrayState(Mutex<(bool, bool)>);
 
-fn icon_for(busy: bool, attention: bool) -> &'static [u8] {
-    if busy {
-        include_bytes!("../icons/tray-busy@2x.png")
-    } else if attention {
-        include_bytes!("../icons/tray-alert@2x.png")
-    } else {
-        include_bytes!("../icons/tray@2x.png")
-    }
-}
-
 /// A setting the window keeps (`ui`), as a switch; `default` when it was never set.
 fn setting(app: &AppHandle, key: &str, default: bool) -> bool {
     lock(&app.state::<AppState>().settings).ui.get(key).and_then(Value::as_bool).unwrap_or(default)
@@ -61,14 +51,18 @@ pub fn apply(app: &AppHandle) {
 
 fn build(app: &AppHandle) -> tauri::Result<()> {
     let (busy, attention) = *app.state::<TrayState>().0.lock().unwrap();
-    let icon = tauri::image::Image::from_bytes(icon_for(busy, attention))?;
+    let look = platform::tray_icon(busy, attention);
+    let icon = tauri::image::Image::from_bytes(look.png)?;
     TrayIconBuilder::with_id(ID)
         .icon(icon)
-        .icon_as_template(true)
-        .tooltip("Brainstead")
+        .icon_as_template(look.template)
+        .tooltip(look.tooltip)
         .on_tray_icon_event(|tray, ev| {
             if let TrayIconEvent::Click { button_state, rect, button, .. } = ev {
-                *CLICKED_AT.lock().unwrap() = Some(std::time::Instant::now());
+                #[cfg(target_os = "macos")]
+                {
+                    *CLICKED_AT.lock().unwrap() = Some(std::time::Instant::now());
+                }
                 if button == MouseButton::Left && button_state == MouseButtonState::Up {
                     toggle(tray.app_handle(), rect);
                 }
@@ -79,10 +73,12 @@ fn build(app: &AppHandle) -> tauri::Result<()> {
 }
 
 /// When the icon was last clicked.
+#[cfg(target_os = "macos")]
 static CLICKED_AT: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
 
 /// Whether macOS's "reopen" (which shows the main window) comes from a click on the icon: with no
 /// window showing, a click that closes the menu can send one too, and should only close the menu.
+#[cfg(target_os = "macos")]
 pub fn reopen_from_icon() -> bool {
     CLICKED_AT.lock().unwrap().is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(1))
 }
@@ -108,13 +104,16 @@ fn icon_place(rect: &tauri::Rect) -> (f64, f64) {
 pub fn setup_window(app: &AppHandle) {
     if let Some(t) = app.get_webview_window("tray") {
         let t2 = t.clone();
-        t.on_window_event(move |ev| {
-            if let tauri::WindowEvent::Focused(false) = ev {
+        t.on_window_event(move |ev| match ev {
+            tauri::WindowEvent::Focused(false) => {
                 if t2.is_visible().unwrap_or(false) {
                     *BLURRED_AT.lock().unwrap() = Some(std::time::Instant::now());
                 }
                 let _ = t2.hide();
             }
+            // The page sizes the window to its contents after it shows.
+            tauri::WindowEvent::Resized(size) => platform::tray_window_resized(&t2, *size),
+            _ => {}
         });
     }
 }
@@ -133,37 +132,7 @@ fn toggle(app: &AppHandle, rect: tauri::Rect) {
         return;
     }
     *OPENED_UNDER.lock().unwrap() = Some(icon_place(&rect));
-    // Placed in points: on macOS they're one space across screens, where physical pixels aren't
-    // (each screen's are its points times its own scale, so with a Retina screen beside another,
-    // a position in pixels lands on the wrong screen or in the wrong place). The click gives the
-    // icon in the pixels of the screen it's on; the screen it's on is the one where, in that
-    // screen's points, it falls inside it.
-    let monitors = app.available_monitors().unwrap_or_default();
-    let icon = rect.position.to_physical::<f64>(1.0);
-    let icon_size = rect.size.to_physical::<f64>(1.0);
-    // The icon can be reported a few points above its screen's top edge (seen: 5 on a screen
-    // placed higher than the built-in one), so it counts as on the screen when it's within an
-    // icon's height of its top; across, it must be inside.
-    let in_points = |m: &tauri::Monitor| {
-        let k = m.scale_factor();
-        let (p, sz) = (m.position(), m.size());
-        let (left, top) = (p.x as f64 / k, p.y as f64 / k);
-        let (x, y, slack) = (icon.x / k, icon.y / k, icon_size.height / k);
-        let inside = x >= left && x < left + sz.width as f64 / k && y >= top - slack && y < top + sz.height as f64 / k;
-        inside.then_some((k, left, left + sz.width as f64 / k))
-    };
-    let screen = monitors.iter().find_map(in_points);
-    let k = screen.map_or_else(|| w.scale_factor().unwrap_or(2.0), |s| s.0);
-    let (x, y, iw, ih) = (icon.x / k, icon.y / k, icon_size.width / k, icon_size.height / k);
-    let mut left = x + iw / 2.0 - WIDTH / 2.0;
-    if let Some((_, screen_left, screen_right)) = screen {
-        left = left.min(screen_right - WIDTH - 8.0).max(screen_left + 8.0);
-    }
-    let place = tauri::LogicalPosition::new(left, y + ih + 6.0);
-    let _ = w.set_position(place);
-    let _ = w.show();
-    // Once on that screen, place it again, in case macOS moved it while showing it.
-    let _ = w.set_position(place);
+    platform::place_tray_window(app, &w, &rect, WIDTH);
     let _ = w.set_focus();
     let _ = w.emit("tray-opened", ());
 }
@@ -178,10 +147,12 @@ pub fn tray_set_state(app: AppHandle, busy: bool, attention: bool) {
     }
     *now = (busy, attention);
     if let Some(t) = app.tray_by_id(ID) {
-        if let Ok(img) = tauri::image::Image::from_bytes(icon_for(busy, attention)) {
+        let look = platform::tray_icon(busy, attention);
+        if let Ok(img) = tauri::image::Image::from_bytes(look.png) {
             let _ = t.set_icon(Some(img));
-            let _ = t.set_icon_as_template(true);
+            let _ = t.set_icon_as_template(look.template);
         }
+        let _ = t.set_tooltip(Some(look.tooltip));
     }
 }
 
@@ -207,6 +178,25 @@ pub fn tray_quit(app: AppHandle) {
     let _ = app.emit_to("main", "quit-requested", ());
 }
 
+/// A second launch, handed over by the single-instance plugin (Windows and Linux): shows this
+/// copy's window. `Brainstead --quit` started from this copy's own program file (the Windows install
+/// script) quits it as closing the window does where that quits: unsaved edits are asked about
+/// first, but not "Quit Brainstead?". A `--quit` from another copy, such as a dev build, which shares
+/// the app's identifier and so its single-instance lock, is ignored.
+#[cfg(any(windows, target_os = "linux"))]
+pub fn second_launch(app: &AppHandle, args: &[String]) {
+    if !args.iter().any(|a| a == "--quit") {
+        show_main(app);
+        return;
+    }
+    let real = |p: &std::path::Path| std::fs::canonicalize(p).ok();
+    let ours = std::env::current_exe().ok().and_then(|e| real(&e));
+    if ours.is_some() && args.first().and_then(|p| real(std::path::Path::new(p))) == ours {
+        show_main(app);
+        let _ = app.emit_to("main", "quit-requested", "unasked");
+    }
+}
+
 pub fn show_main(app: &AppHandle) {
     // Back in the Dock before the window shows, or it can come up behind what had focus.
     platform::set_in_dock(app, true);
@@ -216,6 +206,13 @@ pub fn show_main(app: &AppHandle) {
         platform::activate();
         let _ = w.set_focus();
     }
+}
+
+/// Whether closing the main window quits the app rather than hiding it: on Windows when there is
+/// no tray icon to bring the window back from ("Show in the menu bar" off), as Windows apps do.
+/// macOS hides it, and the Dock icon brings it back.
+pub fn close_quits(app: &AppHandle) -> bool {
+    cfg!(windows) && !setting(app, "menuBar", true)
 }
 
 /// The main window was closed (hidden): out of the Dock when the menu bar is all that's wanted.

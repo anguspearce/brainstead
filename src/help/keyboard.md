@@ -7,6 +7,8 @@ summary: Every key the app answers to, by where it works.
 ---
 Each key works where its heading says; opened from a screen, this topic unfolds that screen's keys. Quick capture's shortcut is set in [Settings › General](app:settings/general); `⌃⌥Space` is the default.
 
+Keys are shown for this computer: Windows uses Ctrl, Alt and Shift where the Mac uses its own modifier keys, so the screen shortcuts are Ctrl+1 to 0 and a note's View, Edit and Source are Ctrl+Shift+1 to 3 on Windows. Read aloud, Export PDF and Quick Look are Mac only for now.
+
 ## Anywhere
 - `⌘K` — Search or jump anywhere
 - `⌘⇧F` — Search page (also `⌘7`)
@@ -19,7 +21,7 @@ Each key works where its heading says; opened from a screen, this topic unfolds 
 - `?` — Help for this screen
 - `Esc` — Clear the screen's search box
 - `⇧⌘?` — Brainstead Help (Help menu)
-- `⌘Q` — Quit (asks first, and about unsaved changes before that)
+- `⌘Q` — Quit (asks first, and about unsaved changes before that). Mac only: on Windows use **File › Exit**, or `⌘Q` in the menu bar window
 
 ## A note
 - `⌥⌘1` `⌥⌘2` `⌥⌘3` — View, Edit, Source
@@ -33,7 +35,7 @@ Each key works where its heading says; opened from a screen, this topic unfolds 
 - `Space` `Esc` — Play or pause, stop (reading aloud)
 - `F7` `F9` — Previous, next paragraph (reading aloud)
 - `⇧⌘R` — Rename
-- `⌥⌘R` — Reveal in Finder
+- `⌥⌘R` — Reveal in Finder (Show in Explorer on Windows)
 - `⌥⌘C` — Copy path
 - `[[` `#` — Link a note, add a tag
 - `⌃Space` — Suggestions in a template's `<% %>` tag
@@ -64,7 +66,7 @@ Each key works where its heading says; opened from a screen, this topic unfolds 
 ## Lists
 - `↑` `↓` — Move between rows
 - `↩` — Open
-- `Space` — Quick Look (Trash; Word, PowerPoint or Excel sources)
+- `Space` — Quick Look (Trash; Word, PowerPoint or Excel sources; Mac only)
 
 ## Task lists
 - `↑` `↓` — Choose a task, across lists

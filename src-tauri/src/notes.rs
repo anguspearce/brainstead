@@ -366,17 +366,28 @@ fn mime(p: &Path) -> &'static str {
     }
 }
 
+/// The file an asset-protocol URL names. macOS's URLs carry the path after the host
+/// (`asset://localhost/Users/maya/x.png`, sometimes without its leading `/`); Windows' carry the
+/// whole path percent-encoded, drive and all (`http://asset.localhost/C%3A%5CUsers%5Cmaya%5Cx.png`),
+/// which takes no leading `/`.
+fn asset_path(url: &str) -> PathBuf {
+    let path = url.split_once("localhost/").map(|(_, p)| p).unwrap_or("");
+    let path = percent_decode(path.split(['?', '#']).next().unwrap_or(""));
+    PathBuf::from(if path.starts_with('/') || brainstead_core::paths::has_drive(&path) { path } else { format!("/{path}") })
+}
+
 /// `html` with each vault image (an asset-protocol URL) inlined as a data: URI, so it survives
 /// the paste into another app. Images outside the vault are left as they are.
 pub fn inline_images(html: &str, root: &Path) -> String {
-    let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let root = brainstead_core::paths::real_path(root);
     IMG_SRC
         .replace_all(html, |c: &regex::Captures| {
-            let url = &c[3];
-            let path = url.split_once("localhost/").map(|(_, p)| p).unwrap_or("");
-            let path = percent_decode(path.split(['?', '#']).next().unwrap_or(""));
-            let abs = PathBuf::from(if path.starts_with('/') { path } else { format!("/{path}") });
-            match abs.canonicalize().ok().filter(|p| p.starts_with(&root)).and_then(|p| std::fs::read(&p).ok().map(|b| (p, b))) {
+            let abs = asset_path(&c[3]);
+            match brainstead_core::paths::canonical(&abs)
+                .ok()
+                .filter(|p| p.starts_with(&root))
+                .and_then(|p| std::fs::read(&p).ok().map(|b| (p, b)))
+            {
                 Some((p, bytes)) => format!(
                     "{}{}data:{};base64,{}{}",
                     &c[1],
@@ -488,7 +499,7 @@ mod tests {
     #[test]
     fn inlines_vault_images_only() {
         let d = tempfile::tempdir().unwrap();
-        let root = d.path().canonicalize().unwrap();
+        let root = brainstead_core::paths::canonical(d.path()).unwrap();
         std::fs::create_dir_all(root.join("images")).unwrap();
         std::fs::write(root.join("images/a b.png"), [1u8, 2, 3]).unwrap();
         let enc = root.join("images/a b.png").to_string_lossy().replace(' ', "%20");
@@ -499,5 +510,18 @@ mod tests {
         let out = inline_images(&html, &root);
         assert!(out.contains(r#"src="data:image/png;base64,AQID""#), "{out}");
         assert!(out.contains(r#"src="http://asset.localhost/etc/hosts""#));
+    }
+
+    #[test]
+    fn asset_urls_from_either_system() {
+        assert_eq!(
+            asset_path("asset://localhost/Users/maya/Vault/images/a%20b.png?x=1"),
+            PathBuf::from("/Users/maya/Vault/images/a b.png")
+        );
+        assert_eq!(asset_path("asset://localhost//Users/maya/a.png"), PathBuf::from("/Users/maya/a.png"));
+        assert_eq!(
+            asset_path("http://asset.localhost/C%3A%5CUsers%5Cmaya%5CVault%5Cimages%5Ca%20b.png"),
+            PathBuf::from(r"C:\Users\maya\Vault\images\a b.png")
+        );
     }
 }

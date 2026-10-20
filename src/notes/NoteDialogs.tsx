@@ -9,12 +9,13 @@ import { useStore } from "../store";
 import { noteDialog, openNewNote } from "./dialogs";
 import { NewNoteDialog } from "./NewNote";
 import { RenameDialog } from "./Rename";
+import { isMod, strayCtrl } from "../platform";
 
 export function NoteDialogs() {
   const d = useStore(noteDialog);
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (e.metaKey && !e.shiftKey && !e.altKey && !e.ctrlKey && e.key === "n") {
+      if (isMod(e) && !e.shiftKey && !e.altKey && !strayCtrl(e) && e.key === "n") {
         e.preventDefault();
         openNewNote();
       }

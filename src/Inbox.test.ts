@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import type { InboxItem } from "./api";
 import { bulkChoices } from "./Inbox";
+import { keyLabel } from "./platform";
 
 const cap = (path: string) => ({ kind: "capture", path, line: 0, text: "", lineText: "", stamp: null }) as InboxItem;
 const task = (line: number) =>
@@ -27,7 +28,7 @@ describe("choices for several ticked items", () => {
     const mixed = [task(3), cap("sources/Orbit App plan.pdf")];
     expect(choices(mixed)).toEqual(["S someday", "⌫ delete"]);
     const [, , label, tip] = bulkChoices(mixed).find(([, b]) => b === "delete")!;
-    expect([label, tip]).toEqual(["Delete 2", "Delete them from the Inbox (captures go to the Trash); ⌘Z undoes one at a time"]);
+    expect([label, tip]).toEqual(["Delete 2", keyLabel("Delete them from the Inbox (captures go to the Trash); ⌘Z undoes one at a time")]);
     expect(bulkChoices([cap("sources/a.pdf"), cap("sources/b.pdf"), cap("sources/c.pdf")]).find(([, b]) => b === "reference")![2]).toBe(
       "Keep 3 in Sources",
     );

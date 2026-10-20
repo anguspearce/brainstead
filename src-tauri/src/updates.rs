@@ -11,7 +11,8 @@
 //! kept, so restarting doesn't check again), and whenever the user picks Check for Updates….
 //! An update found in the background waits until the main window is next focused, so the offer
 //! never pops up over another app. It offers Install and Restart, Later (asked again at the next
-//! day's check) or Skip This Version. Release builds only. Installing restarts the app by the
+//! day's check) or Skip This Version. Release builds only, on a system releases carry a package
+//! for (`platform::release_updates`). Installing restarts the app by the
 //! same road as ⌘Q (`crate::restart_for_update`), so unsaved edits are asked about first.
 //!
 //! The offer and what follows are shown in the main window (src/Update.tsx): `update-offer`,
@@ -86,7 +87,7 @@ fn app_name(app: &AppHandle) -> String {
 /// Starts the background checks. Call once from setup, in the windowed app only.
 pub fn start(app: &AppHandle, busy: Busy) {
     app.manage(Updates { pending: Mutex::new(None), offered: Mutex::new(None), asking: AtomicBool::new(false), busy });
-    if cfg!(debug_assertions) {
+    if cfg!(debug_assertions) || !crate::platform::release_updates() {
         return;
     }
     let app = app.clone();

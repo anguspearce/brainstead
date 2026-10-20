@@ -5,6 +5,8 @@ description = "A home for everything on your mind"
 authors = ["Wayne Davies"]
 license = "GPL-3.0-or-later"
 edition = "2021"
+# std::fs::File::lock (nativehost.rs) was stabilised in 1.89.
+rust-version = "1.89"
 
 [workspace]
 members = ["core", "mcp", "evals"]
@@ -58,8 +60,22 @@ libc = "0.2"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2"
 
+# A second launch focuses the running copy (lib.rs). Not on macOS, where LaunchServices already
+# keeps one copy of the bundle and a second binary started directly (`make dev`, screenshots) is
+# meant to run beside the installed app.
+[target.'cfg(any(windows, target_os = "linux"))'.dependencies]
+tauri-plugin-single-instance = "2"
+
+# The capture host's registration and Open at login (HKCU), and rich copy (platform/other.rs).
+# arboard is the clipboard plugin's own, at its version.
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+arboard = { version = "3.6", default-features = false }
+
 [dev-dependencies]
 tempfile = "3"
+# tauri's MockRuntime, to build the menu bar in a test (menu.rs).
+tauri = { version = "2", features = ["test"] }
 
 # Thin LTO with parallel codegen units: incremental release builds in ~20s instead of minutes.
 [profile.release]

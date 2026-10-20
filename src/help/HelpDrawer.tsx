@@ -20,6 +20,7 @@ import { shortcutsOpen } from "../Shortcuts";
 import { settings, Store, useStore } from "../store";
 import { SearchBox, SearchPick } from "../ui";
 import { appLink, GUIDES, helpUrl, openSection, HelpSection, HelpTopic, searchHelp, TOPICS, topicFor } from ".";
+import { keyLabel } from "../platform";
 
 /** What the drawer shows: a topic (the screen's when none is named), the list of guides (`start`),
  *  or a guide at a step. */
@@ -100,7 +101,7 @@ function HelpText({ text }: { text: string }) {
   return (
     <div className="help-text">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components} urlTransform={helpUrl}>
-        {text}
+        {keyLabel(text)}
       </ReactMarkdown>
     </div>
   );
@@ -125,7 +126,7 @@ function Section({ s, open, group }: { s: HelpSection; open?: boolean; group?: s
     >
       <summary>
         <Icon name="chevright" size={13} className="help-chev" />
-        {s.title}
+        {keyLabel(s.title)}
       </summary>
       <HelpText text={s.body} />
     </details>

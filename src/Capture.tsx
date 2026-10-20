@@ -16,6 +16,7 @@ import { applyTheme, settings } from "./store";
 import { localToday } from "./md/taskQuery";
 import { reportEditError } from "./taskModel";
 import { toast } from "./Toast";
+import { keyLabel } from "./platform";
 
 export type CaptureKind = "task" | "thought";
 
@@ -324,7 +325,7 @@ export function CaptureBox({
         </div>
         <span className="sp" />
         <span className="faint kbdhint">
-          <span className="kbd">↩</span>
+          <span className="kbd">{keyLabel("↩")}</span>
           {kind === "task" ? "To Do list" : "Scratchpad"}
         </span>
       </div>

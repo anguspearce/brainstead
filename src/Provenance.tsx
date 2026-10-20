@@ -17,6 +17,7 @@ import { trashFile } from "./notes/actions";
 import { useVaultVersion } from "./state";
 import { fmtBytes, LayerTag } from "./ui";
 import { plainText } from "./md/plainText";
+import { fileManager } from "./platform";
 
 /** A citing passage as the card quotes it: plain text, without its links to the source or its
  *  block id (the provenance tool quotes it the same way). */
@@ -123,7 +124,12 @@ export function ProvenanceCard({ file }: { file: FileSummary }) {
             {p.citers.length ? "Re-ingest" : "Ingest"}
           </button>
         )}
-        <button type="button" className="btn sm" title="Show the file in Finder" onClick={() => void api.reveal(file.path).catch(() => {})}>
+        <button
+          type="button"
+          className="btn sm"
+          title={`Show the file in ${fileManager}`}
+          onClick={() => void api.reveal(file.path).catch(() => {})}
+        >
           <Icon name="finder" size={12} />
           Reveal
         </button>

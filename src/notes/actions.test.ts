@@ -47,6 +47,11 @@ describe("Copy path", () => {
     await fileAction("copy-path", { path: "Projects/Plan.md", title: "Plan" });
     expect(JSON.stringify(invoke.mock.calls.at(-1))).toContain("/Users/maya/Orbit notes/Projects/Plan.md");
   });
+
+  it("takes a Windows vault folder's separator", () => {
+    settings.update({ vaultPath: "C:\\Users\\maya\\Orbit notes\\" });
+    expect(fullPath("Projects/Plan.md")).toBe("C:\\Users\\maya\\Orbit notes\\Projects\\Plan.md");
+  });
 });
 
 describe("Export PDF", () => {

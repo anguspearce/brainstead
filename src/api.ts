@@ -6,8 +6,23 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import type { Platform } from "./platform";
 
 export type Theme = "system" | "light" | "dark";
+
+/** What this system can do (src-tauri/core/src/features.rs); a screen shows a control only when its feature is on. */
+export interface PlatformFeatures {
+  platform: Platform;
+  quickLook: boolean;
+  spelling: boolean;
+  grammar: boolean;
+  readAloud: boolean;
+  exportPdf: boolean;
+  richCopy: boolean;
+  fullDiskAccess: boolean;
+  openAtLogin: boolean;
+  imageText: boolean;
+}
 
 export interface Settings {
   vaultPath: string | null;
@@ -43,7 +58,7 @@ export interface Settings {
   /** Spelling and grammar marks in the editor (Settings › Notes); both on unless false. */
   spellCheck?: boolean;
   grammarCheck?: boolean;
-  /** An English variant to check in (en_GB, en_ZA…); unset follows macOS. */
+  /** An English variant to check in (en_GB, en_ZA…); unset follows the system. */
   spellLanguage?: string;
   /** Days of the app's own logs kept (Settings › About; src-tauri/src/applog.rs). */
   logDays?: number;
@@ -1044,7 +1059,12 @@ export const api = {
   smartListDelete: (name: string) => invoke<void>("smart_list_delete", { name }),
   /** Quits (⌘Q, once unsaved edits have been dealt with). */
   appQuit: () => invoke<void>("app_quit"),
-  onQuitRequested: (f: () => void): Promise<UnlistenFn> => listen("quit-requested", () => f()),
+  /**
+   * `ask` is false for a quit that shouldn't ask "Quit Brainstead?": closing the window on Windows
+   * with no tray icon, or the Windows install script's `Brainstead --quit`.
+   */
+  onQuitRequested: (f: (ask: boolean) => void): Promise<UnlistenFn> =>
+    listen<string | null>("quit-requested", (e) => f(e.payload !== "unasked")),
   /** Restarts into an update just installed, once unsaved edits have been dealt with. */
   appRestart: () => invoke<void>("app_restart"),
   onRestartRequested: (f: () => void): Promise<UnlistenFn> => listen("restart-requested", () => f()),
@@ -1120,10 +1140,12 @@ export const api = {
   settingsWrite: (settings: Settings) => invoke<Settings>("settings_write", { settings }),
   vaultStatus: () => invoke<VaultStatus>("vault_status"),
   rebuildIndex: () => invoke<void>("rebuild_index"),
+  /** Which features this system has (src/features.ts keeps the answer). */
+  platformFeatures: () => invoke<PlatformFeatures>("platform_features"),
   permissions: () => invoke<Permissions>("permissions"),
   openFullDiskAccess: () => invoke<void>("open_full_disk_access"),
   reveal: (path: string) => invoke<void>("reveal", { path }),
-  /** Shows the app's log folder in Finder. */
+  /** Shows the app's log folder in the file manager. */
   logsReveal: () => invoke<void>("logs_reveal"),
   /** Whether Brainstead opens at login; null where the system can't say. */
   loginItem: () => invoke<boolean | null>("login_item"),

@@ -25,6 +25,13 @@ similar = "2"
 flate2 = "1"
 strsim = "0.11"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+dunce = "1"
+dirs = "6"
+
+# The 8.3 short name of a folder (paths::short_name), one of the spellings a path is read back
+# from, for this crate's tests and the MCP server's.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 tempfile = "3"

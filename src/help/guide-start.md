@@ -6,7 +6,7 @@ order: 1
 summary: Choose or create your vault, decide when Brainstead may change it, and find your way around.
 ---
 ## Choose your vault
-Your vault is the folder of markdown notes you already keep. On first run Brainstead asks for Full Disk Access, then for the folder; you can change it later in [Settings › Vault](app:settings/vault) with **Choose…**. Brainstead indexes the folder into its own database, outside the vault, and keeps the index current as files change in other apps.
+Your vault is the folder of markdown notes you already keep. On first run on a Mac Brainstead asks for Full Disk Access, then for the folder (Windows asks only for the folder); you can change it later in [Settings › Vault](app:settings/vault) with **Choose…**. Brainstead indexes the folder into its own database, outside the vault, and keeps the index current as files change in other apps.
 
 No vault yet? Click **Create a new vault** on the first screen, give it a name and choose where to put it. It's made with a few example notes: open **Start here** for what each one shows, and delete them when you're done. To get them back, use **Add the example notes** in [Settings › Vault](app:settings/vault).
 

@@ -19,6 +19,7 @@ import { closeNoteDialog, setNewNoteCursor } from "./dialogs";
 import { composeFilename } from "./filename";
 import { checkTemplate, freeName, runTemplate, StopRun } from "./templater";
 import { AskPanel, runHooks, TemplaterDocsLink, useAsker, vaultEnv } from "./TemplateRun";
+import { isMod, keyLabel } from "../platform";
 
 export interface LoadedTemplate {
   path: string;
@@ -98,12 +99,12 @@ export function NewNoteDialog({ initial }: { initial?: string }) {
     : tpl
       ? tpl.error
         ? "This template has an error, so it can't be run"
-        : "Run the template and open the note it makes (⌘↩)"
+        : keyLabel("Run the template and open the note it makes (⌘↩)")
       : taken
         ? "There's already a note with this name"
         : !filename
           ? "Give the note a title first"
-          : "Create the note and open it (⌘↩)";
+          : keyLabel("Create the note and open it (⌘↩)");
 
   const create = async () => {
     if (!canCreate) return;
@@ -170,7 +171,7 @@ export function NewNoteDialog({ initial }: { initial?: string }) {
         }}
         onKeyDown={(e) => {
           if (asker.pending) return;
-          if (e.key === "Enter" && e.metaKey) {
+          if (e.key === "Enter" && isMod(e)) {
             e.preventDefault();
             void create();
           } else onArrows(e);
@@ -310,7 +311,7 @@ export function NewNoteDialog({ initial }: { initial?: string }) {
               </button>
               <span title={createTip}>
                 <button type="submit" className="btn pri lg" disabled={!canCreate}>
-                  {busy ? "Creating…" : "Create"} <span className="kbd">⌘↩</span>
+                  {busy ? "Creating…" : "Create"} <span className="kbd">{keyLabel("⌘↩")}</span>
                 </button>
               </span>
             </div>

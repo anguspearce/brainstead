@@ -466,6 +466,14 @@ fn run(app: &AppHandle, id: &str, week: &str, model: &str) {
     let _ = app.emit(CHANGED, ());
 }
 
+/// Whether a source path the model quotes is read to check its suggestion: vault-relative or
+/// absolute, as the model was shown it, but never climbing with `..`. On Windows a drive or `\\?\`
+/// prefix is refused too, since joining one onto the vault's root replaces the root (prefixes are
+/// parsed only on Windows).
+fn readable_source(p: &str) -> bool {
+    std::path::Path::new(p).components().all(|c| !matches!(c, std::path::Component::ParentDir | std::path::Component::Prefix(_)))
+}
+
 /// Gathers the week, asks the model, checks its suggestions and saves them.
 /// `answer` gets the model's answer, to show in the run's chat when it couldn't be read.
 fn prepare(app: &AppHandle, id: &str, week: &str, model: &str, looked: &mut Vec<String>, answer: &mut String) -> Result<Prep, String> {
@@ -485,11 +493,10 @@ fn prepare(app: &AppHandle, id: &str, week: &str, model: &str, looked: &mut Vec<
     answer.clone_from(&out.text);
     let root = app.state::<VaultService>().root().ok_or("No vault is open.")?;
     let (suggestions, dropped) = prep::parse(&out.text, &inputs, |p| {
-        let abs = root.join(p);
-        if abs.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        if !readable_source(p) {
             return None;
         }
-        std::fs::read_to_string(abs).ok()
+        std::fs::read_to_string(root.join(p)).ok()
     })?;
     if !dropped.is_empty() {
         crate::applog!("weekly review preparation left out {}: {}", dropped.len(), dropped.join("; "));
@@ -517,6 +524,29 @@ fn prune() {
     if weeks.len() > KEEP_WEEKS {
         for p in &weeks[..weeks.len() - KEEP_WEEKS] {
             let _ = std::fs::remove_file(p);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::readable_source;
+
+    #[test]
+    fn a_source_is_read_unless_it_climbs_or_names_a_drive() {
+        for ok in ["wiki/x.md", "Meetings/2026-10-05 Orbit App.md", "/Users/maya/Vault/wiki/x.md"] {
+            assert!(readable_source(ok), "{ok}");
+        }
+        for bad in ["../x.md", "wiki/../../x.md", ".."] {
+            assert!(!readable_source(bad), "{bad}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_drive_or_verbatim_source_is_not_read_on_windows() {
+        for bad in [r"C:\Users\maya\x.md", "C:x.md", "c:/x.md", r"\\?\C:\x.md", r"wiki\..\..\x.md"] {
+            assert!(!readable_source(bad), "{bad}");
         }
     }
 }

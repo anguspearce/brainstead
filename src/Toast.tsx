@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { iconizeEmoji } from "./md/fieldEmoji";
 import { Icon } from "./icons";
 import { Store, useStore } from "./store";
+import { keyLabel } from "./platform";
 
 export interface ToastAction {
   label: string;
@@ -44,7 +45,7 @@ export function Toasts() {
           }}
         >
           {m.action.label}
-          {m.action.kbd && <span className="kbd">{m.action.kbd}</span>}
+          {m.action.kbd && <span className="kbd">{keyLabel(m.action.kbd)}</span>}
         </button>
       )}
       {m.tone === "bad" && (

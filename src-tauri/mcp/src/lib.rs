@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use brainstead_core::changes::{self, Instruction};
 use brainstead_core::proposals::{self, Kind, Origin, Patch, Quote, SourceText};
 use brainstead_core::search::SearchRequest;
-use brainstead_core::{bridge, extract, filename, images, lint, projects, write, Index};
+use brainstead_core::{bridge, extract, filename, images, lint, paths, projects, write, Index};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use unicode_normalization::UnicodeNormalization;
@@ -196,7 +196,11 @@ pub fn handle(ctx: &Ctx, msg: Value) -> Option<Value> {
             }))
         }
         "ping" => Ok(json!({})),
-        "tools/list" => Ok(json!({"tools": tools()})),
+        "tools/list" => {
+            let mut list = Value::Array(tools());
+            keys_in_descriptions(&mut list);
+            Ok(json!({"tools": list}))
+        }
         "tools/call" => {
             let name = params.get("name").and_then(Value::as_str).unwrap_or("");
             let args = params.get("arguments").cloned().unwrap_or(json!({}));
@@ -253,6 +257,31 @@ enum Effect {
 /// whole session (D-20261005-14).
 fn unattended() -> Value {
     json!({"type": "boolean", "description": "true when nobody is watching this session (a loop, a scheduled agent): a change that fails a check is held for the user instead of made, and from then on nothing held can be accepted and weekly_start_over and moving_over are refused."})
+}
+
+/// `text` with its shortcuts as this system names them. The help and the tools write them with
+/// macOS glyphs (⌘Z), which Windows names in words (Ctrl+Z), as the window does.
+fn keys(text: &str) -> String {
+    #[cfg(windows)]
+    return brainstead_core::help::windows_keys(text);
+    #[cfg(not(windows))]
+    text.to_string()
+}
+
+/// Every `description` in `v` (the tools and their inputs) through `keys`.
+fn keys_in_descriptions(v: &mut Value) {
+    match v {
+        Value::Object(o) => {
+            for (k, x) in o.iter_mut() {
+                match x {
+                    Value::String(s) if k == "description" => *s = keys(s),
+                    _ => keys_in_descriptions(x),
+                }
+            }
+        }
+        Value::Array(a) => a.iter_mut().for_each(keys_in_descriptions),
+        _ => {}
+    }
 }
 
 fn tool(name: &str, title: &str, effect: Effect, description: &str, mut input: Value) -> Value {
@@ -805,7 +834,7 @@ pub fn tools() -> Vec<Value> {
             "Glance's counts, as Activity and Knowledge health show them (needs the app): notes and wiki pages by type and by tag, most first, and the files the most others link to.",
             schema(json!({}), &[])),
         tool("app_status", "Brainstead's state", Read,
-            "The vault, whether it's read-only (then nothing can be changed until the user switches it off in Settings › Vault), the index as Settings › Vault shows it (its counts, or why it failed), Full Disk Access, Brainstead's version, its app data folder and its website, whether Brainstead runs the daily and weekly summaries, whether the previous app's skills are still in the vault (moving_over retires them), and what ⌘Z would undo (needs the app).",
+            "The vault, whether it's read-only (then nothing can be changed until the user switches it off in Settings › Vault), the index as Settings › Vault shows it (its counts, or why it failed), Full Disk Access, Brainstead's version, its app data folder and its website, whether Brainstead runs the daily and weekly summaries, whether the previous app's skills are still in the vault (moving_over retires them), and what ⌘Z would undo (needs the app). Then features: which of Quick Look, spelling, grammar, Read aloud, Export PDF, rich copy, Full Disk Access, Open at login and the text in images this system has; the window has no button or setting for the rest, so don't offer them.",
             schema(json!({}), &[])),
         tool("list_assistants", "AI assistants found", Read,
             "Settings › AI assistants' Found on this computer, as the pane lists it (needs the app): Claude Code, Codex, Antigravity and Copilot, each with its version, how many models it offers and where it is, or that it isn't installed (with where to read how to install it) or lists no models (then the user runs it in Terminal and signs in). look_again looks for them again, as the pane's Look again does, after one is installed or signed in. Then the pane's other groups: Brainstead's tools' command for each assistant found, to use them from Terminal, and Skills Brainstead does now (the vault's skills whose screen Brainstead has).",
@@ -941,6 +970,12 @@ fn outputs() -> std::collections::HashMap<&'static str, Value> {
             page_schema(
                 json!({"title": s("string"), "target": s("string"), "path": sn(), "days": {"type": ["integer", "null"], "description": "Days since its note changed."}, "stale": s("boolean")}),
             ),
+        ),
+        (
+            "app_status",
+            json!({"type": "object", "properties": {"features": {"type": "object", "description": "What this system has (platform: macos, windows or linux); false is hidden in the window.", "properties": {
+                "platform": s("string"), "quickLook": s("boolean"), "spelling": s("boolean"), "grammar": s("boolean"), "readAloud": s("boolean"), "exportPdf": s("boolean"), "richCopy": s("boolean"), "fullDiskAccess": s("boolean"), "openAtLogin": s("boolean"), "imageText": s("boolean")
+            }}}}),
         ),
         (
             "list_transcripts",
@@ -1231,7 +1266,15 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
         "capture_extensions" => act("capture.status", obj),
         "list_assistants" => act("assistants.found", obj),
         "glance" => act("glance", obj),
-        "app_status" => act("status", obj),
+        "app_status" => {
+            // Then the system's features (brainstead_core::features), the table the window hides by.
+            let mut out = act("status", obj)?;
+            let f = brainstead_core::features::platform_features();
+            out.text.push('\n');
+            out.text.push_str(&f.describe());
+            out.structured = Some(json!({"features": f}));
+            Ok(out)
+        }
         "rebuild_index" => act("index.rebuild", obj),
         "list_automated_tools" => {
             act("automated", acting(obj, name, &["list"], "list", &["name", "folder_contains", "first_message_starts_with"])?)
@@ -1313,7 +1356,24 @@ fn open_app(ctx: &Ctx) -> Result<(), String> {
         // Its own process group: the app keeps running when the assistant's session ends.
         cmd.process_group(0);
     }
-    cmd.spawn().map_err(|e| format!("Brainstead isn't open, and opening it failed: {e}. Open it, then try again."))?;
+    #[cfg(windows)]
+    let spawned = {
+        use std::os::windows::process::CommandExt;
+        // No console, its own process group (a Ctrl+C in the assistant's terminal doesn't reach
+        // it), and out of the session's job object, so closing the session doesn't end the app.
+        // A job that doesn't allow breaking away refuses the start (access denied); then it's
+        // started inside the job.
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
+        cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB).spawn().or_else(|_| {
+            cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+            cmd.spawn()
+        })
+    };
+    #[cfg(not(windows))]
+    let spawned = cmd.spawn();
+    spawned.map_err(|e| format!("Brainstead isn't open, and opening it failed: {e}. Open it, then try again."))?;
     let start = std::time::Instant::now();
     while start.elapsed() < std::time::Duration::from_secs(45) {
         if bridge::app_alive(&ctx.data) {
@@ -1616,9 +1676,10 @@ fn new_note_path(ctx: &Ctx, a: &NoteArgs) -> Result<String, String> {
         }
     }
     let name = filename::compose(a.kind.as_deref(), &a.title, a.date.as_deref()).ok_or("The note needs a title.")?;
-    let folder = a.folder.as_deref().unwrap_or("").trim().trim_matches('/').to_string();
+    let mut folder = a.folder.as_deref().unwrap_or("").trim().trim_matches(paths::SEPARATORS).to_string();
     if !folder.is_empty() {
-        brainstead_core::trash::safe_rel(&folder).map_err(|e| e.to_string())?;
+        // As the file system spells it, so `templates` and `TEMPLA~1` are Templates/.
+        folder = paths::vault_rel(&ctx.vault, &folder)?;
         let first = folder.split('/').next().unwrap_or("");
         if folder.split('/').any(|s| s.starts_with('.')) || proposals::NOT_FOR_NOTES.iter().any(|n| n.eq_ignore_ascii_case(first)) {
             return Err(format!("A note can't go in {folder}/: not in sources/, wiki/ (edit_page makes wiki pages) or Templates/."));
@@ -1748,7 +1809,7 @@ struct HelpArgs {
     query: Option<String>,
 }
 
-/// The app's help (core/src/help.rs); it needs no vault.
+/// The app's help (core/src/help.rs), with its shortcuts as this system names them; it needs no vault.
 fn help(a: HelpArgs) -> Result<String, String> {
     let some = |s: Option<String>| s.filter(|x| !x.trim().is_empty());
     match (some(a.topic), some(a.query)) {
@@ -1756,6 +1817,7 @@ fn help(a: HelpArgs) -> Result<String, String> {
         (None, Some(q)) => Ok(brainstead_core::help::search(&q, 5)),
         (None, None) => Ok(brainstead_core::help::list()),
     }
+    .map(|t| keys(&t))
 }
 
 #[derive(Deserialize)]
@@ -1867,15 +1929,17 @@ fn find_page(ctx: &Ctx, ix: &Index, page: &str) -> Result<PageRef, String> {
     if p.is_empty() {
         return Err("Which page? None was given.".into());
     }
-    if p.contains('/') || p.ends_with(".md") {
-        brainstead_core::trash::safe_rel(&p).map_err(|e| e.to_string())?;
+    if p.contains(paths::SEPARATORS) || p.ends_with(".md") {
+        // The page by the file's own spelling, which the app's rules for changes go by: on Windows
+        // `templates\meeting.md` and `TEMPLA~1/Meeting.md` are `Templates/Meeting.md`.
         let with_ext = if Path::new(&p).extension().is_some() { p.clone() } else { format!("{p}.md") };
         for cand in [&p, &with_ext] {
-            if ctx.vault.join(cand).is_file() {
-                return Ok(PageRef::Found(cand.clone()));
+            let rel = paths::vault_rel(&ctx.vault, cand)?;
+            if ctx.vault.join(&rel).is_file() {
+                return Ok(PageRef::Found(rel));
             }
         }
-        return Ok(PageRef::NotThere(with_ext));
+        return Ok(PageRef::NotThere(paths::vault_rel(&ctx.vault, &with_ext)?));
     }
     match ix.resolve(std::slice::from_ref(&p))?.into_iter().next().flatten() {
         Some(rel) => Ok(PageRef::Found(rel)),
@@ -2515,7 +2579,7 @@ fn create_task(ctx: &Ctx, a: TaskArgs) -> Result<String, String> {
 
 /// Runs the server on stdin and stdout; the process's exit code.
 pub fn main_with(args: &[String], default_data: PathBuf) -> i32 {
-    let mut ctx = match Ctx::from_args(args, default_data) {
+    let ctx = match Ctx::from_args(args, default_data) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("brainstead mcp: {e}");
@@ -2524,6 +2588,7 @@ pub fn main_with(args: &[String], default_data: PathBuf) -> i32 {
     };
     #[cfg(unix)]
     let served = {
+        let mut ctx = ctx;
         if let Some(r) = reload::Resume::take() {
             r.apply(&mut ctx);
         }

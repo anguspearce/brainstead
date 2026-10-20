@@ -14,6 +14,10 @@ The finished build plan is untracked in `archive/`. Decisions: `_sift/decisions.
 
 ## Commands
 
+The commands below are for macOS. Windows has no `make`: use `python tools/check.py` for the check (`python tools/check.py rust` runs one group), `npm run tauri dev` to run with hot reload, `npm run tauri build` to build the NSIS installer in `src-tauri/target/release/bundle/nsis/` (`Brainstead_<version>_x64-setup.exe`) and `python tools/install_windows.py` to build it, quit Brainstead, install it silently for your user and open it (`make install-app`'s counterpart). The `app`, `install-app`, `dmg`, `icons`, `sign-check` and `screenshots` targets are macOS only.
+
+On Windows you need rustup (stable-msvc), Visual Studio Build Tools with the "Desktop development with C++" workload, Node.js 22 or later, Python 3 (the git hooks call `python3`, so it must be on your PATH under that name) and ruff. Run `npm ci` once. CI runs the full check on macOS and Windows and compiles on Linux.
+
 | Command | What it does |
 |---|---|
 | `make dev` | Run with hot reload (Vite on localhost:1440) |
@@ -31,8 +35,8 @@ The finished build plan is untracked in `archive/`. Decisions: `_sift/decisions.
 | `make icons` | Redraw the icon artwork and regenerate the icon set |
 | `make sign-check` | Show the installed app's signer; fail unless it's `signing.local`'s identity |
 
-- `make check` must pass before every commit.
-- Quit the installed Brainstead before `make dev` if they share an app data folder, or both run the scheduled jobs. `BRAINSTEAD_DATA` separates them.
+- `make check` (`python tools/check.py` on Windows) must pass before every commit.
+- Quit the installed Brainstead before `make dev` if they share an app data folder, or both run the scheduled jobs. `BRAINSTEAD_DATA` separates them. On Windows a second launch otherwise hands over to the copy already running (one lock for every build), so a dev copy needs `BRAINSTEAD_DATA` to run beside the installed app.
 - Tests copy `tests/fixtures/vault/` to a temp folder; never a real vault.
 - Capture extensions: Vitest tests sit beside their pure functions (`extensions/**/*.test.js`), run by `make check`. Bump `manifest.json`'s version on any change; users reload via Settings › Capture extensions, which shows each extension's version in its folder, and `chrome://extensions`. A dev build copies the extensions from the repo's `extensions/`, not its resources, so an edit reaches Chrome without a Rust rebuild (`src-tauri/src/nativehost.rs`, `shipped`).
 - Evals default to cheap models (Haiku under test, Sonnet judging); ingest scenarios need and name Sonnet.
@@ -46,7 +50,7 @@ Updates: the app checks `releases/latest/download/latest.json` (`tauri.conf.json
 `CLAUDE.md` has the full list. In short:
 
 - The vault is the only source of truth and other apps edit it. Never reformat markdown the user didn't change. Writes are atomic and refuse if the file changed since read.
-- No model writes to the vault directly: changes go through the app (`src-tauri/src/changes.rs`) and are recorded in Changes. User-started ones apply at once. Held: a scheduled change that fails a check, anything touching `Templates/` (renames and trashes too), runnable code, a system note's header.
+- No model writes to the vault directly: changes go through the app (`src-tauri/src/changes.rs`) and are recorded in Changes. User-started ones apply at once. Held: a scheduled change that fails a check, anything touching `Templates/` (renames and trashes too), runnable code, a system note's header. The rules go by the page's path as the file system spells it (`paths::vault_rel`, in the MCP server's page lookup and in `submit_many`): on Windows one file is also `templates\meeting.md` or `TEMPLA~1/Meeting.md`, and a name Win32 would read as another (`Templates./x.md`, `x.md::$DATA`) is refused.
 - OS-specific code stays in `src-tauri/src/platform/`, for Windows and Linux.
 - Same change as the behaviour: `docs/`, `README.md`, the screen's help (`src/help/*.md`) and MCP support.
 - Invented names only (Orbit App, Maya, Lena, Acme…) in fixtures, docs, comments and UI text.
@@ -57,7 +61,7 @@ These pages are the user guide; the in-app help goes deeper per screen. Say what
 
 ## Where things live
 
-In `~/Library/Application Support/Brainstead/`, or `BRAINSTEAD_DATA`.
+In `~/Library/Application Support/Brainstead/` on a Mac or `%APPDATA%\Brainstead\` on Windows, or `BRAINSTEAD_DATA`. The files are the same on both.
 
 | What | Where |
 |---|---|
@@ -72,7 +76,7 @@ In `~/Library/Application Support/Brainstead/`, or `BRAINSTEAD_DATA`.
 | Weekly review in progress | `weekly.json` |
 | Weekly review's prepared suggestions (by week) and runs | `weekly-prep/` |
 | Unsaved chats; saved chats' turns while read-only (by vault name); Antigravity's working folder | `chats/`, `chats-pending/`, `ask/agy/` |
-| Capture extensions' copy for Show in Finder | `extensions/` |
+| Capture extensions' copy for Show in Finder (Show in Explorer on Windows) | `extensions/` |
 | Latest browser captures (watched) | `captures.json` |
 | Captures waiting in the Inbox | `captures-inbox.json` |
 | Captures already clarified | `inbox-captures.json` |
@@ -92,10 +96,12 @@ The app binary with `--mcp` is the MCP server (Ask adds `--data <folder>`, `--ch
 claude mcp add -s user brainstead -- "/Applications/Brainstead.app/Contents/MacOS/Brainstead" --mcp
 ```
 
+On Windows the command is the installed exe, for example `claude mcp add -s user brainstead -- "%LOCALAPPDATA%\Brainstead\Brainstead.exe" --mcp`. Settings › AI assistants shows the exact path.
+
 - It reads the vault from disk and the index read-only, and writes nothing. A change (`edit_page`, `create_note`, a task, a rename…) is checked, then sent to the app as `change.submit`, which applies or holds it.
 - Other actions (ticking a task, clarifying the Inbox, starting a run, reverting) are request files in `bridge/`. The app hands them to the window, which runs the screens' own functions (`src/mcpActions.ts`), so undo, `log.md`, read-only and Templater behave as on screen.
 - It opens the app if it isn't running.
-- It picks up a new build (`mcp/src/reload.rs`, D-20261011-02). Every 3 seconds, idle or between requests, it compares the program file (device, inode, size, mtime) with the one it started from; once a new one is the same on two checks running (and a bundle has its `Info.plist`), and every request read has been answered, it `execv`s it with the same arguments and `BRAINSTEAD_MCP_RESUME` (the session id, `unattended`, what `initialize` agreed). It reads stdin unbuffered with `poll`, so the new process gets every unread byte. The new one sends `notifications/tools/list_changed` (initialize says `listChanged: true`) instead of waiting for an `initialize`. If the exec fails it logs to stderr and carries on, and doesn't try that file again. So `make install-app` and the updater leave the `--mcp` processes (and Chrome's capture host) running; the updater restarts only the app. Unix only.
+- It picks up a new build (`mcp/src/reload.rs`, D-20261011-02). Every 3 seconds, idle or between requests, it compares the program file (device, inode, size, mtime) with the one it started from; once a new one is the same on two checks running (and a bundle has its `Info.plist`), and every request read has been answered, it `execv`s it with the same arguments and `BRAINSTEAD_MCP_RESUME` (the session id, `unattended`, what `initialize` agreed). It reads stdin unbuffered with `poll`, so the new process gets every unread byte. The new one sends `notifications/tools/list_changed` (initialize says `listChanged: true`) instead of waiting for an `initialize`. If the exec fails it logs to stderr and carries on, and doesn't try that file again. So `make install-app` and the updater leave the `--mcp` processes (and Chrome's capture host) running; the updater restarts only the app. Unix only: on Windows the installer (and so the updater) stops every process running the program file, `--mcp` servers included, through Restart Manager, since a program file in use can't be replaced.
 - Tools have titles and the four MCP hints. Reads are separate tools marked read-only (`list_changes` beside `changes`, `list_trash` beside `restore_from_trash`…), so clients can run them unasked. A read tool sends its change tool's app action, limited to the read actions in `acting`.
 - Unknown tool: JSON-RPC error. Bad arguments or an impossible action: tool error (`isError`) saying why, so the model can retry. 120 calls a minute.
 - Listing tools have an `outputSchema` and return rows as `structuredContent` too: the action returns `listed(...)`'s `{ text, structured }` and `act` passes both on. `search`, `list_projects`, `list_changes`, `activity` and `graph` give one line per row unless `detail`.
@@ -104,7 +110,7 @@ claude mcp add -s user brainstead -- "/Applications/Brainstead.app/Contents/MacO
 
 ## Read aloud
 
-Uses macOS's AVSpeechSynthesizer, not WebKit's `speechSynthesis`, which hides downloaded Premium and Enhanced voices and pauses unreliably.
+macOS only for now (hidden on Windows). Uses macOS's AVSpeechSynthesizer, not WebKit's `speechSynthesis`, which hides downloaded Premium and Enhanced voices and pauses unreliably.
 
 - `src-tauri/src/platform/speech.rs`: the synthesiser, on the main thread, delegate kept alive (it holds it weakly).
 - `src-tauri/src/speech.rs`: `tts_*` commands, synchronous so a stop and the next speak arrive in order.
@@ -114,6 +120,8 @@ Uses macOS's AVSpeechSynthesizer, not WebKit's `speechSynthesis`, which hides do
 - `src/speech/*.test.*`: extraction and playback races, with a fake synthesiser.
 
 ## Signing and permissions
+
+The Windows installer is unsigned, so SmartScreen warns on first run (More info, then Run anyway). Windows has no Full Disk Access, so the rest of this section is macOS only.
 
 Ad-hoc builds lose Full Disk Access on every rebuild. To fix:
 
@@ -135,7 +143,7 @@ A new vault's example notes are in `src-tauri/starter-vault/`, embedded the same
 
 ## Screenshots
 
-`make screenshots` retakes every scene in `tools/screenshots/scenes.json`, in both themes. Needs Pillow.
+macOS only. `make screenshots` retakes every scene in `tools/screenshots/scenes.json`, in both themes. Needs Pillow.
 
 - Demo data is in `.demo/` (gitignored): the fixture vault plus a few files. The app's home is the demo's, so paths show as `~/Notes` and nothing outside `.demo/` is touched.
 - `--fresh` remakes the demo; `--docs` takes only docs scenes; `-j N` runs N apps at once (default 4, each with its own demo app data); `--release` uses `make app`'s build, for release-only behaviour (its Content Security Policy).

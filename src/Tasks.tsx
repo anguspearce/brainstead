@@ -24,6 +24,7 @@ import { askLink, askQuote, TopBar } from "./TopBar";
 import { fmtCount, Popover, SearchBox, Seg, TableBand, useDebounced, usePinnedBar } from "./ui";
 import { settings, useStore } from "./store";
 import type { SavedTaskList } from "./api";
+import { keyLabel } from "./platform";
 
 /** Each grouping's band icon, and what its count's tooltip says. */
 const GROUP_ICON: Record<GroupBy, string> = { none: "", project: "project", context: "tag", due: taskDate("due").icon };
@@ -298,7 +299,12 @@ export function TasksScreen() {
                   onKeyDown={(e) => e.key === "Enter" && saveList(naming.name)}
                 />
               </label>
-              <button type="button" className="btn sm pri" title="Save the list under this name (↩)" onClick={() => saveList(naming.name)}>
+              <button
+                type="button"
+                className="btn sm pri"
+                title={keyLabel("Save the list under this name (↩)")}
+                onClick={() => saveList(naming.name)}
+              >
                 Save
               </button>
             </div>

@@ -107,7 +107,7 @@ pub fn write_atomic(path: &Path, data: &[u8], keep_mtime: bool) -> Result<()> {
     let target;
     let path = match fs::symlink_metadata(path) {
         Ok(m) if m.file_type().is_symlink() => {
-            target = fs::canonicalize(path).map_err(io)?;
+            target = crate::paths::canonical(path).map_err(io)?;
             target.as_path()
         }
         _ => path,

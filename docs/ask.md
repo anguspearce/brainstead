@@ -1,6 +1,6 @@
 # Ask and assistants
 
-Ask chats with the AI assistants already on your Mac, Claude Code, Codex, Copilot and Antigravity, signed in with your own accounts, inside your vault.
+Ask chats with the AI assistants already on your computer, Claude Code, Codex, Copilot and Antigravity, signed in with your own accounts, inside your vault.
 
 [Ask](#ask) · [What an assistant can do](#what-an-assistant-can-do) · [Sessions outside the app](#sessions-outside-the-app) · [Questions about Brainstead](#questions-about-brainstead)
 
@@ -42,7 +42,7 @@ In short, an assistant can do whatever the screens do. The help tool, and the in
 
 A quote not found in its source is flagged, once.
 
-**Held for you to accept:** a change to a template (including a new template, or renaming or trashing one), a change to a [system note's header](notes.md#system-notes), and one that adds code that runs. In a session nobody is watching, a change that fails a check is held too, and so is one from a run it starts that fails a check.
+**Held for you to accept:** a change to a template (including a new template, or renaming or trashing one), however the assistant spells the path (Brainstead goes by the file's own name, so on Windows `templates\meeting.md` or the folder's short name `TEMPLA~1` is still `Templates/Meeting.md`), a change to a [system note's header](notes.md#system-notes), and one that adds code that runs. In a session nobody is watching, a change that fails a check is held too, and so is one from a run it starts that fails a check.
 
 An assistant can list, reject or revert changes when you ask. It accepts a held change only in a session you're in, and only one held because a check failed. The rest are yours to accept on the Changes screen.
 
@@ -70,7 +70,7 @@ Long lists come a page at a time and say how many there are. Nothing changes whi
 
 <a href="images/index.md#ask-and-assistants"><picture><source media="(prefers-color-scheme: dark)" srcset="images/settings-assistants-dark.png"><img alt="Settings › AI assistants: the assistants found, the model for new chats and for each job, and the command that adds Brainstead's tools to Claude Code" src="images/settings-assistants-light.png"></picture></a>
 
-The same tools work from an assistant in Terminal, in every folder. **Settings › AI assistants** shows each assistant's command to copy. Run it once:
+The same tools work from an assistant in a terminal, in every folder. **Settings › AI assistants** shows each assistant's command to copy. Run it once:
 
 ```sh
 claude mcp add -s user brainstead -- "/Applications/Brainstead.app/Contents/MacOS/Brainstead" --mcp   # Claude Code
@@ -79,13 +79,15 @@ copilot mcp add brainstead -- "/Applications/Brainstead.app/Contents/MacOS/Brain
 agy mcp add brainstead -- "/Applications/Brainstead.app/Contents/MacOS/Brainstead" --mcp              # Antigravity
 ```
 
-Searching and reading the vault, facts, the summaries, the health report, the Page shape check and help work with Brainstead closed. Everything else needs the app, and opens it. An update doesn't disconnect a session: its tools move to the new version by themselves, between calls. An assistant can also bring the window to the front on a screen, a Settings pane, a note, a search or an image.
+On Windows the command points at the installed exe instead, for example `claude mcp add -s user brainstead -- "%LOCALAPPDATA%\Brainstead\Brainstead.exe" --mcp`. Settings › AI assistants shows the exact path for each assistant.
+
+Searching and reading the vault, facts, the summaries, the health report, the Page shape check and help work with Brainstead closed. Everything else needs the app, and opens it. On a Mac an update doesn't disconnect a session: its tools move to the new version by themselves, between calls. On Windows the update stops them, so reconnect them in the assistant (in Claude Code, `/mcp`). An assistant can also bring the window to the front on a screen, a Settings pane, a note, a search or an image.
 
 Some things stay with you:
 
 - what you're typing and haven't saved;
 - Changes' **Edit before accepting**;
-- the file menu's export, copy and **Reveal in Finder** commands;
+- the file menu's export, copy and **Reveal in Finder** (**Show in Explorer** on Windows) commands;
 - the Trash's **Empty the Trash** and **Delete forever**. An assistant can move things to the Trash and restore them, but never delete them for good.
 
 ## Questions about Brainstead

@@ -59,10 +59,15 @@ impl Cli {
             Cli::Copilot => "GitHub Copilot",
         }
     }
-    /// Where installers put it under the home folder, besides `~/.local/bin`.
+    /// Where installers put it under the home folder, besides `~/.local/bin` (`.local\bin\<name>.exe`
+    /// on Windows, where npm's `%APPDATA%\npm\<name>.cmd` is looked at too).
     pub fn extra_paths(self) -> &'static [&'static str] {
         match self {
+            #[cfg(not(windows))]
             Cli::Claude => &[".claude/local/claude"],
+            // Claude Code's local install: npm's shim beside its own node_modules.
+            #[cfg(windows)]
+            Cli::Claude => &[".claude/local/claude.cmd", ".claude/local/node_modules/.bin/claude.cmd"],
             _ => &[],
         }
     }
@@ -279,11 +284,60 @@ fn strip<'a>(model: &'a str, prefix: &str) -> &'a str {
     model.strip_prefix(prefix).unwrap_or(model)
 }
 
-/// The arguments after the program's name.
-pub fn args(cli: Cli, r: &Request) -> Result<Vec<String>, String> {
+/// How to start a CLI for one question: the arguments after the program's name, and what to write
+/// to its standard input before closing it (None: no input).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Launch {
+    pub args: Vec<String>,
+    pub stdin: Option<String>,
+}
+
+/// The longest command line, in UTF-16 units, sent to a CLI on Windows. CreateProcess takes at
+/// most 32,767 and longer fails with os error 206; this leaves room for the program's path and
+/// the quoting std adds. A `.cmd` shim allows only 8,191, which is why Claude Code and Codex take
+/// the prompt on standard input instead.
+pub const WINDOWS_COMMAND_LINE_MAX: usize = 30_000;
+
+/// `args`' length as a Windows command line: each argument quoted and followed by a space.
+fn command_line_len(args: &[String]) -> usize {
+    args.iter().map(|a| a.encode_utf16().count() + 3).sum()
+}
+
+/// A clear error in place of os error 206 when `args` won't fit on a Windows command line.
+fn fits_command_line(cli: Cli, args: &[String], windows: bool) -> Result<(), String> {
+    let n = command_line_len(args);
+    if windows && n > WINDOWS_COMMAND_LINE_MAX {
+        return Err(format!(
+            "This request is too long for {} on Windows ({n} characters; it takes about {WINDOWS_COMMAND_LINE_MAX}). Shorten it, or use Claude Code or Codex, which take any length.",
+            cli.label()
+        ));
+    }
+    Ok(())
+}
+
+/// Claude Code's permission rule for editing anything under the folder `dir`. An absolute path in
+/// a rule starts with `//`; on Windows Claude Code matches paths in POSIX form, `C:\Users\maya`
+/// as `/c/Users/maya`. So `/Users/maya/Vault` gives `Edit(//Users/maya/Vault/**)` and
+/// `C:\Users\maya\Vault` gives `Edit(//c/Users/maya/Vault/**)`.
+pub fn claude_edit_rule(dir: &str) -> String {
+    let p = dir.replace('\\', "/");
+    let p = p.strip_prefix("//?/").unwrap_or(&p).trim_end_matches('/');
+    let posix = match crate::paths::has_drive(p) {
+        true => format!("/{}{}", p[..1].to_ascii_lowercase(), &p[2..]),
+        false if p.starts_with('/') => p.to_string(),
+        false => format!("/{p}"),
+    };
+    format!("Edit(/{posix}/**)")
+}
+
+/// How to start the CLI for `r`. Claude Code and Codex take the prompt on standard input (`-p` and
+/// `exec` with no prompt argument, or `-`), so its length is never limited by the command line;
+/// Antigravity and Copilot take it as an argument.
+pub fn args(cli: Cli, r: &Request) -> Result<Launch, String> {
     let instructions = format!("{}\n\n{}", r.system, cli.tools_hint());
     let s = |x: &str| x.to_string();
     let mut a: Vec<String> = Vec::new();
+    let mut stdin = None;
     let images: Vec<String> = r.images.iter().map(|p| p.to_string_lossy().into_owned()).collect();
     match cli {
         Cli::Claude => {
@@ -293,7 +347,9 @@ pub fn args(cli: Cli, r: &Request) -> Result<Vec<String>, String> {
                 [one] => format!("{}\n\nThe image is at {one}: view it with the Read tool before you answer.", r.prompt),
                 many => format!("{}\n\nThe images are at {}: view each with the Read tool before you answer.", r.prompt, many.join(", ")),
             };
-            a.extend([s("-p"), prompt, s("--model"), s(strip(r.model, CLAUDE_PREFIX))]);
+            // `-p` without a prompt reads it from standard input.
+            a.extend([s("-p"), s("--model"), s(strip(r.model, CLAUDE_PREFIX))]);
+            stdin = Some(prompt);
             let mut dirs: Vec<String> = r.images.iter().filter_map(|p| p.parent()).map(|d| d.to_string_lossy().into_owned()).collect();
             dirs.dedup();
             for d in dirs {
@@ -317,7 +373,7 @@ pub fn args(cli: Cli, r: &Request) -> Result<Vec<String>, String> {
             a.extend([s("--allowedTools"), allowed.join(",")]);
             // The vault is never written by a chat, even if a setting would allow it: changes go
             // through Brainstead's MCP tools.
-            a.extend([s("--disallowedTools"), format!("Edit(/{}/**)", r.vault.trim_end_matches('/'))]);
+            a.extend([s("--disallowedTools"), claude_edit_rule(r.vault)]);
             a.extend(["--tools", "Read,Grep,Glob,Skill,Edit,Write", "--permission-mode", "default", "--append-system-prompt"].map(s));
             a.push(instructions);
             if let Some(id) = r.session {
@@ -349,7 +405,9 @@ pub fn args(cli: Cli, r: &Request) -> Result<Vec<String>, String> {
             if let Some(id) = r.session {
                 a.push(s(id));
             }
-            a.push(s(r.prompt));
+            // `-` reads the prompt from standard input.
+            a.push(s("-"));
+            stdin = Some(s(r.prompt));
         }
         Cli::Antigravity => {
             a.extend(["-p", r.prompt, "--agent", AGY_AGENT, "--model", strip(r.model, AGY_PREFIX)].map(s));
@@ -384,7 +442,8 @@ pub fn args(cli: Cli, r: &Request) -> Result<Vec<String>, String> {
             }
         }
     }
-    Ok(a)
+    fits_command_line(cli, &a, cfg!(windows))?;
+    Ok(Launch { args: a, stdin })
 }
 
 /// Antigravity's agent: only its read and search tools (a custom agent's list is enforced; the
@@ -422,7 +481,7 @@ pub struct Outcome {
 
 /// A note's name as the user knows it, from a path a tool opened: "Meeting. Orbit App Steerco".
 fn note_name(path: &str) -> Option<String> {
-    let name = path.trim_end_matches('/').rsplit('/').next()?;
+    let name = path.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next()?;
     let name = name.strip_suffix(".md").unwrap_or(name);
     (!name.is_empty()).then(|| name.to_string())
 }
@@ -773,7 +832,7 @@ mod tests {
             ("agy:x", None),
             ("copilot:auto", Some("c")),
         ] {
-            let a = args(Cli::route(m), &req(m, s)).unwrap();
+            let a = args(Cli::route(m), &req(m, s)).unwrap().args;
             let all = a.join(" ");
             assert!(!all.contains("dangerously"), "{all}");
             assert!(!all.contains("bypassPermissions") && !all.contains("--yolo") && !all.contains("--allow-all"), "{all}");
@@ -800,7 +859,7 @@ mod tests {
         let m = mcp();
         let with = |model: &str| {
             let r = Request { mcp: Some(&m), ..req(model, None) };
-            args(Cli::route(model), &r).unwrap()
+            args(Cli::route(model), &r).unwrap().args
         };
         let c = with("claude:sonnet");
         let i = c.iter().position(|x| x == "--mcp-config").unwrap();
@@ -812,8 +871,8 @@ mod tests {
         assert!(x.contains(&"mcp_servers.brainstead.command=\"/app/Brainstead\"".to_string()));
         assert!(x.contains(&r#"mcp_servers.brainstead.args=["--mcp","--chat","c1"]"#.to_string()));
         assert!(x.contains(&"mcp_servers.brainstead.default_tools_approval_mode=\"approve\"".to_string()));
-        // The prompt still comes last, after `--`.
-        assert_eq!(x[x.len() - 2..], ["--", "What's due?"]);
+        // The prompt is still read last, after `--`, from standard input.
+        assert_eq!(x[x.len() - 2..], ["--", "-"]);
         let p = with("copilot:auto");
         assert!(p.contains(&"--allow-tool=brainstead".to_string()));
         let tools = p.iter().find(|x| x.starts_with("--available-tools=")).unwrap();
@@ -854,34 +913,75 @@ mod tests {
         let (ev, _) =
             feed(Cli::Copilot, &[r#"{"type":"tool.execution_start","data":{"toolName":"brainstead-search","arguments":{"query":"x"}}}"#]);
         assert_eq!(ev, [Event::Status { text: "Searching the vault".into() }]);
+        assert_eq!(note_name(r"C:\Users\maya\Vault\wiki\Orbit App.md").as_deref(), Some("Orbit App"));
+        assert_eq!(note_name("/Users/maya/Vault/wiki/Orbit App.md").as_deref(), Some("Orbit App"));
     }
 
     #[test]
     fn claude_args() {
-        let a = args(Cli::Claude, &req("claude:sonnet", Some("abc"))).unwrap();
-        assert_eq!(a[..4], ["-p", "What's due?", "--model", "sonnet"]);
+        let l = args(Cli::Claude, &req("claude:sonnet", Some("abc"))).unwrap();
+        let a = l.args;
+        assert_eq!(a[..3], ["-p", "--model", "sonnet"]);
+        assert_eq!(l.stdin.as_deref(), Some("What's due?"));
+        assert!(!a.iter().any(|x| x.contains("What's due?")));
         let i = a.iter().position(|x| x == "--tools").unwrap();
         assert_eq!(a[i + 1], "Read,Grep,Glob,Skill,Edit,Write");
         assert!(a.windows(2).any(|w| w == ["--permission-mode", "default"]));
         assert!(a.iter().any(|x| x.starts_with("SYS\n\nUse Grep")));
         assert_eq!(a[a.len() - 2..], ["--resume", "abc"]);
         // A full model id passes through as it is.
-        let b = args(Cli::Claude, &req("claude-sonnet-5", None)).unwrap();
-        assert_eq!(b[3], "claude-sonnet-5");
+        let b = args(Cli::Claude, &req("claude-sonnet-5", None)).unwrap().args;
+        assert_eq!(b[2], "claude-sonnet-5");
+    }
+
+    #[test]
+    fn claude_edit_guard_from_either_system() {
+        assert_eq!(claude_edit_rule("/Users/maya/Vault/"), "Edit(//Users/maya/Vault/**)");
+        assert_eq!(claude_edit_rule(r"C:\Users\maya\Vault"), "Edit(//c/Users/maya/Vault/**)");
+        assert_eq!(claude_edit_rule(r"\\?\D:\Notes\Vault\"), "Edit(//d/Notes/Vault/**)");
+        let a = args(Cli::Claude, &Request { vault: r"C:\Users\maya\Vault", ..req("claude:sonnet", None) }).unwrap().args;
+        assert!(a.windows(2).any(|w| w == ["--disallowedTools", "Edit(//c/Users/maya/Vault/**)"]));
+    }
+
+    #[test]
+    fn long_prompts_go_on_stdin_for_claude_and_codex() {
+        let long = "x".repeat(150_000);
+        for model in ["claude:sonnet", "gpt-5"] {
+            let l = args(Cli::route(model), &Request { prompt: &long, ..req(model, Some("s1")) }).unwrap();
+            assert_eq!(l.stdin.as_deref(), Some(long.as_str()));
+            assert!(command_line_len(&l.args) < WINDOWS_COMMAND_LINE_MAX);
+        }
+        // Copilot and Antigravity take it as an argument: too long for Windows is a clear error.
+        for model in ["copilot:auto", "agy:gemini"] {
+            let cli = Cli::route(model);
+            let l = args(cli, &Request { prompt: &long, ..req(model, None) });
+            if cfg!(windows) {
+                assert!(l.unwrap_err().contains("too long"));
+            } else {
+                assert_eq!(l.unwrap().stdin, None);
+            }
+            let a = args(cli, &req(model, None)).unwrap().args;
+            assert!(fits_command_line(cli, &a, true).is_ok());
+            let mut big = a.clone();
+            big.push(long.clone());
+            assert!(fits_command_line(cli, &big, true).unwrap_err().contains(cli.label()));
+            assert!(fits_command_line(cli, &big, false).is_ok());
+        }
     }
 
     #[test]
     fn images_for_the_clis_that_see_them() {
         let imgs = [std::path::PathBuf::from("/data/ask/img/abc.jpg")];
-        let a = args(Cli::Claude, &Request { images: &imgs, ..req("claude:sonnet", None) }).unwrap();
-        assert!(a[1].starts_with("What's due?\n\nThe image is at /data/ask/img/abc.jpg: view it with the Read tool"), "{}", a[1]);
-        assert!(a.windows(2).any(|w| w == ["--add-dir", "/data/ask/img"]));
-        let c = args(Cli::Codex, &Request { images: &imgs, ..req("gpt-5", None) }).unwrap();
+        let l = args(Cli::Claude, &Request { images: &imgs, ..req("claude:sonnet", None) }).unwrap();
+        let p = l.stdin.unwrap_or_default();
+        assert!(p.starts_with("What's due?\n\nThe image is at /data/ask/img/abc.jpg: view it with the Read tool"), "{p}");
+        assert!(l.args.windows(2).any(|w| w == ["--add-dir", "/data/ask/img"]));
+        let c = args(Cli::Codex, &Request { images: &imgs, ..req("gpt-5", None) }).unwrap().args;
         assert!(c.contains(&"--image=/data/ask/img/abc.jpg".to_string()));
-        assert_eq!(c[c.len() - 2..], ["--", "What's due?"]);
+        assert_eq!(c[c.len() - 2..], ["--", "-"]);
         for (cli, model) in [(Cli::Copilot, "copilot:auto"), (Cli::Antigravity, "agy:gemini")] {
             assert!(!cli.sees_images());
-            let all = args(cli, &Request { images: &imgs, ..req(model, None) }).unwrap().join(" ");
+            let all = args(cli, &Request { images: &imgs, ..req(model, None) }).unwrap().args.join(" ");
             assert!(!all.contains("abc.jpg"), "{all}");
         }
         assert!(Cli::Claude.sees_images() && Cli::Codex.sees_images());
@@ -889,19 +989,20 @@ mod tests {
 
     #[test]
     fn codex_args() {
-        let a = args(Cli::Codex, &req("gpt-5", None)).unwrap();
+        let a = args(Cli::Codex, &req("gpt-5", None)).unwrap().args;
         assert_eq!(a[0], "exec");
         assert!(a.windows(2).any(|w| w == ["-c", "sandbox_mode=\"read-only\""]));
         assert!(a.iter().any(|x| x.starts_with("developer_instructions=\"SYS\\n\\n")));
-        assert_eq!(a[a.len() - 2..], ["--", "What's due?"]);
+        assert_eq!(a[a.len() - 2..], ["--", "-"]);
         let b = args(Cli::Codex, &req("gpt-5", Some("t1"))).unwrap();
-        assert_eq!(b[..2], ["exec", "resume"]);
-        assert_eq!(b[b.len() - 3..], ["--", "t1", "What's due?"]);
+        assert_eq!(b.args[..2], ["exec", "resume"]);
+        assert_eq!(b.args[b.args.len() - 3..], ["--", "t1", "-"]);
+        assert_eq!(b.stdin.as_deref(), Some("What's due?"));
     }
 
     #[test]
     fn agy_args_and_agent() {
-        let a = args(Cli::Antigravity, &req("agy:gemini-3", Some("conv"))).unwrap();
+        let a = args(Cli::Antigravity, &req("agy:gemini-3", Some("conv"))).unwrap().args;
         assert!(a.windows(2).any(|w| w == ["--agent", AGY_AGENT]));
         assert!(a.windows(2).any(|w| w == ["--model", "gemini-3"]));
         assert!(a.windows(2).any(|w| w == ["--add-dir", "/v"]));
@@ -914,11 +1015,11 @@ mod tests {
 
     #[test]
     fn copilot_args() {
-        let a = args(Cli::Copilot, &req("copilot:auto", None)).unwrap();
+        let a = args(Cli::Copilot, &req("copilot:auto", None)).unwrap().args;
         assert!(a[1].starts_with("<instructions>\nSYS\n\n") && a[1].ends_with("</instructions>\n\nWhat's due?"));
         assert!(a.contains(&"--available-tools=view,grep,glob".to_string()));
         assert!(a.windows(2).any(|w| w == ["--model", "auto"]));
-        let b = args(Cli::Copilot, &req("copilot:auto", Some("s9"))).unwrap();
+        let b = args(Cli::Copilot, &req("copilot:auto", Some("s9"))).unwrap().args;
         assert_eq!(b[1], "What's due?");
         assert_eq!(b.last().unwrap(), "--resume=s9");
     }

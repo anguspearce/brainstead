@@ -44,7 +44,20 @@ fn emit_status(app: &AppHandle, s: &Status) {
     let _ = app.emit("index-status", s);
 }
 
+/// The status `start` gives before indexing: "indexing" with the vault's path, or "none".
+fn first_status(vault_path: Option<String>) -> Status {
+    Status { state: if vault_path.is_some() { "indexing" } else { "none" }, vault_path, ..Default::default() }
+}
+
 impl VaultService {
+    /// The service before `start` has run, already saying what `start` will. Tauri makes the
+    /// windows before the app's setup reaches `start`, and on Windows WebView2 answers the main
+    /// window's calls while the other windows are still being made, so the window can ask for the
+    /// status first. An empty state there throws in the sidebar and leaves the window blank.
+    pub fn opening(vault_path: Option<String>) -> Self {
+        VaultService { status: Mutex::new(first_status(vault_path)), ..Default::default() }
+    }
+
     pub fn status(&self) -> Status {
         crate::lock(&self.status).clone()
     }
@@ -67,11 +80,8 @@ impl VaultService {
         };
         // The old watcher stops here.
         *crate::lock(&self.open) = None;
-        let Some(path) = vault_path else {
-            self.set_status(app, gen, Status { state: "none", ..Default::default() });
-            return;
-        };
-        self.set_status(app, gen, Status { state: "indexing", vault_path: Some(path.clone()), ..Default::default() });
+        self.set_status(app, gen, first_status(vault_path.clone()));
+        let Some(path) = vault_path else { return };
         let app = app.clone();
         std::thread::Builder::new()
             .name("vault-open".into())
@@ -136,7 +146,7 @@ impl VaultService {
     /// A vault-relative path as a full path, refusing anything that would leave the vault.
     pub fn resolve_path(&self, rel: &str) -> Result<PathBuf, String> {
         let root = self.root().ok_or("No vault is open.")?;
-        if rel.is_empty() || rel.starts_with(['/', '\\']) || rel.split(['/', '\\']).any(|s| s == ".." || s.is_empty()) {
+        if !brainstead_core::paths::is_vault_relative(rel) {
             return Err(format!("Not a path in the vault: {rel}"));
         }
         Ok(root.join(rel))
@@ -158,8 +168,9 @@ fn open(app: &AppHandle, path: &str, excluded: Vec<String>, rebuild: bool) -> Re
         }
         _ => format!("Couldn't read the vault folder: {e}"),
     })?;
-    // FSEvents reports real paths, so the vault is known by its real path too.
-    let root = root.canonicalize().unwrap_or(root);
+    // FSEvents reports real paths, so the vault is known by its real path too (on Windows without
+    // the `\\?\` prefix, under which nested vault-relative paths don't join).
+    let root = brainstead_core::paths::real_path(&root);
     if let Err(e) = app.asset_protocol_scope().allow_directory(&root, true) {
         crate::applog!("asset scope: {e}");
     }
@@ -273,4 +284,19 @@ pub fn text_cache() -> brainstead_core::extract::TextCache {
     let image: Option<brainstead_core::extract::ImageReader> =
         if crate::scene().is_some() { None } else { Some(crate::platform::image_text) };
     brainstead_core::extract::TextCache::new(text_dir(), Some(crate::platform::pdf_text)).with_image(image)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The window can read the status before `start` runs, and the sidebar draws one of the four
+    /// states: never the empty one `Status::default()` has.
+    #[test]
+    fn the_status_before_start_is_what_start_sets_first() {
+        let s = VaultService::opening(Some("/vault".into())).status();
+        assert_eq!((s.state, s.vault_path.as_deref()), ("indexing", Some("/vault")));
+        let s = VaultService::opening(None).status();
+        assert_eq!((s.state, s.vault_path), ("none", None));
+    }
 }

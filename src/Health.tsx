@@ -45,6 +45,7 @@ import { toast } from "./Toast";
 import { MoreMenu, TopBar } from "./TopBar";
 import { Dialog, LayerTag } from "./ui";
 import { Store, useStore } from "./store";
+import { keyLabel } from "./platform";
 import { vaultVersion } from "./state";
 
 const undo = { label: "Undo", kbd: "⌘Z", run: () => void undoLast() };
@@ -184,7 +185,7 @@ export function HealthScreen() {
           id="fix-all"
           icon="check"
           className="btn"
-          title="Fix every issue that's safe to fix; ⌘Z undoes it"
+          title={keyLabel("Fix every issue that's safe to fix; ⌘Z undoes it")}
           disabled={!fixes.length}
           onClick={() => act("fix-all", () => api.healthFix(fixes), fixed)}
         >
@@ -449,7 +450,7 @@ function Row({ check, i, on }: { check: string; i: LintItem; on: Handlers }) {
       {i.safe && page && check !== "page-shape" && (
         <BusyButton
           id={`fix:${i.text}`}
-          title="Fix this issue; ⌘Z undoes it"
+          title={keyLabel("Fix this issue; ⌘Z undoes it")}
           onClick={() => act(`fix:${i.text}`, () => api.healthFix([fixOf(check, i)]), fixed)}
         >
           Fix
@@ -521,7 +522,7 @@ function Row({ check, i, on }: { check: string; i: LintItem; on: Handlers }) {
             {check === "missing-pages" && !inTrash && (
               <BusyButton
                 id={`create:${i.name}`}
-                title={`Make an entity page called ${pageName(ghost)} in wiki/entities and open it; ⌘Z undoes it`}
+                title={keyLabel(`Make an entity page called ${pageName(ghost)} in wiki/entities and open it; ⌘Z undoes it`)}
                 onClick={() =>
                   act(
                     `create:${i.name}`,
@@ -907,8 +908,8 @@ function SideCards({ r }: { r: LintReport }) {
         ))}
       </div>
       <p className="faint small">
-        Safe fixes (cross-links, dates, log lines, system-note headers) apply straight away and can be undone with ⌘Z. Anything that changes
-        meaning is an agent change, listed in Changes with Revert.
+        Safe fixes (cross-links, dates, log lines, system-note headers) apply straight away and can be undone with {keyLabel("⌘Z")}.
+        Anything that changes meaning is an agent change, listed in Changes with Revert.
       </p>
     </>
   );

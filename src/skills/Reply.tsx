@@ -20,6 +20,7 @@ import { reportEditError } from "../taskModel";
 import { toast } from "../Toast";
 import { TopBar } from "../TopBar";
 import { Seg } from "../ui";
+import { keyLabel } from "../platform";
 
 type Tone = "brief" | "warm" | "formal";
 
@@ -336,14 +337,14 @@ export function ReplyScreen() {
                 />
                 <div className="askbar">
                   <span className="faint small">
-                    {busy ? "Revising the reply…" : "It revises the reply above, keeping your edits · ↩ send · ⇧↩ new line"}
+                    {busy ? "Revising the reply…" : keyLabel("It revises the reply above, keeping your edits · ↩ send · ⇧↩ new line")}
                   </span>
                   <span className="sp" />
                   <button
                     type="button"
                     className="ibtn send"
                     aria-label="Send"
-                    title="Revise the reply as asked (↩)"
+                    title={keyLabel("Revise the reply as asked (↩)")}
                     disabled={!change.trim() || busy}
                     onClick={() => void revise()}
                   >

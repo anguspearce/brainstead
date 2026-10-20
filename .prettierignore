@@ -8,3 +8,4 @@ tools/
 *.md
 *.html
 package-lock.json
+.claude/settings.local.json

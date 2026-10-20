@@ -21,7 +21,7 @@ It's the [Outlook capture](../outlook-capture/README.md) extension ported to Tea
 
 1. Open Brainstead once: it registers its capture helper with Chrome (and Edge, Brave and Chromium when they're installed). Settings › Capture extensions shows whether it's connected.
 2. Chrome → `chrome://extensions` → switch on **Developer mode**.
-3. **Load unpacked** → choose this folder (`extensions/teams-capture/`). Settings › Capture extensions has a Reveal in Finder button for it.
+3. **Load unpacked** → choose this folder (`extensions/teams-capture/`). Settings › Capture extensions has a Reveal in Finder button for it (Show in Explorer on Windows).
 4. Pin the extension to the toolbar.
 
 The manifest carries a fixed public key, so the extension's ID is the same on every computer, and Brainstead's helper accepts only that ID (Chrome checks it against the helper's manifest). There's nothing to copy or paste.

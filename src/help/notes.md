@@ -26,7 +26,7 @@ Right-click a row for its menu:
 - **Ask about this note**, **Ingest into the wiki**, **Bookmark** (or **Remove bookmark**).
 - On a source, its actions where they fit: **Make and ingest a meeting note** (a transcript), **Draft a reply** (an email or chat thread) and **Ask about this source**; and **Compare with…**, which opens [Compare](app:compare) with this file as A.
 - **Copy markdown**, **Copy path** (the file's full path on disk), **Copy title**.
-- **Reveal in Finder**.
+- **Reveal in Finder** (**Show in Explorer** on Windows).
 - **Rename…**, which can update every link to the note, and **Discard draft** when it has one.
 - **Move to the Trash** (the vault's `.trash` folder), with Undo. See [Trash](app:trash).
 

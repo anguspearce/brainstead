@@ -1,6 +1,6 @@
 # Features
 
-The user guide to Brainstead, a Mac app for tasks, notes and an [LLM wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) over one folder of plain markdown files: your vault. Each screen's help (`?`) goes deeper.
+The user guide to Brainstead, a Mac and Windows app for tasks, notes and an [LLM wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) over one folder of plain markdown files: your vault. Each screen's help (`?`) goes deeper.
 
 <a href="images/index.md#features"><picture><source media="(prefers-color-scheme: dark)" srcset="images/today-dark.png"><img alt="Today: overdue, due and deferred tasks, what you're waiting for, the capture box, and where you left off" src="images/today-light.png"></picture></a>
 
@@ -9,20 +9,20 @@ The user guide to Brainstead, a Mac app for tasks, notes and an [LLM wiki](https
 | [Tasks and GTD](tasks.md) | Today, Quick capture, the Inbox, Tasks, Projects, the weekly review, and how tasks are written |
 | [Notes](notes.md) | View, Edit and Source, saving and drafts, queries and callouts, templates, search and ⌘K, the Trash |
 | [The wiki and sources](wiki.md) | Sources and the browser extensions, ingest, Changes, wiki pages, Knowledge health, contradictions, meeting notes and the other tools |
-| [Ask and assistants](ask.md) | Chats with Claude Code, Codex, Copilot and Antigravity, what an assistant can do, Brainstead's tools in Terminal |
-| [Day to day](day-to-day.md) | The menu bar, the daily and weekly summaries and the daily check, help, Settings, and what happens in the background |
+| [Ask and assistants](ask.md) | Chats with Claude Code, Codex, Copilot and Antigravity, what an assistant can do, Brainstead's tools in a terminal |
+| [Day to day](day-to-day.md) | The menu bar (system tray on Windows), the daily and weekly summaries and the daily check, help, Settings, and what happens in the background |
 
 ## Requirements
 
-- A Mac with Apple silicon (M1 or later) and macOS 14 or later.
+- A Mac with Apple silicon (M1 or later) and macOS 14 or later, or a PC with Windows 11 (64-bit).
 - For Ask and the AI features: Claude Code, Codex, GitHub Copilot's CLI or Antigravity, installed and signed in. Everything else works without them.
 - For the capture extensions: Chrome, Edge, Brave, Vivaldi or Chromium.
 
 ## First run
 
-The Welcome screen asks for two things:
+The Welcome screen asks for two things (one on Windows, which has no Full Disk Access step):
 
-- **Full Disk Access.** A vault in a cloud-synced folder (OneDrive, iCloud Drive, Dropbox) needs it, or macOS asks for each protected place separately. Click **Open System Settings**, turn Brainstead on under Privacy & Security › Full Disk Access, and let macOS reopen it. You can skip this and do it later from Settings › Permissions.
+- **Full Disk Access (Mac only).** A vault in a cloud-synced folder (OneDrive, iCloud Drive, Dropbox) needs it, or macOS asks for each protected place separately. Click **Open System Settings**, turn Brainstead on under Privacy & Security › Full Disk Access, and let macOS reopen it. You can skip this and do it later from Settings › Permissions.
 - **Your vault**: the folder of markdown notes. Brainstead opens it **read-only**: nothing changes until you turn **Read-only** off in Settings › Vault.
 
 No vault yet? **Create a new vault** asks for a name and a place, and adds a few example notes: a To Do list, a project, a meeting note, a template, wiki pages and sources. Each says it's an example you can delete, and **Start here** lists them. A new vault opens writable, as nothing in it is yours yet. Settings › Vault › **Add the example notes** puts back any that are missing.
@@ -57,18 +57,20 @@ Counts that need you, such as overdue tasks, the Inbox and changes held for you,
 |---|---|
 | ⌘K | Search or jump to anything, and run commands |
 | ⌘⇧F | The Search page |
-| ⌃⌥Space | Quick capture, from any app |
+| ⌃⌥Space (Ctrl+Shift+Space on Windows) | Quick capture, from any app |
 | ⌘N | New note |
-| ⇧⌘P | Read the open note aloud, then play or pause |
+| ⇧⌘P | Read the open note aloud, then play or pause (Mac only) |
 | ⌘. | Focus mode for the open note, wiki page or source; Esc leaves it |
-| ⌥⌘1 ⌥⌘2 ⌥⌘3 | View, Edit or Source for the open note |
-| ⌘1 … ⌘9, ⌘0 | Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki, Sources |
+| ⌥⌘1 ⌥⌘2 ⌥⌘3 (Ctrl+Shift+1 … 3 on Windows) | View, Edit or Source for the open note |
+| ⌘1 … ⌘9, ⌘0 (Ctrl+1 … 0 on Windows) | Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki, Sources |
 | ⌘[ ⌘] | Back, forward |
 | ⌘Z | Undo the last change |
 | ⌘, | Settings |
 | ? | Help for this screen |
 
-Every screen remembers its list, filter and selection across restarts. Back and forward go through where you've been. Closing the window leaves Brainstead running in the [menu bar](day-to-day.md#the-menu-bar). ⌘Q quits, asking first about unsaved edits.
+On Windows, ⌘ is Ctrl, ⌥ is Alt and ⇧ is Shift, so ⌘K is Ctrl+K. The window has a normal title bar. A few extras are Mac only for now: Quick Look, spelling and grammar marks, Read aloud, Export PDF, and reading text in images and showing images to a model.
+
+Every screen remembers its list, filter and selection across restarts. Back and forward go through where you've been. Closing the window leaves Brainstead running in the [menu bar](day-to-day.md#the-menu-bar) (on Windows, if **Show in the menu bar** is on; otherwise closing the window quits). ⌘Q quits (on Windows, **File › Exit** or the tray's **Quit Brainstead**), asking first about unsaved edits.
 
 ## Licence and credits
 

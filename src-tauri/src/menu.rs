@@ -6,13 +6,14 @@
 //! note. A choice is sent to the window as a `menu` event carrying the item's id (src/noteMenu.ts
 //! acts on it); the note's items are enabled only while a note is open. Help gets Brainstead Help
 //! and Keyboard Shortcuts (src/help/HelpDrawer.tsx acts on those). The app menu gets Brainstead's
-//! own About and Check for Updates… (src/updates.rs).
+//! own About and Check for Updates… (src/updates.rs). On Windows File's Exit is the app's own item,
+//! which quits as the tray's Quit does.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use tauri::menu::{Menu, MenuItem, MenuItemBuilder, MenuItemKind, PredefinedMenuItem, SubmenuBuilder};
-use tauri::{AppHandle, Emitter, Manager, State, Wry};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State, Wry};
 
 /// The Note menu's items that need an open note.
 #[derive(Default)]
@@ -43,20 +44,98 @@ const ITEMS: &[(&str, &str, Option<&str>)] = &[
     ("note:trash", "Move to the Trash", None),
 ];
 
+/// The label an item has on this system: Windows names its file manager in its own words.
+fn label(id: &str, label: &'static str) -> &'static str {
+    if cfg!(windows) && id == "note:reveal" {
+        return "Show in Explorer";
+    }
+    label
+}
+
+/// Whether this system has what the item needs (`PlatformFeatures`, which also decides what the
+/// window shows).
+fn available(id: &str, f: &crate::platform::PlatformFeatures) -> bool {
+    match id {
+        "note:read-aloud" => f.read_aloud,
+        "note:export-pdf" => f.export_pdf,
+        "note:copy-rich" => f.rich_copy,
+        _ => true,
+    }
+}
+
+/// `ITEMS` without what this system lacks, and without the separator a missing group would leave
+/// doubled or at either end.
+fn items(f: &crate::platform::PlatformFeatures) -> Vec<(&'static str, &'static str, Option<&'static str>)> {
+    let mut out: Vec<(&'static str, &'static str, Option<&'static str>)> = Vec::new();
+    for &(id, l, acc) in ITEMS {
+        if id == "-" {
+            if out.last().is_some_and(|(i, _, _)| *i != "-") {
+                out.push((id, l, acc));
+            }
+        } else if available(id, f) {
+            out.push((id, label(id, l), acc.map(accel)));
+        }
+    }
+    if out.last().is_some_and(|(i, _, _)| *i == "-") {
+        out.pop();
+    }
+    out
+}
+
+/// An accelerator as this platform has it: ⌥⌘digit (View, Edit, Source) is Ctrl+Shift+digit off
+/// macOS, as src/platform.ts's keyLabel and isOptCmd have it, since Ctrl+Alt is AltGr on many layouts.
+fn accel(a: &'static str) -> &'static str {
+    if cfg!(target_os = "macos") {
+        return a;
+    }
+    match a {
+        "Alt+CmdOrCtrl+1" => "Shift+CmdOrCtrl+1",
+        "Alt+CmdOrCtrl+2" => "Shift+CmdOrCtrl+2",
+        "Alt+CmdOrCtrl+3" => "Shift+CmdOrCtrl+3",
+        _ => a,
+    }
+}
+
+/// Windows' File › Exit, in place of the predefined Quit (`windows_file`).
+pub const EXIT: &str = "app:exit";
+
+/// Windows' File menu: Close Window, then Exit. tauri's default File menu ends with the
+/// predefined Quit, which muda carries out as `PostQuitMessage(0)`: tao's event loop ends at the
+/// `WM_QUIT` (`GetMessageW` returns 0) and tauri sends `RunEvent::Exit` with no `ExitRequested`
+/// before it, so the window never asks about unsaved edits (Save, Discard, Stay), its size and
+/// place aren't saved and assistant runs aren't stopped. Exit is an item of the app's own, which
+/// goes the way the tray's Quit does (`tray::tray_quit`).
+pub fn windows_file<R: Runtime>(app: &AppHandle<R>, menu: &Menu<R>) -> tauri::Result<()> {
+    let file = SubmenuBuilder::new(app, "File")
+        .item(&PredefinedMenuItem::close_window(app, None)?)
+        .separator()
+        .item(&MenuItemBuilder::with_id(EXIT, "E&xit").build(app)?)
+        .build()?;
+    match menu.items()?.iter().position(|i| matches!(i, MenuItemKind::Submenu(s) if s.text().is_ok_and(|t| t == "File"))) {
+        Some(at) => {
+            menu.remove_at(at)?;
+            menu.insert(&file, at)
+        }
+        None => menu.prepend(&file),
+    }
+}
+
 /// Puts the menu bar up and routes its Note items to the window.
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::default(app)?;
+    #[cfg(windows)]
+    windows_file(app, &menu)?;
     let new = MenuItemBuilder::with_id("note:new", "New Note…").accelerator("CmdOrCtrl+N").build(app)?;
     let mut sub = SubmenuBuilder::new(app, "Note").item(&new).separator();
     let mut doc_items = Vec::new();
-    for (id, label, acc) in ITEMS {
-        if *id == "-" {
+    for (id, label, acc) in items(&crate::platform::platform_features()) {
+        if id == "-" {
             sub = sub.item(&PredefinedMenuItem::separator(app)?);
             continue;
         }
-        let mut b = MenuItemBuilder::with_id(*id, *label).enabled(false);
+        let mut b = MenuItemBuilder::with_id(id, label).enabled(false);
         if let Some(a) = acc {
-            b = b.accelerator(*a);
+            b = b.accelerator(a);
         }
         let item = b.build(app)?;
         sub = sub.item(&item);
@@ -93,35 +172,32 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
             app_menu.insert(&MenuItemBuilder::with_id("app:quit", "Quit Brainstead").accelerator("CmdOrCtrl+Q").build(app)?, at)?;
         }
     }
-    app.set_menu(menu)?;
+    crate::platform::set_menu_bar(app, menu)?;
     *app.state::<NoteMenu>().0.lock().unwrap() = doc_items;
     app.on_menu_event(|app, ev| {
         let id = ev.id().as_ref();
-        if id == "help:website" {
-            use tauri_plugin_opener::OpenerExt;
-            if let Err(e) = app.opener().open_url(WEBSITE, None::<&str>) {
-                crate::applog!("website: {e}");
+        match id {
+            "help:website" => {
+                use tauri_plugin_opener::OpenerExt;
+                if let Err(e) = app.opener().open_url(WEBSITE, None::<&str>) {
+                    crate::applog!("website: {e}");
+                }
             }
-            return;
-        }
-        if id == "app:about" {
-            about(app);
-            return;
-        }
-        if id == "app:quit" {
-            crate::tray::tray_quit(app.clone());
-            return;
-        }
-        if id == "app:updates" {
-            crate::updates::check_now(app);
-            return;
-        }
-        if id.starts_with("note:") || id.starts_with("help:") {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.set_focus();
+            "app:about" => about(app),
+            // macOS's Quit Brainstead and Windows' File › Exit quit as the tray's Quit does: the
+            // window asks about unsaved edits, then "Quit Brainstead?".
+            "app:quit" | EXIT => crate::tray::tray_quit(app.clone()),
+            "app:updates" => crate::updates::check_now(app),
+            // The window acts on the Note and Help items (src/noteMenu.ts, src/help/HelpDrawer.tsx).
+            _ if id.starts_with("note:") || id.starts_with("help:") => {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+                let _ = app.emit_to("main", "menu", id);
             }
-            let _ = app.emit_to("main", "menu", id);
+            // A predefined item, which the system carries out itself.
+            _ => {}
         }
     });
     Ok(())
@@ -182,6 +258,44 @@ pub fn menu_note_open(menu: State<NoteMenu>, open: bool) {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn the_menu_has_what_the_system_has() {
+        let f = crate::platform::platform_features();
+        let ids: Vec<&str> = items(&f).iter().map(|(i, _, _)| *i).collect();
+        assert_eq!(ids.contains(&"note:read-aloud"), f.read_aloud);
+        assert_eq!(ids.contains(&"note:export-pdf"), f.export_pdf);
+        assert_eq!(ids.contains(&"note:copy-rich"), f.rich_copy);
+        assert!(ids.contains(&"note:trash"));
+        assert_ne!(ids.first(), Some(&"-"));
+        assert_ne!(ids.last(), Some(&"-"));
+        assert!(!ids.windows(2).any(|w| w == ["-", "-"]));
+    }
+
+    #[test]
+    fn every_item_is_kept_and_labelled_as_written_when_every_feature_is_there() {
+        let all = crate::platform::PlatformFeatures {
+            read_aloud: true,
+            export_pdf: true,
+            rich_copy: true,
+            ..crate::platform::platform_features()
+        };
+        let got = items(&all);
+        assert_eq!(got.len(), ITEMS.len());
+        let trash = got.iter().find(|(i, _, _)| *i == "note:trash").unwrap();
+        assert_eq!(trash.1, "Move to the Trash");
+    }
+
+    #[test]
+    fn view_edit_and_source_are_ctrl_shift_digit_off_macos() {
+        let got = items(&crate::platform::platform_features());
+        let view = got.iter().find(|(i, _, _)| *i == "note:view").unwrap().2;
+        let want = if cfg!(target_os = "macos") { "Alt+CmdOrCtrl+1" } else { "Shift+CmdOrCtrl+1" };
+        assert_eq!(view, Some(want));
+        assert_eq!(accel("Alt+CmdOrCtrl+C"), "Alt+CmdOrCtrl+C");
+    }
+
     #[test]
     fn website_matches_the_settings_screen() {
         let settings = include_str!("../../src/Settings.tsx");

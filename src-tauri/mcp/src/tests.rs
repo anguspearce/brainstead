@@ -475,6 +475,23 @@ fn help_answers_from_the_apps_own_help() {
 }
 
 #[test]
+fn shortcuts_are_named_as_the_system_names_them() {
+    let f = fixture();
+    let list = rpc(&f.ctx, 1, "tools/list", json!({}));
+    let tools = list["result"]["tools"].as_array().unwrap();
+    let status = tools.iter().find(|t| t["name"] == "app_status").unwrap()["description"].as_str().unwrap().to_string();
+    let keys = ok(&f.ctx, "help", json!({"topic": "keyboard"}));
+    if cfg!(windows) {
+        assert!(status.contains("what Ctrl+Z would undo"), "{status}");
+        let all = list.to_string() + &keys;
+        assert!(!all.contains(['⌘', '⌥', '⇧', '⌃']), "a macOS glyph left on Windows");
+    } else {
+        assert!(status.contains("what ⌘Z would undo"), "{status}");
+        assert!(keys.contains('⌘'), "{keys}");
+    }
+}
+
+#[test]
 fn rate_limited() {
     let f = fixture();
     for _ in 0..120 {
@@ -559,6 +576,53 @@ fn renames_trash_and_deletes_are_sent() {
     assert_eq!(c["instruction"], json!({"op": "delete_line", "line": line, "at": n}));
     assert!(!made(&f, &c).contains("Walk through the Dashboard"));
     assert!(refused(&f.ctx, "delete_task", json!({"task": "Me. To Do List.md:1", "text": "no such task"})).contains("no task"));
+}
+
+/// The page each tool sends for `spelling`, which names Templates/Meeting.md: edit_page,
+/// rename_note (and where it renames to) and trash_note.
+fn sent_pages(f: &Fixture, spelling: &str) -> [String; 4] {
+    let page = |c: &Value, k: &str| c[k].as_str().unwrap_or_default().to_string();
+    let (_, edit) = submitted(f, "edit_page", json!({"page": spelling, "title": "x", "section": "Notes", "content": "Agenda first."}));
+    let (_, rename) = submitted(f, "rename_note", json!({"page": spelling, "title": "Meeting note"}));
+    let (_, trash) = submitted(f, "trash_note", json!({"page": spelling}));
+    [page(&edit, "page"), page(&rename, "page"), page(&rename["instruction"], "to"), page(&trash, "page")]
+}
+
+#[test]
+fn a_page_is_sent_as_the_file_system_spells_it() {
+    let f = fixture();
+    let want = ["Templates/Meeting.md", "Templates/Meeting.md", "Templates/Meeting note.md", "Templates/Meeting.md"].map(String::from);
+    assert_eq!(sent_pages(&f, "Templates/Meeting.md"), want);
+    // A system that doesn't mind case (Windows, macOS by default) names the file in any case.
+    if f.ctx.vault.join("TEMPLATES/MEETING.MD").is_file() {
+        assert_eq!(sent_pages(&f, "templates/meeting.md"), want);
+        assert!(refused(&f.ctx, "create_note", json!({"title": "Retro", "folder": "templates", "content": "x"})).contains("can't go in"));
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn every_windows_spelling_of_a_template_is_sent_as_its_own_path() {
+    let f = fixture();
+    let want = ["Templates/Meeting.md", "Templates/Meeting.md", "Templates/Meeting note.md", "Templates/Meeting.md"].map(String::from);
+    let mut spellings = vec!["Templates\\Meeting.md".to_string(), "templates\\MEETING.md".into()];
+    match paths::short_name(&f.ctx.vault.join("Templates")) {
+        Some(short) => spellings.extend([format!("{short}/Meeting.md"), format!("{short}\\Meeting")]),
+        None => eprintln!("This volume makes no 8.3 names, so the short spelling isn't tried."),
+    }
+    for s in &spellings {
+        assert_eq!(sent_pages(&f, s), want, "{s}");
+    }
+    // Win32 drops a trailing dot, so these name the template too; they're refused.
+    for s in ["Templates./Meeting.md", "Templates/Meeting.md.", "Templates::$INDEX_ALLOCATION/Meeting.md"] {
+        for tool_name in ["edit_page", "rename_note", "trash_note"] {
+            let t = refused(&f.ctx, tool_name, json!({"page": s, "title": "x", "section": "Notes", "content": "y"}));
+            assert!(t.contains("Not a path in the vault"), "{tool_name} {s}: {t}");
+        }
+    }
+    if let Some(short) = paths::short_name(&f.ctx.vault.join("Templates")) {
+        assert!(refused(&f.ctx, "create_note", json!({"title": "Retro", "folder": short, "content": "x"})).contains("can't go in"));
+    }
 }
 
 #[test]

@@ -31,6 +31,11 @@ mod vault;
 mod weekly;
 mod weekprep;
 
+/// For the app program's test of the Windows File menu (main.rs), the one test program
+/// tauri-build gives the Windows manifest that the menu code needs.
+#[doc(hidden)]
+pub use menu::{windows_file, EXIT};
+
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -474,6 +479,8 @@ struct AppInfo {
     data_dir: String,
     /// This program, which is also the MCP server (`--mcp`).
     exe: String,
+    /// What this system has of the features that aren't everywhere (`platform_features`).
+    features: platform::PlatformFeatures,
 }
 
 #[tauri::command]
@@ -483,7 +490,14 @@ fn app_info(app: AppHandle) -> AppInfo {
         build: option_env!("BRAINSTEAD_BUILD").unwrap_or("dev").to_string(),
         data_dir: platform::data_dir().to_string_lossy().into_owned(),
         exe: std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default(),
+        features: platform::platform_features(),
     }
+}
+
+/// Which of the features that aren't on every system this one has, so the window hides the rest.
+#[tauri::command]
+fn platform_features() -> platform::PlatformFeatures {
+    platform::platform_features()
 }
 
 /// Set once the window has dealt with unsaved edits, so the next quit goes through.
@@ -759,9 +773,22 @@ pub fn run() {
     if let Some(w) = &settings_warning {
         crate::applog!("settings: {w}");
     }
+    let vault_service = VaultService::opening(settings.vault_path.clone());
     let state = AppState { settings: Mutex::new(settings), settings_path };
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // First of the plugins, as the plugin requires: a second launch hands over to this copy, which
+    // shows its window, rather than running a second copy on the same index, bridge and capture
+    // shortcut. Not for a screenshot scene, which runs beside the app on purpose, nor for a copy
+    // with its own data folder (`BRAINSTEAD_DATA`, a dev copy): the lock is the app identifier's,
+    // shared by every build, and that copy has its own index and bridge.
+    #[cfg(any(windows, target_os = "linux"))]
+    let builder = if scene().is_none() && std::env::var_os("BRAINSTEAD_DATA").is_none() {
+        builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| tray::second_launch(app, &args)))
+    } else {
+        builder
+    };
+    builder
         .plugin(tauri_plugin_window_state::Builder::default().with_state_flags(STATE_FLAGS).with_denylist(&["capture", "tray"]).build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -777,7 +804,7 @@ pub fn run() {
         .manage(find::Find::load())
         .manage(capture::CaptureState::default())
         .manage(state)
-        .manage(VaultService::default())
+        .manage(vault_service)
         .manage(menu::NoteMenu::default())
         .manage(edits::UndoStack::load(edits::undo_file(&data)))
         .manage(brainstead_core::drafts::Drafts::new(notes::drafts_dir(&data)))
@@ -979,6 +1006,7 @@ pub fn run() {
             weekprep::weekprep_ensure,
             weekprep::weekprep_link,
             app_info,
+            platform_features,
             bridge::mcp_reply,
             bridge::mcp_ready,
             tray::tray_set_state,
@@ -993,6 +1021,11 @@ pub fn run() {
             scene
         ])
         .setup(move |app| {
+            // `Brainstead --quit` (the Windows install script) with no copy running to hand it to
+            // (`tray::second_launch`): there is nothing to quit, so this copy doesn't start either.
+            if std::env::args().skip(1).any(|a| a == "--quit") {
+                std::process::exit(0);
+            }
             // Runs an earlier session left waiting: nothing will take them now.
             ingest::settle_stale();
             // The capture extensions' host, registered with each browser (not by a screenshot demo,
@@ -1069,14 +1102,22 @@ pub fn run() {
                 }
                 menu::set_about(app.handle(), dark);
                 // Closing the window hides it: the app keeps running for the capture shortcut,
-                // and clicking the Dock icon brings the window back. ⌘Q quits.
+                // and clicking the Dock or tray icon brings the window back. ⌘Q quits. On Windows
+                // with no tray icon (`tray::close_quits`) closing quits, through the window's own
+                // quit so it asks about unsaved edits first; the "unasked" payload tells src/Quit.tsx
+                // not to ask "Quit Brainstead?" as well, since closing is how a Windows app quits.
                 let w2 = w.clone();
                 w.on_window_event(move |ev| match ev {
                     tauri::WindowEvent::CloseRequested { api, .. } => {
                         api.prevent_close();
-                        let _ = w2.app_handle().save_window_state(STATE_FLAGS);
-                        let _ = w2.hide();
-                        tray::main_closed(w2.app_handle());
+                        let app = w2.app_handle();
+                        let _ = app.save_window_state(STATE_FLAGS);
+                        if tray::close_quits(app) {
+                            let _ = tauri::Emitter::emit_to(app, "main", "quit-requested", "unasked");
+                        } else {
+                            let _ = w2.hide();
+                            tray::main_closed(app);
+                        }
                     }
                     // An update a background check found is offered once the window has the focus.
                     tauri::WindowEvent::Focused(true) => updates::focused(w2.app_handle()),

@@ -431,7 +431,7 @@ pub fn checks(f: &Facts) -> Vec<String> {
 /// a Tasks `by function` line, Templater's `<% %>`). Scripts run with the app's full access, and an
 /// assistant's text may carry what a captured source told it to write.
 pub fn needs_the_user(page: &str, before: Option<&str>, after: &str) -> Option<String> {
-    if page.split('/').next().is_some_and(|f| f.eq_ignore_ascii_case("Templates")) {
+    if in_templates(page) {
         return Some("It changes a template, whose code runs when you use it.".into());
     }
     // The system-note callout other features look for: changed or taken out.
@@ -482,11 +482,19 @@ pub fn runnable(text: &str) -> usize {
 /// Why a rename or a move to the Trash must wait for the user (D-20261005-11): the note is a
 /// template, the rename would put it among them, or the links it rewrites are in a template.
 pub fn move_needs_the_user<'a>(page: &str, to: Option<&str>, rewrites: impl IntoIterator<Item = &'a str>) -> Option<String> {
-    let template = |p: &str| p.split('/').next().is_some_and(|f| f.eq_ignore_ascii_case("Templates"));
-    if template(page) || to.is_some_and(template) {
+    if in_templates(page) || to.is_some_and(in_templates) {
         return Some("It moves a template, whose code runs when you use it.".into());
     }
-    rewrites.into_iter().any(template).then(|| "It rewrites links in a template, whose code runs when you use it.".into())
+    rewrites.into_iter().any(in_templates).then(|| "It rewrites links in a template, whose code runs when you use it.".into())
+}
+
+/// Whether a vault-relative path is in `Templates/`. The app gives the rules each page as the
+/// file system spells it (`paths::vault_rel`, which also refuses the names Win32 reads as another
+/// file's: a trailing dot or space, a stream); a path that reaches them spelled otherwise is still
+/// caught when it differs in case or separator. An 8.3 short name (`TEMPLA~1`) only `vault_rel`
+/// can read back.
+fn in_templates(p: &str) -> bool {
+    p.split(['/', '\\']).next().is_some_and(|f| f.eq_ignore_ascii_case("Templates"))
 }
 
 fn short(s: &str) -> String {
@@ -1055,6 +1063,43 @@ mod tests {
         assert!(move_needs_the_user("Idea. A.md", Some("Templates/Idea. A.md"), []).is_some());
         assert!(move_needs_the_user("Idea. A.md", Some("Idea. B.md"), ["Notes.md", "Templates/Weekly.md"]).unwrap().contains("links"));
         assert!(move_needs_the_user("Idea. A.md", Some("Idea. B.md"), ["Notes.md"]).is_none());
+    }
+
+    #[test]
+    fn a_template_spelled_another_way_still_waits() {
+        for page in ["templates/Meeting.md", "TEMPLATES/Meeting.md", "Templates\\Meeting.md", "templates\\sub\\Meeting.md"] {
+            assert!(needs_the_user(page, Some("a"), "b").is_some(), "{page}");
+            assert!(move_needs_the_user(page, None, []).is_some(), "{page}");
+            assert!(move_needs_the_user("Idea. A.md", Some(page), []).is_some(), "{page}");
+            assert!(move_needs_the_user("Idea. A.md", Some("Idea. B.md"), [page]).is_some(), "{page}");
+        }
+        assert!(needs_the_user("Templates archive/Meeting.md", Some("a"), "b").is_none());
+        assert!(needs_the_user("Notes/Templates/Meeting.md", Some("a"), "b").is_none());
+    }
+
+    /// Each spelling Windows takes for `Templates/Meeting.md`, as `paths::vault_rel` gives it to
+    /// the rules: read back as the file's own path, or refused.
+    #[cfg(windows)]
+    #[test]
+    fn every_windows_spelling_of_a_template_is_held() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(d.path().join("Templates")).unwrap();
+        std::fs::write(d.path().join("Templates/Meeting.md"), "# Meeting\n").unwrap();
+        let mut spellings = vec!["Templates\\Meeting.md".to_string(), "templates/meeting.md".into(), "TEMPLATES\\New.md".into()];
+        match crate::paths::short_name(&d.path().join("Templates")) {
+            Some(short) => spellings.extend([format!("{short}/Meeting.md"), format!("{short}\\New.md")]),
+            None => eprintln!("This volume makes no 8.3 names, so the short spelling isn't tried."),
+        }
+        for s in &spellings {
+            let page = crate::paths::vault_rel(d.path(), s).unwrap();
+            assert!(page.starts_with("Templates/"), "{s}: {page}");
+            assert!(needs_the_user(&page, Some("a"), "b").is_some(), "{s}");
+            assert!(move_needs_the_user(&page, None, []).is_some(), "{s}");
+            assert!(move_needs_the_user("Idea. A.md", Some(&crate::paths::vault_rel_new(d.path(), s).unwrap()), []).is_some(), "{s}");
+        }
+        for s in ["Templates./Meeting.md", "Templates /Meeting.md", "Templates::$INDEX_ALLOCATION/Meeting.md"] {
+            assert!(crate::paths::vault_rel(d.path(), s).is_err(), "{s}");
+        }
     }
 
     #[test]

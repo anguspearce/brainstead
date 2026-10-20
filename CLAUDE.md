@@ -10,7 +10,7 @@ There are no subsystem pages here and none are to be written; `_sift/conventions
 
 # Brainstead
 
-macOS desktop app (Tauri 2 + React 19) for GTD, notes and an LLM-maintained wiki over a plain-markdown vault. It replaces the previous app (a web app over the same vault) and follows the conventions of the sibling apps.
+macOS and Windows desktop app (Tauri 2 + React 19) for GTD, notes and an LLM-maintained wiki over a plain-markdown vault. It replaces the previous app (a web app over the same vault) and follows the conventions of the sibling apps.
 
 The build plan (stages 1 to 10) and the agent-changes plan (D-20261005-03) are complete. They're archived, untracked, in `archive/build-instructions.md` and `archive/agent-changes.md`: read them for the history of a decision, not as instructions. Decisions are in `_sift/decisions.jsonl` (`sift decisions`); what the app does is in `README.md`, `docs/` and the in-app help (`src/help/`); developer notes are in `docs/development.md`.
 
