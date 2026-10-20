@@ -13,7 +13,7 @@ import { Icon } from "./icons";
 import { SearchBox } from "./ui";
 import { api, FileSummary } from "./api";
 import { features, useFeatures } from "./features";
-import { isMac } from "./platform";
+import { vaultFile, isMac } from "./platform";
 
 const ext = (p: string) => p.slice(p.lastIndexOf(".") + 1).toLowerCase();
 const IMAGE = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "heic"]);
@@ -34,7 +34,7 @@ export function sourceBadge(path: string): string {
   return e && e.length <= 5 ? e.toUpperCase() : "FILE";
 }
 
-const urlOf = (root: string, path: string) => convertFileSrc(`${root.replace(/\/$/, "")}/${path}`);
+const urlOf = (root: string, path: string) => convertFileSrc(vaultFile(root, path));
 
 export function SourcePreview({ file, root, content }: { file: FileSummary; root: string; content: string }) {
   const kind = sourceKind(file.path);

@@ -27,18 +27,33 @@ export const DOC_ACCENTS: [id: string, label: string, swatch: string][] = [
 
 /** id, name, what it's like, and the typeface its sample is set in. */
 export const DOC_STYLES: [id: string, name: string, blurb: string, font: string][] = [
-  ["brainstead", "Brainstead", "The app's own reading style.", '"Geist Variable", -apple-system, sans-serif'],
+  [
+    "brainstead",
+    "Brainstead",
+    "The app's own reading style.",
+    '"Geist Variable", -apple-system, "Segoe UI Variable Text", "Segoe UI", sans-serif',
+  ],
   ["business", "Business", "Coloured headings and rules, banded tables.", '"Avenir Next", "Helvetica Neue", sans-serif'],
   ["editorial", "Editorial", "A serif for long reading, quiet headings, generous spacing.", 'Charter, "Iowan Old Style", Georgia, serif'],
-  ["modern", "Modern", "Large, tight headings, an accent bar, rounded tables.", '"Geist Variable", -apple-system, sans-serif'],
+  [
+    "modern",
+    "Modern",
+    "Large, tight headings, an accent bar, rounded tables.",
+    '"Geist Variable", -apple-system, "Segoe UI Variable Text", "Segoe UI", sans-serif',
+  ],
   [
     "minimal",
     "Minimal",
     "System type, colour only on links and the title rule.",
-    '-apple-system, "SF Pro Text", "Helvetica Neue", sans-serif',
+    '-apple-system, "SF Pro Text", "Helvetica Neue", "Segoe UI Variable Text", "Segoe UI", sans-serif',
   ],
   ["report", "Report", "Numbered sections, small-caps headings, filled table headers.", '"Helvetica Neue", Helvetica, Arial, sans-serif'],
-  ["technical", "Technical", "Monospaced headings, gridded tables, code to the fore.", '-apple-system, "SF Pro Text", sans-serif'],
+  [
+    "technical",
+    "Technical",
+    "Monospaced headings, gridded tables, code to the fore.",
+    '-apple-system, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", sans-serif',
+  ],
 ];
 
 const known = (list: [string, ...unknown[]][], id: string | undefined, dflt: string) => (id && list.some(([x]) => x === id) ? id : dflt);

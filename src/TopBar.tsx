@@ -9,7 +9,7 @@ import { nav, place } from "./nav";
 import { settings, useStore } from "./store";
 import { HelpButton } from "./help/HelpDrawer";
 import { Popover } from "./ui";
-import { keyLabel } from "./platform";
+import { dragRegion, keyLabel } from "./platform";
 
 /** Back and forward, on every screen's top bar. */
 export function HistButtons() {
@@ -151,7 +151,7 @@ export const askLink = (path: string) =>
  *  its Ask button beside help. */
 export function TopBar({ title, sub, children, ask }: { title: string; sub?: string; children?: ReactNode; ask?: AskAbout }) {
   return (
-    <div className="top drag" data-tauri-drag-region>
+    <div className="top drag" {...dragRegion()}>
       <HistButtons />
       <div className="crumbs">
         <b>{title}</b>

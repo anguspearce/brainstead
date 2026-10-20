@@ -60,7 +60,7 @@ import { scriptsAllowed } from "./md/scripts";
 import { getList, getScalar } from "./wiki/props";
 import { FactsCard, SourcesCard, WikiFields } from "./wiki/WikiFields";
 import { iconizeEmoji } from "./md/fieldEmoji";
-import { isMod, isOptCmd, keyLabel, strayCtrl } from "./platform";
+import { dragRegion, isMod, isOptCmd, keyLabel, strayCtrl } from "./platform";
 import { useFeatures } from "./features";
 
 const isMarkdown = (p: string) => /\.(md|txt)$/i.test(p);
@@ -572,7 +572,7 @@ export function DocScreen() {
   return (
     <main className={`main${focus ? " focused" : ""}`} ref={mainEl}>
       {focus && s ? (
-        <div className="top drag focusbar" data-tauri-drag-region>
+        <div className="top drag focusbar" {...dragRegion()}>
           <div className="crumbs focustitle">
             <b>{s.title}</b>
           </div>

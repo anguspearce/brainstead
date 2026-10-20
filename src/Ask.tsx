@@ -54,7 +54,7 @@ import { toast } from "./Toast";
 import { HistButtons } from "./TopBar";
 import { ago, Dialog, Popover, useDebounced } from "./ui";
 import { ASSISTANT_FRONTMATTER } from "./md/scripts";
-import { isMod, keyLabel, strayCtrl } from "./platform";
+import { dragRegion, isMod, keyLabel, strayCtrl } from "./platform";
 
 export function AskScreen() {
   const s = useStore(ask);
@@ -93,7 +93,7 @@ export function AskScreen() {
 
   return (
     <main className="main ask">
-      <div className="top drag" data-tauri-drag-region>
+      <div className="top drag" {...dragRegion()}>
         <HistButtons />
         <div className="asktabs" role="tablist" aria-label="Chats">
           {s.chats.map((x) => (
@@ -638,7 +638,9 @@ function Composer({ c, found }: { c: Chat; found: CliInfo[] | null }) {
       });
     }
   }, [pending, c.id]);
-  useEffect(() => box.current?.focus(), [c.id]);
+  useEffect(() => {
+    box.current?.focus();
+  }, [c.id]);
   // Grow with the text, up to a point.
   useEffect(() => {
     const el = box.current;

@@ -1566,7 +1566,7 @@ fn image_input(ctx: &Ctx, a: &ImageArgs) -> Result<(Vec<u8>, String), String> {
         (None, None) => return Err("Give path (an image file) or base64 (its bytes) with name.".into()),
         (Some(p), None) => {
             let abs = match p.strip_prefix("~/") {
-                Some(rest) => std::env::var_os("HOME").map(PathBuf::from).ok_or("There's no home folder to find ~/ in.")?.join(rest),
+                Some(rest) => dirs::home_dir().ok_or("There's no home folder to find ~/ in.")?.join(rest),
                 None => PathBuf::from(p),
             };
             let abs = std::fs::canonicalize(&abs).map_err(|e| format!("Couldn't find {p}: {e}"))?;

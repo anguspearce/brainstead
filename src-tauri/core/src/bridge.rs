@@ -57,7 +57,22 @@ fn now_ms() -> u128 {
 fn write_json(path: &Path, v: &impl Serialize) -> std::io::Result<()> {
     let tmp = path.with_extension("tmp");
     std::fs::write(&tmp, serde_json::to_vec(v).unwrap_or_default())?;
-    std::fs::rename(&tmp, path)
+    crate::write::rename(&tmp, path)
+}
+
+/// A bridge file's bytes. On Windows the file can't be opened for the moment the other side's
+/// rename replaces it, so a failure other than "not there" is tried twice more before it counts.
+fn read_bridge(path: &Path) -> std::io::Result<Vec<u8>> {
+    let mut tries = 0;
+    loop {
+        match std::fs::read(path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound && tries < 2 => {
+                tries += 1;
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            r => return r,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -72,7 +87,7 @@ pub fn write_alive(path: &Path, pid: u32) -> std::io::Result<()> {
 
 /// Whether the app has said it's up in the last six seconds.
 pub fn app_alive(data: &Path) -> bool {
-    std::fs::read(dir(data).join(ALIVE))
+    read_bridge(&dir(data).join(ALIVE))
         .ok()
         .and_then(|b| serde_json::from_slice::<Alive>(&b).ok())
         .is_some_and(|a| now_ms().saturating_sub(a.at) < 6_000)
@@ -91,9 +106,17 @@ pub fn take_requests(dir: &Path) -> Vec<(PathBuf, Request)> {
         if std::fs::rename(&p, &taken).is_err() {
             continue;
         }
-        match std::fs::read(&taken).ok().and_then(|b| serde_json::from_slice::<Request>(&b).ok()) {
-            Some(r) => out.push((taken, r)),
-            None => {
+        let bytes = match read_bridge(&taken) {
+            Ok(b) => b,
+            // Still held open (Windows): put it back for the next look rather than lose it.
+            Err(_) => {
+                let _ = std::fs::rename(&taken, &p);
+                continue;
+            }
+        };
+        match serde_json::from_slice::<Request>(&bytes) {
+            Ok(r) => out.push((taken, r)),
+            Err(_) => {
                 let _ = std::fs::remove_file(&taken);
             }
         }
@@ -121,7 +144,7 @@ pub fn ask(data: &Path, req: &Request, timeout: Duration) -> Reply {
     let reply = d.join(REPLIES).join(format!("{}.json", req.id));
     let start = Instant::now();
     while start.elapsed() < timeout {
-        if let Some(r) = std::fs::read(&reply).ok().and_then(|b| serde_json::from_slice::<Reply>(&b).ok()) {
+        if let Some(r) = read_bridge(&reply).ok().and_then(|b| serde_json::from_slice::<Reply>(&b).ok()) {
             let _ = std::fs::remove_file(&reply);
             return r;
         }

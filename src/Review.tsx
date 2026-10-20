@@ -22,7 +22,7 @@ import { Dialog, SearchBox, TableBand, useDebounced } from "./ui";
 import { offerFollowUp } from "./Ingest";
 import { DocButton, useGone } from "./docButton";
 import { iconizeEmoji } from "./md/fieldEmoji";
-import { isMod, keyLabel } from "./platform";
+import { vaultFile, isMod, keyLabel } from "./platform";
 
 /** A line of the page as the diff shows it: task fields as their icons, never the file's emoji. */
 export function DiffText({ text }: { text: string }) {
@@ -705,9 +705,7 @@ function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: num
                 : "; it was moved to Brainstead’s Trash."}
             </span>
           </span>
-          {v.status === "applied" && (
-            <img src={convertFileSrc(`${(settings.get().vaultPath ?? "").replace(/\/$/, "")}/${v.page}`)} alt={pageName(v.page)} />
-          )}
+          {v.status === "applied" && <img src={convertFileSrc(vaultFile(settings.get().vaultPath ?? "", v.page))} alt={pageName(v.page)} />}
         </div>
       )}
       {v.changes.length > 0 && <h2 className="eyebrow qsect">{v.problem ? "What it asked for" : "The change"}</h2>}

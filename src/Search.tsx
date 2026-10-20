@@ -100,14 +100,18 @@ export function SearchScreen() {
   const input = useRef<HTMLInputElement>(null);
   const v = useVaultVersion();
 
-  useEffect(() => input.current?.focus(), []);
+  useEffect(() => {
+    input.current?.focus();
+  }, []);
   // A query in the place (⌘K's "Search everything", back to an earlier search) wins over the remembered one,
   // but not the one this page put there itself below: by then the box may hold more, typed since.
   const wrote = useRef<string | null>(null);
   useEffect(() => {
     if (here.q !== undefined && here.q !== wrote.current && here.q !== typed) setQ(here.q);
   }, [here.q]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => setActive(0), [q, layers]);
+  useEffect(() => {
+    setActive(0);
+  }, [q, layers]);
   useEffect(() => {
     let live = true;
     api

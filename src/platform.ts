@@ -42,6 +42,26 @@ export function setPlatform(p: Platform) {
   if (typeof document !== "undefined") document.documentElement.dataset.platform = p;
 }
 
+/**
+ * A vault file's full path, for convertFileSrc and Templater's `tp.file.path`: `rel` (written with
+ * `/`) under `root`, spelled with the root's own separator, so a Windows vault (`C:\Notes`) gets
+ * `C:\Notes\img\a.png`, not a mix of `\` and `/`. A trailing separator on the root and leading
+ * ones on `rel` don't double up.
+ */
+export function vaultFile(root: string, rel: string): string {
+  const windows = /^([A-Za-z]:\\|\\\\)/.test(root) || (root.includes("\\") && !root.includes("/"));
+  const r = rel.replace(/^[\\/]+/, "");
+  const base = root.replace(/[\\/]+$/, "");
+  return windows ? `${base}\\${r.replace(/\//g, "\\")}` : `${base}/${r}`;
+}
+
+/**
+ * `data-tauri-drag-region` on macOS only, spread onto an element: there the window has no title
+ * bar and its top is dragged by these. Windows has its own title bar, and an element it drags the
+ * window by no longer scrolls or takes clicks.
+ */
+export const dragRegion = (): { "data-tauri-drag-region"?: true } => (isMac ? { "data-tauri-drag-region": true } : {});
+
 /** Sets `data-platform` on the root element, which the stylesheet reads. */
 export function applyPlatform() {
   if (typeof document !== "undefined") document.documentElement.dataset.platform = current;

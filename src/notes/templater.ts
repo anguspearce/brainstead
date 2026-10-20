@@ -16,6 +16,7 @@
 
 import moment from "moment";
 import "moment/locale/en-gb";
+import { vaultFile } from "../platform";
 
 /** A file as Templater hands them round (its TFile): vault-relative. */
 export interface TFile {
@@ -330,7 +331,7 @@ export async function runTemplate(src: string, env: Env): Promise<RunResult> {
         target.title = i < 0 ? p : p.slice(i + 1);
         target.named = true;
       },
-      path: (relative = false) => (relative ? targetPath() : `${env.root.replace(/[\\/]+$/, "")}/${targetPath()}`),
+      path: (relative = false) => (relative ? targetPath() : vaultFile(env.root, targetPath())),
       async rename(newTitle: string) {
         target.title = String(newTitle);
         target.named = true;

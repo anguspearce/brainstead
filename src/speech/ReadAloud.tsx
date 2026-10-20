@@ -86,7 +86,9 @@ export const fmtRate = (r: number) => `${Math.round(r * 100) / 100}×`;
 export function SpeedSlider() {
   const saved = useStore(settings).speechRate ?? 1;
   const [v, setV] = useState(saved);
-  useEffect(() => setV(saved), [saved]);
+  useEffect(() => {
+    setV(saved);
+  }, [saved]);
   const commit = () => {
     if (v === (settings.get().speechRate ?? 1)) return;
     settings.update({ speechRate: v });

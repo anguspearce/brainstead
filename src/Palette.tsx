@@ -387,8 +387,12 @@ export function Palette({ onClose }: { onClose: () => void }) {
         : [];
     return layer === 0 ? [...files, ...taskRows, ...cmds, all2, askIt, taskIt] : [...files, all2];
   }, [all, q, found, tasks, layer]);
-  useEffect(() => input.current?.focus(), []);
-  useEffect(() => setI(0), [q]);
+  useEffect(() => {
+    input.current?.focus();
+  }, []);
+  useEffect(() => {
+    setI(0);
+  }, [q]);
   const run = (c: Command | undefined) => {
     if (!c) return;
     onClose();

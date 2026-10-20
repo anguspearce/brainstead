@@ -89,7 +89,9 @@ export function NewNoteDialog({ initial }: { initial?: string }) {
   }, [initial]);
 
   const tpl = templates?.find((t) => t.path === sel) ?? null;
-  useEffect(() => setErr(null), [sel]);
+  useEffect(() => {
+    setErr(null);
+  }, [sel]);
 
   const filename = tpl ? "" : composeFilename(blank);
   const taken = !!filename && existing.has(filename.toLowerCase());

@@ -77,7 +77,9 @@ export const NoteEditor = forwardRef<NoteEditorHandle, Props>(function NoteEdito
     // Made once; the parent remounts it for another file.
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => ed.current?.setMode(mode), [mode]);
+  useEffect(() => {
+    ed.current?.setMode(mode);
+  }, [mode]);
 
   // Images dropped from Finder (Tauri takes file drops before the page sees them).
   useEffect(() => {

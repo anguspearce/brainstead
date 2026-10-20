@@ -238,7 +238,9 @@ export function RunsPane() {
   const dq = useDebounced(q).trim();
   const list = useMemo(() => (dq ? all.filter((r) => runMatches(r, dq)) : all), [all, dq]);
   const [active, setActive] = useState(0);
-  useEffect(() => setActive(0), [dq]);
+  useEffect(() => {
+    setActive(0);
+  }, [dq]);
   const idx = Math.min(active, Math.max(0, list.length - 1));
   const step = (to: number) => {
     setActive(to);

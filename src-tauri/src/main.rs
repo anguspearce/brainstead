@@ -2,8 +2,10 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Prevents an additional console window on Windows in release.
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// No console window on Windows, in dev builds too. The MCP server (--mcp) and the capture
+// extensions' host still talk over the pipes they were started with: a windows-subsystem program
+// keeps the standard handles it inherits; only a console of its own is never made.
+#![cfg_attr(windows, windows_subsystem = "windows")]
 
 fn main() {
     if let Some(code) = brainstead_lib::mcp_main() {

@@ -96,6 +96,50 @@ pub fn check_conflict_copies(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Whether a rename failed only because another program has the file open: on Windows, access
+/// denied, a sharing or a lock violation, as antivirus, OneDrive's sync, an editor or the MCP
+/// server reading the bridge's files cause for a moment. Never elsewhere: a rename over an open
+/// file just works there.
+#[cfg(windows)]
+fn held_open(e: &std::io::Error) -> bool {
+    // ERROR_ACCESS_DENIED, ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION.
+    matches!(e.raw_os_error(), Some(5 | 32 | 33))
+}
+
+#[cfg(not(windows))]
+fn held_open(_: &std::io::Error) -> bool {
+    false
+}
+
+/// How many times a rename is tried, and the longest wait between tries: about a second in all.
+const RENAME_TRIES: u32 = 10;
+const RENAME_WAIT_MAX: std::time::Duration = std::time::Duration::from_millis(200);
+
+/// `op` again, with a doubling wait from 10 ms, while it fails with an error `held` says will pass.
+fn retry_held<T>(
+    mut op: impl FnMut() -> std::io::Result<T>,
+    held: impl Fn(&std::io::Error) -> bool,
+    mut sleep: impl FnMut(std::time::Duration),
+) -> std::io::Result<T> {
+    let mut wait = std::time::Duration::from_millis(10);
+    for _ in 1..RENAME_TRIES {
+        match op() {
+            Err(e) if held(&e) => {
+                sleep(wait);
+                wait = (wait * 2).min(RENAME_WAIT_MAX);
+            }
+            r => return r,
+        }
+    }
+    op()
+}
+
+/// `fs::rename`, tried again for about a second while another program has the file open
+/// (Windows only; elsewhere it's `fs::rename`).
+pub fn rename(from: &Path, to: &Path) -> std::io::Result<()> {
+    retry_held(|| fs::rename(from, to), held_open, std::thread::sleep)
+}
+
 static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Writes through a temporary file in the same folder and a rename, so a crash never leaves half
@@ -126,7 +170,7 @@ pub fn write_atomic(path: &Path, data: &[u8], keep_mtime: bool) -> Result<()> {
         }
         f.sync_all()?;
         drop(f);
-        fs::rename(&tmp, path)
+        rename(&tmp, path)
     })();
     if let Err(e) = written {
         let _ = fs::remove_file(&tmp);
@@ -976,6 +1020,64 @@ pub fn create_file_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A rename that fails while the file is held open is tried again, with a growing wait, up to
+    /// ten times; any other error, or success, returns at once.
+    #[test]
+    fn a_rename_held_up_by_an_open_file_is_tried_again() {
+        use std::cell::RefCell;
+        use std::io::{Error, ErrorKind};
+        use std::time::Duration;
+        let busy = || Error::new(ErrorKind::PermissionDenied, "held open");
+        let held = |e: &Error| e.kind() == ErrorKind::PermissionDenied;
+        // Held open twice, then free.
+        let (calls, waits) = (RefCell::new(0), RefCell::new(vec![]));
+        let op = || {
+            *calls.borrow_mut() += 1;
+            if *calls.borrow() <= 2 {
+                Err(busy())
+            } else {
+                Ok(7)
+            }
+        };
+        assert_eq!(retry_held(op, held, |d| waits.borrow_mut().push(d)).unwrap(), 7);
+        assert_eq!((*calls.borrow(), waits.borrow().clone()), (3, vec![Duration::from_millis(10), Duration::from_millis(20)]));
+        // Held open throughout: ten tries, about a second of waiting, then the error.
+        let (calls, waits) = (RefCell::new(0), RefCell::new(vec![]));
+        let r = retry_held(
+            || {
+                *calls.borrow_mut() += 1;
+                Err::<(), _>(busy())
+            },
+            held,
+            |d| waits.borrow_mut().push(d),
+        );
+        assert_eq!(r.unwrap_err().kind(), ErrorKind::PermissionDenied);
+        assert_eq!(*calls.borrow(), RENAME_TRIES);
+        let total: Duration = waits.borrow().iter().sum();
+        assert!(waits.borrow().iter().all(|d| *d <= RENAME_WAIT_MAX));
+        assert!((Duration::from_millis(800)..Duration::from_millis(1500)).contains(&total), "{total:?}");
+        // Any other error isn't waited on.
+        let (calls, waits) = (RefCell::new(0), RefCell::new(vec![]));
+        let r = retry_held(
+            || {
+                *calls.borrow_mut() += 1;
+                Err::<(), _>(Error::new(ErrorKind::NotFound, "gone"))
+            },
+            held,
+            |d| waits.borrow_mut().push(d),
+        );
+        assert_eq!((r.unwrap_err().kind(), *calls.borrow(), waits.borrow().len()), (ErrorKind::NotFound, 1, 0));
+    }
+
+    /// Only Windows' access denied, sharing and lock violations count as held open, and only there.
+    #[test]
+    fn only_windows_lock_errors_are_waited_on() {
+        let os = |n| std::io::Error::from_raw_os_error(n);
+        assert_eq!([5, 32, 33].map(|n| held_open(&os(n))), [cfg!(windows); 3]);
+        assert!(!held_open(&os(2)));
+        assert!(!held_open(&std::io::Error::other("x")));
+    }
 
     // From the previous app's tasks-index.test.ts and mutations-workflow.test.ts.
     #[test]

@@ -63,7 +63,9 @@ export function FindBar({
   const input = useRef<HTMLInputElement>(null);
   const ranges = useRef<Range[]>([]);
 
-  useEffect(() => input.current?.focus(), [view]);
+  useEffect(() => {
+    input.current?.focus();
+  }, [view]);
 
   // Look again whenever the words or the mode change.
   useEffect(() => {

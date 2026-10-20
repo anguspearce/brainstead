@@ -19,7 +19,7 @@ import { ago, fmtCount, Popover } from "./ui";
 import { toast } from "./Toast";
 import { changes, decisions, health, held, startKnowledge } from "./knowledge";
 import type { IndexStats, Layer, VaultStatus } from "./api";
-import { keyLabel } from "./platform";
+import { dragRegion, keyLabel } from "./platform";
 
 interface Item {
   screen: Screen;
@@ -365,8 +365,8 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const item = (i: Item) => <NavItem key={i.screen} item={i} on={lit === i.screen} stats={st.stats} extra={extra[i.screen]} />;
   return (
     <aside className="side" aria-label="Sidebar">
-      <div className="drag tlspace" data-tauri-drag-region />
-      <div className="brand drag" data-tauri-drag-region>
+      <div className="drag tlspace" {...dragRegion()} />
+      <div className="brand drag" {...dragRegion()}>
         <Mark />
         <b>Brainstead</b>
       </div>

@@ -95,7 +95,9 @@ export function WikiFields({ text, onChange }: { text: string; onChange: (t: str
   const tags = getList(text, "tags");
   const sources = getList(text, "sources");
   const [desc, setDesc] = useState(getScalar(text, "description"));
-  useEffect(() => setDesc(getScalar(text, "description")), [text]);
+  useEffect(() => {
+    setDesc(getScalar(text, "description"));
+  }, [text]);
   const [finding, setFinding] = useState("");
   const found = useSearch(finding, ["source", "note"] as Layer[], 8);
   const addSource = (path: string) => {
