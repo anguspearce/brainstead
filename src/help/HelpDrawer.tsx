@@ -26,8 +26,35 @@ import { appLink, GUIDES, helpUrl, openSection, HelpSection, HelpTopic, searchHe
 export type HelpView = { topic?: string; guide?: string; step?: number; q?: string; start?: boolean };
 export const helpOpen = new Store<HelpView | null>(null);
 
-export const openHelp = (v: HelpView = {}) => helpOpen.set(v);
-export const toggleHelp = () => helpOpen.set(helpOpen.get() ? null : {});
+// The drawer's own back and forward: the pages it showed since it opened (topics, the guides, a
+// guide's steps). Opening it afresh starts a new history.
+let past: HelpView[] = [];
+let future: HelpView[] = [];
+const same = (a: HelpView, b: HelpView) => JSON.stringify(a) === JSON.stringify(b);
+
+export const openHelp = (v: HelpView = {}) => {
+  const now = helpOpen.get();
+  if (!now) past = [];
+  else if (!same(now, v)) past.push(now);
+  future = [];
+  helpOpen.set(v);
+};
+export const toggleHelp = () => (helpOpen.get() ? helpOpen.set(null) : openHelp({}));
+/** Back to the last page; from the first one that isn't the screen's own, back to the screen's. */
+const canBack = (v: HelpView) => past.length > 0 || !!(v.topic || v.guide || v.start);
+const helpBack = () => {
+  const now = helpOpen.get();
+  if (!now) return;
+  future.push(now);
+  helpOpen.set(past.pop() ?? {});
+};
+const helpForward = () => {
+  const now = helpOpen.get();
+  const next = future.pop();
+  if (!next || !now) return;
+  past.push(now);
+  helpOpen.set(next);
+};
 
 /** The keyboard topic's section to open on a screen; Anywhere for the rest. */
 const KEY_SECTION: Partial<Record<Place["screen"], string>> = {
@@ -243,17 +270,16 @@ export function HelpDrawer() {
   return (
     <aside className="help-drawer" role="complementary" aria-label="Help">
       <div className="help-head">
-        {(guide || view.topic || view.start) && (
-          <button
-            type="button"
-            className="ibtn"
-            aria-label="Back to this screen's help"
-            title="Back to this screen's help"
-            onClick={() => openHelp({})}
-          >
+        <span title={canBack(view) ? "Back to the help page you were on" : "Nothing to go back to"}>
+          <button type="button" className="ibtn" aria-label="Back" disabled={!canBack(view)} onClick={helpBack}>
             <Icon name="back" />
           </button>
-        )}
+        </span>
+        <span title={future.length ? "Forward to the help page you went back from" : "Nothing to go forward to"}>
+          <button type="button" className="ibtn" aria-label="Forward" disabled={!future.length} onClick={helpForward}>
+            <Icon name="forward" />
+          </button>
+        </span>
         <h2 className="h2">
           {title}
           <span className="faint"> — {guide ? "getting started" : "help"}</span>
@@ -279,7 +305,7 @@ export function HelpDrawer() {
           label="Help topic"
           placeholder="All topics"
           value={guide || view.start ? null : (topic?.id ?? null)}
-          items={TOPICS.filter((t) => t.kind === "screen").map((t) => ({ value: t.id, label: t.title, hint: t.summary }))}
+          items={TOPICS.filter((t) => t.kind === "screen").map((t) => ({ value: t.id, label: t.title }))}
           onChange={(id) => openHelp({ topic: id })}
         />
       </div>

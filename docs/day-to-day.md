@@ -42,7 +42,7 @@ The ingest switches (ingest new sources as they arrive, refresh pages whose sour
 
 <a href="images/index.md#day-to-day"><picture><source media="(prefers-color-scheme: dark)" srcset="images/help-dark.png"><img alt="The help drawer on Tasks: Getting started and the topic picker under the search box, then the screen's sections" src="images/help-light.png"></picture></a>
 
-Press `?` on any screen, click **?** on the top bar, or choose Help › Brainstead Help (⇧⌘?) for that screen's help in a drawer. Type to search every topic. Under the search box:
+Press `?` on any screen, click **?** on the top bar, or choose Help › Brainstead Help (⇧⌘?) for that screen's help in a drawer. Type to search every topic. The arrows beside the title go back and forward through the help pages you've opened since the drawer opened. Under the search box:
 
 - **Getting started** lists the step-by-step guides, each with its number of steps or a Done mark: Start here, Capture and write, Build the wiki, Find, GTD, Knowledge health, Ask your vault, Templates and note looks, Meeting notes, Draft a reply, Compare and Doc check, Bookmarks and triage, Changes, undo and Trash, Assistants and the MCP server, Scheduled jobs and The menu bar and capture extensions. Brainstead offers them when it opens, until you tick **Don't ask me again** or turn off **Offer Getting started when Brainstead opens** in Settings › General.
 - **All topics** picks any screen's or pane's help; type to find one. **Keyboard shortcuts** is one of them, and opens on the keys for the screen you're on.

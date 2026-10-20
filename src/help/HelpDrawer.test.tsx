@@ -9,7 +9,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null), conver
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 
-import { HelpDrawer, helpOpen } from "./HelpDrawer";
+import { HelpDrawer, helpOpen, openHelp } from "./HelpDrawer";
 
 afterEach(() => {
   cleanup();
@@ -54,5 +54,29 @@ describe("the help drawer's top", () => {
     const open = [...container.querySelectorAll<HTMLDetailsElement>("details.help-sec")].filter((d) => d.open);
     // Today's keys are the task lists'.
     expect(open.map((d) => d.querySelector("summary")?.textContent)).toEqual(["Task lists"]);
+  });
+});
+
+describe("the help drawer's back and forward", () => {
+  it("go through the pages it showed since it opened", () => {
+    act(() => {
+      openHelp({});
+      openHelp({ topic: "tasks" });
+      openHelp({ start: true });
+    });
+    const { getByLabelText } = render(<HelpDrawer />);
+    const back = getByLabelText("Back") as HTMLButtonElement;
+    const fwd = getByLabelText("Forward") as HTMLButtonElement;
+    expect(fwd.disabled).toBe(true);
+    act(() => back.click());
+    expect(helpOpen.get()).toEqual({ topic: "tasks" });
+    act(() => back.click());
+    expect(helpOpen.get()).toEqual({});
+    expect(back.disabled).toBe(true);
+    act(() => fwd.click());
+    expect(helpOpen.get()).toEqual({ topic: "tasks" });
+    // A new page drops what was ahead.
+    act(() => openHelp({ topic: "inbox" }));
+    expect(fwd.disabled).toBe(true);
   });
 });
