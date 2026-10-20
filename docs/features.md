@@ -1,6 +1,6 @@
 # Features
 
-The user guide to Brainstead, a Mac app for tasks, notes and a wiki over one folder of plain markdown files: your vault. Each screen's help (`?`) goes deeper.
+The user guide to Brainstead, a Mac app for tasks, notes and an [LLM wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) over one folder of plain markdown files: your vault. Each screen's help (`?`) goes deeper.
 
 <a href="images/index.md#features"><picture><source media="(prefers-color-scheme: dark)" srcset="images/today-dark.png"><img alt="Today: overdue, due and deferred tasks, what you're waiting for, the capture box, and where you left off" src="images/today-light.png"></picture></a>
 

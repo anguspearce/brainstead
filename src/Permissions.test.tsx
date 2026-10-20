@@ -29,7 +29,7 @@ describe("Welcome", () => {
     open.mockResolvedValue("/Users/maya/Documents");
     vaultCreate.mockResolvedValue("/Users/maya/Documents/Orbit notes");
     render(<Welcome />);
-    expect(screen.getByText(/Getting Things Done, notes and a wiki/)).toBeTruthy();
+    expect(screen.getByText(/Getting Things Done, notes and an LLM wiki/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Create a new vault/ }));
     const name = screen.getByRole("textbox", { name: "Name of the new vault" }) as HTMLInputElement;
     expect(name.value).toBe("Brainstead");

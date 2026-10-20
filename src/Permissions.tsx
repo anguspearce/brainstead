@@ -147,7 +147,7 @@ export function Welcome() {
           <Mark size={34} />
           <b>Brainstead</b>
         </div>
-        <p className="tagline">Getting Things Done, notes and a wiki kept by AI, over plain markdown files you own.</p>
+        <p className="tagline">Getting Things Done, notes and an LLM wiki, over plain markdown files you own.</p>
         {needsFda ? (
           <>
             <h2 className="h2">First, Full Disk Access</h2>
