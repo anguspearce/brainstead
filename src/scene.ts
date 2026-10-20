@@ -12,6 +12,7 @@ import { toast } from "./Toast";
 import { UpdateView, updateView } from "./Update";
 import { fixNameOpen } from "./FixName";
 import { shortcutsOpen } from "./Shortcuts";
+import { guideOffer } from "./help/GuideOffer";
 import { helpOpen, HelpView } from "./help/HelpDrawer";
 import { readingScene } from "./speech/player";
 import type { ClarifySuggestion, Theme, WeekPrepStatus } from "./api";
@@ -51,8 +52,10 @@ export interface Scene {
   reading?: { block: number; char: number };
   /** The menu-bar window alone (src/Tray.tsx), shown by Rust. */
   tray?: boolean;
-  /** The help drawer open: on the screen's topic, or `topic`, a guide at a step, or a search. */
+  /** The help drawer open: on the screen's topic, or `topic`, the guides (`start`), a guide at a step, or a search. */
   help?: HelpView;
+  /** The welcome that offers Getting started when the app opens. */
+  guideOffer?: boolean;
   /** Screens' remembered choices (`useViewState` keys), e.g. the selected task. */
   view?: Record<string, unknown>;
   /** For "ask": show a sample chat. */
@@ -195,6 +198,7 @@ export function applyScene(sc: Scene) {
   if (sc.image) imageView.set({ url: convertFileSrc(`${(settings.get().vaultPath ?? "").replace(/\/$/, "")}/${sc.image}`), alt: sc.image });
   if (sc.chat) ask.set({ chats: [sampleChat()], active: "scene" });
   if (sc.help) helpOpen.set(sc.help);
+  if (sc.guideOffer) guideOffer.set(true);
   if (sc.reading) readingScene.set(sc.reading);
   if (sc.toast) toast(sc.toast, { label: "Undo", run: () => {} });
   if (sc.update) updateView.set(sampleUpdate(sc.update));

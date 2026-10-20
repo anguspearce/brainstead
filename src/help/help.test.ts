@@ -71,12 +71,24 @@ describe("help topics", () => {
       ).toContain(t.page);
   });
 
-  it("has the six getting-started guides, each with steps that link into the app", () => {
-    expect(GUIDES.map((g) => g.title)).toEqual(["Start here", "Capture and write", "Build the wiki", "Find", "GTD", "Knowledge health"]);
+  it("has getting-started guides that link into every screen", () => {
+    expect(GUIDES[0].id).toBe("guide-start");
     for (const g of GUIDES) {
       expect(g.sections.length, g.id).toBeGreaterThanOrEqual(3);
       for (const s of g.sections) expect(s.body, `${g.id} › ${s.title}`).toMatch(/\]\(app:/);
     }
+    const reached = new Set(
+      GUIDES.flatMap((g) =>
+        [
+          ...g.sections
+            .map((s) => s.body)
+            .join("\n")
+            .matchAll(/\]\(app:([a-z]+)/g),
+        ].map((m) => m[1]),
+      ),
+    );
+    // A note opens from a list; every other screen has a guide that takes you there.
+    for (const s of SCREENS.filter((x) => x !== "doc")) expect(reached, s).toContain(s);
   });
 
   it("keeps to the house rules", () => {

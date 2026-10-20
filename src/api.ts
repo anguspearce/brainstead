@@ -58,6 +58,8 @@ export interface Settings {
   menuBarOnly?: boolean;
   /** The help's getting-started guides finished, by id (src/help/HelpDrawer.tsx). */
   helpGuides?: Record<string, boolean>;
+  /** Offer the Getting started guides when the app opens (src/help/GuideOffer.tsx; on unless false). */
+  offerGuide?: boolean;
   /** Moving over from another notes app: the checklist's items the user ticks by hand (Settings › General). */
   movingOver?: Record<string, boolean>;
   /** Each screen's last choices, for a fresh visit to it (useViewState in src/nav.ts). */

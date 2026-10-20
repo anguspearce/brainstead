@@ -5,7 +5,7 @@ screens: []
 order: 40
 summary: Every key the app answers to, by where it works.
 ---
-Each key works where its heading says. Quick capture's shortcut is set in [Settings › General](app:settings/general); `⌃⌥Space` is the default.
+Each key works where its heading says; opened from a screen, this topic unfolds that screen's keys. Quick capture's shortcut is set in [Settings › General](app:settings/general); `⌃⌥Space` is the default.
 
 ## Anywhere
 - `⌘K` — Search or jump anywhere

@@ -24,3 +24,6 @@ Click **Contradictions** in [Knowledge health](app:health)'s top bar, then **Che
 
 ## Turn on the daily check
 In [Settings › Jobs & schedule](app:settings/jobs), turn on **Daily check**. Each day it looks for contradictions in the pages that changed. To have it ingest changed sources again too, turn on **Also refresh pages whose sources changed** in [Settings › AI assistants](app:settings/assistants).
+
+## Fix a name spelt wrong
+When a transcript gets a name wrong, such as "Lina" for Lena, choose **Fix a name everywhere…** in `⌘K`. Type **Written as** and **Correct spelling**, check the files it lists, and click **Apply**. Sources are left alone, the person's wiki page gets the wrong spelling as an alias, and **Remember this correction** keeps later ingests right. The fix is logged in [Activity](app:activity), and `⌘Z` undoes it all. [Fix a name everywhere](help:fix-name) has the details.

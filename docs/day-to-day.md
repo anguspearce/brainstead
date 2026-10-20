@@ -40,11 +40,12 @@ The ingest switches (ingest new sources as they arrive, refresh pages whose sour
 
 ## Help
 
-<a href="images/index.md#day-to-day"><picture><source media="(prefers-color-scheme: dark)" srcset="images/help-dark.png"><img alt="The help drawer on Tasks: its sections, the getting-started guides and the screen's keys" src="images/help-light.png"></picture></a>
+<a href="images/index.md#day-to-day"><picture><source media="(prefers-color-scheme: dark)" srcset="images/help-dark.png"><img alt="The help drawer on Tasks: Getting started and the topic picker under the search box, then the screen's sections" src="images/help-light.png"></picture></a>
 
-Press `?` on any screen, click **?** on the top bar, or choose Help › Brainstead Help (⇧⌘?) for that screen's help in a drawer. Type to search every topic.
+Press `?` on any screen, click **?** on the top bar, or choose Help › Brainstead Help (⇧⌘?) for that screen's help in a drawer. Type to search every topic. Under the search box:
 
-- **Getting started** has six step-by-step guides: Start here, Capture and write, Build the wiki, Find, GTD and Knowledge health.
+- **Getting started** lists the step-by-step guides, each with its number of steps or a Done mark: Start here, Capture and write, Build the wiki, Find, GTD, Knowledge health, Ask your vault, Templates and note looks, Meeting notes, Draft a reply, Compare and Doc check, Bookmarks and triage, Changes, undo and Trash, Assistants and the MCP server, Scheduled jobs and The menu bar and capture extensions. Brainstead offers them when it opens, until you tick **Don't ask me again** or turn off **Offer Getting started when Brainstead opens** in Settings › General.
+- **All topics** picks any screen's or pane's help; type to find one. **Keyboard shortcuts** is one of them, and opens on the keys for the screen you're on.
 - **Ask about Brainstead** puts a question to Ask, which [answers from the same help](ask.md#questions-about-brainstead).
 - The keyboard shortcuts are in Help › Keyboard Shortcuts and in ⌘K.
 - Help › Brainstead Website opens [the website](https://brainstead.davies.co.za/), as does the link in Brainstead › About Brainstead and the **Website** button in Settings › About.

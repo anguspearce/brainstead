@@ -21,6 +21,7 @@ import { FixNameHost } from "./FixName";
 import { ImageViewerHost } from "./ImageViewer";
 import { ShortcutsHost } from "./Shortcuts";
 import { QuitDialog } from "./Quit";
+import { GuideOfferHost } from "./help/GuideOffer";
 import { HelpDrawer, startHelpMenu } from "./help/HelpDrawer";
 import { startMcpBridge } from "./mcpActions";
 import { startSpeech } from "./speech/player";
@@ -198,6 +199,7 @@ export default function App({ scene }: { scene: Scene | null }) {
       <ShortcutsHost />
       <ImageViewerHost />
       <HelpDrawer />
+      <GuideOfferHost />
       <QueryBuilderHost />
       <SpellMenuHost />
       <Tooltips />

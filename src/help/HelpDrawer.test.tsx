@@ -35,3 +35,24 @@ describe("the help drawer's sections", () => {
     expect(secs.filter((d) => d.open)).toEqual([secs[2]]);
   });
 });
+
+describe("the help drawer's top", () => {
+  it("has Getting started and a topic picker, and nothing below the topic", () => {
+    act(() => helpOpen.set({ topic: "tasks" }));
+    const { container, getByText } = render(<HelpDrawer />);
+    expect(container.querySelector(".help-nav .spick")?.textContent).toContain("Tasks");
+    expect(container.querySelector(".help-guides")).toBeNull();
+    expect(container.querySelector(".chip")).toBeNull();
+    act(() => getByText("Getting started").click());
+    expect(helpOpen.get()).toEqual({ start: true });
+    expect(container.querySelectorAll(".help-guide").length).toBeGreaterThan(6);
+  });
+
+  it("opens the keyboard topic on the screen's keys", () => {
+    act(() => helpOpen.set({ topic: "keyboard" }));
+    const { container } = render(<HelpDrawer />);
+    const open = [...container.querySelectorAll<HTMLDetailsElement>("details.help-sec")].filter((d) => d.open);
+    // Today's keys are the task lists'.
+    expect(open.map((d) => d.querySelector("summary")?.textContent)).toEqual(["Task lists"]);
+  });
+});

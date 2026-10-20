@@ -27,6 +27,8 @@ You tick the rest yourself: the other app's summaries off, its browser extension
 - **Only in the menu bar when the window is closed** takes Brainstead out of the Dock when you close its window. It only appears while **Show in the menu bar** is on, and an assistant can't turn it on otherwise.
 - **Open at login** starts Brainstead when you log in. It only appears for the installed app, not one run from a folder. It's the same switch as in the menu-bar window and System Settings › General › Login Items. If macOS asks you to approve it, System Settings opens there; until you do, it shows as off.
 
+- **Offer Getting started when Brainstead opens** (on by default) shows a welcome with **Open Getting Started** each time the app opens on a vault. Ticking **Don't ask me again** in it turns this off. The guides are always in the help: press `?` and click **Getting started**.
+
 What the two together do is in [The menu bar](help:menubar).
 
 ## Change the quick capture shortcut

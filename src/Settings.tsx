@@ -294,6 +294,20 @@ function OpenAtLogin() {
             />
           </div>
         )}
+        <div className="srow">
+          <Icon name="start" />
+          <div className="t">
+            <div className="pt">Offer Getting started when Brainstead opens</div>
+            <div className="faint">
+              A welcome that opens the help's step-by-step guides. They're always in the help: press ? and click Getting started.
+            </div>
+          </div>
+          <Switch
+            label="Offer Getting started when Brainstead opens"
+            on={s.offerGuide !== false}
+            onChange={(v) => settings.update({ offerGuide: v })}
+          />
+        </div>
         {on !== null && (
           <div className="srow">
             <Icon name="power" />

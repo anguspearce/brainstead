@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // The help drawer: `?`, the top bar's ? button or Help › Brainstead Help opens it on the right, on
-// the current screen's topic. Typing filters its sections and searches every topic; below them,
-// the getting-started guides (one step at a time) and the screen's keys. It stays open while you
-// follow a link into the app, so a guide can be walked through; Esc or × closes it.
+// the current screen's topic. Under the search box, Getting started (the guides, one step at a
+// time) and a picker of every topic; Keyboard shortcuts is one of them, opened at the screen's keys.
+// It stays open while you follow a link into the app, so a guide can be walked through; Esc or ×
+// closes it.
 
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ReactNode, useEffect, useMemo, useState } from "react";
@@ -17,17 +18,18 @@ import { Icon } from "../icons";
 import { nav, place, Place } from "../nav";
 import { shortcutsOpen } from "../Shortcuts";
 import { settings, Store, useStore } from "../store";
-import { SearchBox } from "../ui";
-import { appLink, GUIDES, helpUrl, openSection, HelpSection, HelpTopic, KEYS, searchHelp, TOPICS, topicFor } from ".";
+import { SearchBox, SearchPick } from "../ui";
+import { appLink, GUIDES, helpUrl, openSection, HelpSection, HelpTopic, searchHelp, TOPICS, topicFor } from ".";
 
-/** What the drawer shows: a topic (the screen's when none is named), or a guide at a step. */
-export type HelpView = { topic?: string; guide?: string; step?: number; q?: string };
+/** What the drawer shows: a topic (the screen's when none is named), the list of guides (`start`),
+ *  or a guide at a step. */
+export type HelpView = { topic?: string; guide?: string; step?: number; q?: string; start?: boolean };
 export const helpOpen = new Store<HelpView | null>(null);
 
 export const openHelp = (v: HelpView = {}) => helpOpen.set(v);
 export const toggleHelp = () => helpOpen.set(helpOpen.get() ? null : {});
 
-/** The keyboard section for a screen, besides Anywhere. */
+/** The keyboard topic's section to open on a screen; Anywhere for the rest. */
 const KEY_SECTION: Partial<Record<Place["screen"], string>> = {
   doc: "A note",
   inbox: "Inbox",
@@ -103,50 +105,11 @@ function Section({ s, open, group }: { s: HelpSection; open?: boolean; group?: s
   );
 }
 
-function Keys({ screen }: { screen: Place["screen"] }) {
-  const s = useStore(settings);
-  const wanted = ["Anywhere", KEY_SECTION[screen]].filter(Boolean);
-  const capture = (s.captureShortcut ? s.captureShortcut : "Control+Alt+Space")
-    .split("+")
-    .map((p) => ({ Control: "⌃", Alt: "⌥", Shift: "⇧", Super: "⌘" })[p] ?? p)
-    .join("");
-  return (
-    <section className="help-block">
-      <div className="help-blockhead">
-        <span className="eyebrow">Keyboard</span>
-        <button type="button" className="btn sm ghost" title="Show every keyboard shortcut" onClick={() => shortcutsOpen.set(true)}>
-          All shortcuts
-        </button>
-      </div>
-      {KEYS.filter(([t]) => wanted.includes(t)).map(([t, rows]) => (
-        <div key={t} className="help-keys">
-          {wanted.length > 1 && <div className="faint small">{t}</div>}
-          {rows.map(([k, what]) => (
-            <div key={k + what} className="help-key">
-              <span>{what}</span>
-              <span>
-                {k
-                  .replace("⌃⌥Space", capture)
-                  .split("  ")
-                  .map((x) => (
-                    <span key={x} className="kbd">
-                      {x}
-                    </span>
-                  ))}
-              </span>
-            </div>
-          ))}
-        </div>
-      ))}
-    </section>
-  );
-}
-
 function GuideList() {
   const s = useStore(settings);
   return (
     <section className="help-block">
-      <span className="eyebrow">Getting started</span>
+      <HelpText text="Each guide walks you through part of Brainstead a step at a time, with links that take you to the screen it's about while the help stays open." />
       <div className="help-guides">
         {GUIDES.map((g) => (
           <button
@@ -202,7 +165,7 @@ function Guide({ g, step }: { g: HelpTopic; step: number }) {
           onClick={() => {
             if (!last) return openHelp({ guide: g.id, step: at + 1 });
             settings.update({ helpGuides: { ...(settings.get().helpGuides ?? {}), [g.id]: true } });
-            openHelp({});
+            openHelp({ start: true });
           }}
         >
           {last ? "Done" : "Next"}
@@ -254,48 +217,33 @@ export function HelpDrawer() {
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, []);
-  useEffect(() => setQ(view?.q ?? ""), [view?.topic, view?.guide, view?.q]);
+  useEffect(() => setQ(view?.q ?? ""), [view?.topic, view?.guide, view?.start, view?.q]);
 
   if (!view) return null;
   const guide = view.guide ? GUIDES.find((g) => g.id === view.guide) : undefined;
   const topic = (view.topic && TOPICS.find((t) => t.id === view.topic)) || topicFor(p);
   const query = q.trim();
-  const title = guide ? guide.title : topic ? topic.title : "Help";
-  const first = topic ? openSection(topic, p) : undefined;
+  const title = guide ? guide.title : view.start ? "Getting started" : topic ? topic.title : "Help";
+  const first = topic?.id === "keyboard" ? (KEY_SECTION[p.screen] ?? "Anywhere") : topic ? openSection(topic, p) : undefined;
 
   let body: ReactNode;
   if (query) body = <Results q={query} />;
   else if (guide) body = <Guide g={guide} step={view.step ?? 0} />;
-  else
+  else if (view.start) body = <GuideList />;
+  else if (topic)
     body = (
-      <>
-        {topic && (
-          <section className="help-block">
-            {topic.intro && <HelpText text={topic.intro} />}
-            {topic.sections.map((s) => (
-              <Section key={`${topic.id}:${s.title}`} s={s} open={s.title === first} group={`help:${topic.id}`} />
-            ))}
-          </section>
-        )}
-        <GuideList />
-        <Keys screen={p.screen} />
-        <section className="help-block">
-          <span className="eyebrow">All topics</span>
-          <div className="help-topics">
-            {TOPICS.filter((t) => t.kind === "screen" && t.id !== topic?.id).map((t) => (
-              <button key={t.id} type="button" className="chip" title={t.summary} onClick={() => openHelp({ topic: t.id })}>
-                {t.title}
-              </button>
-            ))}
-          </div>
-        </section>
-      </>
+      <section className="help-block">
+        {topic.intro && <HelpText text={topic.intro} />}
+        {topic.sections.map((s) => (
+          <Section key={`${topic.id}:${s.title}`} s={s} open={s.title === first} group={`help:${topic.id}`} />
+        ))}
+      </section>
     );
 
   return (
     <aside className="help-drawer" role="complementary" aria-label="Help">
       <div className="help-head">
-        {(guide || view.topic) && (
+        {(guide || view.topic || view.start) && (
           <button
             type="button"
             className="ibtn"
@@ -316,6 +264,25 @@ export function HelpDrawer() {
       </div>
       {/* Esc closes the drawer, so it doesn't also clear the box. */}
       <SearchBox value={q} onChange={setQ} placeholder="Search the help" escAnywhere={false} />
+      <div className="help-nav">
+        <button
+          type="button"
+          className={`btn sm${guide || view.start ? " on" : ""}`}
+          title="Step-by-step guides to everything Brainstead does"
+          onClick={() => openHelp({ start: true })}
+        >
+          <Icon name="start" size={13} />
+          Getting started
+        </button>
+        <SearchPick
+          className="help-pick"
+          label="Help topic"
+          placeholder="All topics"
+          value={guide || view.start ? null : (topic?.id ?? null)}
+          items={TOPICS.filter((t) => t.kind === "screen").map((t) => ({ value: t.id, label: t.title, hint: t.summary }))}
+          onChange={(id) => openHelp({ topic: id })}
+        />
+      </div>
       <div className="help-body">{body}</div>
       <div className="help-foot">
         <button

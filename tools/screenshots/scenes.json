@@ -526,6 +526,26 @@
     }
   },
   {
+    "name": "help-start",
+    "screen": "today",
+    "help": {
+      "start": true
+    }
+  },
+  {
+    "name": "help-keys",
+    "screen": "doc",
+    "path": "Meeting. Orbit App Steerco - 2026-09-30.md",
+    "help": {
+      "topic": "keyboard"
+    }
+  },
+  {
+    "name": "guide-offer",
+    "screen": "today",
+    "guideOffer": true
+  },
+  {
     "name": "tray",
     "tray": true,
     "width": 720,

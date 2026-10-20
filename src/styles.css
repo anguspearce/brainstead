@@ -9148,6 +9148,14 @@ button.hc {
   margin: 0;
   font-size: 19px;
 }
+.help-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.help-nav .help-pick {
+  flex: 1;
+}
 .help-body {
   flex: 1;
   min-height: 0;
@@ -9168,11 +9176,6 @@ button.hc {
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-.help-blockhead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 .help-text {
   font-size: 13px;
@@ -9256,33 +9259,6 @@ button.hc {
 .help-guide-t {
   flex: 1;
   font-weight: 500;
-}
-.help-keys {
-  display: flex;
-  flex-direction: column;
-}
-.help-key {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 3px 0;
-  font-size: 12.5px;
-  color: var(--ink2);
-}
-.help-key .kbd + .kbd {
-  margin-left: 4px;
-}
-.help-topics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.help-topics .chip {
-  cursor: pointer;
-  border: 1px solid var(--line);
-  font: inherit;
-  font-size: 11.5px;
 }
 .help-guidebox {
   display: flex;

@@ -112,6 +112,8 @@ import { DOC_ACCENTS, DOC_STYLES, docDefaults, lookOf, withOwnLook } from "./doc
 import { loadVoices, speechSettingsChanged, voiceLabel, voices } from "./speech/player";
 import { applyReadSize, applyTheme, READ_SIZE, settings } from "./store";
 import { imageView } from "./ImageViewer";
+import { TOPICS } from "./help";
+import { HelpView, openHelp } from "./help/HelpDrawer";
 import { IMAGE_EXT } from "./md/wikilinks";
 import { nav, place, Screen, SettingsPane } from "./nav";
 import { focusMode } from "./focus";
@@ -3101,6 +3103,7 @@ const SETTINGS: SettingRow[] = [
   ["openAtLogin", "General", "Open at login", "bool", false],
   ["menuBar", "General", "Show in the menu bar", "bool", true],
   ["menuBarOnly", "General", "Only in the menu bar when the window is closed", "bool", false],
+  ["offerGuide", "General", "Offer Getting started when Brainstead opens", "bool", true],
   ["captureShortcut", "General", "Quick capture shortcut (as Control+Alt+Space)", "shortcut", "Control+Alt+Space"],
   ["spellCheck", "Notes", "Check spelling", "bool", true],
   ["grammarCheck", "Notes", "Check grammar", "bool", true],
@@ -3427,6 +3430,15 @@ const SCREEN_IDS: Record<string, Screen> = {
 /** The screens that open on a file of their own, and the argument that names it (as their tools name it). */
 const SCREEN_FILE: Partial<Record<Screen, string>> = { meeting: "transcript", reply: "thread", doccheck: "document" };
 
+/** open's help: getting-started (the list of guides), a guide (at its first step) or a topic, by id or title. */
+function helpView(want: string): { view: HelpView; title: string } {
+  const w = want.toLowerCase();
+  if (w === "getting-started" || w === "getting started") return { view: { start: true }, title: "Getting started" };
+  const t = TOPICS.find((x) => x.id === w || x.title.toLowerCase() === w);
+  if (!t) throw new Error(`There's no help topic ${want}. The help tool lists them; getting-started opens the list of guides.`);
+  return { view: t.kind === "guide" ? { guide: t.id, step: 0 } : { topic: t.id }, title: t.title };
+}
+
 /** open: the window to the front, on a screen, a Settings pane, a note or a search; or an image
  *  full size over it, as a click on one in a note shows it. */
 async function openApp(a: Args): Promise<string> {
@@ -3465,6 +3477,9 @@ async function openApp(a: Args): Promise<string> {
   const focus = typeof a.focus === "boolean" ? a.focus : undefined;
   if (focus && (path ? screen === "graph" : screen || place.get().place.screen !== "doc"))
     throw new Error("Focus mode shows a note, wiki page or source: give page, or open one first.");
+  // The help drawer beside the screen, as ? and its Getting started button and topic picker open it.
+  const helpArg = str(a, "help")?.trim();
+  const help = helpArg ? helpView(helpArg) : null;
   await invoke("main_show", { screen: null });
   const lines = (Array.isArray(a.lines) ? a.lines : []).map((l) => String(l).trim()).filter(Boolean);
   // Graph with a page opens around it, as a note's Graph button (openGraph) does.
@@ -3478,7 +3493,11 @@ async function openApp(a: Args): Promise<string> {
   else if (screen && file) nav.go({ screen, path: file });
   else if (screen) nav.go(screen);
   if (focus !== undefined) focusMode.set(focus);
+  if (help) openHelp(help.view);
   const how = focus ? " in focus mode" : "";
+  if (help && !path && !screen) return `Brainstead shows the help: ${help.title}.`;
+  if (help)
+    return `Brainstead is open${path ? ` on ${pageName(path)}` : name ? ` on ${name.replace(/_/g, " ")}` : ""}, with the help: ${help.title}.`;
   if (path && screen === "graph") return `Brainstead is open on Graph, around ${pageName(path)}.`;
   if (path) return `Brainstead is open on ${pageName(path)}${a.edit === true ? " in Edit" : ""}${how}.`;
   if (focus !== undefined)
