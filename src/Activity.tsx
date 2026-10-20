@@ -440,9 +440,9 @@ function LogTable({
     <div className={`actlog ${perDay ? "banded" : ""}`} role="table" aria-label="The vault's log">
       <div className="ar tb-head" role="row">
         <span role="columnheader">{perDay ? "Time" : "When"}</span>
-        <span role="columnheader">Action</span>
+        <span role="columnheader">Item</span>
         <span role="columnheader" className="itemh">
-          Item
+          Action
           <span className="count">{count}</span>
         </span>
       </div>
@@ -540,9 +540,6 @@ const LogRow = memo(function LogRow({
         )}
         {e.time && <span className="faint tnum">{e.time}</span>}
       </span>
-      <span>
-        <span className="chip">{actionLabel(e.action)}</span>
-      </span>
       <span className="item" title={e.description ? fieldsAsWords(e.description) : undefined}>
         {path ? (
           <button type="button" className="linkish strong" title={`Open ${path}`} onClick={() => openDoc(path)}>
@@ -559,6 +556,9 @@ const LogRow = memo(function LogRow({
             <FieldText text={first.replace(/^[-*]\s+/, "")} q={q} />
           </span>
         )}
+      </span>
+      <span>
+        <span className="chip">{actionLabel(e.action)}</span>
       </span>
     </div>
   );

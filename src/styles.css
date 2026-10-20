@@ -8517,7 +8517,7 @@ button.hc {
 }
 .actlog .ar {
   display: grid;
-  grid-template-columns: 150px 120px minmax(0, 1fr);
+  grid-template-columns: 150px minmax(0, 1fr) 120px;
   gap: 14px;
   align-items: center;
   padding: 0 16px;
@@ -8525,13 +8525,13 @@ button.hc {
   font-size: 12.5px;
 }
 .actlog.banded .ar {
-  grid-template-columns: 64px 120px minmax(0, 1fr);
+  grid-template-columns: 64px minmax(0, 1fr) 120px;
 }
 .actlog .ar.tb-head {
   min-height: 0;
 }
 
-/* The Item header, with the count of entries shown on its right. */
+/* The last header (Action), with the count of entries shown on its right. */
 .actlog .itemh {
   display: flex;
   align-items: baseline;
