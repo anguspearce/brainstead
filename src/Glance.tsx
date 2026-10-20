@@ -6,15 +6,13 @@
 // most others link to. Activity shows the notes' and the most linked, in a column right of the log;
 // Knowledge health the wiki's, in its side column.
 // A slice, or its row in the legend, opens the list it counts: Notes or the Wiki filtered to that
-// type, the Wiki at that tag, or a search for a note tag. Five slices at most, then Other, so the
-// colours (--pie-1…4 and the graph's purple, --pie-6) stay telling apart.
+// type, the Wiki at that tag, or a search for a note tag. Five slices at most, then Other; each in
+// its type's or tag's own colour (src/tones.ts), as a type pill's dot and the Graph show it.
 
-import { useEffect, useState } from "react";
-import { api, Count, Glance } from "./api";
-import { WIKI_TYPE_TONE } from "./graphModel";
+import type { Count, Glance } from "./api";
+import { tonesOf, useGlance } from "./typeTone";
 import { nav, openDoc } from "./nav";
-import { useVaultVersion } from "./state";
-import { fmtCount } from "./ui";
+import { fmtCount, LayerTag } from "./ui";
 
 export interface Slice {
   key: string;
@@ -23,7 +21,7 @@ export interface Slice {
   /** What a click on it does; none for Other when it isn't a list of its own. */
   open?: () => void;
   tip: string;
-  /** Its colour (`p1`…`p5`), when the slice's colour is fixed rather than by rank. */
+  /** Its colour (`p1`…`p6`, src/tones.ts): the type's or tag's own, as everywhere else. */
   tone?: string;
 }
 
@@ -40,33 +38,12 @@ export function fold(counts: Count[], other: (n: number, rest: number) => Omit<S
   return { top, other: o ? { ...o, key: "other", n: restN } : null };
 }
 
-export function useGlance(): Glance | null {
-  const v = useVaultVersion();
-  const [g, setG] = useState<Glance | null>(null);
-  useEffect(() => {
-    let live = true;
-    void api
-      .glance()
-      .then((x) => live && setG(x))
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, [v]);
-  return g;
-}
+export { useGlance };
 
 const pct = (n: number, total: number) => (total ? `${Math.round((n / total) * 100)}%` : "");
 
 /** A donut with a gap between slices, the total in the middle, and a legend that names every
  *  slice with its count, so a colour never carries the meaning alone. */
-/** Wiki page types with their fixed colours (the graph's), the rest taking the colours left over. */
-function wikiTones<T extends { name: string }>(top: T[]): (T & { tone: string })[] {
-  const fixed = new Set(top.map((c) => WIKI_TYPE_TONE[c.name]).filter(Boolean));
-  const spare = ["p4", "p5", "p1", "p2", "p3"].filter((t) => !fixed.has(t));
-  return top.map((c) => ({ ...c, tone: WIKI_TYPE_TONE[c.name] ?? spare.shift() ?? "p5" }));
-}
-
 export function Pie({ title, slices, unit }: { title: string; slices: Slice[]; unit: [string, string] }) {
   const total = slices.reduce((n, s) => n + s.n, 0);
   const R = 44;
@@ -159,6 +136,7 @@ export function VaultGlance({ g }: { g: Glance }) {
         slices={[
           ...types.top.map((c) => ({
             key: c.name,
+            tone: tonesOf(g).noteType.get(c.name.toLowerCase()),
             label: c.name,
             n: c.n,
             tip: `${fmtCount(c.n)} ${c.n === 1 ? "note" : "notes"} of type ${c.name}: show them`,
@@ -173,6 +151,7 @@ export function VaultGlance({ g }: { g: Glance }) {
         slices={[
           ...tags.top.map((c) => ({
             key: c.name,
+            tone: tonesOf(g).tag.get(c.name.toLowerCase()),
             label: `#${c.name}`,
             n: c.n,
             tip: `${fmtCount(c.n)} ${c.n === 1 ? "note" : "notes"} tagged #${c.name}: search for them`,
@@ -194,7 +173,7 @@ function MostLinked({ rows }: { rows: Glance["mostLinked"] }) {
       <ol>
         {rows.map((r) => (
           <li key={r.path}>
-            <span className={`lb ${r.layer}`} />
+            <LayerTag layer={r.layer} />
             <button type="button" className="blink grow ell" title={`Open ${r.title}`} onClick={() => openDoc(r.path)}>
               {r.title}
             </button>
@@ -225,9 +204,9 @@ export function WikiGlance({ g }: { g: Glance }) {
         title="Wiki pages by type"
         unit={["page", "pages"]}
         slices={[
-          ...wikiTones(types.top).map((c) => ({
+          ...types.top.map((c) => ({
             key: c.name,
-            tone: c.tone,
+            tone: tonesOf(g).wikiType.get(c.name.toLowerCase()),
             label: c.name,
             n: c.n,
             tip: `${fmtCount(c.n)} ${c.n === 1 ? "page" : "pages"} of type ${c.name}: show them`,
@@ -242,6 +221,7 @@ export function WikiGlance({ g }: { g: Glance }) {
         slices={[
           ...tags.top.map((c) => ({
             key: c.name,
+            tone: tonesOf(g).tag.get(c.name.toLowerCase()),
             label: `#${c.name}`,
             n: c.n,
             tip: `${fmtCount(c.n)} ${c.n === 1 ? "page" : "pages"} tagged #${c.name}: show them`,

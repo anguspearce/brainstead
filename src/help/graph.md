@@ -23,13 +23,14 @@ An assistant can read the same neighbourhood around a page, leaving out kinds yo
 A large neighbourhood is cut to the nearest 400 pages, and the line under the graph says so.
 
 ## Read the colours
-Each kind of page has its own colour, the same as on Knowledge health:
+Each kind of page has the colour it has everywhere else in Brainstead. A wiki type is the colour of its type pill's dot and its slice on the Knowledge health pie; notes, sources and other wiki pages are the colour of their square (Note, Source, Wiki):
 
-- Entities: blue.
-- Concepts: green.
-- Other wiki pages: amber.
-- Sources and summaries: orange.
-- Notes: purple.
+- Entities: sky blue.
+- Concepts: olive green.
+- Summaries: coral.
+- Other wiki pages: teal, as Wiki's square.
+- Sources: brown, as Source's square.
+- Notes: blue, as Note's square.
 
 The chips at the top left name them. A grey ring is a page that's linked to but not written yet. A bubble's size is how many links it has across the vault.
 

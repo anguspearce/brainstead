@@ -15,7 +15,7 @@ import { ingestable } from "./Lists";
 import { openDoc } from "./nav";
 import { trashFile } from "./notes/actions";
 import { useVaultVersion } from "./state";
-import { fmtBytes } from "./ui";
+import { fmtBytes, LayerTag } from "./ui";
 import { plainText } from "./md/plainText";
 
 /** A citing passage as the card quotes it: plain text, without its links to the source or its
@@ -85,7 +85,10 @@ export function ProvenanceCard({ file }: { file: FileSummary }) {
       {p.citers.map((c) => (
         <div key={c.path} className="provciter">
           <button type="button" className="blink" title={`Open ${c.title}`} onClick={() => openDoc(c.path)}>
-            <span className="lb wiki">{c.title}</span>
+            <span className="lbt">
+              <LayerTag layer="wiki" />
+              <span className="ell">{c.title}</span>
+            </span>
             <span className="faint">
               {c.passages.length ? `${c.passages.length} passage${c.passages.length === 1 ? "" : "s"}` : "in its sources"}
             </span>

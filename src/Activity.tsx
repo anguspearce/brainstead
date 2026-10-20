@@ -8,14 +8,13 @@
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ActivityDay, api, FileSummary, LogEntry } from "./api";
-import { LAYER_LABEL } from "./Doc";
 import { Icon } from "./icons";
 import { fieldIcon, fieldsAsWords, fieldTip, splitTaskFields } from "./taskFields";
 import { openDoc, useViewState } from "./nav";
 import { useVaultVersion } from "./state";
 import { useGlance, VaultGlance } from "./Glance";
 import { TopBar } from "./TopBar";
-import { fmtCount, SearchBox, Seg, TableBand, useDebounced } from "./ui";
+import { fmtCount, LayerTag, SearchBox, Seg, TableBand, useDebounced } from "./ui";
 import { settings, useStore } from "./store";
 import { actionLabel, actionsIn, buildGrid, cellTip, filterLog, fmtDate, iso, linkTarget, marks, rankLog } from "./activityModel";
 
@@ -365,7 +364,7 @@ function DayFiles({ day, onClear }: { day: string; onClear: () => void }) {
         <div className="actfiles">
           {files.map((f) => (
             <button key={f.path} type="button" className="actfile" onClick={() => openDoc(f.path)} title={f.path}>
-              <span className={`lb ${f.layer}`}>{LAYER_LABEL[f.layer]}</span>
+              <LayerTag layer={f.layer} />
               <span className="t">{f.title}</span>
               <span className="faint tnum">{new Date(f.mtime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span>
             </button>

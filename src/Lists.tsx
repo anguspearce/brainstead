@@ -26,6 +26,7 @@ import { useDraftPaths } from "./drafts";
 import { IMAGE_EXT } from "./md/wikilinks";
 import { TopBar } from "./TopBar";
 import { Dialog, fmtBytes, fmtCount, Popover, Seg } from "./ui";
+import { TypeDot, TypePill } from "./typeTone";
 
 function useFiles<T = FileSummary>(load: () => Promise<T[]>): T[] | null {
   const [rows, setRows] = useState<T[] | null>(null);
@@ -71,7 +72,13 @@ const titleCol = <T extends FileSummary>(drafts?: Set<string>): Column<T> => ({
     </div>
   ),
 });
-const dateCol = <T extends FileSummary>(): Column<T> => ({ key: "date", label: "Date", width: "0 0 96px", value: (r) => r.date });
+const dateCol = <T extends FileSummary>(): Column<T> => ({
+  key: "date",
+  label: "Date",
+  width: "0 0 96px",
+  value: (r) => r.date,
+  render: (r) => <span className="faint">{r.date ?? "—"}</span>,
+});
 const modCol = <T extends FileSummary>(): Column<T> => ({
   key: "mtime",
   label: "Modified",
@@ -120,14 +127,14 @@ export function NotesScreen() {
     return rows.filter((r) => (type === "other" ? !r.type || !named.has(r.type) : r.type === type));
   }, [rows, type, chips]);
   const columns: Column<FileSummary>[] = [
+    titleCol(drafts),
     {
       key: "type",
       label: "Type",
       width: "0 0 110px",
       value: (r) => r.type,
-      render: (r) => (r.type ? <span className="chip">{r.type}</span> : <span className="faint">—</span>),
+      render: (r) => (r.type ? <TypePill type={r.type} /> : <span className="faint">—</span>),
     },
-    titleCol(drafts),
     dateCol(),
     modCol(),
     sizeCol(),
@@ -178,6 +185,7 @@ export function NotesScreen() {
                   }
                   onClick={() => setType(type === t ? null : t)}
                 >
+                  {t !== "other" && <TypeDot type={t} />}
                   {t === "other" ? "Other" : t} <span className="faint">{fmtCount(n)}</span>
                 </button>
               ))}
@@ -289,7 +297,7 @@ export function wikiHealth(path: string, heldPages: Set<string>, report: LintRep
 }
 
 const HEALTH_CHIP = {
-  held: ["Held", "acc", "Held: a change to this page waits in Changes for you to accept or reject"],
+  held: ["Held", "amber", "Held: a change to this page waits in Changes for you to accept or reject"],
   stale: ["Stale", "amber", "Stale: a source changed after this page was written, or Knowledge health flags it as out of date"],
   issue: [
     "Check",
@@ -350,7 +358,7 @@ export function WikiScreen() {
       label: "Type",
       width: "0 0 110px",
       value: (r) => r.type,
-      render: (r) => (r.type ? <span className="chip">{r.type}</span> : <span className="faint">—</span>),
+      render: (r) => (r.type ? <TypePill type={r.type} wiki /> : <span className="faint">—</span>),
     },
     {
       key: "sources",
@@ -379,7 +387,15 @@ export function WikiScreen() {
       label: "Tags",
       width: "2",
       value: (r) => r.tags.join(" "),
-      render: (r) => <span className="faint ell">{r.tags.map((t) => `#${t}`).join(" ")}</span>,
+      render: (r) => (
+        <span className="chips ell">
+          {r.tags.map((t) => (
+            <span key={t} className="chip">
+              #{t}
+            </span>
+          ))}
+        </span>
+      ),
     },
     modCol(),
   ];
@@ -458,6 +474,7 @@ export function WikiScreen() {
                   }
                   onClick={() => setType(type === t ? null : t)}
                 >
+                  {t !== "other" && <TypeDot type={t} wiki />}
                   {t === "other" ? "Other" : t} <span className="faint">{fmtCount(n)}</span>
                 </button>
               ))}

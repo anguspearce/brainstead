@@ -14,7 +14,8 @@ import { nav, openDoc, place, useViewState } from "./nav";
 import { useVaultVersion } from "./state";
 import { useStore } from "./store";
 import { askLink, askQuote, TopBar } from "./TopBar";
-import { fmtCount, Popover, SearchBox, Seg } from "./ui";
+import { fmtCount, LayerTag, Popover, SearchBox, Seg } from "./ui";
+import { TypeDot } from "./typeTone";
 import { KIND_COLOUR, KINDS, Kind, kindLabel, kindOf, kindsIn, labelled, neighbours, pick, radius, visible } from "./graphModel";
 
 type Mode = "around" | "wiki";
@@ -232,7 +233,10 @@ function GraphPane({
   return (
     <aside className="gpane">
       <div>
-        <span className="chip">{kindLabel(focus)}</span>
+        <span className="chip">
+          <TypeDot colour={ghost ? "transparent" : `var(${KIND_COLOUR[kindOf(focus)]})`} />
+          {kindLabel(focus)}
+        </span>
         <h2 className="h2">{focus.title}</h2>
         <div className="faint">
           {fmtCount(focus.degree)} {focus.degree === 1 ? "link" : "links"} in the vault{!ghost && ` · ${focus.id}`}
@@ -290,7 +294,7 @@ function CentrePicker({ onPick }: { onPick: (path: string) => void }) {
           <div className="menu">
             {hits.map((f) => (
               <button key={f.path} type="button" title={`Centre the graph on ${f.title}`} onClick={() => choose(f.path)}>
-                <span className={`lb ${f.layer}`} />
+                <LayerTag layer={f.layer} />
                 <span className="gpick-t">{f.title}</span>
               </button>
             ))}

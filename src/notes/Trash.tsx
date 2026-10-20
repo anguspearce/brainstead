@@ -14,7 +14,7 @@ import { useVaultVersion } from "../state";
 import { reportEditError } from "../taskModel";
 import { toast } from "../Toast";
 import { TopBar } from "../TopBar";
-import { ago, Dialog, fmtBytes, SearchBox, Seg } from "../ui";
+import { ago, Dialog, fmtBytes, LayerTag, SearchBox, Seg } from "../ui";
 import { errText } from "./actions";
 import { folderOf } from "./filename";
 
@@ -213,8 +213,8 @@ export function TrashScreen() {
               >
                 {allOn && <Icon name="check" size={11} />}
               </button>
-              <span>Type</span>
               <span>Name</span>
+              <span>Type</span>
               <span>Was in</span>
               <span>Deleted</span>
               <span className="r">Size</span>
@@ -237,7 +237,6 @@ export function TrashScreen() {
                   >
                     {on && <Icon name="check" size={11} />}
                   </button>
-                  <span className={`lb ${r.layer}`}>{LABEL[r.layer] ?? r.layer}</span>
                   <div className="ell">
                     <div className="ell trname">{r.basename.replace(/\.md$/i, "")}</div>
                     {stuck && (
@@ -247,6 +246,9 @@ export function TrashScreen() {
                       </div>
                     )}
                   </div>
+                  <span>
+                    <LayerTag layer={r.layer} />
+                  </span>
                   <span className="mono faint ell">{folderOf(r.originalRel) || "/"}</span>
                   <span className="faint" title={ago(new Date(r.deletedAt).getTime())}>
                     {deletedWhen(r.deletedAt)}

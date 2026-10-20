@@ -13,6 +13,7 @@ import { openDoc } from "../nav";
 import { useVaultVersion } from "../state";
 import { useStore } from "../store";
 import { retryTasks, tasksFailed, toggleTask, useAllTasks } from "../taskModel";
+import { LayerTag } from "../ui";
 
 /** The note's headings, outside code blocks and frontmatter, as (level, text). */
 export function outline(md: string): [number, string][] {
@@ -147,7 +148,10 @@ export function LastTimeCard({ path }: { path: string }) {
       <div className="eyebrow">Last time with {name}</div>
       {before ? (
         <button type="button" className="blink" title={`Open the previous 1-1 with ${name}`} onClick={() => openDoc(before.path)}>
-          <span className="lb note">{before.title}</span>
+          <span className="lbt">
+            <LayerTag layer="note" />
+            <span className="ell">{before.title}</span>
+          </span>
         </button>
       ) : (
         <p className="faint small">The first 1-1 with {name} here.</p>

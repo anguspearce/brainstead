@@ -21,7 +21,7 @@ import { InfoTip, TaskEditor, taskKey, TaskList, TasksFailed, useTaskListKeys } 
 import { taskDate } from "./taskDates";
 import { tasksFailed, useAllTasks, viewRows, VIEWS, ViewId } from "./taskModel";
 import { askLink, askQuote, TopBar } from "./TopBar";
-import { fmtCount, Popover, SearchBox, Seg, TableBand, useDebounced } from "./ui";
+import { fmtCount, Popover, SearchBox, Seg, TableBand, useDebounced, usePinnedBar } from "./ui";
 import { settings, useStore } from "./store";
 import type { SavedTaskList } from "./api";
 
@@ -108,6 +108,7 @@ export function TasksScreen() {
   // A new task takes the list's tag and context, so it shows where you are; with none it goes to the Inbox.
   const adds = [view.adds, ctx && `#context/${ctx}`].filter(Boolean).join(" ");
   const search = useRef<HTMLInputElement>(null);
+  const pinned = usePinnedBar();
   useTaskListKeys(search);
   return (
     <main className="main">
@@ -204,7 +205,7 @@ export function TasksScreen() {
             <div className="tempty faint">Loading…</div>
           ) : (
             <>
-              <div className="tfilters" role="group" aria-label="Filter">
+              <div className="tfilters" role="group" aria-label="Filter" ref={pinned}>
                 <SearchBox
                   value={q}
                   onChange={setQ}

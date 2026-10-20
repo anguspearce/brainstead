@@ -45,12 +45,16 @@
   --l-wiki: #0d7f74;
   --l-source: #9a5600;
   --l-journal: #b5386f;
-  --pie-1: #2a78d6;
-  --pie-2: #eb6834;
-  --pie-3: #1baf7a;
-  --pie-4: #eda100;
-  --pie-6: #8b5cf6;
+
+  /* Types and tags (src/tones.ts): six tones kept apart from the layers' colours above. */
+  --pie-1: #7a5af0;
+  --pie-2: #e2553f;
+  --pie-3: #6b9a1c;
+  --pie-4: #cc9200;
+  --pie-5: #1c93c6;
+  --pie-6: #b345c9;
   --pie-other: #b3bac5;
+  --code-name: #8b5cf6;
   --pop: 0 1px 2px rgb(15 20 30 / 6%), 0 12px 40px rgb(15 20 30 / 14%);
   --scrim: rgb(20 18 15 / 28%);
   --sans: "Geist Variable", -apple-system, "SF Pro Text", system-ui, sans-serif;
@@ -66,12 +70,14 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --ground: #16181c;
-    --pie-1: #3987e5;
-    --pie-2: #d95926;
-    --pie-3: #199e70;
-    --pie-4: #c98500;
-    --pie-6: #9a78f0;
+    --pie-1: #9a83f5;
+    --pie-2: #f07360;
+    --pie-3: #9cc54a;
+    --pie-4: #e3b03c;
+    --pie-5: #4db5e0;
+    --pie-6: #cf7be0;
     --pie-other: #59616d;
+    --code-name: #9a78f0;
     --side: #1b1e23;
     --surface: #1f2228;
     --sunk: #1a1d21;
@@ -118,12 +124,14 @@
   color-scheme: dark;
 
   --ground: #16181c;
-  --pie-1: #3987e5;
-  --pie-2: #d95926;
-  --pie-3: #199e70;
-  --pie-4: #c98500;
-  --pie-6: #9a78f0;
+  --pie-1: #9a83f5;
+  --pie-2: #f07360;
+  --pie-3: #9cc54a;
+  --pie-4: #e3b03c;
+  --pie-5: #4db5e0;
+  --pie-6: #cf7be0;
   --pie-other: #59616d;
+  --code-name: #9a78f0;
   --side: #1b1e23;
   --surface: #1f2228;
   --sunk: #1a1d21;
@@ -676,14 +684,14 @@ input {
 .btn.ghost:hover {
   background: var(--hover);
 }
+
+/* Every button is the standard 28px high; sm and lg only change the padding and the text. */
 .btn.sm {
-  height: 24px;
   padding: 0 8px;
   font-size: 12px;
   border-radius: 6px;
 }
 .btn.lg {
-  height: 34px;
   padding: 0 14px;
   font-size: 13.5px;
   border-radius: 8px;
@@ -734,6 +742,15 @@ input {
   border: 1px solid var(--line);
   white-space: nowrap;
 }
+
+/* A type's colour dot, in its pill or filter (TypeDot in src/ui.tsx). */
+.tdot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+
 .seg {
   display: inline-flex;
   padding: 2px;
@@ -1482,9 +1499,6 @@ mark.search-hit {
 .sbar .seg {
   align-self: center;
 }
-.sbar select.sel {
-  height: 30px;
-}
 .inp.lg {
   height: 40px;
   font-size: 15px;
@@ -1963,7 +1977,7 @@ details.callout[open] .callout-chev {
 .hljs-title,
 .hljs-section,
 .hljs-name {
-  color: var(--pie-6);
+  color: var(--code-name);
 }
 
 /* task query blocks */
@@ -2373,6 +2387,14 @@ details.callout[open] .callout-chev {
   color: inherit;
 }
 
+/* An Inbox item's #tags, after its words, as a task row shows them. */
+.itag {
+  margin-left: 6px;
+  color: var(--ink3);
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
 /* Always there, muted until the row is hovered or selected, so the menu can be found. */
 .trow .tmore {
   opacity: 0.45;
@@ -2429,9 +2451,15 @@ details.callout[open] .callout-chev {
 }
 
 /* The Tasks screen's list is a table: no header, a band per group, flat rows with dividers. */
+
+/* The search and filters stay at the top while the list scrolls; the bands stick under them. */
 .tpage .tfilters {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   margin: 0;
   padding: 12px 16px;
+  background: var(--ground);
   border-bottom: 1px solid var(--line);
 }
 .tlist.table {
@@ -2634,7 +2662,13 @@ details.callout[open] .callout-chev {
 .todaytable .tb-group.red .tb-band > :first-child {
   color: var(--red);
 }
+
+/* Today's context filter stays at the top while the page scrolls (above the body's 28px padding). */
 .tctx {
+  position: sticky;
+  top: -28px;
+  z-index: 3;
+  background: var(--ground);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -2771,10 +2805,9 @@ details.callout[open] .callout-chev {
 button.rrow.rlink:hover {
   background: var(--hover);
 }
-.rrow .lb {
+.rrow .lbt {
   flex: 0 1 auto;
-  max-width: 40%;
-  min-width: 0;
+  max-width: 45%;
 }
 .draftrow .rlink {
   display: flex;
@@ -3016,14 +3049,26 @@ html.capture-view body {
 }
 
 /* Long titles in side cards wrap rather than widening the card (and the page). */
-.blink .lb,
-.side-card .lb {
-  white-space: normal;
-  overflow-wrap: anywhere;
-  align-items: flex-start;
+
+/* A file's name with its layer after it (LayerTag in src/ui.tsx). */
+.lbt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ink);
+  font-weight: 500;
 }
-.blink .lb::before {
-  margin-top: 4px;
+.lbt .ell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lbt .lb,
+.hqi .lb,
+.menu .lb {
+  flex: none;
 }
 
 /* Scrollbars in the theme's colours: thin, a rounded thumb, no track. */
@@ -3278,9 +3323,12 @@ button.rnhead {
 }
 
 /* Trash */
+
+/* The search box, the selection bar and the footer stay put; only the list scrolls. */
 .body.trash {
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 .trsel {
   display: flex;
@@ -3295,10 +3343,14 @@ button.rnhead {
 }
 .trlist {
   --tb-head: 34px;
+
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 .trrow {
   display: grid;
-  grid-template-columns: 28px 90px minmax(0, 1fr) minmax(120px, 220px) 110px 72px 190px;
+  grid-template-columns: 28px minmax(0, 1fr) 90px minmax(120px, 220px) 110px 72px 190px;
   align-items: center;
   gap: 12px;
   min-height: 50px;
@@ -5234,7 +5286,7 @@ button.rnhead {
 }
 .cm-tp-code .tok-propertyName,
 .cm-tp-code .tok-definition {
-  color: var(--pie-6);
+  color: var(--code-name);
 }
 .cm-tp-comment {
   font-family: var(--mono);
@@ -6489,6 +6541,19 @@ select.sel {
   font-size: 12.5px;
   color: var(--ink2);
   min-width: 0;
+}
+
+/* A done task's context and effort in grey words, as task rows show them. */
+.pdone .chip {
+  height: auto;
+  padding: 0;
+  gap: 4px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-size: inherit;
+  font-weight: 400;
+  color: var(--ink3);
 }
 
 /* Inbox */
@@ -8532,7 +8597,6 @@ button.hc {
 
 /* Tasks: the effort select, New task */
 .tfilters select.sel.sm {
-  height: 22px;
   font-size: 11.5px;
 }
 .newtask {
@@ -9609,7 +9673,7 @@ html.tray-view body {
   transition: width 0.2s linear;
 }
 .playerspeed {
-  height: 26px;
+  height: 28px;
   padding: 0 10px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -9756,6 +9820,10 @@ html.tray-view body {
   background: var(--pie-4);
 }
 .pie .p5 {
+  stroke: var(--pie-5);
+  background: var(--pie-5);
+}
+.pie .p6 {
   stroke: var(--pie-6);
   background: var(--pie-6);
 }

@@ -93,7 +93,7 @@ The contradictions check groups claims about the same thing on the pages that ch
 
 <a href="images/index.md#the-wiki-and-sources"><picture><source media="(prefers-color-scheme: dark)" srcset="images/graph-dark.png"><img alt="The graph: a wiki page at the centre with the pages around it, coloured by type" src="images/graph-light.png"></picture></a>
 
-The **Graph** draws how pages link: a page's neighbourhood, or the whole wiki. Entities are blue, sources and summaries orange, concepts green, notes purple, as on the Wiki's pie chart.
+The **Graph** draws how pages link: a page's neighbourhood, or the whole wiki. Each kind keeps the colour it has everywhere else: a wiki type (entities sky blue, concepts olive, summaries coral) the colour of its type pill's dot and its pie slice, and notes, sources and other wiki pages the colour of their Note, Source and Wiki squares. Any other note or wiki type, and every tag, has a colour of its own worked out from its name, so it's the same on every pill and pie.
 
 ## Meeting notes and the other tools
 

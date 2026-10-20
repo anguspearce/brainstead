@@ -305,7 +305,7 @@ function PdfView({ url }: { url: string }) {
               title={`Go to page ${p}`}
               onClick={() => go(p)}
             >
-              <span className="lb source">Page {p}</span>
+              <span className="lbt">Page {p}</span>
               <span className="faint">{snippet(p)}</span>
             </button>
           ))}

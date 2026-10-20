@@ -18,6 +18,7 @@ import { toast } from "./Toast";
 import { TopBar } from "./TopBar";
 import { DocButton, useGone } from "./docButton";
 import { ASSISTANT_FRONTMATTER } from "./md/scripts";
+import { LayerTag } from "./ui";
 
 /** How a clash's verdict reads, and its tone. */
 export function verdictLabel(it: ContradictionItem): [string, string] {
@@ -207,7 +208,10 @@ export function ContradictionsScreen() {
                   onClick={() => setSel(it.id)}
                 >
                   <span className="qtop">
-                    <span className="lb wiki">{it.subject}</span>
+                    <span className="lbt">
+                      <LayerTag layer="wiki" />
+                      <span className="ell">{it.subject}</span>
+                    </span>
                     <span className={`chip sm ${tone}`}>{label}</span>
                   </span>
                   <span className="tt">{it.attribute.replace(/^other:/, "").replace(/_/g, " ")}</span>

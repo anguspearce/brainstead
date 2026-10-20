@@ -54,13 +54,13 @@ import { FindBar } from "./notes/FindBar";
 import { lineDiff } from "./notes/lineDiff";
 import { plainText } from "./md/plainText";
 import { LastTimeCard, NoteTasksCard, OutlineCard } from "./notes/SideCards";
-import { ago, Dialog, Popover, Seg, useDebounced } from "./ui";
+import { ago, Dialog, LAYER_LABEL, LayerTag, Popover, Seg, useDebounced } from "./ui";
+import { TypePill } from "./typeTone";
 import { scriptsAllowed } from "./md/scripts";
 import { getList, getScalar } from "./wiki/props";
 import { FactsCard, SourcesCard, WikiFields } from "./wiki/WikiFields";
 import { iconizeEmoji } from "./md/fieldEmoji";
 
-export const LAYER_LABEL: Record<string, string> = { note: "Note", wiki: "Wiki", source: "Source", template: "Template" };
 const isMarkdown = (p: string) => /\.(md|txt)$/i.test(p);
 const editable = (s: FileSummary) => isMarkdown(s.path) && s.layer !== "source";
 
@@ -720,8 +720,8 @@ export function DocScreen() {
               <header className="dochead">
                 {!focus && (
                   <div className="docmeta" data-no-print>
-                    <span className={`lb ${s.layer}`}>{LAYER_LABEL[s.layer]}</span>
-                    {s.type && <span className="chip">{s.type}</span>}
+                    <LayerTag layer={s.layer} />
+                    {s.type && <TypePill type={s.type} wiki={s.layer === "wiki"} />}
                     {s.date && <span className="faint">{s.date}</span>}
                     <span className="faint mono ell docpath" title={s.path}>
                       {s.path}
@@ -1196,7 +1196,10 @@ function Backlinks({ doc, onFold }: { doc: Doc; onFold: () => void }) {
       {b.length === 0 && <p className="faint">Nothing links here yet.</p>}
       {b.map((l) => (
         <button key={l.path} type="button" className="blink" title={`Open ${l.title}`} onClick={() => openDoc(l.path)}>
-          <span className={`lb ${l.layer}`}>{l.title}</span>
+          <span className="lbt">
+            <LayerTag layer={l.layer} />
+            <span className="ell">{l.title}</span>
+          </span>
           {l.context && <span className="faint">{iconizeEmoji(plainText(l.context))}</span>}
         </button>
       ))}
@@ -1240,7 +1243,7 @@ function Properties({ doc }: { doc: Doc }) {
             {k}
           </dt>
           <dd>
-            <PropValue v={v} />
+            <PropValue v={v} tags={k === "tags"} />
           </dd>
         </div>
       ))}
@@ -1248,7 +1251,8 @@ function Properties({ doc }: { doc: Doc }) {
   );
 }
 
-function PropValue({ v }: { v: unknown }) {
+/** `tags`: the tags property, each shown with its #, as tags are everywhere else. */
+function PropValue({ v, tags }: { v: unknown; tags?: boolean }) {
   const items = Array.isArray(v) ? v : [v];
   if (items.every((x) => typeof x === "string" && /^\[\[[^\]]+\]\]$/.test(x))) {
     return (
@@ -1264,7 +1268,7 @@ function PropValue({ v }: { v: unknown }) {
       <span className="chips">
         {v.map((x, i) => (
           <span key={i} className="chip">
-            {String(x)}
+            {tags ? `#${String(x).replace(/^#/, "")}` : String(x)}
           </span>
         ))}
       </span>

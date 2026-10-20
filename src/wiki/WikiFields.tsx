@@ -14,6 +14,7 @@ import { openDoc } from "../nav";
 import { useSearch } from "../Search";
 import { vaultTags } from "../Capture";
 import { getList, getScalar, setList, setScalar } from "./props";
+import { LayerTag } from "../ui";
 
 const linkName = (v: string) => v.replace(/^\[\[|\]\]$/g, "").split(/[|#]/)[0];
 
@@ -171,7 +172,10 @@ export function WikiFields({ text, onChange }: { text: string; onChange: (t: str
                 title={`Add ${h.file.title} to this page's sources`}
                 onClick={() => addSource(h.file.path)}
               >
-                <span className={`lb ${h.file.layer}`}>{h.file.title}</span>
+                <span className="lbt">
+                  <LayerTag layer={h.file.layer} />
+                  <span className="ell">{h.file.title}</span>
+                </span>
               </button>
             ))}
         </div>
@@ -196,8 +200,9 @@ export function SourcesCard({ cites }: { cites: string[] }) {
         >
           <span className="cite">{i + 1}</span>
           <span className="grow">
-            <span className={`lb ${p.startsWith("sources/") ? "source" : p.startsWith("wiki/") ? "wiki" : "note"}`}>
-              {(p.split("/").pop() ?? p).replace(/\.md$/, "")}
+            <span className="lbt">
+              <LayerTag layer={p.startsWith("sources/") ? "source" : p.startsWith("wiki/") ? "wiki" : "note"} />
+              <span className="ell">{(p.split("/").pop() ?? p).replace(/\.md$/, "")}</span>
             </span>
           </span>
         </button>

@@ -28,7 +28,7 @@ import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
 import { askQuote, TopBar } from "./TopBar";
 import { reviewWeek } from "./Weekly";
-import { Dialog, TableBand } from "./ui";
+import { Dialog, LayerTag, TableBand } from "./ui";
 import { Markdown } from "./md/Markdown";
 import { settings, useStore } from "./store";
 import { useVaultVersion } from "./state";
@@ -69,6 +69,33 @@ export function taskLine(c: Clarified): string {
   if (c.effort && effortMinutes(c.effort) !== null) bits.push(`[effort:: ${c.effort}]`);
   if (c.due) bits.push(`📅 ${c.due}`);
   return `- [ ] ${prepareCapture("task", bits.join(" "))}`;
+}
+
+const TAG = /(^|\s)#([A-Za-z][\w/-]*)/g;
+
+/** An item's first line with its #tags after it, as a task row shows them: contexts as @calls, the
+ *  rest as #tag, in grey. */
+function ItemTitle({ text }: { text: string }) {
+  const tags = [...text.matchAll(TAG)].map((m) => m[2]);
+  return (
+    <>
+      <TaskText
+        text={
+          tags.length
+            ? text
+                .replace(TAG, "$1")
+                .replace(/\s{2,}/g, " ")
+                .trim()
+            : text
+        }
+      />
+      {tags.map((g) => (
+        <span key={g} className="itag">
+          {g.startsWith("context/") ? `@${g.slice(8)}` : `#${g}`}
+        </span>
+      ))}
+    </>
+  );
 }
 
 const itemText = (i: InboxItem) => (i.kind === "task" ? i.text : i.text).trim();
@@ -233,7 +260,7 @@ export function InboxScreen() {
     if (!sceneInboxSuggest.get() || !cur || isTranscript(cur)) return;
     const id = key(cur);
     setSugg((m) => (m[id] ? m : { ...m, [id]: sampleSuggestion(id) }));
-  }, [cur]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cur]);
   // A transcript whose meeting note is under way (or failed): its row says so, and while it's
   // under way it can't be ticked or chosen, so it isn't made twice.
   useEffect(startRuns, []);
@@ -504,7 +531,7 @@ export function InboxScreen() {
                         }}
                       >
                         <span className="tt">
-                          <TaskText text={i.kind === "capture" ? captureTitle(i.text) : itemText(i).split("\n")[0]} />
+                          <ItemTitle text={i.kind === "capture" ? captureTitle(i.text) : itemText(i).split("\n")[0]} />
                         </span>
                         {p ? (
                           <span className={`faint iprog ${p.busy ? "" : "bad"}`} title={p.why}>
@@ -532,7 +559,7 @@ export function InboxScreen() {
                     <span className="ikindsm" title={inboxItemKind(i).label}>
                       <Icon name={inboxItemKind(i).icon} size={13} />
                     </span>
-                    <TaskText text={i.kind === "capture" ? captureTitle(i.text) : itemText(i).split("\n")[0]} />
+                    <ItemTitle text={i.kind === "capture" ? captureTitle(i.text) : itemText(i).split("\n")[0]} />
                     <span className="faint small"> · {sourceOf(i)}</span>
                   </li>
                 ))}
@@ -965,13 +992,19 @@ function FileAsReference({ item, onClose, onDone }: { item: InboxItem; onClose: 
               title={`Add it as a bullet at the end of ${h.file.title}`}
               onClick={() => void append(h.file.path, h.file.title)}
             >
-              <span className="lb note">{h.file.title}</span>
+              <span className="lbt">
+                <LayerTag layer="note" />
+                <span className="ell">{h.file.title}</span>
+              </span>
               <span className="faint">{h.file.path}</span>
             </button>
           ))}
           {q.trim() && (
             <button type="button" className="blink" title="Create a new note with this name holding the item" onClick={() => void create()}>
-              <span className="lb note">New note “{q.trim()}”</span>
+              <span className="lbt">
+                <LayerTag layer="note" />
+                <span className="ell">New note “{q.trim()}”</span>
+              </span>
             </button>
           )}
         </div>

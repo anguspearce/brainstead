@@ -8,6 +8,35 @@ import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 
+export const LAYER_LABEL: Record<string, string> = { note: "Note", wiki: "Wiki", source: "Source", template: "Template" };
+
+/** A file's layer as Search shows it: a square in the layer's colour, then its name. After a file's
+ *  name, in a list (`.lbt` holds the two). */
+export function LayerTag({ layer }: { layer: string }) {
+  return <span className={`lb ${layer}`}>{LAYER_LABEL[layer] ?? layer}</span>;
+}
+
+/** A bar pinned at the top of its scroller with position: sticky (a list's search and filters): a
+ *  ref that keeps the scroller's --tb-head at the bar's height, so the list's bands stick under it
+ *  however it wraps. */
+export function usePinnedBar() {
+  const [el, setEl] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    const box = el?.parentElement;
+    if (!el || !box) return;
+    const set = () => box.style.setProperty("--tb-head", `${el.offsetHeight}px`);
+    set();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      box.style.removeProperty("--tb-head");
+    };
+  }, [el]);
+  return setEl;
+}
+
 /** Search delay after the last keystroke: typing only updates the box, and the list redraws once. */
 export const SEARCH_DEBOUNCE_MS = 250;
 

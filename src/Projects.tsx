@@ -34,7 +34,7 @@ import { reportEditError, undoLast, useAllTasks } from "./taskModel";
 import { toast } from "./Toast";
 import { askLink, askQuote, MoreMenu, TopBar } from "./TopBar";
 import { iconizeEmoji } from "./md/fieldEmoji";
-import { ago, Dialog, fmtCount, Seg } from "./ui";
+import { ago, Dialog, fmtCount, LayerTag, Seg } from "./ui";
 
 /** ⌘K's New project: the Projects screen opens with New project showing. */
 export const newProjectAsked = new Store<boolean>(false);
@@ -603,7 +603,10 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
         <div className="card side-card">
           <div className="eyebrow">The project note</div>
           <button type="button" className="blink" title={`Open ${p.path}`} onClick={() => openDoc(p.path)}>
-            <span className="lb note">{p.name}</span>
+            <span className="lbt">
+              <LayerTag layer="note" />
+              <span className="ell">{p.name}</span>
+            </span>
             <span className="faint">Changed {ago(p.lastTouched)}</span>
           </button>
         </div>
@@ -612,7 +615,10 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
           {!p.links.length && <p className="faint small">Any note that links [[Project. {p.name}]] shows here.</p>}
           {p.links.slice(0, 12).map((l) => (
             <button key={l} type="button" className="blink" title={`Open ${l}`} onClick={() => openDoc(l)}>
-              <span className="lb note">{l.replace(/\.md$/, "").split("/").pop()}</span>
+              <span className="lbt">
+                <LayerTag layer="note" />
+                <span className="ell">{l.replace(/\.md$/, "").split("/").pop()}</span>
+              </span>
             </button>
           ))}
         </div>
@@ -666,7 +672,10 @@ function ProjectWiki({ path }: { path: string }) {
       <div className="eyebrow">Wiki pages</div>
       {pages.slice(0, 10).map((w) => (
         <button key={w} type="button" className="blink" title={`Open ${w}`} onClick={() => openDoc(w)}>
-          <span className="lb wiki">{w.replace(/\.md$/, "").split("/").pop()}</span>
+          <span className="lbt">
+            <LayerTag layer="wiki" />
+            <span className="ell">{w.replace(/\.md$/, "").split("/").pop()}</span>
+          </span>
         </button>
       ))}
     </div>
@@ -709,7 +718,8 @@ function RecentActivity({ links, done }: { links: string[]; done: TaskRow[] }) {
       <div className="eyebrow">Recent activity</div>
       {items.map((i) => (
         <button key={i.key} type="button" className="blink" title={`Open ${i.path}`} onClick={() => openDoc(i.path)}>
-          <span className={i.kind === "note" ? "lb note" : "pdone ell"}>
+          <span className={i.kind === "note" ? "lbt" : "pdone ell"}>
+            {i.kind === "note" && <LayerTag layer="note" />}
             {i.kind === "done" && <Icon name="check" size={12} style={{ color: "var(--green)" }} />}
             {i.kind === "cancelled" && <Icon name="cancelled" size={12} style={{ color: "var(--ink3)" }} />} {iconizeEmoji(i.text)}
           </span>

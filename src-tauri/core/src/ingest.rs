@@ -405,7 +405,7 @@ pub fn plan(
             dropped
                 .push(Dropped { page: rel, reason: "There's a summary page already; update it by hand or re-ingest it as a page.".into() });
         } else {
-            let after = new_page(&rel, "source-summary", s.description.as_deref().unwrap_or(""), &link, &s.content);
+            let after = new_page(&rel, "summary", s.description.as_deref().unwrap_or(""), &link, &s.content);
             out.push(Planned {
                 page: rel,
                 kind: Kind::New,
@@ -638,7 +638,7 @@ mod tests {
         let gate = &planned[2];
         assert!(gate.after.starts_with("---\ntype: concept\nname: Launch gate\ndescription: \"\"\nsources: [\"[[Programme Update Steerco 2026-09-28.pdf]]\"]\n---\n\n## Current state\n\nGates the launch.\n"));
         let summary = &planned[0];
-        assert!(summary.after.contains("type: source-summary") && summary.after.ends_with("Launch moves to 28 November.\n"));
+        assert!(summary.after.contains("type: summary") && summary.after.ends_with("Launch moves to 28 November.\n"));
     }
 
     /// A page in the shape, and an answer in the page-shape form for it.

@@ -24,7 +24,6 @@ import { api, Layer } from "./api";
 import { useAllTasks } from "./taskModel";
 import { taskLabel } from "./md/TaskBlock";
 import { Icon } from "./icons";
-import { LAYER_LABEL } from "./Doc";
 import { Snippet } from "./FileList";
 import { nav, openDoc, place } from "./nav";
 import { openRename, trashFile } from "./notes/actions";
@@ -39,7 +38,7 @@ const TOOL_WORDS: Partial<Record<string, string>> = {
   doccheck: "doc check check a document canonical register version in force feedback operating model align",
 };
 import { applyTheme, settings } from "./store";
-import { useDebounced } from "./ui";
+import { LAYER_LABEL, useDebounced } from "./ui";
 
 export interface Command {
   id: string;

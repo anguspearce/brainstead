@@ -19,7 +19,7 @@ const G: Graph = {
   nodes: [
     node("wiki/entities/Orbit App.md", "wiki", "entity", 0, 5),
     node("wiki/concepts/Hub Platform.md", "wiki", "concept"),
-    node("wiki/summaries/Update.md", "wiki", "source-summary"),
+    node("wiki/summaries/Update.md", "wiki", "summary"),
     node("sources/Update.md", "source"),
     node("Meeting. Orbit.md", "note"),
     node("ghost:roadmap", "ghost"),
@@ -35,7 +35,7 @@ const G: Graph = {
 
 describe("graph", () => {
   it("colours a node by its layer, and a wiki page by its type", () => {
-    expect(G.nodes.map(kindOf)).toEqual(["entity", "concept", "source", "source", "note", "ghost"]);
+    expect(G.nodes.map(kindOf)).toEqual(["entity", "concept", "summary", "source", "note", "ghost"]);
     expect(kindLabel(G.nodes[2])).toBe("Summary");
     expect(kindLabel(G.nodes[3])).toBe("Source");
     expect(kindOf({ layer: "wiki", type: null })).toBe("wiki");
@@ -47,7 +47,7 @@ describe("graph", () => {
     expect(v.nodes.map((n) => n.id)).toContain("wiki/entities/Orbit App.md");
     expect(v.edges).toHaveLength(3);
     expect(visible(G, [], null)).toBe(G);
-    expect(kindsIn(G)).toEqual(["entity", "source", "concept", "note", "ghost"]);
+    expect(kindsIn(G)).toEqual(["entity", "concept", "summary", "source", "note", "ghost"]);
   });
 
   it("knows each node's neighbours and which get a label (the centre and the biggest)", () => {

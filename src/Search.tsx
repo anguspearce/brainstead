@@ -9,13 +9,13 @@ import { useEffect, useRef, useState } from "react";
 import { api, Layer, SearchHit, SearchResults, SmartList } from "./api";
 import { FileMenu, useFileMenu } from "./FileMenu";
 import { Snippet } from "./FileList";
-import { LAYER_LABEL } from "./Doc";
 import { Icon } from "./icons";
 import { nav, openDoc, place, useViewState } from "./nav";
 import { useVaultVersion } from "./state";
 import { useStore } from "./store";
 import { askQuote, TopBar } from "./TopBar";
-import { Dialog, fmtCount, SearchBox, Seg, useDebounced } from "./ui";
+import { Dialog, fmtCount, LAYER_LABEL, LayerTag, SearchBox, Seg, useDebounced } from "./ui";
+import { TypePill } from "./typeTone";
 import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
 
@@ -293,9 +293,9 @@ export function SearchScreen() {
                   onContextMenu={(e) => menu.openAt(e, h.file)}
                 >
                   <div className="hhead">
-                    <span className={`lb ${h.file.layer}`}>{LAYER_LABEL[h.file.layer]}</span>
+                    <LayerTag layer={h.file.layer} />
                     <b className="ell">{h.file.title}</b>
-                    {h.file.type && <span className="chip">{h.file.type}</span>}
+                    {h.file.type && <TypePill type={h.file.type} wiki={h.file.layer === "wiki"} />}
                     <span className="sp" />
                     {h.passages > 1 && <span className="faint">{h.passages} passages</span>}
                     {h.file.date && <span className="faint">{h.file.date}</span>}

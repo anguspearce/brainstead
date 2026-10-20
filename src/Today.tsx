@@ -22,7 +22,7 @@ import { DraftNudge, LoadFailed, TaskList, TasksFailed, useTaskListKeys } from "
 import { deferredPast, tasksFailed, todayRows, useAllTasks, viewRows, VIEWS } from "./taskModel";
 import { useVaultOpening, useVaultVersion, vaultStatus } from "./state";
 import { TopBar } from "./TopBar";
-import { ago, fmtCount, TableBand } from "./ui";
+import { ago, fmtCount, LayerTag, TableBand } from "./ui";
 import { iconizeEmoji } from "./md/fieldEmoji";
 
 export function greeting(h: number, name?: string) {
@@ -614,7 +614,8 @@ function HeldCard() {
           title={`${pageName(p.page)}: ${p.title}\n${p.flags[0] ?? ""}\nOpen Changes to accept or reject it`}
           onClick={() => nav.go("review")}
         >
-          <span className={`lb ${p.page.startsWith("wiki/") ? "wiki" : "note"}`}>
+          <span className="lbt">
+            <LayerTag layer={p.page.startsWith("wiki/") ? "wiki" : "note"} />
             <span className="ell">{pageName(p.page)}</span>
           </span>
           <span className="ell grow">{iconizeEmoji(p.title)}</span>

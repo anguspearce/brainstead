@@ -6,33 +6,33 @@
 // how big a node is and which get a label.
 
 import type { Graph, GraphNode } from "./api";
+import { toneVar, WIKI_TYPE_TONE } from "./tones";
 
 /** What a node is drawn as: a wiki page by its type, a source, a note, or a link to nothing. */
-export type Kind = "concept" | "entity" | "wiki" | "source" | "note" | "ghost";
+export type Kind = "concept" | "entity" | "summary" | "wiki" | "source" | "note" | "ghost";
 
 export const KINDS: [Kind, string][] = [
   ["entity", "Entities"],
-  ["source", "Sources and summaries"],
   ["concept", "Concepts"],
+  ["summary", "Summaries"],
   ["wiki", "Other wiki"],
+  ["source", "Sources"],
   ["note", "Notes"],
   ["ghost", "Not written yet"],
 ];
 
-/** The colour token for each kind: the pie charts' palette, the same colour per type as the "Wiki
- *  pages by type" pie (WIKI_TYPE_TONE), notes in a colour of their own, and Other's grey for links
+/** Each kind's colour token: a wiki type's tone (src/tones.ts), as its type pill's dot and the pie show
+ *  it; other wiki pages, sources and notes in their layer's colour, as their squares; grey for links
  *  to nothing. */
 export const KIND_COLOUR: Record<Kind, string> = {
-  entity: "--pie-1",
-  source: "--pie-2",
-  concept: "--pie-3",
-  wiki: "--pie-4",
-  note: "--pie-6",
+  entity: toneVar(WIKI_TYPE_TONE.entity),
+  concept: toneVar(WIKI_TYPE_TONE.concept),
+  summary: toneVar(WIKI_TYPE_TONE.summary),
+  wiki: "--l-wiki",
+  source: "--l-source",
+  note: "--l-note",
   ghost: "--pie-other",
 };
-
-/** The pie slice for each wiki page type, so a type is the same colour on the pie and the graph. */
-export const WIKI_TYPE_TONE: Record<string, string> = { entity: "p1", "source-summary": "p2", summary: "p2", concept: "p3" };
 
 export function kindOf(n: Pick<GraphNode, "layer" | "type">): Kind {
   if (n.layer === "ghost") return "ghost";
@@ -41,7 +41,8 @@ export function kindOf(n: Pick<GraphNode, "layer" | "type">): Kind {
   const t = (n.type ?? "").toLowerCase();
   if (t === "concept") return "concept";
   if (t === "entity") return "entity";
-  if (t === "summary" || t === "source" || t === "source-summary") return "source";
+  // source-summary: what ingests wrote before 1.2.1.
+  if (t === "summary" || t === "source" || t === "source-summary") return "summary";
   return "wiki";
 }
 
@@ -57,8 +58,15 @@ export function visible(g: Graph, hidden: Kind[], center: string | null): Graph 
 /** What the side pane calls one node. */
 export function kindLabel(n: Pick<GraphNode, "layer" | "type">): string {
   const k = kindOf(n);
-  if (k === "source") return n.layer === "wiki" ? "Summary" : "Source";
-  return { concept: "Concept", entity: "Entity", wiki: "Wiki page", note: "Note", ghost: "Not written yet" }[k];
+  return {
+    concept: "Concept",
+    entity: "Entity",
+    summary: "Summary",
+    source: "Source",
+    wiki: "Wiki page",
+    note: "Note",
+    ghost: "Not written yet",
+  }[k];
 }
 
 /** The kinds present, for the filter chips. */

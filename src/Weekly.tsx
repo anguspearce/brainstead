@@ -23,7 +23,7 @@ import { TaskList, TasksFailed } from "./TaskList";
 import { reportEditError, tasksFailed, useAllTasks, viewRows, VIEWS } from "./taskModel";
 import { toast } from "./Toast";
 import { TopBar } from "./TopBar";
-import { ago, Dialog } from "./ui";
+import { ago, Dialog, LayerTag } from "./ui";
 import { PrepHeader, PrepRows, prepStep, WEEKLY_STATE_CHANGED, when } from "./weeklyPrep";
 
 /** The ISO week a local date is in: "2026-W40". */
@@ -585,7 +585,10 @@ function Step({ id, ctx, log }: { id: string; ctx: WeeklyContext | null; log: (l
           )}
           {list.map((n) => (
             <button key={n.path} type="button" className="blink" title={`Open ${n.title}`} onClick={() => openDoc(n.path)}>
-              <span className="lb note">{n.title}</span>
+              <span className="lbt">
+                <LayerTag layer="note" />
+                <span className="ell">{n.title}</span>
+              </span>
               {n.mtime > 0 && <span className="faint">{ago(n.mtime)}</span>}
             </button>
           ))}

@@ -43,7 +43,7 @@ import { nav, openDoc, useViewState } from "./nav";
 import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
 import { MoreMenu, TopBar } from "./TopBar";
-import { Dialog } from "./ui";
+import { Dialog, LayerTag } from "./ui";
 import { Store, useStore } from "./store";
 import { vaultVersion } from "./state";
 
@@ -892,14 +892,15 @@ function SideCards({ r }: { r: LintReport }) {
         {!pendingSources.length && !changed.length && <p className="faint small">Every source is cited.</p>}
         {pendingSources.slice(0, 6).map((i) => (
           <div key={i.text} className="hqi">
-            <span className="lb source" />
+            <LayerTag layer="source" />
             <span className="grow ell">{pageName(i.page ?? "")}</span>
+            <span className="chip amber sm">New</span>
             <IngestButton path={i.page ?? ""} />
           </div>
         ))}
         {changed.slice(0, 4).map((i) => (
           <div key={i.text} className="hqi">
-            <span className="lb source" />
+            <LayerTag layer="source" />
             <span className="grow ell">{pageName(i.page ?? "")}</span>
             <span className="chip amber sm">Changed</span>
           </div>
