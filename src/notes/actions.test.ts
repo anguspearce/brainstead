@@ -19,7 +19,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 
 const TRANSCRIPT = "sources/Teams. Transcript. Offsite - 2026-10-06.md";
 
-import { fileAction, fullPath, loadImagesForPrint, trashFile } from "./actions";
+import { fileAction, fullPath, loadImagesForPrint, pdfFooter, trashFile } from "./actions";
 import { settings } from "../store";
 
 describe("Move to the Trash from the file menu", () => {
@@ -69,5 +69,22 @@ describe("Export PDF", () => {
     // One that never loads doesn't hold the export up.
     box.querySelector("img")!.decode = () => new Promise(() => {});
     await loadImagesForPrint(box, 20);
+  });
+});
+
+describe("the PDF footer where the print draws it (Windows)", () => {
+  it("puts the title and page counts in the bottom margin, and takes them away after", () => {
+    const remove = pdfFooter('A "quoted" \\ title');
+    const css = document.head.lastElementChild!.textContent!;
+    expect(css).toContain('@bottom-left { content: "A \\"quoted\\" \\\\ title";');
+    expect(css).toContain('@bottom-right { content: "Page " counter(page) " of " counter(pages);');
+    remove();
+    expect(document.head.textContent).not.toContain("@bottom-left");
+  });
+
+  it("shortens a long title as the Mac's footer does", () => {
+    const remove = pdfFooter("x".repeat(120));
+    expect(document.head.lastElementChild!.textContent).toContain(`"${"x".repeat(89)}…"`);
+    remove();
   });
 });

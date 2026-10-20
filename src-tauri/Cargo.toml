@@ -71,6 +71,11 @@ tauri-plugin-single-instance = "2"
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
 arboard = { version = "3.6", default-features = false }
+# Export PDF through WebView2's PrintToPdf (platform/mod.rs), at tauri's own versions; the paper
+# size from the user's locale.
+webview2-com = "0.39"
+windows-core = "0.62"
+windows-sys = { version = "0.61", features = ["Win32_Globalization"] }
 
 [dev-dependencies]
 tempfile = "3"

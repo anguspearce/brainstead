@@ -7567,7 +7567,11 @@ select.sel {
 .abouthead img {
   flex: none;
 }
-.abouthead .btn {
+
+/* Website and (on Windows) Check for Updates…, side by side at the right. */
+.abouthead .aboutacts {
+  display: flex;
+  gap: 8px;
   margin-left: auto;
 }
 

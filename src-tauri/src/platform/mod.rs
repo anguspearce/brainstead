@@ -356,11 +356,66 @@ pub fn print_to_pdf(w: &tauri::WebviewWindow, dest: &Path) -> Result<(), String>
         .map_err(|e| e.to_string())?;
         rx.recv_timeout(std::time::Duration::from_secs(10)).map_err(|_| "Printing didn't start.".to_string())?
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    {
+        let dest = dest.to_path_buf();
+        let (tx, rx) = std::sync::mpsc::channel();
+        w.with_webview(move |wv| {
+            let _ = tx.send(windows_print_to_pdf(&wv, &dest));
+        })
+        .map_err(|e| e.to_string())?;
+        rx.recv_timeout(std::time::Duration::from_secs(10)).map_err(|_| "Printing didn't start.".to_string())?
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         let _ = (w, dest);
         Err("Export PDF isn't available on this system yet.".into())
     }
+}
+
+/// WebView2's PrintToPdf, on the main thread: the paper the user's locale uses (A4, or Letter), half
+/// an inch all round as on a Mac, no browser header or footer (the page's print style draws the
+/// title and "Page N of M" in the bottom margin, src/notes/actions.ts) and no backgrounds, as
+/// WebKit's print. Chromium repeats a long table's header row itself.
+#[cfg(windows)]
+fn windows_print_to_pdf(wv: &tauri::webview::PlatformWebview, dest: &Path) -> Result<(), String> {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{ICoreWebView2Environment6, ICoreWebView2_7};
+    use webview2_com::PrintToPdfCompletedHandler;
+    use windows_core::{Interface, HSTRING};
+    let old = |_| "This computer's WebView2 is too old to print to PDF: update Microsoft Edge WebView2 Runtime.".to_string();
+    // SAFETY: COM calls on the live webview Tauri hands over, on the main thread it lives on.
+    unsafe {
+        let core = wv.controller().CoreWebView2().map_err(|e| e.to_string())?;
+        let core: ICoreWebView2_7 = core.cast().map_err(old)?;
+        let env: ICoreWebView2Environment6 = wv.environment().cast().map_err(old)?;
+        let s = env.CreatePrintSettings().map_err(|e| e.to_string())?;
+        let (pw, ph) = if paper_is_letter() { (8.5, 11.0) } else { (8.27, 11.69) };
+        s.SetPageWidth(pw).map_err(|e| e.to_string())?;
+        s.SetPageHeight(ph).map_err(|e| e.to_string())?;
+        for set in [s.SetMarginTop(0.5), s.SetMarginBottom(0.5), s.SetMarginLeft(0.5), s.SetMarginRight(0.5)] {
+            set.map_err(|e| e.to_string())?;
+        }
+        s.SetShouldPrintHeaderAndFooter(false).map_err(|e| e.to_string())?;
+        s.SetShouldPrintBackgrounds(false).map_err(|e| e.to_string())?;
+        let done = PrintToPdfCompletedHandler::create(Box::new(|r, ok| {
+            if r.is_err() || !ok {
+                crate::applog!("export pdf: WebView2's PrintToPdf failed ({r:?})");
+            }
+            Ok(())
+        }));
+        core.PrintToPdf(&HSTRING::from(dest.to_string_lossy().as_ref()), &s, &done).map_err(|e| e.to_string())
+    }
+}
+
+/// Whether the user's locale prints on US Letter (LOCALE_IPAPERSIZE 1) rather than A4.
+#[cfg(windows)]
+fn paper_is_letter() -> bool {
+    use windows_sys::Win32::Globalization::{GetLocaleInfoEx, LOCALE_IPAPERSIZE, LOCALE_RETURN_NUMBER};
+    let mut n = [0u16; 2];
+    // SAFETY: a null locale name is the user's default; the buffer is two UTF-16 units, the DWORD
+    // LOCALE_RETURN_NUMBER writes.
+    let got = unsafe { GetLocaleInfoEx(std::ptr::null(), LOCALE_IPAPERSIZE | LOCALE_RETURN_NUMBER, n.as_mut_ptr(), 2) };
+    got > 0 && (n[0] as u32 | (n[1] as u32) << 16) == 1
 }
 
 /// A `Command` for a console program, started without a console window: a GUI app on Windows
@@ -742,5 +797,15 @@ mod tests {
         assert_eq!(manifest_file(&file, &want, false), (true, true));
         let other = serde_json::json!({"name": "com.example.host", "path": "/y"});
         assert_eq!(manifest_file(&file, &other, false), (true, false));
+    }
+
+    /// Off macOS a PDF's text comes from pdf-extract, which won't read a file without its
+    /// cross-reference table, as PDFKit will: the fixture's sample has to be a well-formed PDF.
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn reads_the_fixture_pdf_as_the_index_does() {
+        let pdf = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/vault/sources/Programme Update Steerco 2026-09-28.pdf");
+        let pages = pdf_text(&pdf).unwrap();
+        assert!(pages.concat().contains("Programme update, page 1"), "{pages:?}");
     }
 }

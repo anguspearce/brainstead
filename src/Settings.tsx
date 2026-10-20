@@ -1362,22 +1362,24 @@ function About() {
           <h2 className="h3">Brainstead</h2>
           <p className="muted">A home for everything on your mind.</p>
         </div>
-        <button type="button" className="btn sm" title="Open Brainstead's website in the browser" onClick={() => void openUrl(WEBSITE)}>
-          <Icon name="globe" size={14} />
-          Website
-        </button>
-        {/* The Brainstead menu has it on a Mac; Windows has no menu bar. */}
-        {isWindows && (
-          <button
-            type="button"
-            className="btn sm"
-            title="Look for a new version now; Brainstead says what it found"
-            onClick={() => void api.updateCheck().catch((e) => toast(errText(e), undefined, "bad"))}
-          >
-            <Icon name="refresh" size={14} />
-            Check for Updates…
+        <div className="aboutacts">
+          <button type="button" className="btn sm" title="Open Brainstead's website in the browser" onClick={() => void openUrl(WEBSITE)}>
+            <Icon name="globe" size={14} />
+            Website
           </button>
-        )}
+          {/* The Brainstead menu has it on a Mac; Windows has no menu bar. */}
+          {isWindows && (
+            <button
+              type="button"
+              className="btn sm"
+              title="Look for a new version now; Brainstead says what it found"
+              onClick={() => void api.updateCheck().catch((e) => toast(errText(e), undefined, "bad"))}
+            >
+              <Icon name="refresh" size={14} />
+              Check for Updates…
+            </button>
+          )}
+        </div>
       </div>
       {info && (
         <dl className="kv">

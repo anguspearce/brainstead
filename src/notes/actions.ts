@@ -16,7 +16,7 @@ import { reportEditError, undoLast } from "../taskModel";
 import { toast } from "../Toast";
 import { noteDialog } from "./dialogs";
 import { features } from "../features";
-import { fileManager } from "../platform";
+import { fileManager, isWindows } from "../platform";
 import { isTranscriptPath, trashTranscript } from "../meetingFlow";
 import { settings } from "../store";
 
@@ -52,18 +52,33 @@ export async function loadImagesForPrint(root: ParentNode = document, ms = 10_00
   await Promise.race([Promise.all(loaded), new Promise((r) => setTimeout(r, ms))]);
 }
 
+/** The Mac's PDF footer (platform::stamp_pdf_footer) as print style: the title bottom left and
+ *  "Page N of M" bottom right, 8pt grey, in the half-inch bottom margin. Returns its removal. */
+export function pdfFooter(title: string): () => void {
+  const t = [...title].length > 90 ? [...title].slice(0, 89).join("") + "…" : title;
+  const box = 'font: 8pt "Geist Variable", "Segoe UI", sans-serif; color: #8a929c; vertical-align: bottom; padding-bottom: 8pt;';
+  const style = document.createElement("style");
+  style.textContent = `@media print { @page { margin: 0.5in; @bottom-left { content: ${cssString(t)}; ${box} } @bottom-right { content: "Page " counter(page) " of " counter(pages); ${box} } } }`;
+  document.head.append(style);
+  return () => style.remove();
+}
+
+/** A CSS string literal of `s`. */
+const cssString = (s: string) => `"${s.replace(/[\\"]/g, "\\$&").replace(/\n/g, " ")}"`;
+
 /** Asks where to save, then prints the window's document (its print styles) to a PDF there. */
 export async function exportPdf(title: string): Promise<void> {
   if (!features.get().exportPdf) return toast("Export as PDF isn't available on this computer", undefined, "bad");
   const dest = await save({ defaultPath: `${title}.pdf`, filters: [{ name: "PDF", extensions: ["pdf"] }] });
   if (!dest) return;
   // Long tables repeat their header on each page (WebKit's print doesn't): split for the print,
-  // put back after.
-  const { restore, forced } = splitTablesForPrint();
+  // put back after. WebView2's Chromium repeats it itself, and draws the footer from the page's
+  // print style, where the Mac stamps it on afterwards.
+  const { restore, forced } = isWindows ? { restore: pdfFooter(title), forced: false } : splitTablesForPrint();
   toast("Exporting as PDF…");
   try {
     await loadImagesForPrint();
-    await api.exportPdf(dest, title, forced);
+    await api.exportPdf(dest, isWindows ? null : title, forced);
     toast("Exported as PDF", { label: "Show", run: () => void api.reveal(dest).catch(() => {}) });
   } catch (e) {
     toast(errText(e), undefined, "bad");
