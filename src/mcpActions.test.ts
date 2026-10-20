@@ -2,7 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 type Call = [string, Record<string, unknown> | undefined];
 const calls: Call[] = [];
@@ -1662,6 +1662,10 @@ describe("MCP actions", () => {
     });
 
     it("reads and changes the newer settings: login, models, spelling, read aloud and the document look", async () => {
+      // The voices below are the macOS synthesiser's; elsewhere the player lists the web view's.
+      const was = platform();
+      setPlatform("macos");
+      onTestFinished(() => setPlatform(was));
       answers.settings_write = (a) => a!.settings;
       let login = false;
       answers.login_item = () => login;

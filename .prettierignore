@@ -9,3 +9,4 @@ tools/
 *.html
 package-lock.json
 .claude/settings.local.json
+.claude/worktrees/

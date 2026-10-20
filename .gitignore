@@ -23,3 +23,6 @@ src-tauri/gen/help
 
 # The archived build plan and other local-only papers
 archive/
+
+# Agents' scratch copies of the repo
+.claude/worktrees/
