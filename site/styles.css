@@ -607,6 +607,17 @@ h2 {
   padding-left: 0.3em;
   margin-top: 10px;
 }
+/* A heading over each system's install steps. */
+.install-os {
+  max-width: 34em;
+  margin: 40px auto 0;
+  text-align: left;
+  font-size: 18px;
+  font-weight: 600;
+}
+.install-os + .install {
+  margin-top: 14px;
+}
 .install li::marker {
   color: var(--accent);
   font-weight: 500;

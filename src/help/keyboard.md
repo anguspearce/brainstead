@@ -7,7 +7,7 @@ summary: Every key the app answers to, by where it works.
 ---
 Each key works where its heading says; opened from a screen, this topic unfolds that screen's keys. Quick capture's shortcut is set in [Settings › General](app:settings/general); `⌃⌥Space` is the default.
 
-Keys are shown for this computer: Windows uses Ctrl, Alt and Shift where the Mac uses its own modifier keys, so the screen shortcuts are Ctrl+1 to 0 and a note's View, Edit and Source are Ctrl+Shift+1 to 3 on Windows. Quick Look is Mac only for now.
+Keys are shown for this computer: Windows uses Ctrl, Alt and Shift where the Mac uses its own modifier keys, so the screen shortcuts are Ctrl+1 to 0 and a note's View, Edit and Source are Ctrl+Shift+1 to 3 on Windows. Windows has no Quick Look: there, the same button opens the file in its own app.
 
 ## Anywhere
 - `⌘K` — Search or jump anywhere
@@ -66,7 +66,7 @@ Keys are shown for this computer: Windows uses Ctrl, Alt and Shift where the Mac
 ## Lists
 - `↑` `↓` — Move between rows
 - `↩` — Open
-- `Space` — Quick Look (Trash; Word, PowerPoint or Excel sources; Mac only)
+- `Space` — Quick Look (Trash; Word, PowerPoint or Excel sources; on a Mac)
 
 ## Task lists
 - `↑` `↓` — Choose a task, across lists

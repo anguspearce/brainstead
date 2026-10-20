@@ -20,7 +20,7 @@ For a Mac with Apple silicon (M1 or later) and macOS 14 or later.
 
 ### Windows
 
-For Windows 11 (64-bit). WebView2 is already part of Windows 11.
+For Windows 10 or 11 (64-bit). WebView2, which it runs in, is already part of both.
 
 1. Download [Brainstead_x64-setup.exe](https://github.com/waynetd777/brainstead/releases/latest/download/Brainstead_x64-setup.exe) from the [latest release](https://github.com/waynetd777/brainstead/releases/latest).
 2. Run it. It installs for your user only, with no administrator rights.
@@ -29,7 +29,7 @@ For Windows 11 (64-bit). WebView2 is already part of Windows 11.
 
 Brainstead opens a vault you choose read-only (a new one it makes for you opens writable). When you're ready for it to change files (ticking tasks, saving notes), turn off **Read-only** in Settings › Vault. See [First run](docs/features.md#first-run). To build it yourself instead, see [Building it](#building-it).
 
-Brainstead checks for a new version once a day and offers to install it; Brainstead › Check for Updates… (Settings › About › Check for Updates… on Windows) checks now.
+Brainstead checks for a new version once a day and offers to install it, on a Mac and on Windows; Brainstead › Check for Updates… (Settings › About › Check for Updates… on Windows) checks now.
 
 <a href="docs/images/index.md#the-readme"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/today-dark.png"><img alt="Today: the day in a sentence, the capture box, overdue and deferred tasks, what you're waiting for, and where you left off" src="docs/images/today-light.png"></picture></a>
 
