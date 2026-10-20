@@ -43,7 +43,7 @@ FIRST_RUN = "\n\n".join(
         "**Mac** (Apple silicon, macOS 14 or later): open `Brainstead.dmg` and drag Brainstead onto Applications. "
         "The first time you open it, macOS says it can't check the app for malicious software, as it isn't notarised by Apple: "
         "click **Done**, then in System Settings › Privacy & Security click **Open Anyway**.",
-        "**Windows** (11, 64-bit): run `Brainstead_x64-setup.exe`, added a few minutes after the Mac's files. "
+        "**Windows** (10 or 11, 64-bit): run `Brainstead_x64-setup.exe`, added a few minutes after the Mac's files. "
         "If Windows says it protected your PC, click **More info**, then **Run anyway**: the installer isn't code-signed. "
         "It installs for you alone, with no administrator password.",
     ]
