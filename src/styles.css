@@ -3101,10 +3101,14 @@ html.capture-view body {
 /* ── Stage 4: note dialogs, Trash, print (src/notes/) ─────────────────────────────────────── */
 
 /* New note */
+
+/* Its row is held to the dialog's height, so on a short window (a laptop with display scaling) the
+   template list and the form scroll inside it instead of running off the bottom, out of reach. */
 .newnote {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  min-height: 460px;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: min(460px, calc(100vh - 120px));
   max-height: calc(100vh - 120px);
 }
 .nnside {
@@ -3115,6 +3119,9 @@ html.capture-view body {
   flex-direction: column;
   gap: 4px;
   overflow: auto;
+}
+.nnside.more {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 56px), transparent);
 }
 .nnside .eyebrow {
   padding: 0 4px 6px;

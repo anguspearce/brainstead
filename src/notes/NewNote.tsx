@@ -142,6 +142,22 @@ export function NewNoteDialog({ initial }: { initial?: string }) {
   };
 
   const list = useRef<HTMLDivElement>(null);
+  // More templates below the fold: the list's foot fades, so a hidden scrollbar (Windows 11 shows
+  // it only on hover) isn't the only sign there are more.
+  const [more, setMore] = useState(false);
+  const checkMore = () => {
+    const el = list.current;
+    setMore(!!el && el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+  };
+  useEffect(() => {
+    const el = list.current;
+    if (!el) return;
+    checkMore();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(checkMore);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [templates]); // eslint-disable-line react-hooks/exhaustive-deps
   const options = [BLANK, ...(templates ?? []).map((t) => t.path)];
   // ↑↓ choose the template from anywhere in the dialog, the fields included (a select keeps its
   // own arrows). From the list, focus follows the choice.
@@ -179,7 +195,7 @@ export function NewNoteDialog({ initial }: { initial?: string }) {
           } else onArrows(e);
         }}
       >
-        <div className="nnside" ref={list} role="listbox" aria-label="Template">
+        <div className={`nnside ${more ? "more" : ""}`} ref={list} role="listbox" aria-label="Template" onScroll={checkMore}>
           <span className="eyebrow">Template</span>
           <button
             type="button"

@@ -11,6 +11,7 @@ import { Mark } from "../icons";
 import { settings, Store, useStore } from "../store";
 import { Dialog } from "../ui";
 import { openHelp } from "./HelpDrawer";
+import { noteDialog } from "../notes/dialogs";
 
 export const guideOffer = new Store(false);
 let offered = false;
@@ -25,10 +26,17 @@ export function GuideOfferHost() {
     // A moment after the shell has drawn, so it isn't lost under the first screen's loading.
     const t = window.setTimeout(() => {
       offered = true;
-      guideOffer.set(true);
+      // Not over a dialog already open (⌘N pressed as the app opened): this launch goes without it.
+      if (!noteDialog.get()) guideOffer.set(true);
     }, 800);
     return () => window.clearTimeout(t);
   }, [offer]);
+  // A note dialog opened while it's showing takes its place, rather than opening hidden under it.
+  useEffect(() => {
+    return noteDialog.subscribe(() => {
+      if (noteDialog.get()) guideOffer.set(false);
+    });
+  }, []);
   if (!open) return null;
   const close = (start: boolean) => {
     guideOffer.set(false);
