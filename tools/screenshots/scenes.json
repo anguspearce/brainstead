@@ -575,5 +575,269 @@
     "name": "update-message",
     "screen": "today",
     "update": "message"
+  },
+  {
+    "name": "tut-welcome",
+    "data": "welcome",
+    "screen": "today",
+    "crop": [
+      270,
+      250,
+      860,
+      380
+    ]
+  },
+  {
+    "name": "tut-today",
+    "data": "tutorial",
+    "screen": "today"
+  },
+  {
+    "name": "tut-new-note",
+    "data": "tutorial",
+    "screen": "notes",
+    "dialog": "new-note",
+    "template": "Meeting"
+  },
+  {
+    "name": "tut-kickoff",
+    "data": "tutorial",
+    "screen": "doc",
+    "path": "Meeting. Office move kick-off - {{date-2}}.md",
+    "docMode": "live"
+  },
+  {
+    "name": "tut-project",
+    "data": "tutorial",
+    "screen": "doc",
+    "path": "Project. Office move.md"
+  },
+  {
+    "name": "tut-tasks",
+    "data": "tutorial",
+    "screen": "tasks"
+  },
+  {
+    "name": "tut-inbox",
+    "data": "tutorial",
+    "screen": "inbox",
+    "view": {
+      "inbox:sel": "task:16:- [ ] Ask Lena for the Mill Lane floor p"
+    }
+  },
+  {
+    "name": "tut-proposal-edit",
+    "data": "tutorial",
+    "screen": "doc",
+    "path": "Report. Office move proposal - {{date}}.md",
+    "docMode": "live",
+    "caret": "*The second floor| at 12 Mill Lane"
+  },
+  {
+    "name": "tut-look",
+    "data": "tutorial",
+    "screen": "doc",
+    "path": "Report. Office move proposal - {{date}}.md",
+    "docMenu": "look"
+  },
+  {
+    "name": "tut-export",
+    "data": "tutorial",
+    "screen": "doc",
+    "path": "Report. Office move proposal - {{date}}.md",
+    "docMenu": "more"
+  },
+  {
+    "name": "tut-proposal",
+    "data": "tutorial",
+    "screen": "doc",
+    "path": "Report. Office move proposal - {{date}}.md",
+    "focus": true
+  },
+  {
+    "name": "tut-card-beginner",
+    "data": "tutorial",
+    "screen": "doc",
+    "path": "Report. Office move proposal - {{date}}.md",
+    "focus": true,
+    "crop": [
+      150,
+      50,
+      400,
+      250
+    ]
+  },
+  {
+    "name": "tut2-projects",
+    "data": "intermediate",
+    "screen": "projects",
+    "path": "Project. Office move.md"
+  },
+  {
+    "name": "tut2-inbox",
+    "data": "intermediate",
+    "screen": "inbox",
+    "view": {
+      "inbox:sel": "task:16:- [ ] Order monitors for the quiet room"
+    }
+  },
+  {
+    "name": "tut2-tasks",
+    "data": "intermediate",
+    "screen": "tasks",
+    "view": {
+      "tasks:group": "context"
+    }
+  },
+  {
+    "name": "tut2-task-menu",
+    "data": "intermediate",
+    "screen": "tasks",
+    "taskMenu": "Project. Office move.md:12"
+  },
+  {
+    "name": "tut2-one-on-one",
+    "data": "intermediate",
+    "screen": "doc",
+    "path": "1-1. Lena - {{date}}.md"
+  },
+  {
+    "name": "tut2-dashboard",
+    "data": "intermediate",
+    "screen": "doc",
+    "path": "Dashboard. Office move.md"
+  },
+  {
+    "name": "tut2-palette",
+    "data": "intermediate",
+    "screen": "today",
+    "palette": true
+  },
+  {
+    "name": "tut2-weekly",
+    "data": "intermediate",
+    "screen": "weekly",
+    "view": {
+      "weekly:begun": true
+    }
+  },
+  {
+    "name": "tut2-tray",
+    "data": "intermediate",
+    "tray": true,
+    "width": 720
+  },
+  {
+    "name": "tut2-card",
+    "data": "intermediate",
+    "screen": "projects",
+    "path": "Project. Office move.md",
+    "crop": [
+      630,
+      60,
+      400,
+      250
+    ]
+  },
+  {
+    "name": "tut3-assistants",
+    "data": "advanced",
+    "screen": "settings",
+    "pane": "assistants"
+  },
+  {
+    "name": "tut3-sources",
+    "data": "advanced",
+    "screen": "sources"
+  },
+  {
+    "name": "tut3-wiki-page",
+    "data": "advanced",
+    "screen": "doc",
+    "path": "wiki/entities/12 Mill Lane.md"
+  },
+  {
+    "name": "tut3-provenance",
+    "data": "advanced",
+    "screen": "doc",
+    "path": "sources/Lease. 12 Mill Lane heads of terms.md"
+  },
+  {
+    "name": "tut3-review",
+    "data": "advanced",
+    "screen": "review"
+  },
+  {
+    "name": "tut3-ask",
+    "data": "advanced",
+    "screen": "ask",
+    "chat": "tutorial"
+  },
+  {
+    "name": "tut3-meeting",
+    "data": "advanced",
+    "screen": "meeting"
+  },
+  {
+    "name": "tut3-reply",
+    "data": "advanced",
+    "screen": "reply",
+    "path": "sources/Email. Thread. Re Fibre at Mill Lane - {{date-1}}.md",
+    "replyDraft": true
+  },
+  {
+    "name": "tut3-card",
+    "data": "advanced",
+    "screen": "doc",
+    "path": "wiki/entities/12 Mill Lane.md",
+    "crop": [
+      250,
+      70,
+      400,
+      250
+    ]
+  },
+  {
+    "name": "tut4-report-focus",
+    "data": "power",
+    "screen": "doc",
+    "path": "Report. Office move progress - {{date}}.md",
+    "focus": true
+  },
+  {
+    "name": "tut4-project",
+    "data": "power",
+    "screen": "projects",
+    "path": "Project. Office move.md"
+  },
+  {
+    "name": "tut4-session",
+    "data": "power",
+    "screen": "review",
+    "view": {
+      "review:sel": "pw-1"
+    }
+  },
+  {
+    "name": "tut4-held",
+    "data": "power",
+    "screen": "review",
+    "view": {
+      "review:sel": "pw-held"
+    }
+  },
+    {
+    "name": "tut4-card",
+    "data": "power",
+    "screen": "review",
+    "view": {
+      "review:sel": "pw-held"
+    },
+    "crop": [
+      640,
+      70,
+      400,
+      250
+    ]
   }
 ]

@@ -1,0 +1,354 @@
+<!doctype html>
+<!-- Copyright © 2026 Wayne Davies. Free software under the GNU General Public License, version 3 or later. -->
+<!-- See LICENSE for the full text. -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Run your week with Brainstead: an intermediate tutorial</title>
+  <meta name="description" content="A step-by-step tutorial for Brainstead users ready for more: projects, the Inbox, contexts, due and defer dates, 1-1 notes, dashboards, finding anything and the weekly review.">
+  <link rel="canonical" href="https://brainstead.davies.co.za/tutorials/intermediate.html">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ffffff">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Brainstead">
+  <meta property="og:url" content="https://brainstead.davies.co.za/tutorials/intermediate.html">
+  <meta property="og:title" content="Run your week with Brainstead">
+  <meta property="og:description" content="Juggle several projects without dropping a thing, and learn Brainstead's GTD tools as you go.">
+  <meta property="og:image" content="https://brainstead.davies.co.za/img/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Brainstead",
+        "item": "https://brainstead.davies.co.za/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Tutorials",
+        "item": "https://brainstead.davies.co.za/tutorials/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": "Run your week",
+        "item": "https://brainstead.davies.co.za/tutorials/intermediate.html"
+      }
+    ]
+  }
+  </script>
+  <link rel="apple-touch-icon" href="../img/icon-180.png">
+  <link rel="icon" href="../img/mark.svg" type="image/svg+xml">
+  <link rel="preload" href="../fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
+  <script>document.documentElement.classList.add("js");</script>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="tutorials.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-in">
+    <a class="brand" href="../"><img src="../img/mark.svg" alt="" width="22" height="22">Brainstead</a>
+    <nav class="nav-links">
+      <a href="../#gtd">Tasks</a>
+      <a href="../#notes">Notes</a>
+      <a href="../#wiki">Wiki</a>
+      <a href="./" aria-current="page">Tutorials</a>
+    </nav>
+    <a class="btn btn-sm" href="../#download">Download</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="t-hero">
+    <p class="eyebrow rise"><a href="./">Tutorials</a> › Intermediate</p>
+    <h1 class="rise">Run your week<br><span class="grad">without the worry.</span></h1>
+    <p class="lede rise">Several projects, a full Inbox and people waiting on you. Set up a system you can trust, so nothing slips through.</p>
+    <ul class="meta rise">
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>About an hour</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>8 steps</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>After <a href="beginner.html">Your first hour</a></li>
+    </ul>
+    <div class="pick rise">
+      <p>I'm using a</p>
+      <div class="seg" role="tablist" aria-label="Your computer">
+        <button role="tab" aria-selected="true" data-os="mac" title="Show the keys for a Mac">Mac</button>
+        <button role="tab" aria-selected="false" data-os="win" title="Show the keys for a Windows PC">Windows PC</button>
+        <span class="seg-thumb" aria-hidden="true"></span>
+      </div>
+      <p class="pick-note">The keys below follow your choice.</p>
+    </div>
+  </section>
+
+  <section class="brief">
+    <div class="brief-card reveal">
+      <p class="eyebrow">The story so far</p>
+      <p>Sam said yes: the team moves to 12 Mill Lane in four weeks. But the move isn't the only thing on your plate. Sam also wants <b>a team away day</b> in January, you're trying to <b>book a summer holiday</b>, and you meet Lena from facilities every week.</p>
+      <p>Things are starting to land in your Inbox faster than you can deal with them. This tutorial follows <b>Getting Things Done</b>: catch everything, decide what each thing is, keep it where you'll see it at the right moment, and look over it all once a week.</p>
+      <ul class="makes">
+        <li><b>Three projects</b>each with a next step</li>
+        <li><b>An empty Inbox</b>everything decided</li>
+        <li><b>1-1 notes</b>that remember for you</li>
+        <li><b>A weekly review</b>to keep it all current</li>
+      </ul>
+    </div>
+  </section>
+
+  <div class="t-body">
+    <aside class="toc" aria-label="Steps">
+      <p>Steps</p>
+      <ol>
+        <li><a href="#projects"><span>1</span>Give work a home</a></li>
+        <li><a href="#inbox"><span>2</span>Empty your Inbox</a></li>
+        <li><a href="#contexts"><span>3</span>The right task, right now</a></li>
+        <li><a href="#dates"><span>4</span>Due, defer and waiting</a></li>
+        <li><a href="#people"><span>5</span>Keep track of people</a></li>
+        <li><a href="#dashboard"><span>6</span>Build a dashboard</a></li>
+        <li><a href="#find"><span>7</span>Find anything</a></li>
+        <li><a href="#review"><span>8</span>The weekly review</a></li>
+      </ol>
+      <div class="bar" aria-hidden="true"><i></i></div>
+    </aside>
+
+    <div class="lessons">
+
+      <!-- 1 -->
+      <section id="projects" class="lesson">
+        <span class="num">1</span>
+        <h2>Give your work a home.</h2>
+        <p class="why">Anything that takes more than one step is a <b>project</b>. Each one gets its own note, what "done" looks like, and at least one <b>next action</b>: the very next thing you could physically do.</p>
+        <ol class="do">
+          <li>Click <b>Projects</b> in the sidebar, then <b>Office move</b>, the project note you made in the first tutorial.</li>
+          <li>Click the pencil beside <b>Done looks like</b> and write the finish line: <i>The team is working from 12 Mill Lane by 1 December</i>. Set <b>Area</b> to <b>Work</b> the same way.</li>
+          <li>Under the next actions, type in <b>Add a next action</b> and press <kbd data-win="Enter">↩</kbd>:
+            <div class="type">Book the removal firm for 22 November <span class="t">@calls effort:15m due:tomorrow</span></div>
+            The extra words become a context, a time estimate and a due date.
+          </li>
+          <li>Click <b>New project</b> at the top. Name it <b>Team away day</b>, write what done looks like, choose the <b>Work</b> area and click <b>Make project</b>.</li>
+          <li>Do the same for <b>Summer holiday</b>, in a new area called <b>Personal</b>. Projects are grouped by area, so home and work stay apart.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut2-projects-light.webp" alt="Projects grouped by area, with Office move open and its next actions and waiting-fors" width="1400" height="875" loading="lazy"></div>
+          <figcaption>Projects, grouped by area. Team away day says <b>No next action</b> in red: it's stuck until you decide its next step.</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v.01M11 12h1v5h1"/></svg>
+          <p><b>Why a "next action"?</b> "Organise the away day" is too big to start. "Ask the team for three dates" is something you can do in five minutes. A project with a next action keeps moving.</p>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section id="inbox" class="lesson">
+        <span class="num">2</span>
+        <h2>Empty your Inbox.</h2>
+        <p class="why">All week you've been catching things with <kbd data-win="Ctrl+Shift+Space">⌃⌥Space</kbd>: monitors for the quiet room, parking permits, a caterer. Now decide what each one is. It takes seconds an item once you know the keys.</p>
+        <ol class="do">
+          <li>Click <b>Inbox</b> in the sidebar. The first item opens on the right.</li>
+          <li>Ask yourself: <b>does it need doing?</b> Then press a key:
+            <ul>
+              <li><kbd>N</kbd> a <b>next action</b>: pick its project or context, and save.</li>
+              <li><kbd>P</kbd> a <b>new project</b>, when it needs more than one step.</li>
+              <li><kbd>W</kbd> <b>waiting for</b> someone else.</li>
+              <li><kbd>2</kbd> <b>done now</b>: if it takes under two minutes, just do it.</li>
+              <li><kbd>S</kbd> <b>someday / maybe</b>, <kbd>R</kbd> <b>file it</b> in a note, or <kbd data-win="Backspace">⌫</kbd> <b>delete</b> it.</li>
+            </ul>
+          </li>
+          <li>For <i>Order monitors for the quiet room</i>, press <kbd>N</kbd>, choose the <b>Office move</b> project and the <b>@computer</b> context, and save. It moves into the project.</li>
+          <li>The next item opens by itself. Keep going until the Inbox says it's empty.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut2-inbox-light.webp" alt="The Inbox with a captured task open and the choices for it" width="1400" height="875" loading="lazy"></div>
+          <figcaption>Each item, one at a time: does it need doing, and if so, what's next?</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14l-5-5 5-5M4 9h11a5 5 0 0 1 0 10h-3"/></svg>
+          <p><b>Changed your mind?</b> Press <kbd data-win="Ctrl+Z">⌘Z</kbd> to undo the last choice. Nothing is lost.</p>
+        </div>
+      </section>
+
+      <!-- 3 -->
+      <section id="contexts" class="lesson">
+        <span class="num">3</span>
+        <h2>The right task, right now.</h2>
+        <p class="why">You have ten minutes and your phone before a meeting. Which tasks fit? <b>Contexts</b> say where or with what a task can be done; <b>effort</b> says how long it takes. Together they find the task that fits the moment.</p>
+        <ol class="do">
+          <li>Open <b>Tasks</b>. <b>Next actions</b> lists every task that's ready to do, from every project and note.</li>
+          <li>Click a context chip, such as <b>@calls</b>, to see only phone calls.</li>
+          <li>Choose <b>15 min or less</b> from the effort menu to see only quick ones.</li>
+          <li>Or choose <b>Group by › Context</b> in the top bar to see everything in bands: calls, computer, errands, office.</li>
+          <li>Find yourself using a view often? Click <b>Save this list…</b> and give it a name, such as <i>Quick calls</i>. It stays on the left.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut2-tasks-light.webp" alt="Next actions grouped by context: calls, computer and errands" width="1400" height="875" loading="lazy"></div>
+          <figcaption>Next actions, grouped by context. Each task shows its project, so the Lisbon flights sit happily beside the removal firm.</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg>
+          <p><b>Keys for speed.</b> On any task list, <kbd>↑</kbd> <kbd>↓</kbd> choose a task, <kbd>Space</kbd> ticks it, and <kbd>/</kbd> jumps to the search box.</p>
+        </div>
+      </section>
+
+      <!-- 4 -->
+      <section id="dates" class="lesson">
+        <span class="num">4</span>
+        <h2>Due, defer and waiting.</h2>
+        <p class="why">Not every task has a deadline, and some can't start yet. Brainstead keeps them apart, so your lists only show what you can act on today.</p>
+        <ol class="do">
+          <li>On Tasks, <b>right-click</b> a task (or click its <b>⋯</b>) to open its menu.</li>
+          <li><b>Set due date</b> is for real deadlines: the day it <i>must</i> be done. Use it sparingly, so a due date means something.</li>
+          <li><b>Defer until</b> hides a task until a day you choose. <i>Label the desks at Mill Lane</i> can't happen until you have the keys, so defer it to the day you get them. It disappears from Next actions and comes back on Today that morning.</li>
+          <li><b>Waiting for someone</b> moves a task onto the <b>Waiting for</b> list: Lena's seating plan, Theo's fibre date. Look at that list before you chase anyone.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut2-task-menu-light.webp" alt="A task's menu: due date, defer until, context, effort, project and priority" width="1400" height="875" loading="lazy"></div>
+          <figcaption>Everything about a task, one right-click away.</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/></svg>
+          <p><b>Start each day on Today.</b> It shows what's overdue, due today, back from being deferred, and who you're waiting on. If Today is clear, pick from Next actions.</p>
+        </div>
+      </section>
+
+      <!-- 5 -->
+      <section id="people" class="lesson">
+        <span class="num">5</span>
+        <h2>Keep track of people.</h2>
+        <p class="why">You meet Lena every week. Brainstead can remember what you agreed last time, and what you still owe each other, so every catch-up starts where the last one ended.</p>
+        <ol class="do">
+          <li>Press <kbd data-win="Ctrl+N">⌘N</kbd>, choose the <b>1-1</b> template and pick <b>Lena</b>. (The example template lists Maya, Lena and Theo; open it under <b>Templates</b> to put in your own people.)</li>
+          <li>Write her update and yours under the headings.</li>
+          <li>Anything to follow up goes under <b>Follow-ups</b>, as a task tagged with her name:
+            <div class="type"><span class="k">- [ ]</span> Book the lift at Mill Lane for moving day <span class="t">#followup/Lena</span></div>
+          </li>
+          <li>Look at the panel on the right: <b>Last time with Lena</b> links last week's 1-1 and lists every follow-up still open with her, from any note.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut2-one-on-one-light.webp" alt="This week's 1-1 with Lena, and Last time with Lena with two open follow-ups" width="1400" height="875" loading="lazy"></div>
+          <figcaption>This week's 1-1, with last week's follow-ups waiting on the right.</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 20v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2M10 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8M21 20v-2a4 4 0 0 0-3-3.9M16 2.1a4 4 0 0 1 0 7.8"/></svg>
+          <p><b>All your follow-ups</b>, with everyone, are on the <b>Follow-ups</b> list on the Tasks screen.</p>
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section id="dashboard" class="lesson">
+        <span class="num">6</span>
+        <h2>Build a dashboard.</h2>
+        <p class="why">A note can hold a <b>live list</b> of tasks from across your vault. Make one page that shows the whole office move at a glance, and it keeps itself up to date.</p>
+        <ol class="do">
+          <li>Press <kbd data-win="Ctrl+N">⌘N</kbd>, choose <b>Blank note</b>, and name it with Type <b>Dashboard</b> and Title <b>Office move</b>.</li>
+          <li>Add a heading, <i>Due in the next two weeks</i>, then click <b>Insert a query</b>, the last button on the toolbar.</li>
+          <li>Fill in the form: <b>not done</b>, due before a date two weeks away, and the path <b>Office move</b> so it only shows this project's tasks. The preview shows what you'll get. Click <b>Insert</b>.</li>
+          <li>Add more lists the same way: <i>Waiting on others</i>, and <i>Follow-ups with Lena</i>.</li>
+          <li>Switch to <b>View</b>. Each list fills in, and you can tick tasks right there.</li>
+        </ol>
+        <p class="why">Behind the form is a short block of plain text, which you can also type yourself:</p>
+        <div class="type"><span class="k">```tasks</span>
+not done
+tags include #waiting-for
+path includes Office move
+<span class="k">```</span></div>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut2-dashboard-light.webp" alt="The Office move dashboard with three live task lists" width="1400" height="875" loading="lazy"></div>
+          <figcaption>One page for the whole move: what's due, who you're waiting on and what you owe Lena.</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v17l-5-4-5 4z"/></svg>
+          <p><b>Keep it handy.</b> Click the <b>bookmark</b> button at the top of the note to pin it to the sidebar, under Bookmarks.</p>
+        </div>
+      </section>
+
+      <!-- 7 -->
+      <section id="find" class="lesson">
+        <span class="num">7</span>
+        <h2>Find anything.</h2>
+        <p class="why">As your vault grows, don't go looking through lists. One shortcut finds any note, task, screen or command.</p>
+        <ol class="do">
+          <li>Press <kbd data-win="Ctrl+K">⌘K</kbd> from anywhere.</li>
+          <li>Type a few letters, such as <b>mill</b>, and press <kbd data-win="Enter">↩</kbd> to open the best match. It finds words inside notes too, not just names.</li>
+          <li>Need more room? Press <kbd data-win="Ctrl+Enter">⌘↩</kbd> instead, for the full <b>Search</b> page with every match.</li>
+          <li>Learn the screen keys: <kbd data-win="Ctrl+1">⌘1</kbd> is Today, <kbd data-win="Ctrl+2">⌘2</kbd> the Inbox, <kbd data-win="Ctrl+3">⌘3</kbd> Tasks and <kbd data-win="Ctrl+4">⌘4</kbd> Projects. <kbd data-win="Ctrl+[">⌘[</kbd> goes back.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut2-palette-light.webp" alt="The search box open over Today, listing screens and commands" width="1400" height="875" loading="lazy"></div>
+          <figcaption>One box to find a note, go to a screen or run a command.</figcaption>
+        </figure>
+      </section>
+
+      <!-- 8 -->
+      <section id="review" class="lesson">
+        <span class="num">8</span>
+        <h2>The weekly review.</h2>
+        <p class="why">This is the habit that makes it all work. Once a week, take half an hour to empty your head, bring every list up to date and make sure each project has a next step. Brainstead walks you through it.</p>
+        <ol class="do">
+          <li>On Friday afternoon, Today shows <b>Weekly review day</b> with <b>Start</b>. (Or click <b>Weekly review</b> in the sidebar and <b>Start the review</b> any time.)</li>
+          <li>Work through the steps on the left. <b>Get clear</b> empties your Inbox and the week's notes. <b>Get current</b> goes over next actions, meetings, projects and who you're waiting for. <b>Get creative</b> looks at someday ideas.</li>
+          <li>At <b>Projects</b>, Team away day still has no next action. Type one in: <i>Ask the team for three dates</i>.</li>
+          <li>Called away? <b>Pause</b> keeps your place; <b>Carry on</b> brings you back.</li>
+          <li>On the last step, click <b>Finish and save</b>. Brainstead writes the week's review note, with what you did and anything you noted.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut2-weekly-light.webp" alt="The weekly review at the Projects step, with Team away day flagged" width="1400" height="875" loading="lazy"></div>
+          <figcaption>Step 7 of 11: every project gets a next action before you move on.</figcaption>
+        </figure>
+        <h3>Between reviews: <span data-win="the notification area">the menu bar</span></h3>
+        <p class="why">Brainstead keeps an icon in your <span data-win="notification area, by the clock">menu bar</span>. Click it for what's overdue and due today, and a box to capture a task without opening the window.</p>
+        <figure class="shot reveal">
+          <div class="window free narrow"><img src="../img/tut2-tray-light.webp" alt="Brainstead's small window from the menu bar: counts, a capture box and shortcuts" width="720" height="1038" loading="lazy"></div>
+          <figcaption>Today at a glance, from anywhere.</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <p><b>Another day suits you better?</b> Change the review's day and time in <b>Settings › Jobs &amp; schedule</b>.</p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <section class="done">
+    <h2 class="reveal">Your week, under control.</h2>
+    <p class="lede reveal">The move is on track, the away day has a next step and the holiday is moving too. You learned to:</p>
+    <ul class="checks reveal">
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Run projects with next actions</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Empty the Inbox with a key an item</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Pick tasks by context and effort</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Use due, defer and waiting for</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Keep 1-1s and follow-ups</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Build a live dashboard</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Find anything with one key</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Do the weekly review</li>
+    </ul>
+    <div class="cta reveal">
+      <a class="btn" href="advanced.html">Next: Your own wiki</a>
+      <a class="link" href="./">All tutorials <span aria-hidden="true">›</span></a>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <nav class="foot-links">
+    <a href="../">Home</a>
+    <a href="./">Tutorials</a>
+    <a href="https://github.com/waynetd777/brainstead#readme">Guide</a>
+    <a href="https://github.com/waynetd777/brainstead/releases">Releases</a>
+    <a href="https://github.com/waynetd777/brainstead/blob/main/LICENSE">Licence</a>
+  </nav>
+  <p class="copy">© 2026 Wayne Davies. Free software under the GNU General Public License, version 3 or later.</p>
+</footer>
+
+<script src="tutorials.js"></script>
+</body>
+</html>

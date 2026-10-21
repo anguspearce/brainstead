@@ -15,7 +15,7 @@ import { shortcutsOpen } from "./Shortcuts";
 import { guideOffer } from "./help/GuideOffer";
 import { helpOpen, HelpView } from "./help/HelpDrawer";
 import { readingScene } from "./speech/player";
-import type { ClarifySuggestion, Theme, WeekPrepStatus } from "./api";
+import type { ClarifySuggestion, Reply, Theme, WeekPrepStatus } from "./api";
 import { ask, blankChat } from "./askState";
 import { nav, Screen, SettingsPane } from "./nav";
 import { noteDialog } from "./notes/dialogs";
@@ -47,6 +47,8 @@ export interface Scene {
   hover?: boolean;
   /** For "doc": the Linked from pane collapsed. */
   sideFolded?: boolean;
+  /** For "doc": the Look picker or the ⋯ menu open. */
+  docMenu?: "look" | "more";
   /** For "doc": in focus mode (⌘.). */
   focus?: boolean;
   /** For "doc": the note shown being read aloud at a block and spoken character, saying nothing. */
@@ -60,7 +62,9 @@ export interface Scene {
   /** Screens' remembered choices (`useViewState` keys), e.g. the selected task. */
   view?: Record<string, unknown>;
   /** For "ask": show a sample chat. */
-  chat?: boolean;
+  chat?: boolean | "tutorial";
+  /** For "reply": a sample draft for the thread, as Draft would make it (the website tutorial's). */
+  replyDraft?: boolean;
   /** An image in the vault (its path) shown full size over the window. */
   image?: string;
   /** For "weekly": sample suggestions for the week, instead of preparing them. */
@@ -106,6 +110,57 @@ function sampleChat() {
   };
 }
 
+/** The website's advanced tutorial (site/tutorials/advanced.html): a /wiki question about the
+ *  office move, over its demo vault (tools/screenshots/demo_tutorial.py). */
+function tutorialChat() {
+  const c = blankChat("claude:sonnet");
+  return {
+    ...c,
+    id: "scene",
+    title: "Before moving day",
+    filename: "Chat. Before moving day.md",
+    contextTokens: 24000,
+    contextWindow: 200000,
+    transcript: [
+      { id: "1", role: "user" as const, text: "/wiki What do we still need to sort out before moving day?" },
+      { id: "2", role: "tool" as const, text: "Searching the wiki" },
+      { id: "3", role: "tool" as const, text: "Reading 12 Mill Lane" },
+      { id: "4", role: "tool" as const, text: "Reading Moving day" },
+      { id: "5", role: "tool" as const, text: "Reading Swift Removals" },
+      {
+        id: "6",
+        role: "assistant" as const,
+        text: 'Three things, from the wiki and its sources:\n\n- **Book the goods lift.** Weekend moves at [[12 Mill Lane]] "need the goods lift booked a week ahead", so by 15 November.\n- **Let the fibre engineer in** on 10 November at 8am. Theo asked who will, and nobody has said yet.\n- **Parking for the movers.** Only "four permits included": [[Swift Removals]] bring two vans, so ask the landlord for two more for the weekend.\n\n[[Moving day]] has the plan for the day itself. You already have a task to book the lift, from your 1-1 with Lena.',
+        meta: "claude:sonnet",
+      },
+    ],
+    busy: false,
+    streaming: "",
+    status: "",
+    looked: ["Searching the wiki"],
+    queue: [],
+  };
+}
+
+/** The reply scene's draft is on (`replyDraft`). */
+export const sceneReply = new Store<Reply | null>(null);
+
+/** The tutorial's draft reply to Theo's email about the fibre at Mill Lane. */
+const sampleReply: Reply = {
+  answered: "partly",
+  verdict: "Two of Theo's three questions are answered; who lets the engineer in is left for you.",
+  callouts: [
+    { point: "Can someone let the engineer in at 8am on 10 November?", status: "partly" },
+    { point: "Will the comms room key be ready?", status: "answered" },
+    { point: "Do we still need the second line for guest Wi-Fi?", status: "answered" },
+  ],
+  draft:
+    "Hi Theo,\n\nThat's great news, thank you.\n\nThe landlord hands over the keys on 15 November, but Lena can collect the comms room key early, so it will be ready for the 10th. [someone] will meet the engineer at 8am.\n\nYes, please keep the second line: the quiet room and both meeting rooms will use the guest Wi-Fi.\n\nThanks,\n",
+  grounded: ["wiki/entities/12 Mill Lane.md", "1-1. Lena", "Report. Office move proposal"],
+  gaps: ["Who will meet the engineer at 8am on 10 November"],
+  task: "Confirm who lets the fibre engineer in on 10 November",
+};
+
 /** The Inbox scene's suggestion is on (`inboxSuggest`). */
 export const sceneInboxSuggest = new Store(false);
 
@@ -120,6 +175,9 @@ export const sampleSuggestion = (id: string): ClarifySuggestion => ({
   due: "2026-11-07",
   why: "The steerco moved the launch, and Theo is updating the comms plan: nothing for you to do until he has.",
 });
+
+/** For "doc": the menu the scene opens on the note (`docMenu`). */
+export const sceneDocMenu = new Store<"look" | "more" | null>(null);
 
 /** The weekly review's scene suggestions are on (`weekprep`). */
 export const scenePrep = new Store(false);
@@ -194,10 +252,12 @@ export function applyScene(sc: Scene) {
   // Fix name: `q` the name as written, `title` the right one.
   if (sc.dialog === "shortcuts") shortcutsOpen.set(true);
   if (sc.dialog === "fix-name") fixNameOpen.set({ wrong: sc.q, right: sc.title });
+  if (sc.docMenu) sceneDocMenu.set(sc.docMenu);
   if (sc.weekprep) scenePrep.set(true);
   if (sc.inboxSuggest) sceneInboxSuggest.set(true);
   if (sc.image) imageView.set({ url: convertFileSrc(vaultFile(settings.get().vaultPath ?? "", sc.image)), alt: sc.image });
-  if (sc.chat) ask.set({ chats: [sampleChat()], active: "scene" });
+  if (sc.chat) ask.set({ chats: [sc.chat === "tutorial" ? tutorialChat() : sampleChat()], active: "scene" });
+  if (sc.replyDraft) sceneReply.set(sampleReply);
   if (sc.help) helpOpen.set(sc.help);
   if (sc.guideOffer) guideOffer.set(true);
   if (sc.reading) readingScene.set(sc.reading);

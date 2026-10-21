@@ -21,6 +21,7 @@ import { toast } from "../Toast";
 import { TopBar } from "../TopBar";
 import { Seg } from "../ui";
 import { keyLabel } from "../platform";
+import { sceneReply } from "../scene";
 
 type Tone = "brief" | "warm" | "formal";
 
@@ -82,6 +83,14 @@ export function ReplyScreen() {
   // The thread is read, and the draft, asked changes and Undo start over, when another thread is
   // chosen or the thread's own file changes, not when anything else in the vault does.
   const [read, setRead] = useState(0);
+  // Screenshot mode: the scene's sample draft, once the thread is read.
+  useEffect(() => {
+    const s = sceneReply.get();
+    if (s && text) {
+      setR(s);
+      setDraft(s.draft);
+    }
+  }, [text]);
   const seen = useRef(vv);
   useEffect(() => {
     if (seen.current === vv) return;

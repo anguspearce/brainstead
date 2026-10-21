@@ -46,6 +46,8 @@ from PIL import Image, ImageChops, ImageCms, ImageDraw, ImageStat
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 HERE = ROOT / "tools" / "screenshots"
+# The demo's writers (demo_wiki.py, demo_tutorial.py) sit beside the scenes.
+sys.path.insert(0, str(HERE))
 DEMO = ROOT / ".demo"
 # Scenes the docs show ("docs": true) go to docs/images/ and are committed; the rest, for checking
 # screens while building, go to a gitignored folder.
@@ -110,10 +112,13 @@ def make_demo():
     vault = DEMO / "Home" / "Notes"
     shutil.copytree(FIXTURE, vault)
     # Demo-only wiki pages around the fixture's two, so the Graph and the pies are well filled.
-    sys.path.insert(0, str(HERE))
     import demo_wiki
 
     demo_wiki.write(vault)
+    # The website tutorials' own vault and first run (scenes with "data").
+    import demo_tutorial
+
+    demo_tutorial.write(DEMO, DEMO / "Home")
     (DEMO / "data").mkdir(parents=True)
     settings = {"vaultPath": str(vault), "excluded": ["archived"], "readOnly": True, "theme": "system"}
     (DEMO / "data" / "settings.json").write_text(json.dumps(settings, indent=2))
@@ -292,8 +297,12 @@ def demo_changes(out, vault):
 def capture(scene, theme, data, settle):
     """Launches the app on the scene, unseen, and returns its webview's snapshot, taken `settle`
     seconds in, as an sRGB image, or None when none came."""
-    sc = {k: v for k, v in scene.items() if k not in ("crop", "width", "docs")}
+    sc = {k: v for k, v in scene.items() if k not in ("crop", "width", "docs", "data")}
     sc["theme"] = theme
+    if scene.get("data") and "path" in sc:
+        import demo_tutorial
+
+        sc["path"] = demo_tutorial.fill(sc["path"], datetime.datetime.now())
     with tempfile.TemporaryDirectory() as tmp:
         shot = pathlib.Path(tmp) / "shot.tiff"
         app = subprocess.Popen(
@@ -390,6 +399,12 @@ def shoot(scene, theme, data):
         big = finish(raw, scene, theme, full=True)
         big.save(site, "WEBP", quality=90, method=6)
         print(f"  {site.relative_to(ROOT)}  {big.width}x{big.height}")
+    # A picture shown at its own size (the tutorials' cards) has a 1x copy beside it, for srcset:
+    # a screen at 1x then gets the app's own pixels, not a 2x picture scaled down to a blur.
+    small = SITE / f"{scene['name']}-{theme}@1x.webp"
+    if small.exists():
+        im.save(small, "WEBP", quality=92, method=6)
+        print(f"  {small.relative_to(ROOT)}  {im.width}x{im.height}")
     return True
 
 
@@ -452,6 +467,12 @@ def main():
             def one(job):
                 data = free.get()
                 try:
+                    # A scene on the tutorials' app data runs on a fresh copy of it.
+                    if job[0].get("data"):
+                        own = pathlib.Path(tempfile.mkdtemp(dir=tmp))
+                        shutil.rmtree(own)
+                        shutil.copytree(DEMO / f"data-{job[0]['data']}", own)
+                        return shoot(*job, own)
                     return shoot(*job, data)
                 finally:
                     free.put(data)

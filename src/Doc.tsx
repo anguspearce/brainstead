@@ -57,6 +57,7 @@ import { LastTimeCard, NoteTasksCard, OutlineCard } from "./notes/SideCards";
 import { ago, Dialog, LAYER_LABEL, LayerTag, Popover, Seg, useDebounced } from "./ui";
 import { TypePill } from "./typeTone";
 import { scriptsAllowed } from "./md/scripts";
+import { sceneDocMenu } from "./scene";
 import { getList, getScalar } from "./wiki/props";
 import { FactsCard, SourcesCard, WikiFields } from "./wiki/WikiFields";
 import { iconizeEmoji } from "./md/fieldEmoji";
@@ -83,6 +84,7 @@ export function DocScreen() {
   const [err, setErr] = useState<string | null>(null);
   const [mode, setMode] = useState<DocMode>(openingMode);
   const menu = useFileMenu();
+  const moreBtn = useRef<HTMLButtonElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const readEl = useRef<HTMLDivElement>(null);
   /** Read aloud: the box the word highlight is drawn in, the blocks being read, and the screen's main. */
@@ -320,6 +322,11 @@ export function DocScreen() {
     return () => window.removeEventListener("keydown", k);
   }, [focus]);
   const richEl = () => (s && isMarkdown(s.path) ? readEl.current : null);
+  // Screenshot mode: the scene's ⋯ menu open once the note has loaded.
+  useEffect(() => {
+    if (s && moreBtn.current && sceneDocMenu.get() === "more") menu.open(moreBtn.current.getBoundingClientRect(), s);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s]);
 
   // Ticking a task in View: the one-line write the task screens make (⌘Z undoes it), or, with
   // unsaved edits, an edit in the editor's text that's saved with them.
@@ -684,6 +691,7 @@ export function DocScreen() {
             <button
               type="button"
               className="ibtn"
+              ref={moreBtn}
               aria-label="More"
               title="Graph, read aloud, text size, focus mode, copy, rename and more for this file"
               onClick={(e) => menu.open(e.currentTarget.getBoundingClientRect(), s)}
@@ -1317,6 +1325,11 @@ export function h1RepeatsTitle(src: string, title: string): boolean {
 /** The document's light/dark switch, and its theme and colour (defaults in Settings › Notes). */
 function DocLookControls({ look }: { look: ReturnType<typeof useDocLook> }) {
   const [at, setAt] = useState<DOMRect | null>(null);
+  const btn = useRef<HTMLButtonElement>(null);
+  // Screenshot mode: the scene's Look picker open.
+  useEffect(() => {
+    if (btn.current && sceneDocMenu.get() === "look") setAt(btn.current.getBoundingClientRect());
+  }, []);
   const style = DOC_STYLES.find(([id]) => id === look.style)?.[1] ?? "Brainstead";
   const colour = DOC_ACCENTS.find(([id]) => id === look.accent);
   const label = `${style}, ${colour?.[1] ?? "Brainstead blue"}${look.overridden ? " (this note)" : ""}`;
@@ -1332,6 +1345,7 @@ function DocLookControls({ look }: { look: ReturnType<typeof useDocLook> }) {
         <Icon name={look.theme === "dark" ? "sun" : "moon"} size={14} />
       </button>
       <button
+        ref={btn}
         type="button"
         className={`btn ghost sm lookbtn ${look.overridden ? "own" : ""}`}
         aria-label={`Document look: ${label}`}

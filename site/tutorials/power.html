@@ -1,0 +1,492 @@
+<!doctype html>
+<!-- Copyright © 2026 Wayne Davies. Free software under the GNU General Public License, version 3 or later. -->
+<!-- See LICENSE for the full text. -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Command centre: Brainstead for power users</title>
+  <meta name="description" content="Recipes for running Brainstead from Terminal with an AI assistant and its MCP tools, together with Jira, Confluence, Asana, Figma, Slack, GitHub and your calendar: briefings, reports, ticket sync, overnight runs and your own commands.">
+  <link rel="canonical" href="https://brainstead.davies.co.za/tutorials/power.html">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ffffff">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Brainstead">
+  <meta property="og:url" content="https://brainstead.davies.co.za/tutorials/power.html">
+  <meta property="og:title" content="Command centre: Brainstead for power users">
+  <meta property="og:description" content="One assistant, Brainstead's tools and the rest of your stack: recipes that do an afternoon's work in a sentence.">
+  <meta property="og:image" content="https://brainstead.davies.co.za/img/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Brainstead",
+        "item": "https://brainstead.davies.co.za/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Tutorials",
+        "item": "https://brainstead.davies.co.za/tutorials/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": "Command centre",
+        "item": "https://brainstead.davies.co.za/tutorials/power.html"
+      }
+    ]
+  }
+  </script>
+  <link rel="apple-touch-icon" href="../img/icon-180.png">
+  <link rel="icon" href="../img/mark.svg" type="image/svg+xml">
+  <link rel="preload" href="../fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
+  <script>document.documentElement.classList.add("js");</script>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="tutorials.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-in">
+    <a class="brand" href="../"><img src="../img/mark.svg" alt="" width="22" height="22">Brainstead</a>
+    <nav class="nav-links">
+      <a href="../#gtd">Tasks</a>
+      <a href="../#notes">Notes</a>
+      <a href="../#wiki">Wiki</a>
+      <a href="./" aria-current="page">Tutorials</a>
+    </nav>
+    <a class="btn btn-sm" href="../#download">Download</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="t-hero">
+    <p class="eyebrow rise"><a href="./">Tutorials</a> › Power user</p>
+    <h1 class="rise">Command centre.<br><span class="grad">One sentence at a time.</span></h1>
+    <p class="lede rise">Your assistant in Terminal, with Brainstead's tools and the rest of your stack: Jira, Confluence, Asana, Figma, Slack, GitHub and your calendar. Ten recipes that turn an afternoon's work into one request.</p>
+    <ul class="meta rise">
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Dip in, any order</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-6-6-6M12 19h8"/></svg>10 recipes</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>After <a href="advanced.html">Your own wiki</a></li>
+    </ul>
+    <div class="pick rise">
+      <p>I'm using a</p>
+      <div class="seg" role="tablist" aria-label="Your computer">
+        <button role="tab" aria-selected="true" data-os="mac" title="Show the commands for a Mac">Mac</button>
+        <button role="tab" aria-selected="false" data-os="win" title="Show the commands for a Windows PC">Windows PC</button>
+        <span class="seg-thumb" aria-hidden="true"></span>
+      </div>
+      <p class="pick-note">The commands below follow your choice.</p>
+    </div>
+  </section>
+
+  <section class="brief">
+    <div class="brief-card reveal">
+      <p class="eyebrow">The story so far</p>
+      <p>The move is two weeks out and it has spread everywhere. IT's work is in <b>Jira</b>, the fit-out plan in <b>Confluence</b>, facilities' jobs in <b>Asana</b>, the new signage in <b>Figma</b>, and the team talks it all over in <b>Slack</b>. Your own notes, tasks and wiki are in Brainstead.</p>
+      <p>An assistant with tools for all of them can join them up. Each recipe below shows a real session: what you type, the tools it calls, and what you get. Brainstead's tools make every change through the app, so all of it lands in <b>Changes</b>, where you can check it and undo it.</p>
+      <ul class="makes">
+        <li><b>A morning briefing</b>from every tool</li>
+        <li><b>A report for Sam</b>from Jira and Confluence</li>
+        <li><b>Tickets and tasks</b>kept in step</li>
+        <li><b>Overnight runs</b>you check over coffee</li>
+      </ul>
+    </div>
+  </section>
+
+  <div class="t-body">
+    <aside class="toc" aria-label="Recipes">
+      <p>Recipes</p>
+      <ol>
+        <li><a href="#connect"><span>1</span>Connect everything</a></li>
+        <li><a href="#briefing"><span>2</span>Morning briefing</a></li>
+        <li><a href="#report"><span>3</span>A report for Sam</a></li>
+        <li><a href="#sync"><span>4</span>Jira and tasks in step</a></li>
+        <li><a href="#figma"><span>5</span>Design to decision</a></li>
+        <li><a href="#lease"><span>6</span>The lease changed</a></li>
+        <li><a href="#meeting"><span>7</span>After the meeting</a></li>
+        <li><a href="#review"><span>8</span>Review in Terminal</a></li>
+        <li><a href="#overnight"><span>9</span>While you sleep</a></li>
+        <li><a href="#commands"><span>10</span>Your own commands</a></li>
+      </ol>
+      <div class="bar" aria-hidden="true"><i></i></div>
+    </aside>
+
+    <div class="lessons">
+
+      <!-- 1 -->
+      <section id="connect" class="lesson">
+        <span class="num">1</span>
+        <h2>Connect everything.</h2>
+        <p class="why">An MCP server is a set of tools an assistant can use. Brainstead has one, and so do most of the tools you work in. Add them once, and every session can use them all together.</p>
+        <ol class="do">
+          <li>In Brainstead, open <b>Settings › AI assistants</b>, find <b>Brainstead's tools</b> and copy the command for your assistant. Run it once in <span data-win="PowerShell">Terminal</span>.</li>
+          <li>Add the others the way each one's documentation says. Most are one <code>mcp add</code> line, or a connector you switch on in your assistant's settings, then sign in once.</li>
+          <li>Check what's connected:
+            <div class="session">
+              <div class="s-bar"><i></i><i></i><i></i><span>~ — zsh</span></div>
+              <div class="s-body">
+                <p class="s-label s-l-you">You run:</p>
+                <p class="s-you">claude mcp list</p>
+                <p class="s-label s-l-result">Your terminal lists what Claude can use:</p>
+                <ul class="s-tools">
+                  <li>brainstead: Brainstead --mcp — Connected</li>
+                  <li>atlassian (Jira, Confluence) — Connected</li>
+                  <li>asana — Connected</li>
+                  <li>figma — Connected</li>
+                  <li>slack — Connected</li>
+                  <li>github — Connected</li>
+                  <li>google-calendar — Connected</li>
+                </ul>
+              </div>
+            </div>
+          </li>
+          <li>Start your assistant from any folder: <code>claude</code>. If Brainstead isn't open, its tools open it.</li>
+        </ol>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6z M9 12l2 2 4-4"/></svg>
+          <p><b>What it may change.</b> Through Brainstead's tools an assistant changes your vault only as the screens do, with their checks, and every change is listed in Changes with Revert. Templates, runnable code and system notes are always held for you. The vault's <code>CLAUDE.md</code> tells assistants to use the tools instead of editing files.</p>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section id="briefing" class="lesson">
+        <span class="num">2</span>
+        <h2>The morning briefing.</h2>
+        <p class="why">Before you open a single app: what's due, what's new, what's on the calendar, and who asked you for something overnight.</p>
+        <ul class="uses"><li class="mcp">brainstead</li><li class="mcp calendar">calendar</li><li class="mcp slack">slack</li></ul>
+        <div class="session reveal">
+          <div class="s-bar"><i></i><i></i><i></i><span>claude — ~</span></div>
+          <div class="s-body">
+            <p class="s-label s-l-you">You ask Claude:</p>
+            <p class="s-you">Brief me for today: my tasks, the Inbox, my calendar, and anything in #office-move that needs me. Capture whatever I have to act on.</p>
+            <p class="s-label s-l-tools">Claude uses these tools:</p>
+            <ul class="s-tools">
+              <li><b class="mcp">brainstead</b> list_tasks <span class="r">view: today — 2 due, 1 overdue, 3 waiting</span></li>
+              <li><b class="mcp">brainstead</b> list_inbox <span class="r">6 items: 1 email, 1 transcript, 3 tasks, 1 thought</span></li>
+              <li><b class="mcp calendar">calendar</b> today's events <span class="r">1-1 with Lena 10:00 · Leadership 14:00</span></li>
+              <li><b class="mcp slack">slack</b> search #office-move, mentions since yesterday <span class="r">2 messages for you</span></li>
+              <li><b class="mcp">brainstead</b> capture <span class="r">task: Send Priya the parking permit form</span></li>
+              <li><b class="mcp">brainstead</b> capture <span class="r">task: Reply to Jonas about desk labels</span></li>
+            </ul>
+            <p class="s-label s-l-result">Claude briefs you, and two new tasks wait in your Inbox:</p>
+            <div class="s-answer">
+              <p><b>Today:</b> book the removal firm (overdue since yesterday) and send the moving-day checklist. You're waiting on Theo (fibre date), Lena (seating plan) and the deep clean.</p>
+              <p><b>Calendar:</b> your 1-1 with Lena at 10:00 has two open follow-ups: the quiet-room booking rules and the goods lift. Leadership at 14:00: Sam may ask about the move.</p>
+              <p><b>Slack:</b> Priya needs the parking form, and Jonas asked how desks will be labelled. Both are in your Inbox now.</p>
+            </div>
+          </div>
+        </div>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg>
+          <p><b>Then clear it.</b> Follow up with <i>"clarify the Inbox: suggest what each one is and wait for my yes"</i>. It uses <code>clarify_inbox</code>, the Inbox's own choices, one item at a time.</p>
+        </div>
+      </section>
+
+      <!-- 3 -->
+      <section id="report" class="lesson">
+        <span class="num">3</span>
+        <h2>A progress report for Sam.</h2>
+        <p class="why">Sam wants an update for the leadership meeting. The facts are in four places. One request pulls them together into a report with a chart, in your vault, styled and ready to export.</p>
+        <ul class="uses"><li class="mcp atlassian">jira</li><li class="mcp atlassian">confluence</li><li class="mcp asana">asana</li><li class="mcp">brainstead</li></ul>
+        <div class="session reveal">
+          <div class="s-bar"><i></i><i></i><i></i><span>claude — ~</span></div>
+          <div class="s-body">
+            <p class="s-label s-l-you">You ask Claude:</p>
+            <p class="s-you">Write Sam a progress report on the office move for this afternoon. Use the FAC tickets labelled office-move in Jira, the "Mill Lane fit-out plan" page in Confluence, facilities' Asana project and my project in Brainstead. Status by area, a chart of open tickets by week, risks, and the decisions we need from him. Give it the Report look in dark blue.</p>
+            <p class="s-label s-l-tools">Claude uses these tools:</p>
+            <ul class="s-tools">
+              <li><b class="mcp atlassian">atlassian</b> searchJiraIssuesUsingJql <span class="r">project = FAC AND labels = office-move — 24 tickets, 15 done</span></li>
+              <li><b class="mcp atlassian">atlassian</b> getConfluencePage <span class="r">Mill Lane fit-out plan — updated yesterday by Lena</span></li>
+              <li><b class="mcp asana">asana</b> tasks in "Office move — facilities" <span class="r">11 tasks, 2 overdue</span></li>
+              <li><b class="mcp">brainstead</b> list_projects <span class="r">Office move: 7 next actions, 3 waiting</span></li>
+              <li><b class="mcp">brainstead</b> facts <span class="r">12 Mill Lane: parking — four permits included (lease)</span></li>
+              <li><b class="mcp">brainstead</b> add_image <span class="r">images/move-burndown.svg</span></li>
+              <li><b class="mcp">brainstead</b> create_note <span class="r">Report. Office move progress - 2026-10-21</span></li>
+              <li><b class="mcp">brainstead</b> note_look <span class="r">Report, dark blue</span></li>
+              <li><b class="mcp">brainstead</b> open <span class="r">the report, in View</span></li>
+            </ul>
+            <p class="s-label s-l-result">Claude writes the report into your vault and opens it in Brainstead:</p>
+            <div class="s-answer">
+              <p>Done: <b>Office move progress</b> is open in Brainstead. On track overall; 15 of 24 tickets closed; one risk (parking for the movers' vans) and two decisions for Sam. Press <code data-win="Ctrl+P">⌘P</code> to export the PDF.</p>
+            </div>
+          </div>
+        </div>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut4-report-focus-light.webp" alt="The Office move progress report: status by area in a table, and a chart of open tickets by week" width="1400" height="875" loading="lazy"></div>
+          <figcaption>The report, written into your vault from Jira, Confluence, Asana and your own notes.</figcaption>
+        </figure>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut4-session-light.webp" alt="Changes: the terminal session's three changes, a new image, a new note and three tasks, each with Revert" width="1400" height="875" loading="lazy"></div>
+          <figcaption>Everything the session did, in Changes. <b>Revert all</b> undoes the lot.</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M16 6l-4-4-4 4M12 2v13"/></svg>
+          <p><b>Share it where Sam reads.</b> Add <i>"and post the summary as a comment on the FAC epic"</i> or <i>"and send it to #leadership in Slack"</i>. The PDF itself is one <kbd data-win="Ctrl+P">⌘P</kbd> away.</p>
+        </div>
+      </section>
+
+      <!-- 4 -->
+      <section id="sync" class="lesson">
+        <span class="num">4</span>
+        <h2>Jira and your tasks, in step.</h2>
+        <p class="why">Tickets live in Jira; your day lives in Brainstead. Bring yours across as next actions, other people's as waiting-fors, and send your progress back.</p>
+        <ul class="uses"><li class="mcp atlassian">jira</li><li class="mcp">brainstead</li></ul>
+        <div class="session reveal">
+          <div class="s-bar"><i></i><i></i><i></i><span>claude — ~</span></div>
+          <div class="s-body">
+            <p class="s-label s-l-you">You ask Claude:</p>
+            <p class="s-you">Put my open office-move tickets on the Office move project as next actions, with their due dates and the ticket number first. Tickets assigned to Lena or Theo that I'm watching go under Waiting for. Skip any already there.</p>
+            <p class="s-label s-l-tools">Claude uses these tools:</p>
+            <ul class="s-tools">
+              <li><b class="mcp atlassian">atlassian</b> searchJiraIssuesUsingJql <span class="r">labels = office-move AND (assignee = currentUser() OR watcher = currentUser()) AND statusCategory != Done — 5</span></li>
+              <li><b class="mcp">brainstead</b> list_tasks <span class="r">project: Office move — 2 tickets already there</span></li>
+              <li><b class="mcp">brainstead</b> create_task <span class="r">FAC-142 Order the network switches · @computer · due Fri</span></li>
+              <li><b class="mcp">brainstead</b> create_task <span class="r">FAC-147 Approve the furniture delivery slot · @calls · due Sun</span></li>
+              <li><b class="mcp">brainstead</b> create_task <span class="r">FAC-150 Lena: deep clean at Mill Lane · #waiting-for</span></li>
+            </ul>
+            <p class="s-label s-l-result">Claude adds the tickets to your project:</p>
+            <div class="s-answer"><p>Three tickets added to <b>Office move</b>: two next actions and one waiting-for. Two were already on the project, so I left them.</p></div>
+          </div>
+        </div>
+        <p class="why">Later, when you've ordered the switches and ticked the task:</p>
+        <div class="session reveal">
+          <div class="s-bar"><i></i><i></i><i></i><span>claude — ~</span></div>
+          <div class="s-body">
+            <p class="s-label s-l-you">You ask Claude:</p>
+            <p class="s-you">I've ticked FAC-142. Close the ticket with a comment saying they arrive on 6 November.</p>
+            <p class="s-label s-l-tools">Claude uses these tools:</p>
+            <ul class="s-tools">
+              <li><b class="mcp">brainstead</b> list_tasks <span class="r">done this week: FAC-142 Order the network switches ✓</span></li>
+              <li><b class="mcp atlassian">atlassian</b> addCommentToJiraIssue <span class="r">FAC-142: Ordered; arriving 6 November.</span></li>
+              <li><b class="mcp atlassian">atlassian</b> transitionJiraIssue <span class="r">FAC-142 → Done</span></li>
+            </ul>
+            <p class="s-label s-l-result">Claude updates Jira:</p>
+            <div class="s-answer"><p>FAC-142 is Done in Jira, with your comment.</p></div>
+          </div>
+        </div>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut4-project-light.webp" alt="The Office move project with the Jira tickets among its next actions and waiting-fors" width="1400" height="875" loading="lazy"></div>
+          <figcaption>Jira tickets as next actions, beside everything else on the project.</figcaption>
+        </figure>
+      </section>
+
+      <!-- 5 -->
+      <section id="figma" class="lesson">
+        <span class="num">5</span>
+        <h2>From design to decision.</h2>
+        <p class="why">Priya has put three signage options for the new office in Figma. Get them in front of the team, gather the votes, and keep the outcome where you'll find it.</p>
+        <ul class="uses"><li class="mcp figma">figma</li><li class="mcp">brainstead</li><li class="mcp slack">slack</li></ul>
+        <div class="session reveal">
+          <div class="s-bar"><i></i><i></i><i></i><span>claude — ~</span></div>
+          <div class="s-body">
+            <p class="s-label s-l-you">You ask Claude:</p>
+            <p class="s-you">Take the three frames on the "Options" page of Priya's "Mill Lane signage" Figma file and make a decision note with a picture of each and its pros and cons. Then ask #office-move to vote by Thursday, and give me a task to tally the votes.</p>
+            <p class="s-label s-l-tools">Claude uses these tools:</p>
+            <ul class="s-tools">
+              <li><b class="mcp figma">figma</b> get metadata <span class="r">Mill Lane signage › Options — 3 frames</span></li>
+              <li><b class="mcp figma">figma</b> get screenshot ×3 <span class="r">Wayfinding, Minimal, Bold colour</span></li>
+              <li><b class="mcp">brainstead</b> add_image ×3 <span class="r">images/signage-wayfinding.png, …</span></li>
+              <li><b class="mcp">brainstead</b> create_note <span class="r">Decision. Mill Lane signage - 2026-10-21</span></li>
+              <li><b class="mcp slack">slack</b> send message <span class="r">#office-move: three options, vote with an emoji by Thursday</span></li>
+              <li><b class="mcp">brainstead</b> create_task <span class="r">Tally the signage votes · Office move · due Thu</span></li>
+            </ul>
+            <p class="s-label s-l-result">Claude makes the note, starts the vote and adds your task:</p>
+            <div class="s-answer"><p>The decision note has the three options side by side. The vote is up in #office-move, and you have a task for Thursday. When it's in, say <i>"record the result in the decision note"</i>.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section id="lease" class="lesson">
+        <span class="num">6</span>
+        <h2>The lease changed.</h2>
+        <p class="why">The landlord's agent sends revised terms as a PDF. What actually changed, does the wiki still hold, and what do you say back?</p>
+        <ul class="uses"><li class="mcp">brainstead</li></ul>
+        <div class="session reveal">
+          <div class="s-bar"><i></i><i></i><i></i><span>claude — ~</span></div>
+          <div class="s-body">
+            <p class="s-label s-l-you">You ask Claude:</p>
+            <p class="s-you">Add <span data-win="~\Downloads\Mill Lane terms v2.pdf">~/Downloads/Mill Lane terms v2.pdf</span> to Sources, compare it with the first heads of terms, update the wiki, and draft a reply to the agent's email questioning anything that got worse for us.</p>
+            <p class="s-label s-l-tools">Claude uses these tools:</p>
+            <ul class="s-tools">
+              <li><b class="mcp">brainstead</b> import_sources <span class="r">sources/Mill Lane terms v2.pdf</span></li>
+              <li><b class="mcp">brainstead</b> compare_docs <span class="r">3 differences: break clause, service charge, parking</span></li>
+              <li><b class="mcp">brainstead</b> start_run <span class="r">ingest: Mill Lane terms v2.pdf</span></li>
+              <li><b class="mcp">brainstead</b> run_status <span class="r">done — 2 pages updated, every quote found</span></li>
+              <li><b class="mcp">brainstead</b> facts <span class="r">12 Mill Lane › break: year three → year two (superseded)</span></li>
+              <li><b class="mcp">brainstead</b> draft_reply <span class="r">Re Revised terms — partly answered, 1 gap</span></li>
+            </ul>
+            <p class="s-label s-l-result">Claude sums up what changed, updates the wiki and drafts the reply:</p>
+            <div class="s-answer">
+              <p>Three changes: the break moves to <b>year two</b> (better for us), a new <b>service charge of $1,100 a month</b> (worse), and parking is now <b>three permits</b>, not four (worse).</p>
+              <p>12 Mill Lane and Moving day are updated, each change quoting the new terms. The draft reply asks about the service charge and the lost permit; it leaves the start date of the service charge for you to fill in.</p>
+            </div>
+          </div>
+        </div>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>
+          <p><b>Nothing quietly overwritten.</b> The wiki keeps the old value as superseded, with its date and quote, so <i>"what did the first terms say about parking?"</i> still has an answer.</p>
+        </div>
+      </section>
+
+      <!-- 7 -->
+      <section id="meeting" class="lesson">
+        <span class="num">7</span>
+        <h2>After the meeting.</h2>
+        <p class="why">The weekly check-in was on Teams. Its actions belong in three different systems. Write it up once, and send each action where it'll get done.</p>
+        <ul class="uses"><li class="mcp">brainstead</li><li class="mcp atlassian">jira</li><li class="mcp asana">asana</li><li class="mcp slack">slack</li></ul>
+        <div class="session reveal">
+          <div class="s-bar"><i></i><i></i><i></i><span>claude — ~</span></div>
+          <div class="s-body">
+            <p class="s-label s-l-you">You ask Claude:</p>
+            <p class="s-you">Write up today's office move check-in. Then: IT actions become FAC tickets for Theo, facilities actions go to Lena in Asana, mine stay as tasks. Post a three-line summary to #office-move.</p>
+            <p class="s-label s-l-tools">Claude uses these tools:</p>
+            <ul class="s-tools">
+              <li><b class="mcp">brainstead</b> list_transcripts <span class="r">Office move check-in - 2026-10-21</span></li>
+              <li><b class="mcp">brainstead</b> start_run <span class="r">meeting_note — made from your Meeting template, ingested</span></li>
+              <li><b class="mcp">brainstead</b> read_section <span class="r">Meeting. Office move check-in - 2026-10-21 › Actions — 5 actions</span></li>
+              <li><b class="mcp atlassian">atlassian</b> createJiraIssue ×2 <span class="r">FAC-158 Be on site for the fibre engineer · FAC-159 Label the comms room ports</span></li>
+              <li><b class="mcp asana">asana</b> create task ×2 <span class="r">Book the goods lift · Order kitchen supplies (Lena)</span></li>
+              <li><b class="mcp">brainstead</b> edit_task ×4 <span class="r">ticket numbers added; Theo's and Lena's marked waiting for</span></li>
+              <li><b class="mcp slack">slack</b> send message <span class="r">#office-move: check-in summary</span></li>
+            </ul>
+            <p class="s-label s-l-result">Claude writes the note and sends each action where it belongs:</p>
+            <div class="s-answer"><p>The meeting note is in your vault and the wiki. Two tickets for Theo, two Asana tasks for Lena, and your one action, <i>Send the moving-day checklist</i>, is due Friday. The summary is posted.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8 -->
+      <section id="review" class="lesson">
+        <span class="num">8</span>
+        <h2>The weekly review, in Terminal.</h2>
+        <p class="why">Friday afternoon. Do the review as a conversation: the assistant walks the same steps as the screen, using what Brainstead prepared from your week.</p>
+        <ul class="uses"><li class="mcp">brainstead</li><li class="mcp github">github</li></ul>
+        <div class="session reveal">
+          <div class="s-bar"><i></i><i></i><i></i><span>claude — ~</span></div>
+          <div class="s-body">
+            <p class="s-label s-l-you">You ask Claude:</p>
+            <p class="s-you">Let's do my weekly review. Go step by step, accept the obvious suggestions and ask me about the rest. Also check whether Theo's pull request for the new office Wi-Fi settings has been merged.</p>
+            <p class="s-label s-l-tools">Claude uses these tools:</p>
+            <ul class="s-tools">
+              <li><b class="mcp">brainstead</b> weekly_review <span class="r">week 43 · 14 suggestions prepared</span></li>
+              <li><b class="mcp">brainstead</b> weekly_step <span class="r">start — Collect loose ends</span></li>
+              <li><b class="mcp">brainstead</b> weekly_suggestion ×9 <span class="r">3 ticked, 2 deferred, 4 Inbox items clarified</span></li>
+              <li><b class="mcp github">github</b> pull request #212 <span class="r">acme/office-network: merged yesterday</span></li>
+              <li><b class="mcp">brainstead</b> edit_task <span class="r">ticked: Theo to confirm the Wi-Fi settings</span></li>
+              <li><b class="mcp">brainstead</b> list_projects <span class="r">Team away day: no next action</span></li>
+              <li><b class="mcp">brainstead</b> create_task <span class="r">Ask the team for three dates · Team away day</span></li>
+              <li><b class="mcp">brainstead</b> weekly_step <span class="r">finish — Me. Weekly Review - 2026-W43</span></li>
+            </ul>
+            <p class="s-label s-l-result">Claude finishes the review and saves its note:</p>
+            <div class="s-answer"><p>Review saved. Nine suggestions accepted, the Wi-Fi settings are merged so I ticked that waiting-for, and Team away day has a next action again. Five left for you, listed in the review note.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 9 -->
+      <section id="overnight" class="lesson">
+        <span class="num">9</span>
+        <h2>While you sleep.</h2>
+        <p class="why">Let the assistant do the routine work before you're up: ingest what arrived, tidy the wiki, and leave a briefing. Run with nobody watching, anything that fails a check is <b>held</b> for you, not made.</p>
+        <ul class="uses"><li class="mcp">brainstead</li><li class="mcp slack">slack</li><li class="mcp notion">notion</li></ul>
+        <ol class="do">
+          <li>Write the job down in a file, <code>overnight.md</code>:
+            <div class="type">Use Brainstead's tools with unattended: true on every call.
+1. Ingest every source still New (pending_sources, start_run).
+2. Run the Knowledge health safe fixes (lint, fix_health).
+3. Read new messages in #office-move and the team's Notion
+   "Move FAQ"; capture anything that needs me.
+4. Write "Briefing. &lt;today&gt;" with what changed and what's held.</div>
+          </li>
+          <li>Schedule it for 6am on weekdays:
+            <div class="os-pane" data-os="mac"><div class="type"><span class="k">crontab -e</span>
+0 6 * * 1-5  claude -p "$(cat ~/overnight.md)" --allowedTools "mcp__brainstead__*,mcp__slack__*,mcp__notion__*"</div></div>
+            <div class="os-pane" data-os="win"><div class="type"><span class="k">schtasks</span> /create /tn "Brainstead overnight" /sc weekly /d MON,TUE,WED,THU,FRI /st 06:00 /tr "powershell -c claude -p (Get-Content ~\overnight.md -Raw) --allowedTools 'mcp__brainstead__*,mcp__slack__*,mcp__notion__*'"</div></div>
+          </li>
+          <li>In the morning, open <b>Changes</b>. What passed every check is already made; what didn't waits under <b>Held for you</b>, with the reason.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut4-held-light.webp" alt="Changes: a change from the overnight run held because its quote isn't in its source, with Accept, Edit before accepting and Reject" width="1400" height="875" loading="lazy"></div>
+          <figcaption>The overnight run tried to change the parking fact from an email, but the quote isn't in the email. So it waits for you.</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/></svg>
+          <p><b>Keep your summaries honest.</b> Add the job under <b>Settings › Jobs &amp; schedule › Tools that start sessions</b>, and the daily summary counts its sessions as automated, not as your work.</p>
+        </div>
+      </section>
+
+      <!-- 10 -->
+      <section id="commands" class="lesson">
+        <span class="num">10</span>
+        <h2>Your own commands.</h2>
+        <p class="why">Found a recipe you use every week? Save it as a command, and run it with a word.</p>
+        <ol class="do">
+          <li>Make a file in your assistant's commands folder. For Claude Code, <code data-win="%USERPROFILE%\.claude\commands\progress-report.md">~/.claude/commands/progress-report.md</code>:
+            <div class="type">Write a progress report on the project $ARGUMENTS for Sam.
+Use its Jira tickets, its Confluence pages, its Asana project
+and its Brainstead project. Status by area, a chart of open
+tickets by week, risks and decisions needed. Report look,
+dark blue. Open it in Brainstead when it's done.</div>
+          </li>
+          <li>Run it from any session:
+            <div class="session">
+              <div class="s-bar"><i></i><i></i><i></i><span>claude — ~</span></div>
+              <div class="s-body"><p class="s-label s-l-you">You type:</p><p class="s-you">/progress-report Office move</p><p class="s-label s-l-result">Claude follows the recipe, as in recipe 3, for the project you named.</p></div>
+            </div>
+          </li>
+        </ol>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.2v.1"/></svg>
+          <p><b>Ideas for more.</b> <i>/friday</i> for the weekly review and a Slack update; <i>/one-on-one Lena</i> to prepare a 1-1 from your last notes, her Jira and Asana work and your open follow-ups; <i>/standup</i> for what you did yesterday, from Brainstead's daily summary and GitHub. Ask the assistant <i>"what can Brainstead's tools do?"</i> and it reads Brainstead's own help.</p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <section class="done">
+    <h2 class="reveal">Your whole stack, one conversation.</h2>
+    <p class="lede reveal">Brainstead keeps your notes, tasks and wiki; your other tools keep theirs. The assistant joins them up, and you keep the last word. You learned to:</p>
+    <ul class="checks reveal">
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Connect Brainstead and other MCP servers</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Brief yourself across every tool</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Build reports from Jira and Confluence</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Keep tickets and tasks in step</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Compare documents and update the wiki</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Route meeting actions to the right system</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Run jobs unattended, safely</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Save recipes as your own commands</li>
+    </ul>
+    <div class="cta reveal">
+      <a class="btn" href="./">All tutorials</a>
+      <a class="link" href="../#download">Download Brainstead <span aria-hidden="true">›</span></a>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <nav class="foot-links">
+    <a href="../">Home</a>
+    <a href="./">Tutorials</a>
+    <a href="https://github.com/waynetd777/brainstead#readme">Guide</a>
+    <a href="https://github.com/waynetd777/brainstead/releases">Releases</a>
+    <a href="https://github.com/waynetd777/brainstead/blob/main/LICENSE">Licence</a>
+  </nav>
+  <p class="copy">© 2026 Wayne Davies. Free software under the GNU General Public License, version 3 or later.</p>
+</footer>
+
+<script src="tutorials.js"></script>
+</body>
+</html>

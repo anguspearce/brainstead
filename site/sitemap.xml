@@ -2,6 +2,26 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://brainstead.davies.co.za/</loc>
-    <lastmod>2026-10-20</lastmod>
+    <lastmod>2026-10-21</lastmod>
+  </url>
+  <url>
+    <loc>https://brainstead.davies.co.za/tutorials/</loc>
+    <lastmod>2026-10-21</lastmod>
+  </url>
+  <url>
+    <loc>https://brainstead.davies.co.za/tutorials/beginner.html</loc>
+    <lastmod>2026-10-21</lastmod>
+  </url>
+  <url>
+    <loc>https://brainstead.davies.co.za/tutorials/intermediate.html</loc>
+    <lastmod>2026-10-21</lastmod>
+  </url>
+  <url>
+    <loc>https://brainstead.davies.co.za/tutorials/advanced.html</loc>
+    <lastmod>2026-10-21</lastmod>
+  </url>
+  <url>
+    <loc>https://brainstead.davies.co.za/tutorials/power.html</loc>
+    <lastmod>2026-10-21</lastmod>
   </url>
 </urlset>

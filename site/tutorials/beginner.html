@@ -1,0 +1,394 @@
+<!doctype html>
+<!-- Copyright © 2026 Wayne Davies. Free software under the GNU General Public License, version 3 or later. -->
+<!-- See LICENSE for the full text. -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Your first hour with Brainstead: a beginner's tutorial</title>
+  <meta name="description" content="A step-by-step tutorial for new Brainstead users: install it, make notes, link them, add tasks, capture ideas, write a polished document with pictures and export it as a PDF.">
+  <link rel="canonical" href="https://brainstead.davies.co.za/tutorials/beginner.html">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ffffff">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Brainstead">
+  <meta property="og:url" content="https://brainstead.davies.co.za/tutorials/beginner.html">
+  <meta property="og:title" content="Your first hour with Brainstead">
+  <meta property="og:description" content="Organise an office move from start to finish, and learn Brainstead as you go.">
+  <meta property="og:image" content="https://brainstead.davies.co.za/img/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Brainstead",
+        "item": "https://brainstead.davies.co.za/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Tutorials",
+        "item": "https://brainstead.davies.co.za/tutorials/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": "Your first hour",
+        "item": "https://brainstead.davies.co.za/tutorials/beginner.html"
+      }
+    ]
+  }
+  </script>
+  <link rel="apple-touch-icon" href="../img/icon-180.png">
+  <link rel="icon" href="../img/mark.svg" type="image/svg+xml">
+  <link rel="preload" href="../fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
+  <script>document.documentElement.classList.add("js");</script>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="tutorials.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-in">
+    <a class="brand" href="../"><img src="../img/mark.svg" alt="" width="22" height="22">Brainstead</a>
+    <nav class="nav-links">
+      <a href="../#gtd">Tasks</a>
+      <a href="../#notes">Notes</a>
+      <a href="../#wiki">Wiki</a>
+      <a href="./" aria-current="page">Tutorials</a>
+    </nav>
+    <a class="btn btn-sm" href="../#download">Download</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="t-hero">
+    <p class="eyebrow rise"><a href="./">Tutorials</a> › Beginner</p>
+    <h1 class="rise">Your first hour<br><span class="grad">with Brainstead.</span></h1>
+    <p class="lede rise">Follow one small, real-life job from start to finish, and learn the app as you go. No experience needed.</p>
+    <ul class="meta rise">
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>About 45 minutes</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>9 short steps</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Mac or Windows</li>
+    </ul>
+    <div class="pick rise">
+      <p>I'm using a</p>
+      <div class="seg" role="tablist" aria-label="Your computer">
+        <button role="tab" aria-selected="true" data-os="mac" title="Show the steps and keys for a Mac">Mac</button>
+        <button role="tab" aria-selected="false" data-os="win" title="Show the steps and keys for a Windows PC">Windows PC</button>
+        <span class="seg-thumb" aria-hidden="true"></span>
+      </div>
+      <p class="pick-note">The steps and keys below follow your choice.</p>
+    </div>
+  </section>
+
+  <section class="brief">
+    <div class="brief-card reveal">
+      <p class="eyebrow">The story</p>
+      <p>You work at Acme, and the lease on your team's office ends in six weeks. Your manager, Sam, has asked you to <b>organise the move to a new office</b> and send a short proposal by Friday.</p>
+      <p>It's the kind of job that lives in your head, on sticky notes and in a dozen emails. By the end of this tutorial it will all be in one place, and you'll have a polished PDF to send Sam.</p>
+      <ul class="makes">
+        <li><b>A project</b>for the office move</li>
+        <li><b>Meeting notes</b>linked to it</li>
+        <li><b>A task list</b>with due dates</li>
+        <li><b>A proposal</b>with pictures, as a PDF</li>
+      </ul>
+    </div>
+  </section>
+
+  <div class="t-body">
+    <aside class="toc" aria-label="Steps">
+      <p>Steps</p>
+      <ol>
+        <li><a href="#install"><span>1</span>Install Brainstead</a></li>
+        <li><a href="#vault"><span>2</span>Make your vault</a></li>
+        <li><a href="#notes"><span>3</span>Write your first notes</a></li>
+        <li><a href="#links"><span>4</span>Link notes together</a></li>
+        <li><a href="#tasks"><span>5</span>Add tasks to a note</a></li>
+        <li><a href="#capture"><span>6</span>Capture on the go</a></li>
+        <li><a href="#document"><span>7</span>Write the proposal</a></li>
+        <li><a href="#look"><span>8</span>Change the look</a></li>
+        <li><a href="#pdf"><span>9</span>Export a PDF</a></li>
+      </ol>
+      <div class="bar" aria-hidden="true"><i></i></div>
+    </aside>
+
+    <div class="lessons">
+
+      <!-- 1 -->
+      <section id="install" class="lesson">
+        <span class="num">1</span>
+        <h2>Install Brainstead.</h2>
+        <p class="why">Brainstead is free, needs no account and runs on your own computer. Installing it takes a couple of minutes.</p>
+        <div class="os">
+          <div class="os-pane" data-os="mac">
+            <ol class="do">
+              <li><a href="https://github.com/waynetd777/brainstead/releases/latest/download/Brainstead.dmg">Download Brainstead for Mac</a>. You need a Mac with Apple silicon (M1 or later) and macOS 14 or later.</li>
+              <li>Open the downloaded file and drag <b>Brainstead</b> onto <b>Applications</b>.</li>
+              <li>Open Brainstead from Applications. macOS says it can't check the app, because it isn't notarised by Apple. Click <b>Done</b>.</li>
+              <li>Open <b>System Settings › Privacy &amp; Security</b>, scroll down and click <b>Open Anyway</b>. From now on it opens normally.</li>
+              <li>Brainstead asks for <b>Full Disk Access</b>, so it can read your notes wherever they are. Follow its instructions, or click <b>Continue without it</b>.</li>
+            </ol>
+          </div>
+          <div class="os-pane" data-os="win">
+            <ol class="do">
+              <li><a href="https://github.com/waynetd777/brainstead/releases/latest/download/Brainstead_x64-setup.exe">Download Brainstead for Windows</a>. You need Windows 10 or 11 (64-bit).</li>
+              <li>Run the installer. It installs just for you, with no administrator password.</li>
+              <li>If Windows says it protected your PC, click <b>More info</b>, then <b>Run anyway</b>. (The app isn't code-signed.)</li>
+              <li>Open Brainstead from the Start menu.</li>
+            </ol>
+          </div>
+        </div>
+        <figure class="shot reveal">
+          <div class="window free"><img src="../img/tut-welcome-light.webp" alt="Brainstead's welcome screen, with Choose folder and Create a new vault" width="860" height="380" loading="lazy"></div>
+          <figcaption>The first thing you'll see: Brainstead asking where your notes live.</figcaption>
+        </figure>
+      </section>
+
+      <!-- 2 -->
+      <section id="vault" class="lesson">
+        <span class="num">2</span>
+        <h2>Make your vault.</h2>
+        <p class="why">Your <b>vault</b> is simply a folder on your computer where Brainstead keeps your notes. Each note is an ordinary text file, so your work is never locked inside the app.</p>
+        <ol class="do">
+          <li>On the welcome screen, click <b>Create a new vault</b>.</li>
+          <li>Give it a name, such as <b>My notes</b>, and choose where to keep it. Your Documents folder is a good place.</li>
+          <li>Brainstead makes the folder, fills it with a few example notes and opens on <b>Today</b>, your home screen.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut-today-light.webp" alt="The Today screen: a summary of the day, a capture box and the tasks due soon" width="1400" height="875" loading="lazy"></div>
+          <figcaption>Today: what's due, what's coming up and a box to jot things down. The sidebar on the left takes you everywhere else.</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v.01M11 12h1v5h1"/></svg>
+          <p><b>Already keep notes in a folder?</b> Click <b>Choose folder…</b> instead. Brainstead opens it <b>read-only</b>, so nothing changes until you turn Read-only off in <b>Settings › Vault</b>. A vault Brainstead makes for you is ready to write in straight away.</p>
+        </div>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.2v.1"/></svg>
+          <p><b>Lost?</b> Press <kbd>?</kbd> on any screen for help with it, or open the example note <b>Start here</b> for a tour.</p>
+        </div>
+      </section>
+
+      <!-- 3 -->
+      <section id="notes" class="lesson">
+        <span class="num">3</span>
+        <h2>Write your first notes.</h2>
+        <p class="why">Start with a note for the office move itself, then one for the kick-off meeting you had with Sam, Lena from facilities and Theo from IT.</p>
+        <h3>A project note</h3>
+        <ol class="do">
+          <li>Press <kbd data-win="Ctrl+N">⌘N</kbd> (or click <b>New note</b> on the Notes screen) and choose <b>Blank note</b>.</li>
+          <li>For <b>Type</b> enter <b>Project</b>, and for <b>Title</b> enter <b>Office move</b>. Clear the date: a project isn't tied to one day. Click <b>Create</b>.</li>
+          <li>The note opens, ready to write in. Type a line about what the project is for:
+            <div class="type">Our lease at Harbour Street ends on 30 November, so the team is moving to a new office.</div>
+          </li>
+          <li>Press <kbd data-win="Ctrl+S">⌘S</kbd> to save.</li>
+        </ol>
+        <h3>A meeting note, from a template</h3>
+        <ol class="do">
+          <li>Press <kbd data-win="Ctrl+N">⌘N</kbd> again, and this time pick the <b>Meeting</b> template.</li>
+          <li>When it asks what the meeting is about, type <b>Office move kick-off</b> and click <b>Create</b>. The note arrives with Attendees, Notes and Actions headings, and today's date in its name.</li>
+          <li>Fill in who was there and what you discussed. Use the toolbar for bold, headings and lists, just as in a word processor.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut-new-note-light.webp" alt="The New note dialog with the Meeting template chosen" width="1400" height="875" loading="lazy"></div>
+          <figcaption>New note: start blank, or from a template that sets out the headings for you.</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+          <p><b>View and Edit.</b> The switch at the top of a note moves between <b>View</b>, for reading, and <b>Edit</b>, for writing. Brainstead saves only when you press <kbd data-win="Ctrl+S">⌘S</kbd>, and keeps a draft as you type, so nothing is lost if you forget.</p>
+        </div>
+      </section>
+
+      <!-- 4 -->
+      <section id="links" class="lesson">
+        <span class="num">4</span>
+        <h2>Link notes together.</h2>
+        <p class="why">Links turn separate notes into a web you can click through. Link the meeting to the project, and each note will show the other.</p>
+        <ol class="do">
+          <li>In the meeting note, under Notes, start a line and type two square brackets: <kbd>[[</kbd></li>
+          <li>A list of your notes appears. Type <b>office</b>, choose <b>Project. Office move</b> and press <kbd data-win="Enter">↩</kbd>.
+            <div class="type">This is all part of the <span class="k">[[Project. Office move|Office move]]</span>.</div>
+          </li>
+          <li>Save, then <kbd data-win="Ctrl">⌘</kbd>-click the link (or click it in View) to jump to the project.</li>
+          <li>Look at the panel on the right of the project: under <b>Linked from</b> is your meeting note, with the line that links to it. You never have to link both ways.</li>
+        </ol>
+        <div class="pair">
+          <figure class="shot reveal">
+            <div class="window"><img src="../img/tut-kickoff-light.webp" alt="The kick-off meeting note in Edit, with links to the project and the proposal" width="1400" height="875" loading="lazy"></div>
+            <figcaption>The meeting note, with its links.</figcaption>
+          </figure>
+          <figure class="shot reveal">
+            <div class="window"><img src="../img/tut-project-light.webp" alt="The Office move project, with the meeting note under Linked from" width="1400" height="875" loading="lazy"></div>
+            <figcaption>The project, linked from the meeting.</figcaption>
+          </figure>
+        </div>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>
+          <p><b>Shorter link text.</b> Everything after the <code>|</code> is what the reader sees, so <code>[[Project. Office move|Office move]]</code> reads simply as <i>Office move</i>.</p>
+        </div>
+      </section>
+
+      <!-- 5 -->
+      <section id="tasks" class="lesson">
+        <span class="num">5</span>
+        <h2>Add tasks to a note.</h2>
+        <p class="why">In Brainstead, a task is just a line in a note with a box in front of it. Write your actions where they came up, and Brainstead gathers them all onto one list for you.</p>
+        <ol class="do">
+          <li>In the meeting note, under Actions, type a dash, a space and a pair of square brackets with a space between, then the task. (Or click the task-list button on the toolbar.)
+            <div class="type"><span class="k">- [ ]</span> Get three quotes from removal firms</div>
+          </li>
+          <li>To give it a due date, type <b>due:</b> at the end of the line and pick a day from the calendar that pops up. It's shown as a small calendar icon and the date.</li>
+          <li>Add a task you're waiting on someone else for, with the <b>#waiting-for</b> tag:
+            <div class="type"><span class="k">- [ ]</span> Theo to check the internet connection at Mill Lane <span class="t">#waiting-for</span></div>
+          </li>
+          <li>Save, then open <b>Tasks</b> in the sidebar. Your new tasks are there with every other task in the vault, sorted by when they're due.</li>
+          <li>Done one? Tick its box, here or in the note. The note is updated to match.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut-tasks-light.webp" alt="The Tasks screen with the office move tasks and their due dates" width="1400" height="875" loading="lazy"></div>
+          <figcaption>Tasks gathers every open task from every note, so nothing gets lost in the middle of a page.</figcaption>
+        </figure>
+      </section>
+
+      <!-- 6 -->
+      <section id="capture" class="lesson">
+        <span class="num">6</span>
+        <h2>Capture on the go.</h2>
+        <p class="why">You're in the middle of an email when you remember you need Lena's floor plan. Don't switch apps: catch it in two seconds and get back to what you were doing.</p>
+        <ol class="do">
+          <li>From any app, press <kbd data-win="Ctrl+Shift+Space">⌃⌥Space</kbd>. A small capture box appears.</li>
+          <li>Type the task and press <kbd data-win="Enter">↩</kbd>:
+            <div class="type">Ask Lena for the Mill Lane floor plan</div>
+          </li>
+          <li>Had an idea rather than a to-do? Open the box again, press <kbd>Tab</kbd> to switch to <b>Thought</b>, and type it:
+            <div class="type">Could we ask the landlord for the first month rent-free?</div>
+          </li>
+          <li>Later, open the <b>Inbox</b> in the sidebar. Everything you captured waits there until you decide what it is: a task for the project, a note, or nothing at all.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut-inbox-light.webp" alt="The Inbox with the captured task and thought" width="1400" height="875" loading="lazy"></div>
+          <figcaption>The Inbox: everything you caught on the run, ready to sort when you have a minute.</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg>
+          <p><b>Shortcuts as you type.</b> In the capture box, <code>due: fri</code> sets a due date and <code>@calls</code> marks a task as a phone call, so <i>Call the removal firm due: fri @calls</i> is a complete task.</p>
+        </div>
+      </section>
+
+      <!-- 7 -->
+      <section id="document" class="lesson">
+        <span class="num">7</span>
+        <h2>Write the proposal.</h2>
+        <p class="why">Now for the document Sam asked for: a clear, professional proposal with a table of options, a floor plan and a timeline.</p>
+        <ol class="do">
+          <li>Press <kbd data-win="Ctrl+N">⌘N</kbd>, choose <b>Blank note</b>, and enter <b>Report</b> as the Type and <b>Office move proposal</b> as the Title. Keep today's date.</li>
+          <li>Give it structure with headings: choose <b>Heading 2</b> from the style menu at the left of the toolbar (it says <b>Body text</b>) for <i>Summary</i>, <i>The options</i>, <i>The new floor</i>, <i>Timeline</i> and <i>Next steps</i>. The note's name is already its title.</li>
+          <li>Compare the two offices side by side: click the <b>table</b> button on the toolbar and fill it in.</li>
+          <li>Add the floor plan: <b>drag the picture</b> from your desktop or an email into the note, or copy it and <b>paste</b> it with <kbd data-win="Ctrl+V">⌘V</kbd>. Brainstead saves a copy in your vault's <b>images</b> folder and places it where your cursor is.</li>
+          <li>Too big? Point at the picture and <b>drag a corner</b> to resize it.</li>
+          <li>Under the picture, add a short caption in <i>italics</i> (<kbd data-win="Ctrl+I">⌘I</kbd>), then add the timeline the same way.</li>
+          <li>Link the proposal from the project note, as you did in step 4, and save.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut-proposal-edit-light.webp" alt="The proposal in Edit, with the floor plan picture and its caption" width="1400" height="875" loading="lazy"></div>
+          <figcaption>The proposal taking shape in Edit, with the floor plan embedded and its caption underneath.</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6z"/><path d="M12 8v5M12 16v.01"/></svg>
+          <p><b>Make a risk stand out.</b> Start a line with <code>&gt; [!warning]</code> and a title, and View draws it as a coloured box. Handy for the one thing Sam mustn't miss.</p>
+        </div>
+      </section>
+
+      <!-- 8 -->
+      <section id="look" class="lesson">
+        <span class="num">8</span>
+        <h2>Change the look.</h2>
+        <p class="why">The same words can look plain or polished. Brainstead has seven themes for documents, each with a choice of colours, and you can give one note its own look.</p>
+        <ol class="do">
+          <li>Switch the proposal to <b>View</b>.</li>
+          <li>At the top right of the page, click the <b>Look:</b> button.</li>
+          <li>Pick a theme. Point at each to read what it's like; <b>Business</b> gives coloured headings and banded tables, just right for a proposal.</li>
+          <li>Pick a colour from the swatches. <b>Dark blue</b> looks smart for work.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut-look-light.webp" alt="The Look menu open on the proposal, with the Business theme chosen" width="1400" height="875" loading="lazy"></div>
+          <figcaption>Look: a theme and a colour for this document alone.</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+          <p><b>Like it everywhere?</b> Set the look for every note in <b>Settings › Notes › Document look</b>. A note you've styled on its own keeps its look.</p>
+        </div>
+      </section>
+
+      <!-- 9 -->
+      <section id="pdf" class="lesson">
+        <span class="num">9</span>
+        <h2>Export a PDF.</h2>
+        <p class="why">Last step: turn the proposal into a PDF you can attach to an email to Sam.</p>
+        <ol class="do">
+          <li>With the proposal open, click the <b>⋯</b> button at the top right.</li>
+          <li>Choose <b>Export PDF…</b> (or just press <kbd data-win="Ctrl+P">⌘P</kbd>).</li>
+          <li>Choose where to save it, and click <b>Save</b>.</li>
+        </ol>
+        <p class="why">The PDF keeps your theme, colours and pictures, and puts the title and page numbers in the footer. Attach it to your email, and you're done.</p>
+        <div class="pair">
+          <figure class="shot reveal">
+            <div class="window"><img src="../img/tut-export-light.webp" alt="The ⋯ menu open, with Export PDF" width="1400" height="875" loading="lazy"></div>
+            <figcaption>Export PDF, on the ⋯ menu.</figcaption>
+          </figure>
+          <figure class="shot reveal">
+            <div class="window"><img src="../img/tut-proposal-light.webp" alt="The finished proposal in the Business theme, with the floor plan" width="1400" height="875" loading="lazy"></div>
+            <figcaption>The finished proposal, ready for Sam.</figcaption>
+          </figure>
+        </div>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+          <p><b>Rather paste it into an email?</b> Choose <b>Copy rich text</b> on the same menu, and paste: headings, tables and formatting come with it.</p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <section class="done">
+    <h2 class="reveal">You did it.</h2>
+    <p class="lede reveal">The office move is out of your head and into one place, and Sam has the proposal. Along the way, you learned to:</p>
+    <ul class="checks reveal">
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Install Brainstead and make a vault</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Write notes, blank or from a template</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Link notes with <code>[[</code></li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Add tasks with due dates</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Capture tasks and thoughts from anywhere</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Write a document with tables and pictures</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Give it a professional look</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Export it as a PDF</li>
+    </ul>
+    <div class="cta reveal">
+      <a class="btn" href="intermediate.html">Next: Run your week</a>
+      <a class="link" href="./">All tutorials <span aria-hidden="true">›</span></a>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <nav class="foot-links">
+    <a href="../">Home</a>
+    <a href="./">Tutorials</a>
+    <a href="https://github.com/waynetd777/brainstead#readme">Guide</a>
+    <a href="https://github.com/waynetd777/brainstead/releases">Releases</a>
+    <a href="https://github.com/waynetd777/brainstead/blob/main/LICENSE">Licence</a>
+  </nav>
+  <p class="copy">© 2026 Wayne Davies. Free software under the GNU General Public License, version 3 or later.</p>
+</footer>
+
+<script src="tutorials.js"></script>
+</body>
+</html>

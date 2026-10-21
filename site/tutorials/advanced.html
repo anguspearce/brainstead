@@ -1,0 +1,322 @@
+<!doctype html>
+<!-- Copyright © 2026 Wayne Davies. Free software under the GNU General Public License, version 3 or later. -->
+<!-- See LICENSE for the full text. -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Your own wiki with Brainstead: an advanced tutorial</title>
+  <meta name="description" content="A step-by-step tutorial for experienced Brainstead users: connect an AI assistant, build a wiki from your documents and emails, check its work, ask your vault questions, turn meetings into notes and draft replies.">
+  <link rel="canonical" href="https://brainstead.davies.co.za/tutorials/advanced.html">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ffffff">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="Brainstead">
+  <meta property="og:url" content="https://brainstead.davies.co.za/tutorials/advanced.html">
+  <meta property="og:title" content="Your own wiki with Brainstead">
+  <meta property="og:description" content="Let an AI assistant turn your documents, emails and meetings into a wiki you can trust.">
+  <meta property="og:image" content="https://brainstead.davies.co.za/img/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Brainstead",
+        "item": "https://brainstead.davies.co.za/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Tutorials",
+        "item": "https://brainstead.davies.co.za/tutorials/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": "Your own wiki",
+        "item": "https://brainstead.davies.co.za/tutorials/advanced.html"
+      }
+    ]
+  }
+  </script>
+  <link rel="apple-touch-icon" href="../img/icon-180.png">
+  <link rel="icon" href="../img/mark.svg" type="image/svg+xml">
+  <link rel="preload" href="../fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
+  <script>document.documentElement.classList.add("js");</script>
+  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="tutorials.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-in">
+    <a class="brand" href="../"><img src="../img/mark.svg" alt="" width="22" height="22">Brainstead</a>
+    <nav class="nav-links">
+      <a href="../#gtd">Tasks</a>
+      <a href="../#notes">Notes</a>
+      <a href="../#wiki">Wiki</a>
+      <a href="./" aria-current="page">Tutorials</a>
+    </nav>
+    <a class="btn btn-sm" href="../#download">Download</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="t-hero">
+    <p class="eyebrow rise"><a href="./">Tutorials</a> › Advanced</p>
+    <h1 class="rise">Your own wiki.<br><span class="grad">Written for you.</span></h1>
+    <p class="lede rise">Let an AI assistant read your documents, emails and meetings, and turn them into a wiki you can check, question and trust.</p>
+    <ul class="meta rise">
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>About an hour</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>8 steps</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>After <a href="intermediate.html">Run your week</a></li>
+    </ul>
+    <div class="pick rise">
+      <p>I'm using a</p>
+      <div class="seg" role="tablist" aria-label="Your computer">
+        <button role="tab" aria-selected="true" data-os="mac" title="Show the keys for a Mac">Mac</button>
+        <button role="tab" aria-selected="false" data-os="win" title="Show the keys for a Windows PC">Windows PC</button>
+        <span class="seg-thumb" aria-hidden="true"></span>
+      </div>
+      <p class="pick-note">The keys below follow your choice.</p>
+    </div>
+  </section>
+
+  <section class="brief">
+    <div class="brief-card reveal">
+      <p class="eyebrow">The story so far</p>
+      <p>The move is four weeks away and the paperwork is piling up: the landlord's <b>lease terms</b>, the <b>removal firm's quote</b>, an <b>email from Theo</b> about the internet connection, and a <b>Teams meeting</b> where everyone gave an update.</p>
+      <p>The answers you need are in there somewhere. In this tutorial an AI assistant reads it all and keeps a <b>wiki</b>: a page for the new office, one for the removal firm, one for moving day. Every fact on those pages is quoted from where it came from, so you can always check.</p>
+      <ul class="makes">
+        <li><b>A wiki</b>built from your documents</li>
+        <li><b>Answers</b>with their sources</li>
+        <li><b>A meeting note</b>from a transcript</li>
+        <li><b>A reply</b>drafted for you</li>
+      </ul>
+    </div>
+  </section>
+
+  <div class="t-body">
+    <aside class="toc" aria-label="Steps">
+      <p>Steps</p>
+      <ol>
+        <li><a href="#assistant"><span>1</span>Connect an assistant</a></li>
+        <li><a href="#sources"><span>2</span>Bring in your sources</a></li>
+        <li><a href="#ingest"><span>3</span>Build the wiki</a></li>
+        <li><a href="#check"><span>4</span>Check its work</a></li>
+        <li><a href="#ask"><span>5</span>Ask your vault</a></li>
+        <li><a href="#meeting"><span>6</span>Meetings into notes</a></li>
+        <li><a href="#reply"><span>7</span>Draft a reply</a></li>
+        <li><a href="#terminal"><span>8</span>Work from Terminal</a></li>
+      </ol>
+      <div class="bar" aria-hidden="true"><i></i></div>
+    </aside>
+
+    <div class="lessons">
+
+      <!-- 1 -->
+      <section id="assistant" class="lesson">
+        <span class="num">1</span>
+        <h2>Connect an assistant.</h2>
+        <p class="why">Brainstead has no AI of its own. It uses an assistant you already have on your computer, signed in with your own account: <b>Claude Code</b>, <b>Codex</b>, <b>GitHub Copilot</b> or <b>Antigravity</b>.</p>
+        <ol class="do">
+          <li>If you don't have one yet, install one and sign in to it once. Brainstead shows how: open <b>Settings › AI assistants</b> and click <b>How to install</b> beside the one you want.</li>
+          <li>Back in Brainstead, click <b>Look again</b>. The assistant appears under <b>Found on this computer</b>.</li>
+          <li>Under <b>New chats use</b>, pick the model for your chats. <b>Models by job</b> lets background work, such as building the wiki, use a model of its own.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut3-assistants-light.webp" alt="Settings, AI assistants: the model new chats use, and settings for meeting notes and ingest" width="1400" height="875" loading="lazy"></div>
+          <figcaption>Settings › AI assistants: which assistant, which model, and what happens after each job.</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6z M9 12l2 2 4-4"/></svg>
+          <p><b>You stay in charge.</b> An assistant never edits your files itself. It asks Brainstead, which checks each change and lists it in <b>Changes</b>, where you can undo it. Anything risky waits for you to accept it.</p>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section id="sources" class="lesson">
+        <span class="num">2</span>
+        <h2>Bring in your sources.</h2>
+        <p class="why">A <b>source</b> is anything the wiki is built from: a PDF, a Word or Excel file, a picture, a note, an email or a Teams chat. Sources are kept as they are, in your vault's <b>sources</b> folder.</p>
+        <ol class="do">
+          <li>Open <b>Sources</b> in the sidebar.</li>
+          <li>Drag the lease terms and the removal firm's quote from your desktop onto the window, or click <b>Import</b> and choose them. Each one is marked <b>New</b>.</li>
+          <li>To bring in emails and Teams chats in one click, add the browser extensions: open <b>Settings › Capture extensions</b> and follow the steps for Chrome or Edge.</li>
+          <li>Then, in Outlook on the web, open Theo's email and click the extension's button. The thread lands in Sources, and in your Inbox.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut3-sources-light.webp" alt="Sources: Theo's email and a Teams transcript marked New, the lease and the quote marked Ingested" width="1400" height="875" loading="lazy"></div>
+          <figcaption>Sources, with what each one can become: an ingest, a reply or a meeting note.</figcaption>
+        </figure>
+      </section>
+
+      <!-- 3 -->
+      <section id="ingest" class="lesson">
+        <span class="num">3</span>
+        <h2>Build the wiki.</h2>
+        <p class="why"><b>Ingesting</b> a source means the assistant reads it and writes what it learned into the wiki: a new page for each thing that needs one, and updates to the pages that already exist.</p>
+        <ol class="do">
+          <li>On Sources, click <b>Ingest</b> on the lease's row.</li>
+          <li>Watch the <b>Ingest runs</b> pane on the right: it reads the source, plans the pages, writes them and finally checks every quote against the lease.</li>
+          <li>Ingest the removal firm's quote the same way.</li>
+          <li>Open <b>Wiki</b> in the sidebar. There are new pages for <b>12 Mill Lane</b>, <b>Swift Removals</b> and <b>Moving day</b>, linked to each other.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut3-wiki-page-light.webp" alt="The 12 Mill Lane wiki page, each fact quoted with a small citation number, and its two sources" width="1400" height="875" loading="lazy"></div>
+          <figcaption>The 12 Mill Lane page. Each small number is a citation: the fact is quoted, word for word, from that source.</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M20 20v-6h-6M5.6 15A8 8 0 0 0 19 17.7M18.4 9A8 8 0 0 0 5 6.3"/></svg>
+          <p><b>Sources change.</b> When the landlord sends new terms, replace the file and click <b>Refresh from sources</b> at the top of the page. Or let the daily check do it for you: switch it on in <b>Settings › AI assistants</b>, under Ingest.</p>
+        </div>
+      </section>
+
+      <!-- 4 -->
+      <section id="check" class="lesson">
+        <span class="num">4</span>
+        <h2>Check its work.</h2>
+        <p class="why">AI can be wrong, so Brainstead makes everything it does easy to check and easy to undo.</p>
+        <ol class="do">
+          <li>On the 12 Mill Lane page, click a citation number. The lease opens with that passage marked. On the right, <b>Cited in the wiki</b> lists every page that quotes it.</li>
+          <li>Open <b>Changes</b> at the foot of the sidebar. Each ingest is listed with every change it made: the new text in green, and under <b>What it rests on</b>, each quote marked <b>Found in the source</b>.</li>
+          <li>Don't like a change? Click <b>Revert</b>. <b>Revert all</b> undoes a whole ingest. Both keep any edits you've made since.</li>
+          <li>Changes that need your decision wait under <b>Held for you</b>: a quote that couldn't be found, or a change to a template.</li>
+        </ol>
+        <div class="pair">
+          <figure class="shot reveal">
+            <div class="window"><img src="../img/tut3-provenance-light.webp" alt="The lease source, with the wiki pages that quote it listed on the right" width="1400" height="875" loading="lazy"></div>
+            <figcaption>The lease, and every passage the wiki quotes.</figcaption>
+          </figure>
+          <figure class="shot reveal">
+            <div class="window"><img src="../img/tut3-review-light.webp" alt="Changes: the ingest's three new pages, with the change and the quotes it rests on" width="1400" height="875" loading="lazy"></div>
+            <figcaption>Changes: what changed, why, and Revert.</figcaption>
+          </figure>
+        </div>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/></svg>
+          <p><b>Keep it healthy.</b> <b>Knowledge health</b> checks the wiki every time it changes: broken links, missing pages, facts without a source, and pages that disagree with each other. The fixes with one right answer take one click.</p>
+        </div>
+      </section>
+
+      <!-- 5 -->
+      <section id="ask" class="lesson">
+        <span class="num">5</span>
+        <h2>Ask your vault.</h2>
+        <p class="why">Now the payoff. Instead of searching through the lease, the quote and your notes, just ask.</p>
+        <ol class="do">
+          <li>Open <b>Ask</b> with <kbd data-win="Ctrl+6">⌘6</kbd>.</li>
+          <li>Start your question with <b>/wiki</b>, so the answer comes from the wiki and its sources, with the links to check:
+            <div class="type"><span class="k">/wiki</span> What do we still need to sort out before moving day?</div>
+          </li>
+          <li>Press <kbd data-win="Enter">↩</kbd>. You can see what it reads as it works.</li>
+          <li>Under the answer: <b>Add tasks</b> turns what it found into tasks, <b>Save as note</b> keeps it, and <b>File this answer</b> makes a good answer a wiki page of its own.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut3-ask-light.webp" alt="Ask: an answer listing the goods lift, the fibre engineer and parking, with links to the wiki pages" width="1400" height="875" loading="lazy"></div>
+          <figcaption>An answer that joins up the lease, the quote and Theo's email, and links to where each point came from.</figcaption>
+        </figure>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.2v.1"/></svg>
+          <p><b>Ask about anything you're looking at.</b> The <b>Ask</b> button at the top of most screens starts a chat about that note, project or source. It can answer questions about Brainstead itself, too.</p>
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section id="meeting" class="lesson">
+        <span class="num">6</span>
+        <h2>Meetings into notes.</h2>
+        <p class="why">This morning's check-in was on Teams, with a transcript. Rather than write it up, let the assistant turn it into a meeting note from your own template, and add what was said to the wiki.</p>
+        <ol class="do">
+          <li>Capture the transcript with the Teams extension from the meeting's recap, or drop the transcript file onto Sources.</li>
+          <li>Open <b>Tools › Meeting notes</b> in the sidebar and choose the transcript.</li>
+          <li>Check <b>The note</b> card: Brainstead has worked out the type, name and date. Change anything marked "check".</li>
+          <li>Click <b>Make and ingest the note</b>. The note is written from your Meeting template, with its actions as tasks, then read into the wiki.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut3-meeting-light.webp" alt="Meeting notes: the check-in transcript, with the note's type, name and date ready to make" width="1400" height="875" loading="lazy"></div>
+          <figcaption>A transcript in, a meeting note out.</figcaption>
+        </figure>
+      </section>
+
+      <!-- 7 -->
+      <section id="reply" class="lesson">
+        <span class="num">7</span>
+        <h2>Draft a reply.</h2>
+        <p class="why">Theo asked three questions. The assistant can draft the answer from what your vault already knows, and tell you what it couldn't answer.</p>
+        <ol class="do">
+          <li>In the Inbox, open Theo's email and press <kbd>D</kbd>, or choose <b>Tools › Draft reply</b> and pick the thread.</li>
+          <li>Choose a tone, <b>Brief</b>, <b>Warm</b> or <b>Formal</b>, and click <b>Draft</b>.</li>
+          <li>Read the verdict under the email: which questions are answered. <b>To fill in</b> lists what's left for you, such as who meets the engineer.</li>
+          <li>Edit the reply, or ask for a change: <i>shorter</i>, or <i>say Lena will meet him</i>.</li>
+          <li>Click <b>Copy reply</b> and paste it into Outlook. Brainstead never sends anything itself. <b>Add task</b> catches the follow-up the reply commits you to.</li>
+        </ol>
+        <figure class="shot reveal">
+          <div class="window"><img src="../img/tut3-reply-light.webp" alt="Draft reply: Theo's email on the left, the drafted reply on the right, with what's left to fill in" width="1400" height="875" loading="lazy"></div>
+          <figcaption>A drafted reply, with the one gap it couldn't fill marked for you.</figcaption>
+        </figure>
+      </section>
+
+      <!-- 8 -->
+      <section id="terminal" class="lesson">
+        <span class="num">8</span>
+        <h2>Work from Terminal.</h2>
+        <p class="why">If you use your assistant in a terminal, give it Brainstead's tools. It can then do almost anything the screens do, from any folder, with the same checks and the same Changes list.</p>
+        <ol class="do">
+          <li>In <b>Settings › AI assistants</b>, find <b>Brainstead's tools</b>. It shows the command for each assistant it found, with the right path for your computer.</li>
+          <li>Click <b>Copy</b>, paste it into <span data-win="PowerShell">Terminal</span> and press <kbd data-win="Enter">↩</kbd>. For Claude Code it looks like this:
+            <div class="type">claude mcp add -s user brainstead -- <span class="t">"…/Brainstead"</span> --mcp</div>
+          </li>
+          <li>Start your assistant and ask it something, such as <i>what's left on the office move?</i> or <i>add a task to book the lift for Friday</i>.</li>
+        </ol>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-6-6-6M12 19h8"/></svg>
+          <p><b>Leave it working.</b> An assistant running unattended passes <i>unattended</i> to Brainstead, and every change that fails a check is held for you, not made.</p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <section class="done">
+    <h2 class="reveal">A second brain that shows its work.</h2>
+    <p class="lede reveal">The lease, the quote, the email and the meeting are all in one wiki, and every answer can be traced back. You learned to:</p>
+    <ul class="checks reveal">
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Connect your own AI assistant</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Bring in files, emails and chats</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Ingest sources into the wiki</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Check quotes and revert changes</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Ask questions with /wiki</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Turn transcripts into notes</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Draft replies from your vault</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>Use Brainstead from Terminal</li>
+    </ul>
+    <div class="cta reveal">
+      <a class="btn" href="power.html">Next: Command centre</a>
+      <a class="link" href="./">All tutorials <span aria-hidden="true">›</span></a>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <nav class="foot-links">
+    <a href="../">Home</a>
+    <a href="./">Tutorials</a>
+    <a href="https://github.com/waynetd777/brainstead#readme">Guide</a>
+    <a href="https://github.com/waynetd777/brainstead/releases">Releases</a>
+    <a href="https://github.com/waynetd777/brainstead/blob/main/LICENSE">Licence</a>
+  </nav>
+  <p class="copy">© 2026 Wayne Davies. Free software under the GNU General Public License, version 3 or later.</p>
+</footer>
+
+<script src="tutorials.js"></script>
+</body>
+</html>
