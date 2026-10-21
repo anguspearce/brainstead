@@ -688,7 +688,7 @@ h2 {
 }
 
 /* The tutorials' cards, one a level: on the tutorials index and the home page's Learn section. */
-/* Two cards a row, each 400px wide, so its picture (cropped at 400 by 250, with a 2x copy) is
+/* Two cards a row, each 400px wide, so its picture (the window's own pixels, with a 2x copy) is
    drawn at its own size and stays sharp on a 1x screen. */
 .levels {
   max-width: 852px;
@@ -716,7 +716,7 @@ a.level:hover {
 }
 /* The card's picture: a small app window on a tinted panel, peeking up from the foot of the card,
    so it reads as the app and not as the tutorial's text. The picture is drawn at its own size
-   (400 by 250, with a 2x copy) and the panel crops what doesn't fit. */
+   (the window's own pixels, with a 2x copy) and the panel crops what doesn't fit. */
 .level-shot {
   margin-top: auto;
   height: 200px;
@@ -728,7 +728,7 @@ a.level:hover {
   border-top: 1px solid var(--line);
 }
 .mini {
-  width: 400px;
+  width: max-content;
   border-radius: 10px 0 0 0;
   overflow: hidden;
   background: var(--surface);
@@ -756,7 +756,8 @@ a.level:hover .mini {
   background: #d5d9df;
 }
 .mini img {
-  width: 400px;
+  display: block;
+  width: auto;
   max-width: none;
   height: auto;
 }

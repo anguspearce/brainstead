@@ -61,6 +61,9 @@ RELEASE_BIN = ROOT / "src-tauri" / "target" / "release" / "bundle" / "macos" / "
 DEV_URL = "http://localhost:1440"
 FIXTURE = ROOT / "tests" / "fixtures" / "vault"
 WIDTH = 1400
+# The main window's width in points as the scenes open it (src-tauri/src/lib.rs): the site's
+# pictures are twice this, whatever the display's scale.
+WINDOW = 1440
 SETTLE = 5.0
 # How long past its delay a snapshot may take to come before the launch is given up as failed
 # (normally it's there within a second or two).
@@ -396,28 +399,38 @@ def shoot(scene, theme, data):
     print(f"  {out.relative_to(ROOT)}  {im.width}x{im.height}")
     site = SITE / f"{scene['name']}-{theme}.webp"
     if site.exists():
-        big = finish(raw, scene, theme, full=True)
+        big = finish(raw, scene, theme, scale=2)
         big.save(site, "WEBP", quality=90, method=6)
         print(f"  {site.relative_to(ROOT)}  {big.width}x{big.height}")
     # A picture shown at its own size (the tutorials' cards) has a 1x copy beside it, for srcset:
     # a screen at 1x then gets the app's own pixels, not a 2x picture scaled down to a blur.
     small = SITE / f"{scene['name']}-{theme}@1x.webp"
     if small.exists():
-        im.save(small, "WEBP", quality=92, method=6)
-        print(f"  {small.relative_to(ROOT)}  {im.width}x{im.height}")
+        one = finish(raw, scene, theme, scale=1)
+        one.save(small, "WEBP", quality=92, method=6)
+        print(f"  {small.relative_to(ROOT)}  {one.width}x{one.height}")
     return True
 
 
-def finish(im, scene, theme, full=False):
-    """The snapshot as it's saved: at the scene's width (or, `full`, its own size, never larger),
-    with the window's chrome, cropped."""
+def points(scene):
+    """The scene window's width in points: the main window opens at 1440 (src-tauri/src/lib.rs) or
+    a scene's "window" size; the menu-bar window keeps its own "width"."""
+    if scene.get("tray"):
+        return scene["width"]
+    return scene.get("window", [WINDOW])[0]
+
+
+def finish(im, scene, theme, scale=None):
+    """The snapshot as it's saved: at the scene's width, or at `scale` times the window's own width
+    in points (2 for the site's pictures, 1 for a 1x copy), never larger than the snapshot, with
+    the window's chrome, cropped (crops are given at the scene's width)."""
     # A scene may keep its own width (the menu-bar window, at its natural 2x size).
     width = scene.get("width", WIDTH)
-    s = max(1.0, im.width / width) if full else 1.0
-    size = round(width * s)
+    size = width if scale is None else min(im.width, round(points(scene) * scale))
+    s = size / width
     im = im.resize((size, round(im.height * size / im.width)), Image.LANCZOS)
     if not scene.get("tray"):
-        im = chrome(im, theme, s)
+        im = chrome(im, theme, max(1.0, s))
     if "crop" in scene:
         x, y, w, h = (round(v * s) for v in scene["crop"])
         im = im.crop((x, y, x + w, y + h))

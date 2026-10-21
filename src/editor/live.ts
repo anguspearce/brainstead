@@ -80,6 +80,14 @@ class ImageWidget extends WidgetType {
     if (width) img.style.width = `${width}px`;
     if (height && !width) img.style.height = `${height}px`;
     span.appendChild(img);
+    // A picture with no size of its own (an SVG with only a viewBox) would shrink to nothing in
+    // this shrink-to-fit frame: it fills the line instead, as View draws it.
+    if (!width && !height)
+      img.addEventListener("load", () =>
+        requestAnimationFrame(() => {
+          if (img.isConnected && img.getBoundingClientRect().width < 2) span.classList.add("fluid");
+        }),
+      );
     void this.hooks.imageUrl?.(this.src).then((u) => {
       if (u) img.src = u;
       else {

@@ -4,7 +4,7 @@ A home for everything on your mind: tasks, notes and an LLM wiki that writes its
 
 Brainstead is a Mac and Windows app for [Getting Things Done](https://gettingthingsdone.com), notes and an [LLM wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), all in one folder of markdown files (your vault) that other markdown editors can open too. Your tasks are `- [ ]` lines in your notes, gathered into GTD lists. AI assistants you already have on your computer (Claude Code, Codex, Copilot, Antigravity) answer from the vault, build wiki pages from your sources with every claim quoted, and make changes for you, each listed with Revert.
 
-See it on the [Brainstead website](https://brainstead.davies.co.za/).
+See it on the [Brainstead website](https://brainstead.davies.co.za/), and learn it step by step with the [tutorials](https://brainstead.davies.co.za/tutorials/): Beginner, Intermediate, Advanced and Power user.
 
 ## Download
 

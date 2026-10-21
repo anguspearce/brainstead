@@ -3790,6 +3790,11 @@ button.rnhead {
   max-width: 100%;
   cursor: default;
 }
+.editor .cm-img.fluid,
+.editor .cm-img.fluid img {
+  display: block;
+  width: 100%;
+}
 
 /* In Edit: a frame, a handle at each corner to resize, and a button to remove it. */
 .editor .cm-img.edit:hover img,
