@@ -20,7 +20,7 @@ import {
 } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
+import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 import { Compartment, EditorSelection, EditorState, Extension, Prec, StateEffect, StateField, Text, Transaction } from "@codemirror/state";
 import { Decoration, DecorationSet, drawSelection, dropCursor, EditorView, keymap } from "@codemirror/view";
 import { effortMinutes } from "../gtd";
@@ -195,6 +195,10 @@ export class CMEditor implements Editor {
         dropCursor(),
         markdown({ base: markdownLanguage, addKeymap: true, extensions: [Highlight] }),
         highlightSelectionMatches(),
+        // The find bar drives this search with CodeMirror's panel hidden (src/editor/find.ts). At the
+        // bottom, a hidden panel counts as covering the window, so every keystroke scrolled the line
+        // being typed up out of sight; at the top it counts as nothing.
+        search({ top: true }),
         autocompletion({
           override: [completions(this.hooks), queryCompletions, templaterCompletions],
           activateOnTyping: true,
