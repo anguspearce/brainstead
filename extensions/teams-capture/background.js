@@ -345,3 +345,74 @@ async function sendToBrainstead(message) {
   if (!res?.ok) throw new Error(`Brainstead refused: ${String(res?.message ?? "no answer").slice(0, 200)}`);
   return res;
 }
+
+// ── Sign-in handover (Brainstead's Teams and Outlook sync, D-20261025-01) ──────────────
+//
+// While a Teams tab is open, Brainstead can read the user's own chats, mail and calendar if it has
+// the page's sign-in. The page keeps it (MSAL's cache) in localStorage; this reads it from an open
+// Teams tab and hands it to Brainstead's host on a timer. It never leaves the user's own machine —
+// it goes to the local app only. Capturing by button is unchanged; this is separate and silent.
+
+const HANDOVER_ALARM = "brainstead-signin-handover";
+const HANDOVER_PERIOD_MIN = 30;
+
+/** Read the Teams page's sign-in from localStorage. Runs in the page (localStorage is the page's
+ *  origin). Returns the refresh/access-token entries and Teams' region settings — no decoding. */
+function readSignIn() {
+  const out = { origin: location.origin, rt: null, ats: [], gtm: null };
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    const v = localStorage.getItem(k) || "";
+    if (k.includes("DISCOVER-REGION-GTM")) out.gtm = v;
+    try {
+      const e = JSON.parse(v);
+      if (e && e.credentialType === "RefreshToken" && e.secret && e.clientId) out.rt = e;
+      if (e && e.credentialType === "AccessToken" && e.secret)
+        out.ats.push({ target: e.target, realm: e.realm, clientId: e.clientId, secret: e.secret });
+    } catch (_) {
+      /* not a JSON MSAL entry */
+    }
+  }
+  return out;
+}
+
+async function handOverSignIn() {
+  let tabs;
+  try {
+    tabs = await chrome.tabs.query({
+      url: [
+        "https://teams.microsoft.com/*",
+        "https://teams.cloud.microsoft/*",
+        "https://teams.microsoft.us/*",
+        "https://teams.office365.us/*",
+      ],
+    });
+  } catch (_) {
+    return;
+  }
+  for (const tab of tabs) {
+    let results;
+    try {
+      results = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readSignIn });
+    } catch (_) {
+      continue; // a tab still loading, or one we can't script
+    }
+    const page = results?.[0]?.result;
+    if (page?.rt && page.gtm) {
+      try {
+        await chrome.runtime.sendNativeMessage(HOST, { type: "sign-in", ...page });
+        return; // one good hand-over is enough
+      } catch (_) {
+        // Brainstead not running or not registered yet; try again on the next alarm.
+        return;
+      }
+    }
+  }
+}
+
+chrome.alarms.create(HANDOVER_ALARM, { periodInMinutes: HANDOVER_PERIOD_MIN });
+chrome.alarms.onAlarm.addListener((a) => {
+  if (a.name === HANDOVER_ALARM) handOverSignIn();
+});
+chrome.runtime.onStartup.addListener(handOverSignIn);
+chrome.runtime.onInstalled.addListener(handOverSignIn);

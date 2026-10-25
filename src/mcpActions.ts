@@ -2226,6 +2226,60 @@ async function status(): Promise<string> {
 
 /** Settings › Capture extensions, as the pane shows it: the folder the extensions load from, the
  *  browsers that know Brainstead's capture host, and the last captures. */
+/** Teams and Outlook sync (Settings › Teams and Outlook sync), doing what the pane does: read its
+ *  state, run a pass, turn it on or off, choose a channel, or skip a sender. macOS only. */
+async function syncTool(a: Args): Promise<string> {
+  const action = str(a, "action") ?? "get";
+  const s = settings.get();
+  if (action === "get") {
+    const [state, meetings] = await Promise.all([
+      api.syncSignInState(),
+      s.syncEnabled ? api.syncTodayMeetings().catch(() => []) : Promise.resolve([]),
+    ]);
+    const ignore = s.syncIgnoreSenders ?? [];
+    return [
+      `Teams and Outlook sync is ${s.syncEnabled ? "on" : "off"}.`,
+      state.signedIn
+        ? `Signed in (handed over ${state.handedOver ? new Date(state.handedOver).toISOString().slice(0, 16).replace("T", " ") : "recently"}).`
+        : "Not signed in — open Teams in the browser so the extension hands the sign-in over.",
+      `1:1 and group chats sync automatically; channels chosen: ${(s.syncChannels ?? []).length}.`,
+      ignore.length ? `Mail skipped from: ${ignore.join(", ")}.` : "No senders skipped.",
+      meetings.length
+        ? `Upcoming meetings today:\n${meetings.map((m) => `- ${new Date(m.start).toISOString().slice(11, 16)} ${m.subject}`).join("\n")}`
+        : "No more meetings today.",
+    ].join("\n");
+  }
+  if (action === "on" || action === "off") {
+    settings.update({ syncEnabled: action === "on" });
+    return `Teams and Outlook sync turned ${action}.`;
+  }
+  if (action === "now") {
+    const r = await api.syncNow();
+    if (r.blocked) return `Didn't run: ${r.blocked}`;
+    return `Synced: ${r.chats} chat day(s), ${r.mail} email(s), ${r.transcripts} transcript(s).${r.problems.length ? ` Problems: ${r.problems.join("; ")}.` : ""}`;
+  }
+  if (action === "ignore" || action === "unignore") {
+    const sender = str(a, "sender")?.trim().toLowerCase();
+    if (!sender) throw new Error("sender is the address or domain to skip (or stop skipping).");
+    const have = s.syncIgnoreSenders ?? [];
+    settings.update({ syncIgnoreSenders: action === "ignore" ? [...new Set([...have, sender])] : have.filter((x) => x !== sender) });
+    return `${action === "ignore" ? "Skipping" : "No longer skipping"} ${sender}.`;
+  }
+  if (action === "channel" || action === "unchannel") {
+    const id = str(a, "id")?.trim();
+    if (!id) throw new Error("id is the channel's conversation id (teams_sync get, or list the channels, to find it).");
+    const have = s.syncChannels ?? [];
+    settings.update({ syncChannels: action === "channel" ? [...new Set([...have, id])] : have.filter((x) => x !== id) });
+    return `${action === "channel" ? "Syncing" : "No longer syncing"} channel ${id}.`;
+  }
+  if (action === "channels") {
+    const chans = await api.syncListChannels();
+    const chosen = new Set(s.syncChannels ?? []);
+    return chans.length ? chans.map((c) => `- ${c.topic} (${chosen.has(c.id) ? "on" : "off"}) · ${c.id}`).join("\n") : "No channels found.";
+  }
+  throw new Error("action is get, on, off, now, channels, channel, unchannel, ignore or unignore.");
+}
+
 async function captureExtensions(): Promise<string> {
   const c = await api.captureStatus();
   const name = { outlook: "Outlook", teams: "Teams", other: "Other" } as const;
@@ -2658,6 +2712,7 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   "assistants.found": assistantsFound,
   "source.provenance": provenance,
   "capture.status": captureExtensions,
+  sync: syncTool,
   glance: glanceTool,
   automated: automated,
   suggestions: suggestions,
@@ -3172,6 +3227,7 @@ const settingRows = (): SettingRow[] => [
   ["meetingIngest", "AI assistants", "Ingest a meeting note once it's made", "bool", true],
   ["meetingTrash", "AI assistants", "Then move the transcript to the Trash", "bool", true],
   ["ingestOnArrival", "AI assistants", "Ingest new sources as they arrive", "bool", false],
+  ["syncEnabled", "Teams and Outlook sync", "Sync Teams and Outlook (macOS)", "bool", false],
   ["refreshStale", "AI assistants", "Also refresh pages whose sources changed", "bool", false],
   ["summariesHere", "Jobs & schedule", "Brainstead runs the daily and weekly summaries", "bool", false],
   ["holdSummaries", "Jobs & schedule", "Hold the summaries for me", "bool", false],

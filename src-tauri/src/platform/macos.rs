@@ -384,6 +384,25 @@ pub fn stamp_pdf_footer(path: &Path, title: &str) -> Result<(), String> {
     }
 }
 
+/// The login Keychain's generic password `account` of `service`, as text.
+pub fn secret_get(service: &str, account: &str) -> Option<String> {
+    let b = security_framework::passwords::get_generic_password(service, account).ok()?;
+    String::from_utf8(b).ok()
+}
+
+pub fn secret_set(service: &str, account: &str, value: &str) -> Result<(), String> {
+    security_framework::passwords::set_generic_password(service, account, value.as_bytes())
+        .map_err(|e| format!("Couldn't keep the sign-in in the Keychain: {e}"))
+}
+
+pub fn secret_delete(service: &str, account: &str) -> Result<(), String> {
+    match security_framework::passwords::delete_generic_password(service, account) {
+        // errSecItemNotFound: nothing to forget.
+        Err(e) if e.code() != -25300 => Err(format!("Couldn't remove the sign-in from the Keychain: {e}")),
+        _ => Ok(()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use objc2::msg_send;

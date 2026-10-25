@@ -40,8 +40,12 @@ dirs = "6"
 base64 = "0.22"
 regex = "1"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+# Teams and Outlook sync's calls (sync/), at the updater's own version.
+reqwest = { version = "0.13", features = ["blocking", "json", "form", "query"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+# The sync's sign-in in the login Keychain (platform/macos.rs), at rustls' own version.
+security-framework = "3.7"
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSValue", "NSURL", "NSDictionary", "NSArray", "NSRange", "NSGeometry", "objc2-core-foundation"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSColor", "NSText", "NSSpellChecker", "NSPasteboard", "NSPrintInfo", "NSPrintOperation", "NSView", "NSResponder", "NSWindow", "NSPanel", "objc2-core-foundation"] }

@@ -12,9 +12,10 @@ import { api, FileSummary } from "./api";
 import { Icon } from "./icons";
 import { nav } from "./nav";
 import { askAboutNote } from "./Ask";
-import { runSourceAction, SOURCE_ACTION, sourceActions } from "./sourceActions";
+import { ignoreSenderItems, runSourceAction, SOURCE_ACTION, sourceActions } from "./sourceActions";
 import { canIngest as ingestOffered } from "./Lists";
 import { copyRich, errText, exportPdf, fullPath, openRename, toggleBookmark, trashFile, useBookmarked } from "./notes/actions";
+import { settings } from "./store";
 import { Popover } from "./ui";
 import { toast } from "./Toast";
 import { fileManager, isMac, keyLabel } from "./platform";
@@ -89,6 +90,23 @@ export function FileMenu({
     };
   }, [f, menu.at]);
   const bookmarked = useBookmarked(menu.at ? f?.path : undefined);
+  // For a synced email source (macOS), the sender's address, so "Don't sync this sender" can add it.
+  const [syncFrom, setSyncFrom] = useState<string | null>(null);
+  useEffect(() => {
+    setSyncFrom(null);
+    if (!f || !menu.at || !isMac || !f.path.startsWith("sources/")) return;
+    let live = true;
+    api
+      .dataviewRead(f.path)
+      .then((t) => {
+        const m = t?.match(/^\*\*From:\*\*\s*(\S+@\S+)/m);
+        if (live) setSyncFrom(m ? m[1].toLowerCase() : null);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [f, menu.at]);
   const features = useFeatures();
   if (!menu.at || !f) return null;
   const isText = /\.(md|txt)$/i.test(f.path);
@@ -156,6 +174,22 @@ export function FileMenu({
             >
               <Icon name={SOURCE_ACTION[a].icon} size={14} />
               {SOURCE_ACTION[a].label(false)}
+            </button>
+          ))}
+        {syncFrom &&
+          ignoreSenderItems(syncFrom).map((it) => (
+            <button
+              key={it.entry}
+              type="button"
+              role="menuitem"
+              title={it.tip}
+              onClick={run(async () => {
+                const have = settings.get().syncIgnoreSenders ?? [];
+                if (!have.includes(it.entry)) settings.update({ syncIgnoreSenders: [...have, it.entry] });
+              }, `Won't sync ${it.entry} any more`)}
+            >
+              <Icon name="mail" size={14} />
+              {it.label}
             </button>
           ))}
         {canIngest && (

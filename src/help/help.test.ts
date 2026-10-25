@@ -32,7 +32,7 @@ const SCREENS: Screen[] = [
   "doccheck",
   "compare",
 ];
-const PANES: SettingsPane[] = ["general", "notes", "vault", "assistants", "jobs", "capture", "permissions", "about"];
+const PANES: SettingsPane[] = ["general", "notes", "vault", "assistants", "jobs", "capture", "sync", "permissions", "about"];
 
 describe("help topics", () => {
   it("parses a file", () => {

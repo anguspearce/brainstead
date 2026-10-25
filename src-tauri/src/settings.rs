@@ -30,6 +30,12 @@ pub struct Settings {
     pub summaries_here: bool,
     /// When the user does the guided weekly review (Settings › Jobs & schedule).
     pub weekly_review: brainstead_core::reviews::WeeklyReview,
+    /// Teams and Outlook sync is on (Settings › Teams and Outlook sync; macOS only, D-20261025-01).
+    pub sync_enabled: bool,
+    /// Channel conversation ids the user chose to sync (off by default; 1:1 and group chats always).
+    pub sync_channels: Vec<String>,
+    /// Senders or domains whose mail the sync skips ("Don't sync this sender").
+    pub sync_ignore_senders: Vec<String>,
     /// Anything the window keeps that this side doesn't need to know about (sidebar state and the like).
     #[serde(flatten)]
     pub ui: serde_json::Map<String, serde_json::Value>,
@@ -47,6 +53,9 @@ impl Default for Settings {
             summaries: Default::default(),
             summaries_here: false,
             weekly_review: Default::default(),
+            sync_enabled: false,
+            sync_channels: Vec::new(),
+            sync_ignore_senders: Vec::new(),
             ui: Default::default(),
         }
     }

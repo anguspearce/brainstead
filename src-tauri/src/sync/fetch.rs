@@ -1,0 +1,519 @@
+// Copyright © 2026 Wayne Davies. Free software under the GNU General Public License, version 3 or later.
+// See LICENSE for the full text.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+//! Reading the user's own chats, Inbox mail and calendar, and turning them into capture values the
+//! vault is written from. The HTTP lives in `api`; here is what to ask for and how to shape the
+//! answer. Parsing is split from fetching so it can be tested against saved JSON without the network.
+
+use chrono::{DateTime, Local, Utc};
+use reqwest::blocking::Client;
+use serde_json::Value;
+
+use super::api;
+use super::auth::{self, Service, SignIn};
+use super::html;
+use brainstead_core::webcapture::{Capture, Message, Thread};
+
+/// A chat message, once read from chatsvc.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChatMessage {
+    pub id: String,
+    pub sender: String,
+    pub body: String,
+    pub time: DateTime<Utc>,
+}
+
+/// A conversation in the user's list.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Conv {
+    pub id: String,
+    pub topic: String,
+    pub kind: ConvKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConvKind {
+    OneOnOne,
+    Group,
+    Channel,
+    Meeting,
+    Other,
+}
+
+impl ConvKind {
+    pub fn of(id: &str) -> ConvKind {
+        if id.contains("meeting_") {
+            ConvKind::Meeting
+        } else if id.contains("@thread.tacv2") {
+            ConvKind::Channel
+        } else if id.ends_with("@unq.gbl.spaces") {
+            ConvKind::OneOnOne
+        } else if id.contains("@thread.v2") {
+            ConvKind::Group
+        } else {
+            ConvKind::Other
+        }
+    }
+}
+
+/// A calendar event, for Today and for finding meetings to fetch transcripts of.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Event {
+    pub subject: String,
+    pub start: DateTime<Utc>,
+    pub end: DateTime<Utc>,
+    pub organizer: String,
+    pub online: bool,
+    /// The meeting's chat/thread id, when it's a Teams meeting (for the transcript lookup).
+    pub thread_id: Option<String>,
+}
+
+// ── Chats ──────────────────────────────────────────────────────────────────────────────
+
+/// The user's conversations, newest activity first.
+pub fn conversations(client: &Client, s: &SignIn) -> Result<Vec<Conv>, String> {
+    let url = format!("{}/v1/users/ME/conversations?view=msnp24Equivalent&pageSize=200", s.chat_service.trim_end_matches('/'));
+    let body = api::get_chatsvc(client, &url)?;
+    Ok(parse_conversations(&body))
+}
+
+pub fn parse_conversations(body: &Value) -> Vec<Conv> {
+    body["conversations"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|c| {
+                    let id = c["id"].as_str()?.to_string();
+                    let topic = c["threadProperties"]["topic"].as_str().unwrap_or("").to_string();
+                    Some(Conv { kind: ConvKind::of(&id), id, topic })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A conversation's recent messages, oldest first. One page (enough for a day of a normal chat).
+pub fn chat_messages(client: &Client, s: &SignIn, conv_id: &str) -> Result<Vec<ChatMessage>, String> {
+    let url = format!(
+        "{}/v1/users/ME/conversations/{}/messages?view=msnp24Equivalent|supportsMessageProperties&pageSize=200",
+        s.chat_service.trim_end_matches('/'),
+        urlencode(conv_id)
+    );
+    let body = api::get_chatsvc(client, &url)?;
+    Ok(parse_messages(&body))
+}
+
+pub fn parse_messages(body: &Value) -> Vec<ChatMessage> {
+    let mut msgs: Vec<ChatMessage> = body["messages"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|m| {
+                    // Only real chat messages: skip control/system events (member added, call ended…).
+                    let mt = m["messagetype"].as_str().unwrap_or("");
+                    if mt != "RichText/Html" && mt != "Text" {
+                        return None;
+                    }
+                    let content = m["content"].as_str().unwrap_or("");
+                    let body = if mt == "RichText/Html" { html::to_text(content) } else { content.trim().to_string() };
+                    if body.is_empty() {
+                        return None;
+                    }
+                    let time = m["originalarrivaltime"].as_str().or_else(|| m["composetime"].as_str())?;
+                    let time = DateTime::parse_from_rfc3339(time).ok()?.with_timezone(&Utc);
+                    Some(ChatMessage {
+                        id: m["id"].as_str().or(m["originalarrivaltime"].as_str()).unwrap_or("").to_string(),
+                        sender: m["imdisplayname"].as_str().filter(|s| !s.is_empty()).unwrap_or("Unknown").to_string(),
+                        body,
+                        time,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    msgs.sort_by_key(|m| m.time);
+    msgs
+}
+
+/// Builds a Teams chat capture for one local day of a conversation. The title is the chat's topic,
+/// or the distinct other participants, or "Teams chat".
+pub fn chat_capture(conv: &Conv, day_msgs: &[ChatMessage], me: &str, url_base: &str) -> Option<Capture> {
+    if day_msgs.is_empty() {
+        return None;
+    }
+    let title = if !conv.topic.is_empty() {
+        conv.topic.clone()
+    } else {
+        let mut names: Vec<&str> = day_msgs.iter().map(|m| m.sender.as_str()).filter(|n| *n != me && *n != "Unknown").collect();
+        names.sort();
+        names.dedup();
+        if names.is_empty() {
+            "Teams chat".to_string()
+        } else {
+            names.join(", ")
+        }
+    };
+    let messages = day_msgs
+        .iter()
+        .map(|m| Message {
+            sender: m.sender.clone(),
+            from_address: None,
+            to: None,
+            cc: None,
+            recipients: None,
+            date: Some(m.time.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string()),
+            body: m.body.clone(),
+        })
+        .collect();
+    Some(Capture::Teams(Thread {
+        url: format!("{url_base}/_#/conversations/{}", urlencode(&conv.id)),
+        title,
+        kind: Some("chat".into()),
+        messages,
+        meeting_date: None,
+        meeting_start: None,
+    }))
+}
+
+// ── Mail ───────────────────────────────────────────────────────────────────────────────
+
+/// A mail message, once read from Outlook REST.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Mail {
+    pub id: String,
+    pub subject: String,
+    pub from: String,
+    pub from_address: String,
+    pub to: String,
+    pub received: DateTime<Utc>,
+    pub body: String,
+    pub web_link: String,
+}
+
+/// Recent Inbox messages, newest first.
+pub fn inbox(client: &Client, top: usize) -> Result<Vec<Mail>, String> {
+    let url = format!(
+        "https://outlook.office.com/api/v2.0/me/mailfolders/inbox/messages?$top={top}&$orderby=ReceivedDateTime%20desc&$select=Subject,From,ToRecipients,Body,ReceivedDateTime,WebLink"
+    );
+    let body = api::get_json(client, Service::Outlook, &url)?;
+    Ok(parse_mail(&body))
+}
+
+pub fn parse_mail(body: &Value) -> Vec<Mail> {
+    body["value"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|m| {
+                    let received = m["ReceivedDateTime"].as_str()?;
+                    let received = DateTime::parse_from_rfc3339(received).ok()?.with_timezone(&Utc);
+                    let from = &m["From"]["EmailAddress"];
+                    let to = m["ToRecipients"]
+                        .as_array()
+                        .map(|r| r.iter().filter_map(|x| x["EmailAddress"]["Name"].as_str()).collect::<Vec<_>>().join(", "))
+                        .unwrap_or_default();
+                    let content = m["Body"]["Content"].as_str().unwrap_or("");
+                    let is_html = m["Body"]["ContentType"].as_str().map(|t| t.eq_ignore_ascii_case("html")).unwrap_or(true);
+                    Some(Mail {
+                        id: m["Id"].as_str().unwrap_or("").to_string(),
+                        subject: m["Subject"].as_str().unwrap_or("(no subject)").to_string(),
+                        from: from["Name"].as_str().unwrap_or("Unknown").to_string(),
+                        from_address: from["Address"].as_str().unwrap_or("").to_string(),
+                        to,
+                        received,
+                        body: if is_html { html::to_text(content) } else { content.trim().to_string() },
+                        web_link: m["WebLink"].as_str().unwrap_or("").to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A single-message Outlook capture from one mail.
+pub fn mail_capture(m: &Mail) -> Capture {
+    Capture::Outlook(Thread {
+        url: if m.web_link.is_empty() { "https://outlook.office.com/mail/".into() } else { m.web_link.clone() },
+        title: m.subject.clone(),
+        kind: None,
+        messages: vec![Message {
+            sender: m.from.clone(),
+            from_address: Some(m.from_address.clone()).filter(|a| !a.is_empty()),
+            to: Some(m.to.clone()).filter(|t| !t.is_empty()),
+            cc: None,
+            recipients: None,
+            date: Some(m.received.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string()),
+            body: m.body.clone(),
+        }],
+        meeting_date: None,
+        meeting_start: None,
+    })
+}
+
+// ── Calendar ───────────────────────────────────────────────────────────────────────────
+
+/// The user's meetings between `start` and `end` (Teams middle-tier calendar).
+pub fn calendar(client: &Client, s: &SignIn, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<Vec<Event>, String> {
+    let mt = s.middle_tier.trim_end_matches('/');
+    let fmt = |t: DateTime<Utc>| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let url = format!(
+        "{mt}/v2.1/me/calendars/calendarView?startDate={}&endDate={}&$top=100&$skip=0&$orderby=startTime%20asc&$filter=isCancelled%20eq%20false&$select=subject,startTime,endTime,isOnlineMeeting,skypeTeamsMeetingUrl,skypeTeamsData,organizerName",
+        urlencode(&fmt(start)),
+        urlencode(&fmt(end)),
+    );
+    let body = api::get_chatsvc(client, &url)?;
+    Ok(parse_calendar(&body))
+}
+
+pub fn parse_calendar(body: &Value) -> Vec<Event> {
+    body["value"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|e| {
+                    let start = DateTime::parse_from_rfc3339(e["startTime"].as_str()?).ok()?.with_timezone(&Utc);
+                    let end = e["endTime"]
+                        .as_str()
+                        .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
+                        .map(|t| t.with_timezone(&Utc))
+                        .unwrap_or(start);
+                    Some(Event {
+                        subject: e["subject"].as_str().unwrap_or("(no subject)").to_string(),
+                        start,
+                        end,
+                        organizer: e["organizerName"].as_str().unwrap_or("").to_string(),
+                        online: e["isOnlineMeeting"].as_bool().unwrap_or(false),
+                        thread_id: meeting_thread_id(e),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The meeting's thread id, from the Teams meeting data on a calendar event. Teams stores it in
+/// `skypeTeamsData` (a JSON string with a `cid`) or in the join URL.
+fn meeting_thread_id(e: &Value) -> Option<String> {
+    if let Some(data) = e["skypeTeamsData"].as_str() {
+        if let Ok(v) = serde_json::from_str::<Value>(data) {
+            if let Some(cid) = v["cid"].as_str().filter(|s| !s.is_empty()) {
+                return Some(cid.to_string());
+            }
+        }
+    }
+    // Fall back to the thread id embedded in the join URL (…/l/meetup-join/19%3ameeting_…%40thread.v2/…).
+    let url = e["skypeTeamsMeetingUrl"].as_str()?;
+    let dec = url.replace("%3a", ":").replace("%3A", ":").replace("%40", "@");
+    let start = dec.find("19:meeting_")?;
+    let tail = &dec[start..];
+    let end = tail.find("@thread.v2")? + "@thread.v2".len();
+    Some(tail[..end].to_string())
+}
+
+// ── Transcripts ────────────────────────────────────────────────────────────────────────
+
+/// The transcript for a meeting thread, as a Teams transcript capture, when one exists. Best-effort:
+/// returns Ok(None) when the meeting had no transcript (not recorded, or still processing).
+pub fn transcript_capture(client: &Client, ev: &Event) -> Result<Option<Capture>, String> {
+    let Some(thread_id) = &ev.thread_id else { return Ok(None) };
+    let filter = format!("ItemProperties/Default/MeetingThreadId eq '{thread_id}'");
+    let select = "ItemId,ItemProperties/Default/TranscriptJson,ItemProperties/Default/RecordingStartDateTime,Visualization";
+    let url = format!(
+        "https://substrate.office.com/api/beta/me/WorkingSetFiles/?$filter={}&$orderby={}&$select={}",
+        urlencode(&filter),
+        urlencode("FileCreatedTime desc"),
+        urlencode(select),
+    );
+    // WorkingSetFiles needs the Substrate token and this Prefer header.
+    let token = auth::token(client, Service::Substrate)?;
+    let resp = client
+        .get(&url)
+        .bearer_auth(token)
+        .header("Accept", "application/json")
+        .header("Prefer", r#"substrate.flexibleschema,outlook.data-source="Substrate",exchange.behavior="SubstrateFiles""#)
+        .send()
+        .map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("substrate.office.com answered {}", resp.status().as_u16()));
+    }
+    let body: Value = resp.json().map_err(|e| e.to_string())?;
+    Ok(parse_transcript(&body, ev))
+}
+
+pub fn parse_transcript(body: &Value, ev: &Event) -> Option<Capture> {
+    let item = body["value"].as_array()?.iter().find(|i| i["ItemProperties"]["Default"]["TranscriptJson"].is_string())?;
+    let raw = item["ItemProperties"]["Default"]["TranscriptJson"].as_str()?;
+    let data: Value = serde_json::from_str(raw).ok()?;
+    let entries = data["entries"].as_array()?;
+    if entries.is_empty() {
+        return None;
+    }
+    let messages = entries
+        .iter()
+        .filter_map(|e| {
+            let text = e["text"].as_str()?.trim();
+            if text.is_empty() {
+                return None;
+            }
+            Some(Message {
+                sender: e["speakerDisplayName"].as_str().filter(|s| !s.is_empty()).unwrap_or("Unknown").to_string(),
+                from_address: None,
+                to: None,
+                cc: None,
+                recipients: None,
+                date: e["startOffset"].as_str().map(|s| s.trim_end_matches("0000").to_string()),
+                body: text.to_string(),
+            })
+        })
+        .collect::<Vec<_>>();
+    if messages.is_empty() {
+        return None;
+    }
+    let start_local = ev.start.with_timezone(&Local);
+    Some(Capture::Teams(Thread {
+        url: item["ItemProperties"]["Default"]["RecordingStartDateTime"]
+            .as_str()
+            .map(|_| "https://teams.microsoft.com/".to_string())
+            .unwrap_or_else(|| "https://teams.microsoft.com/".to_string()),
+        title: ev.subject.clone(),
+        kind: Some("transcript".into()),
+        messages,
+        meeting_date: Some(start_local.format("%Y-%m-%d").to_string()),
+        meeting_start: Some(start_local.format("%H:%M").to_string()),
+    }))
+}
+
+/// Percent-encodes a path/query segment (conversation ids and OData filters carry `:`, `@`, spaces).
+pub fn urlencode(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
+/// The signed-in user's own display name, from a cached token's claims, for titling 1:1 chats.
+pub fn my_name(s: &SignIn) -> String {
+    s.tokens.values().find_map(|t| auth::claims(&t.token)["name"].as_str().map(str::to_string)).unwrap_or_default()
+}
+
+/// Groups messages by their local calendar day (`YYYY-MM-DD`).
+pub fn by_local_day(msgs: &[ChatMessage]) -> std::collections::BTreeMap<String, Vec<ChatMessage>> {
+    let mut map: std::collections::BTreeMap<String, Vec<ChatMessage>> = std::collections::BTreeMap::new();
+    for m in msgs {
+        let day = m.time.with_timezone(&Local).format("%Y-%m-%d").to_string();
+        map.entry(day).or_default().push(m.clone());
+    }
+    map
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn classifies_conversations_by_id() {
+        assert_eq!(ConvKind::of("19:abc@unq.gbl.spaces"), ConvKind::OneOnOne);
+        assert_eq!(ConvKind::of("19:abc@thread.v2"), ConvKind::Group);
+        assert_eq!(ConvKind::of("19:abc@thread.tacv2"), ConvKind::Channel);
+        assert_eq!(ConvKind::of("19:meeting_abc@thread.v2"), ConvKind::Meeting);
+        assert_eq!(ConvKind::of("48:notifications"), ConvKind::Other);
+    }
+
+    #[test]
+    fn parses_chat_messages_and_skips_system_events() {
+        let body = json!({"messages": [
+            {"id": "2", "messagetype": "RichText/Html", "content": "<p>Hi &amp; bye</p>", "imdisplayname": "Maya", "originalarrivaltime": "2026-10-24T09:00:00.000Z"},
+            {"id": "3", "messagetype": "Text", "content": "plain", "imdisplayname": "Lena", "originalarrivaltime": "2026-10-24T08:00:00.000Z"},
+            {"id": "4", "messagetype": "ThreadActivity/AddMember", "content": "x", "originalarrivaltime": "2026-10-24T07:00:00.000Z"},
+            {"id": "5", "messagetype": "RichText/Html", "content": "   ", "imdisplayname": "Z", "originalarrivaltime": "2026-10-24T10:00:00.000Z"},
+        ]});
+        let msgs = parse_messages(&body);
+        assert_eq!(msgs.len(), 2, "system event and empty message dropped");
+        assert_eq!((msgs[0].sender.as_str(), msgs[0].body.as_str()), ("Lena", "plain"), "oldest first");
+        assert_eq!(msgs[1].body, "Hi & bye");
+    }
+
+    #[test]
+    fn titles_a_one_on_one_by_the_other_person() {
+        let conv = Conv { id: "19:x@unq.gbl.spaces".into(), topic: String::new(), kind: ConvKind::OneOnOne };
+        let t = "2026-10-24T09:00:00Z".parse().unwrap();
+        let msgs = vec![
+            ChatMessage { id: "1".into(), sender: "Maya".into(), body: "hi".into(), time: t },
+            ChatMessage { id: "2".into(), sender: "Me Myself".into(), body: "hello".into(), time: t },
+        ];
+        let cap = chat_capture(&conv, &msgs, "Me Myself", "https://teams.microsoft.com").unwrap();
+        match cap {
+            Capture::Teams(th) => {
+                assert_eq!(th.title, "Maya");
+                assert_eq!(th.messages.len(), 2);
+                assert_eq!(th.kind.as_deref(), Some("chat"));
+            }
+            _ => panic!("expected a Teams capture"),
+        }
+    }
+
+    #[test]
+    fn parses_mail_bodies_as_text() {
+        let body = json!({"value": [{
+            "Id": "AAA", "Subject": "Roadmap", "ReceivedDateTime": "2026-10-24T06:30:00Z",
+            "From": {"EmailAddress": {"Name": "Lena", "Address": "lena@acme.example"}},
+            "ToRecipients": [{"EmailAddress": {"Name": "Me", "Address": "me@acme.example"}}],
+            "Body": {"ContentType": "HTML", "Content": "<div>Point one</div><div>Point two</div>"},
+            "WebLink": "https://outlook.office.com/mail/id/AAA"
+        }]});
+        let mail = parse_mail(&body);
+        assert_eq!(mail.len(), 1);
+        assert_eq!(mail[0].from_address, "lena@acme.example");
+        assert_eq!(mail[0].body, "Point one\nPoint two");
+        match mail_capture(&mail[0]) {
+            Capture::Outlook(th) => {
+                assert_eq!(th.title, "Roadmap");
+                assert_eq!(th.messages[0].to.as_deref(), Some("Me"));
+            }
+            _ => panic!("expected an Outlook capture"),
+        }
+    }
+
+    #[test]
+    fn reads_the_meeting_thread_id_from_the_join_url() {
+        let e = json!({"skypeTeamsMeetingUrl": "https://teams.microsoft.com/l/meetup-join/19%3ameeting_ABC123%40thread.v2/0?context=x"});
+        assert_eq!(meeting_thread_id(&e).as_deref(), Some("19:meeting_ABC123@thread.v2"));
+        let e2 = json!({"skypeTeamsData": "{\"cid\":\"19:meeting_XYZ@thread.v2\"}"});
+        assert_eq!(meeting_thread_id(&e2).as_deref(), Some("19:meeting_XYZ@thread.v2"));
+        assert_eq!(meeting_thread_id(&json!({})), None);
+    }
+
+    #[test]
+    fn builds_a_transcript_capture() {
+        let ev = Event {
+            subject: "Steerco".into(),
+            start: "2026-10-24T13:00:00Z".parse().unwrap(),
+            end: "2026-10-24T14:00:00Z".parse().unwrap(),
+            organizer: "Lena".into(),
+            online: true,
+            thread_id: Some("19:meeting_ABC@thread.v2".into()),
+        };
+        let tj = json!({"entries": [
+            {"speakerDisplayName": "Maya", "text": "Welcome.", "startOffset": "00:00:01.0000000"},
+            {"speakerDisplayName": "", "text": "  ", "startOffset": "00:00:02.0000000"},
+        ]})
+        .to_string();
+        let body = json!({"value": [{"ItemProperties": {"Default": {"TranscriptJson": tj}}}]});
+        match parse_transcript(&body, &ev).unwrap() {
+            Capture::Teams(th) => {
+                assert_eq!(th.kind.as_deref(), Some("transcript"));
+                assert_eq!(th.title, "Steerco");
+                assert_eq!(th.messages.len(), 1, "empty line dropped");
+                assert_eq!(th.messages[0].sender, "Maya");
+                assert!(th.meeting_date.is_some());
+            }
+            _ => panic!("expected a Teams transcript capture"),
+        }
+        // No transcript present → None.
+        assert!(parse_transcript(&json!({"value": []}), &ev).is_none());
+    }
+}

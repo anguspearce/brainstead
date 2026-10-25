@@ -44,6 +44,12 @@ export interface Settings {
   /** Jobs & schedule: ingest a new source as it arrives (a capture, a file dropped or imported);
    *  and, in the daily check, ingest again the sources that changed since pages cited them. */
   ingestOnArrival?: boolean;
+  /** Teams and Outlook sync is on (Settings › Teams and Outlook sync; macOS only). */
+  syncEnabled?: boolean;
+  /** Channel conversation ids chosen to sync (1:1 and group chats always sync). */
+  syncChannels?: string[];
+  /** Senders or domains whose mail the sync skips ("Don't sync this sender"). */
+  syncIgnoreSenders?: string[];
   /** After a meeting note is made: ingest it (default on), then move its transcript to the Trash (default on). */
   meetingIngest?: boolean;
   meetingTrash?: boolean;
@@ -345,6 +351,32 @@ export interface Captured {
   path: string | null;
   error: string | null;
   at: string;
+  /** Made by the Teams and Outlook sync rather than an extension button (ingested unattended). */
+  sync?: boolean;
+}
+
+/** The Teams and Outlook sign-in state (Settings › Teams and Outlook sync). */
+export interface SyncSignIn {
+  signedIn: boolean;
+  handedOver: string | null;
+}
+
+/** What one sync pass did. */
+export interface SyncReport {
+  chats: number;
+  mail: number;
+  transcripts: number;
+  problems: string[];
+  blocked: string | null;
+}
+
+/** An upcoming meeting for the Today screen. */
+export interface SyncMeeting {
+  subject: string;
+  start: string;
+  end: string;
+  organizer: string;
+  online: boolean;
 }
 
 export interface Doc {
@@ -1279,6 +1311,12 @@ export const api = {
     }>("capture_status"),
   captureReveal: (which: "outlook-capture" | "teams-capture") => invoke<void>("capture_reveal", { which }),
   onCapture: (f: (c: Captured) => void): Promise<UnlistenFn> => listen<Captured>("capture", (e) => f(e.payload)),
+  // Teams and Outlook sync (src-tauri/src/sync/). macOS only.
+  syncSignInState: () => invoke<SyncSignIn>("sync_sign_in_state"),
+  syncSignOut: () => invoke<void>("sync_sign_out"),
+  syncNow: () => invoke<SyncReport>("sync_now"),
+  syncTodayMeetings: () => invoke<SyncMeeting[]>("sync_today_meetings"),
+  syncListChannels: () => invoke<{ id: string; topic: string }[]>("sync_list_channels"),
   // Dataview (src-tauri/src/dataview.rs, src/md/dataview/).
   /** Pages changed since generation `since` (0: all), and every page's path now. */
   dataviewPages: (since: number) => invoke<DvPagesDelta>("dataview_pages", { since }),

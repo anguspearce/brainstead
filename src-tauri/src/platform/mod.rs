@@ -804,6 +804,31 @@ pub fn remove_update_installers(name: &str) {
 /// window (`platform_features`) and the MCP server's `app_status` both read.
 pub use brainstead_core::features::{platform_features, PlatformFeatures};
 
+/// A secret kept for Brainstead (the Teams and Outlook sign-in, `sync/auth.rs`): the login
+/// Keychain on macOS, under the service "Brainstead" (or "Brainstead (dev)" for a dev build, so it
+/// leaves the installed app's alone). None when there's none. Elsewhere there's no store yet.
+pub fn secret_get(account: &str) -> Option<String> {
+    imp::secret_get(&secret_service(), account)
+}
+
+/// Keeps `value` as the secret `account`, replacing what was there.
+pub fn secret_set(account: &str, value: &str) -> Result<(), String> {
+    imp::secret_set(&secret_service(), account, value)
+}
+
+/// Forgets the secret `account`; fine when there's none.
+pub fn secret_delete(account: &str) -> Result<(), String> {
+    imp::secret_delete(&secret_service(), account)
+}
+
+fn secret_service() -> String {
+    if cfg!(debug_assertions) {
+        "Brainstead (dev)".into()
+    } else {
+        "Brainstead".into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

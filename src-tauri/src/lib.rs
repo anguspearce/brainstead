@@ -25,6 +25,7 @@ mod reviews;
 mod settings;
 mod skills;
 mod speech;
+mod sync;
 mod tray;
 mod updates;
 mod vault;
@@ -926,6 +927,11 @@ pub fn run() {
             notes::sources_import,
             nativehost::capture_status,
             nativehost::capture_reveal,
+            sync::sync_sign_in_state,
+            sync::sync_sign_out,
+            sync::sync_now,
+            sync::sync_today_meetings,
+            sync::sync_list_channels,
             bookmarks,
             smart_lists,
             asset_find,
@@ -1044,6 +1050,11 @@ pub fn run() {
                 std::thread::spawn(nativehost::register);
             }
             nativehost::watch(app.handle().clone());
+            // Teams and Outlook sync's timer (D-20261025-01): off unless the user turns it on, and a
+            // no-op without a sign-in. Not in a screenshot demo.
+            if scene().is_none() {
+                sync::watch(app.handle().clone());
+            }
             // The menu-bar icon and its menu window (stage 10). A scene with "tray": true shows the
             // menu window alone, somewhere on screen, for its screenshot.
             tray::setup_window(app.handle());

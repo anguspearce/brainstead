@@ -23,6 +23,10 @@ pub const MAX_BYTES: usize = 16 * 1024 * 1024;
 #[derive(Debug, Clone, Deserialize)]
 pub struct Message {
     pub sender: String,
+    /// The sender's email address, when known (the Teams and Outlook sync sets it so "Don't sync this
+    /// sender" can read it back; the extensions don't). Rendered as a `**From:**` line.
+    #[serde(default, rename = "fromAddress")]
+    pub from_address: Option<String>,
     #[serde(default)]
     pub to: Option<String>,
     #[serde(default)]
@@ -173,6 +177,9 @@ fn message_lines(m: &Message, level: usize, out: &mut Vec<String>) {
         _ => format!("{hashes} {}", m.sender),
     });
     out.push(String::new());
+    if let Some(from) = m.from_address.as_ref().filter(|a| !a.is_empty()) {
+        out.extend([format!("**From:** {from}"), String::new()]);
+    }
     if let Some(to) = m.to.as_ref().or(m.recipients.as_ref()).filter(|t| !t.is_empty()) {
         out.extend([format!("**To:** {to}"), String::new()]);
     }

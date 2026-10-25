@@ -239,3 +239,16 @@ mod tests {
         }
     }
 }
+
+/// No secret store here yet: Teams and Outlook sync is macOS only for now.
+pub fn secret_get(_service: &str, _account: &str) -> Option<String> {
+    None
+}
+
+pub fn secret_set(_service: &str, _account: &str, _value: &str) -> Result<(), String> {
+    Err("Teams and Outlook sync is only on macOS for now.".into())
+}
+
+pub fn secret_delete(_service: &str, _account: &str) -> Result<(), String> {
+    Ok(())
+}

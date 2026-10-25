@@ -830,6 +830,14 @@ pub fn tools() -> Vec<Value> {
         tool("capture_extensions", "Capture extensions", Read,
             "Settings › Capture extensions, as the pane shows it (needs the app): the folder the Outlook and Teams extensions are loaded from, the browsers and whether each knows Brainstead's capture host, and the last captures, each with what it was, the file it made in sources/ or why it was refused.",
             schema(json!({}), &[])),
+        tool("teams_sync", "Teams and Outlook sync", Change,
+            "Settings › Teams and Outlook sync, doing what the pane does (needs the app; macOS only). Reads the user's own Teams chats, meeting transcripts, Inbox mail and calendar into sources/ while Teams is open in the browser (D-20261025-01). With action get (the default): whether it's on, whether it's signed in, how many channels are chosen, which senders are skipped, and today's remaining meetings. on/off turns it on or off (also the syncEnabled setting). now runs one pass and says what it added. channels lists the user's channels with their ids and whether each is on; channel/unchannel turns one on or off by id. ignore/unignore adds or removes a sender address or a whole domain from the mail skip list, as “Don't sync this sender” does. The sync only ever reads from Teams and Outlook. Only when the user asks.",
+            schema(json!({
+                "action": {"type": "string", "enum": ["get", "on", "off", "now", "channels", "channel", "unchannel", "ignore", "unignore"], "description": "What to do; get (status) when left out."},
+                "sender": {"type": "string", "description": "With ignore or unignore: an email address (name@example.com) or a bare domain (example.com)."},
+                "id": {"type": "string", "description": "With channel or unchannel: the channel's conversation id, as action channels lists it."},
+                "reason": reason
+            }), &[])),
         tool("glance", "The vault at a glance", Read,
             "Glance's counts, as Activity and Knowledge health show them (needs the app): notes and wiki pages by type and by tag, most first, and the files the most others link to.",
             schema(json!({}), &[])),
@@ -1267,6 +1275,7 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
         "graph" => act("graph", obj),
         "open" => act("open", obj),
         "capture_extensions" => act("capture.status", obj),
+        "teams_sync" => act("sync", obj),
         "list_assistants" => act("assistants.found", obj),
         "glance" => act("glance", obj),
         "app_status" => {

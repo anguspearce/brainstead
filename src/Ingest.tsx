@@ -98,11 +98,11 @@ export function meetingProgress(
 }
 
 /** Starts ingesting these files; says so. */
-export function ingest(paths: string[]) {
+export function ingest(paths: string[], unattended = false) {
   if (!paths.length) return toast("There's nothing here to ingest", undefined, "bad");
   startRuns();
   api
-    .ingestStart(paths)
+    .ingestStart(paths, unattended)
     .then((ids) =>
       toast(ids.length === 1 ? `Ingesting ${pageName(paths[0])}` : `Ingesting ${ids.length} sources, one after another`, {
         label: "Sources",

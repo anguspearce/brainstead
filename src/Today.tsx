@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Today: what's overdue, due and deferred until today, what you're waiting for, a capture box,
-// and the notes you were in. No calendar: Microsoft Graph isn't available (§1).
+// and the notes you were in. Upcoming meetings show when Teams and Outlook sync is on (macOS), read
+// from the user's own Teams calendar — not Microsoft Graph (D-20261025-01).
 
 import { changes, decisions, health, held, pageName, startKnowledge } from "./knowledge";
 import { useEffect, useMemo, useState } from "react";
@@ -24,7 +25,7 @@ import { useVaultOpening, useVaultVersion, vaultStatus } from "./state";
 import { TopBar } from "./TopBar";
 import { ago, fmtCount, LayerTag, TableBand } from "./ui";
 import { iconizeEmoji } from "./md/fieldEmoji";
-import { captureDefault, keyLabel } from "./platform";
+import { captureDefault, isMac, keyLabel } from "./platform";
 
 export function greeting(h: number, name?: string) {
   const g = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
@@ -231,6 +232,7 @@ export function TodayScreen() {
         </section>
         <aside className="tside">
           <ProcessCard />
+          {isMac && s.syncEnabled && <MeetingsCard />}
           <SummaryCard kind="weekly" />
           <SummaryCard kind="daily" />
           <HeldCard />
@@ -327,6 +329,37 @@ function SideCard({ title, right, children }: { title: string; right?: React.Rea
       </div>
       {children}
     </section>
+  );
+}
+
+/** Today's remaining Teams meetings, from the sync's calendar (Settings › Teams and Outlook sync).
+ *  Nothing shows when there are none, so a quiet day adds no clutter. */
+function MeetingsCard() {
+  const [meetings, setMeetings] = useState<import("./api").SyncMeeting[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    api
+      .syncTodayMeetings()
+      .then((m) => live && setMeetings(m))
+      .catch(() => live && setMeetings([]));
+    return () => {
+      live = false;
+    };
+  }, []);
+  if (!meetings || meetings.length === 0) return null;
+  const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return (
+    <SideCard title="Upcoming meetings">
+      {meetings.map((m, i) => (
+        <div key={i} className="rrow">
+          <span className="n">{time(m.start)}</span>
+          <span className="ell grow" title={m.organizer ? `${m.subject} — ${m.organizer}` : m.subject}>
+            {m.subject}
+          </span>
+          {m.online && <Icon name="refresh" size={12} aria-label="Teams meeting" />}
+        </div>
+      ))}
+    </SideCard>
   );
 }
 

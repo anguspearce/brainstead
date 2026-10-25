@@ -37,6 +37,7 @@ const PANES: [SettingsPane, string, string][] = [
   ["assistants", "AI assistants", "cpu"],
   ["jobs", "Jobs & schedule", "calendar"],
   ["capture", "Capture extensions", "source"],
+  ["sync", "Teams and Outlook sync", "refresh"],
   ["permissions", "Permissions", "shield"],
   ["about", "About", "info"],
 ];
@@ -44,7 +45,7 @@ const PANES: [SettingsPane, string, string][] = [
 export function SettingsScreen() {
   const p = useStore(place).place;
   const features = useFeatures();
-  const panes = PANES.filter(([id]) => id !== "permissions" || features.fullDiskAccess);
+  const panes = PANES.filter(([id]) => (id !== "permissions" || features.fullDiskAccess) && (id !== "sync" || isMac));
   const pane = p.pane === "permissions" && !features.fullDiskAccess ? "general" : (p.pane ?? "general");
   const title = PANES.find((x) => x[0] === pane)?.[1] ?? "Settings";
   return (
@@ -73,6 +74,7 @@ export function SettingsScreen() {
           {pane === "assistants" && <Assistants />}
           {pane === "jobs" && <Jobs />}
           {pane === "capture" && <CapturePane />}
+          {pane === "sync" && <SyncPane />}
           {pane === "permissions" && <PermissionsPane />}
           {pane === "about" && <About />}
         </div>
@@ -1188,6 +1190,196 @@ const EXTENSIONS: { id: "outlook-capture" | "teams-capture"; ext: "outlook" | "t
 ];
 
 /** The Outlook and Teams extensions: where to load them from, whether the browsers know Brainstead's helper, the last captures. */
+function SyncPane() {
+  const s = useStore(settings);
+  const [signIn, setSignIn] = useState<Awaited<ReturnType<typeof api.syncSignInState>> | null>(null);
+  const [channels, setChannels] = useState<{ id: string; topic: string }[] | null>(null);
+  const [report, setReport] = useState<import("./api").SyncReport | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [newIgnore, setNewIgnore] = useState("");
+  const refresh = () =>
+    api
+      .syncSignInState()
+      .then(setSignIn)
+      .catch(() => setSignIn(null));
+  useEffect(() => {
+    refresh();
+    const again = () => refresh();
+    window.addEventListener("focus", again);
+    return () => window.removeEventListener("focus", again);
+  }, []);
+  const enabled = !!s.syncEnabled;
+  const ignore = s.syncIgnoreSenders ?? [];
+  const chosen = s.syncChannels ?? [];
+  const addIgnore = () => {
+    const v = newIgnore.trim().toLowerCase();
+    if (v && !ignore.includes(v)) settings.update({ syncIgnoreSenders: [...ignore, v] });
+    setNewIgnore("");
+  };
+  const syncNow = () => {
+    setBusy(true);
+    setReport(null);
+    api
+      .syncNow()
+      .then((r) => {
+        setReport(r);
+        if (r.blocked) toast(r.blocked, undefined, "bad");
+      })
+      .catch((e) => toast(String(e), undefined, "bad"))
+      .finally(() => setBusy(false));
+  };
+  const loadChannels = () => {
+    setChannels(null);
+    api
+      .syncListChannels()
+      .then(setChannels)
+      .catch((e) => toast(`Couldn't list channels: ${e}`, undefined, "bad"));
+  };
+  return (
+    <>
+      <section className="sgroup">
+        <h2 className="h3">Teams and Outlook sync</h2>
+        <p className="muted">
+          Brainstead reads your own Teams chats, meeting transcripts, Inbox mail and calendar and writes what's new into sources/, ready to
+          ingest and listed in the Inbox — the same as a capture, without clicking. It uses the sign-in your open Teams tab already has,
+          handed over by the Teams extension, so keep Teams open in your browser; it reads only, and nothing leaves this Mac but the calls
+          to Microsoft.
+        </p>
+        <Switch label="Sync Teams and Outlook" on={enabled} onChange={(v) => settings.update({ syncEnabled: v })} />
+        {s.readOnly && enabled && (
+          <div className="doc-banner warn" role="status">
+            <Icon name="info" size={14} />
+            <span>Read-only is on (Settings › Vault), so the sync is paused until it's switched off.</span>
+          </div>
+        )}
+      </section>
+
+      <section className="sgroup">
+        <h2 className="h3">Sign-in</h2>
+        <div className="card">
+          <div className="srow">
+            <Icon name={signIn?.signedIn ? "check" : "info"} style={{ color: signIn?.signedIn ? "var(--green)" : "var(--ink3)" }} />
+            <div className="t">
+              <div className="pt">{signIn?.signedIn ? "Signed in" : "Not signed in"}</div>
+              <div className="faint">
+                {signIn?.signedIn
+                  ? `Handed over ${signIn.handedOver ? ago(new Date(signIn.handedOver).getTime()) : "recently"}. Open Teams in your browser each day to keep it fresh.`
+                  : "Open Teams in Chrome (with the Teams extension loaded) so it can hand the sign-in over. It arrives within a few minutes."}
+              </div>
+            </div>
+            {signIn?.signedIn && (
+              <button
+                type="button"
+                className="btn sm"
+                title="Forget the Teams sign-in on this Mac"
+                onClick={() => void api.syncSignOut().then(refresh)}
+              >
+                Sign out
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="sgroup">
+        <h2 className="h3">Sync now</h2>
+        <p className="faint">The sync runs on its own every so often. Run it now to check it's working.</p>
+        <button type="button" className="btn" title="Run one Teams and Outlook sync pass now" disabled={busy || !enabled} onClick={syncNow}>
+          <Icon name="refresh" size={13} />
+          {busy ? "Syncing…" : "Sync now"}
+        </button>
+        {report && !report.blocked && (
+          <p className="faint" role="status">
+            Added {report.chats} chat {report.chats === 1 ? "day" : "days"}, {report.mail} {report.mail === 1 ? "email" : "emails"} and{" "}
+            {report.transcripts} {report.transcripts === 1 ? "transcript" : "transcripts"}.
+            {report.problems.length > 0 && ` ${report.problems.length} problem${report.problems.length === 1 ? "" : "s"}.`}
+          </p>
+        )}
+        {report?.problems?.map((p, i) => (
+          <div key={i} className="doc-banner warn" role="alert">
+            <Icon name="info" size={14} />
+            <span>{p}</span>
+          </div>
+        ))}
+      </section>
+
+      <section className="sgroup">
+        <h2 className="h3">Mail to skip</h2>
+        <p className="faint">
+          Your Inbox syncs, apart from these senders or domains (and anything Outlook files under Other). Use “Don't sync this sender” on a
+          synced email to add one, or add one here.
+        </p>
+        <div className="row">
+          <input
+            className="input"
+            placeholder="name@example.com or example.com"
+            value={newIgnore}
+            onChange={(e) => setNewIgnore(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addIgnore()}
+          />
+          <button
+            type="button"
+            className="btn sm"
+            title="Add this sender or domain to the skip list"
+            onClick={addIgnore}
+            disabled={!newIgnore.trim()}
+          >
+            Add
+          </button>
+        </div>
+        {ignore.length > 0 && (
+          <div className="card">
+            {ignore.map((e) => (
+              <div key={e} className="srow">
+                <Icon name="mail" style={{ color: "var(--ink3)" }} />
+                <div className="t">
+                  <div className="pt mono">{e}</div>
+                </div>
+                <button
+                  type="button"
+                  className="btn sm"
+                  title={`Stop skipping ${e}`}
+                  onClick={() => settings.update({ syncIgnoreSenders: ignore.filter((x) => x !== e) })}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="sgroup">
+        <h2 className="h3">Channels</h2>
+        <p className="faint">1:1 and group chats sync automatically. Channels are off unless you choose them here.</p>
+        <button
+          type="button"
+          className="btn sm"
+          title="List your Teams channels to choose which to sync"
+          disabled={!signIn?.signedIn}
+          onClick={loadChannels}
+        >
+          {channels ? "Refresh channel list" : "Show my channels"}
+        </button>
+        {channels && channels.length === 0 && <p className="faint">No channels found.</p>}
+        {channels && channels.length > 0 && (
+          <div className="card">
+            {channels.map((c) => (
+              <div key={c.id} className="srow">
+                <Switch
+                  label={c.topic}
+                  on={chosen.includes(c.id)}
+                  onChange={(v) => settings.update({ syncChannels: v ? [...chosen, c.id] : chosen.filter((x) => x !== c.id) })}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </>
+  );
+}
+
 function CapturePane() {
   const s = useStore(settings);
   const [st, setSt] = useState<Awaited<ReturnType<typeof api.captureStatus>> | null>(null);

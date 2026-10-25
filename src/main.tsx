@@ -84,8 +84,9 @@ async function start() {
     if (!c.path) return toast(`${c.what} not captured: ${c.error ?? "refused"}`, undefined, "bad");
     toast(`${c.what} captured`, { label: "Open", run: () => openDoc(c.path!) });
     // Settings › AI assistants › Ingest: a new source is ingested as it arrives.
-    // A transcript waits for its meeting note instead (src/meetingFlow.ts).
-    if (settings.get().ingestOnArrival && !isTranscriptPath(c.path)) ingest([c.path]);
+    // A transcript waits for its meeting note instead (src/meetingFlow.ts). A capture the Teams and
+    // Outlook sync made (c.sync) is ingested unattended, so a change that fails a check is held.
+    if (settings.get().ingestOnArrival && !isTranscriptPath(c.path)) ingest([c.path], c.sync === true);
   });
   root.render(
     <React.StrictMode>

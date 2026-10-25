@@ -77,6 +77,10 @@ pub struct Captured {
     pub path: Option<String>,
     pub error: Option<String>,
     pub at: String,
+    /// Made by the Teams and Outlook sync rather than an extension button, so the app can ingest it
+    /// unattended. Absent on older captures (reads as false).
+    #[serde(default)]
+    pub sync: bool,
 }
 
 fn extension_of(origin: &str) -> &'static str {
@@ -100,26 +104,22 @@ fn handle(data: &Path, origin: &str, v: Value) -> Value {
     if ext == "other" {
         return json!({"ok": false, "message": "Brainstead only takes captures from its own Outlook and Teams extensions."});
     }
+    // The Teams extension hands over the open tab's sign-in, so the app can sync the user's own
+    // chats, mail and calendar (D-20261025-01). It carries no capture to write.
+    if v.get("type").and_then(Value::as_str) == Some("sign-in") {
+        if ext != "teams" {
+            return json!({"ok": false, "message": "Only the Teams extension hands over the sign-in."});
+        }
+        return match crate::sync::accept_handover(&v) {
+            Ok(()) => json!({"ok": true}),
+            Err(message) => json!({"ok": false, "message": message}),
+        };
+    }
     let c: Capture = match serde_json::from_value(v) {
         Ok(c) => c,
         Err(e) => return json!({"ok": false, "message": format!("Brainstead doesn't know this capture: {e}")}),
     };
-    let what = c.what().to_string();
-    let result = match vault {
-        None => Err("Brainstead has no vault chosen yet. Open Brainstead and choose one.".to_string()),
-        Some(_) if s.read_only => Err("Brainstead's vault is read-only. Switch off Settings › Vault › Read-only to capture.".to_string()),
-        Some(v) => webcapture::write(&v, &c, chrono::Local::now()).map_err(|e| e.to_string()),
-    };
-    note(
-        data,
-        Captured {
-            extension: ext,
-            what,
-            path: result.as_ref().ok().cloned(),
-            error: result.as_ref().err().cloned(),
-            at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-        },
-    );
+    let result = deliver(data, vault.as_deref(), s.read_only, &ext, &c, false);
     match result {
         Ok(path) => {
             let filename = path.trim_start_matches("sources/").to_string();
@@ -127,6 +127,32 @@ fn handle(data: &Path, origin: &str, v: Value) -> Value {
         }
         Err(message) => json!({"ok": false, "message": message}),
     }
+}
+
+/// Writes capture `c` into `vault`'s `sources/` and records it in the Inbox and `captures.json`, the
+/// way an extension capture is. `sync` marks a capture the Teams and Outlook sync made rather than a
+/// button press (so the app can ingest it unattended). The vault path, or why it was refused; a
+/// refusal is recorded too, so it shows in the Inbox strip and Settings. Shared by the native host
+/// and the in-app sync (`sync::run`).
+pub fn deliver(data: &Path, vault: Option<&Path>, read_only: bool, ext: &str, c: &Capture, sync: bool) -> Result<String, String> {
+    let what = c.what().to_string();
+    let result = match vault {
+        None => Err("Brainstead has no vault chosen yet. Open Brainstead and choose one.".to_string()),
+        Some(_) if read_only => Err("Brainstead's vault is read-only. Switch off Settings › Vault › Read-only to capture.".to_string()),
+        Some(v) => webcapture::write(v, c, chrono::Local::now()).map_err(|e| e.to_string()),
+    };
+    note(
+        data,
+        Captured {
+            extension: ext.to_string(),
+            what,
+            path: result.as_ref().ok().cloned(),
+            error: result.as_ref().err().cloned(),
+            at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            sync,
+        },
+    );
+    result
 }
 
 /// The captures noted so far, newest first.
@@ -435,6 +461,7 @@ mod tests {
             path: Some(format!("sources/c{i}.md")),
             error: None,
             at: format!("2026-10-03T10:{:02}:{:02}.000Z", i / 60, i % 60),
+            sync: false,
         };
         // An older install: captures.json only. Its captures seed the Inbox list.
         write_list(&data.path().join("captures.json"), &[cap(0)]);

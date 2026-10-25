@@ -48,6 +48,9 @@ The **Daily summary** card shows today's or the most recent daily summary, folde
 
 The **Weekly summary** card above it works the same way. Both show when **Brainstead runs the daily and weekly summaries** is on in [Settings › Jobs & schedule](app:settings/jobs), or when there's a summary to show.
 
+## See today's meetings
+On a Mac, with [Teams and Outlook sync](app:settings/sync) on, an **Upcoming meetings** card lists your remaining Teams meetings for the day, read from your own calendar. It's hidden when there are none.
+
 ## Pick up where you left off
 **Changes held for you** counts the changes held in [Changes](app:review) and lists the first four; click one, or **Review**, to accept or reject them.
 

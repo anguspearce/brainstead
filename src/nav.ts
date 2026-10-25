@@ -34,7 +34,7 @@ export type Screen =
   | "doccheck"
   | "compare";
 
-export type SettingsPane = "general" | "notes" | "vault" | "assistants" | "jobs" | "capture" | "permissions" | "about";
+export type SettingsPane = "general" | "notes" | "vault" | "assistants" | "jobs" | "capture" | "sync" | "permissions" | "about";
 
 export interface Place {
   screen: Screen;
