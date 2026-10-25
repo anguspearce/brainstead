@@ -25,6 +25,7 @@ import { useVaultVersion } from "./state";
 import { useDraftPaths } from "./drafts";
 import { IMAGE_EXT } from "./md/wikilinks";
 import { TopBar } from "./TopBar";
+import { isMac } from "./platform";
 import { Dialog, fmtBytes, fmtCount, Popover, Seg } from "./ui";
 import { TypeDot, TypePill } from "./typeTone";
 import { keyLabel } from "./platform";
@@ -622,6 +623,43 @@ function useDropToSources(): boolean {
   return over;
 }
 
+/** Run one Teams and Outlook sync pass from a button, reporting what it added. Shared by the Sources
+ *  top bar and Settings' Sync now. */
+function SyncNowButton() {
+  const s = useStore(settings);
+  const [syncing, setSyncing] = useState(false);
+  if (!isMac || !s.syncEnabled) return null;
+  const run = () => {
+    setSyncing(true);
+    api
+      .syncNow()
+      .then((r) => {
+        if (r.blocked) return toast(r.blocked, undefined, "bad");
+        const n = r.chats + r.mail + r.transcripts;
+        toast(
+          n
+            ? `Synced ${r.chats} chat ${r.chats === 1 ? "day" : "days"}, ${r.mail} mail, ${r.transcripts} transcript${r.transcripts === 1 ? "" : "s"}`
+            : "Synced — nothing new",
+          r.problems.length ? { label: "Settings", run: () => nav.go({ screen: "settings", pane: "sync" }) } : undefined,
+        );
+      })
+      .catch((e) => toast(String(e), undefined, "bad"))
+      .finally(() => setSyncing(false));
+  };
+  return (
+    <button
+      type="button"
+      className="btn"
+      title="Read new Teams chats, mail and transcripts into sources/ now"
+      disabled={syncing}
+      onClick={run}
+    >
+      <Icon name="refresh" size={14} className={syncing ? "spin" : undefined} />
+      {syncing ? "Syncing…" : "Sync now"}
+    </button>
+  );
+}
+
 export function SourcesScreen() {
   const rows = useFiles<SourceRow>(() => api.sourcesList());
   useEffect(startKnowledge, []);
@@ -685,6 +723,7 @@ export function SourcesScreen() {
   return (
     <main className="main">
       <TopBar title="Sources" ask={{ about: "your sources", prompt: "About my sources: " }}>
+        <SyncNowButton />
         <button type="button" className="btn" title="Copy files into sources/ (or drop them here)" onClick={() => void pickSources()}>
           <Icon name="plus" size={14} />
           Import

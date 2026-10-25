@@ -189,6 +189,41 @@ pub fn chat_capture(conv: &Conv, day_msgs: &[ChatMessage], me: &str, url_base: &
     }))
 }
 
+// ── Channels ───────────────────────────────────────────────────────────────────────────
+
+/// A channel the user can choose to sync: its conversation id and a "Team / Channel" name.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Channel {
+    pub id: String,
+    pub name: String,
+}
+
+/// The user's teams and their channels, from the chat-service aggregator (the conversations list
+/// doesn't carry channel names). Named "Team / Channel" so the picker is readable.
+pub fn channels(client: &Client, s: &SignIn) -> Result<Vec<Channel>, String> {
+    let base = s.csa_service.trim_end_matches('/');
+    if base.is_empty() {
+        return Err("No channel service address in the sign-in; open Teams in the browser again.".into());
+    }
+    let url = format!("{base}/api/v3/teams/users/me?isPrefetch=false&enableMembershipSummary=true");
+    Ok(parse_channels(&api::get_csa(client, &url)?))
+}
+
+pub fn parse_channels(body: &Value) -> Vec<Channel> {
+    let mut out = Vec::new();
+    for team in body["teams"].as_array().into_iter().flatten() {
+        let team_name = team["displayName"].as_str().unwrap_or("").trim();
+        for ch in team["channels"].as_array().into_iter().flatten() {
+            let (Some(id), Some(name)) = (ch["id"].as_str(), ch["displayName"].as_str()) else { continue };
+            let name = name.trim();
+            let label = if team_name.is_empty() { name.to_string() } else { format!("{team_name} / {name}") };
+            out.push(Channel { id: id.to_string(), name: label });
+        }
+    }
+    out.sort_by_key(|c| c.name.to_lowercase());
+    out
+}
+
 // ── Mail ───────────────────────────────────────────────────────────────────────────────
 
 /// A mail message, once read from Outlook REST.
@@ -547,6 +582,21 @@ mod tests {
             _ => panic!("expected a Teams capture"),
         }
         assert_eq!(chat_display_name(&msgs, "Me Myself"), "", "no other writers that day");
+    }
+
+    #[test]
+    fn names_channels_as_team_slash_channel() {
+        let body = json!({"teams": [
+            {"displayName": "Orbit App", "channels": [
+                {"id": "19:aaa@thread.tacv2", "displayName": "General"},
+                {"id": "19:bbb@thread.tacv2", "displayName": "Design"}]},
+            {"displayName": "", "channels": [{"id": "19:ccc@thread.tacv2", "displayName": "Lonely"}]},
+            {"displayName": "No channels"},
+        ]});
+        let chans = parse_channels(&body);
+        let names: Vec<&str> = chans.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["Lonely", "Orbit App / Design", "Orbit App / General"], "sorted, team-prefixed");
+        assert_eq!(chans[1].id, "19:bbb@thread.tacv2");
     }
 
     #[test]

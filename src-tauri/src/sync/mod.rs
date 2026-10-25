@@ -99,12 +99,7 @@ pub struct Channel {
 pub async fn sync_list_channels() -> Result<Vec<Channel>, String> {
     tauri::async_runtime::spawn_blocking(|| {
         let sign_in = auth::load().ok_or("Not signed in to Teams.")?;
-        let convs = fetch::conversations(&client(), &sign_in)?;
-        Ok(convs
-            .into_iter()
-            .filter(|c| c.kind == fetch::ConvKind::Channel)
-            .map(|c| Channel { topic: if c.topic.is_empty() { "(unnamed channel)".into() } else { c.topic }, id: c.id })
-            .collect())
+        Ok(fetch::channels(&client(), &sign_in)?.into_iter().map(|c| Channel { id: c.id, topic: c.name }).collect())
     })
     .await
     .map_err(|e| e.to_string())?

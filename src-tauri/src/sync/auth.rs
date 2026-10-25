@@ -30,6 +30,8 @@ pub enum Service {
     Outlook,
     /// Meeting transcripts.
     Substrate,
+    /// The chat-service aggregator (teams and channels list).
+    Csa,
 }
 
 impl Service {
@@ -38,6 +40,7 @@ impl Service {
             Service::Spaces => "https://api.spaces.skype.com/.default offline_access",
             Service::Outlook => "https://outlook.office.com/.default offline_access",
             Service::Substrate => "https://substrate.office.com/.default offline_access",
+            Service::Csa => "https://chatsvcagg.teams.microsoft.com/.default offline_access",
         }
     }
 
@@ -46,6 +49,7 @@ impl Service {
             Service::Spaces => "spaces",
             Service::Outlook => "outlook",
             Service::Substrate => "substrate",
+            Service::Csa => "csa",
         }
     }
 }
@@ -73,6 +77,9 @@ pub struct SignIn {
     pub chat_service: String,
     /// The middle-tier address (`…/api/mt/part/<region>`), for the Teams calendar.
     pub middle_tier: String,
+    /// The chat-service aggregator address (`…/api/csa/<region>`), for the teams and channels list.
+    #[serde(default)]
+    pub csa_service: String,
     /// When the extension last handed the sign-in over (RFC 3339).
     pub handed_over: String,
 }
@@ -148,11 +155,12 @@ pub fn from_handover(v: &Value) -> Option<SignIn> {
     let gtm: Value = v["gtm"].as_str().and_then(|s| serde_json::from_str(s).ok()).unwrap_or(Value::Null);
     let chat_service = gtm["item"]["chatServiceAfd"].as_str().unwrap_or("").to_string();
     let middle_tier = gtm["item"]["middleTier"].as_str().unwrap_or("").to_string();
+    let csa_service = gtm["item"]["chatSvcAggAfd"].as_str().unwrap_or("").to_string();
 
     // Carry over any still-valid service tokens from the page, so the first sync needn't refresh.
     let now = now_secs();
     let mut tokens = BTreeMap::new();
-    for svc in [Service::Spaces, Service::Outlook, Service::Substrate] {
+    for svc in [Service::Spaces, Service::Outlook, Service::Substrate, Service::Csa] {
         if let Some(best) = best_page_token(&ats, svc, now) {
             tokens.insert(svc.key().to_string(), best);
         }
@@ -166,6 +174,7 @@ pub fn from_handover(v: &Value) -> Option<SignIn> {
         tokens,
         chat_service,
         middle_tier,
+        csa_service,
         handed_over: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
     })
 }
@@ -182,6 +191,7 @@ fn best_page_token(ats: &[Value], svc: Service, now: i64) -> Option<Token> {
                 Service::Spaces => aud == "https://api.spaces.skype.com",
                 Service::Outlook => aud == "https://outlook.office.com" && scp.contains("Mail.Read"),
                 Service::Substrate => aud == "https://substrate.office.com",
+                Service::Csa => aud == "https://chatsvcagg.teams.microsoft.com",
             };
             let expires = jwt_expiry(&token);
             (matches && expires > now + MARGIN_SECS).then_some(Token { token, expires })

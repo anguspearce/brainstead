@@ -1298,10 +1298,18 @@ function SyncPane() {
       <section className="sgroup">
         <h2 className="h3">Sync now</h2>
         <p className="faint">The sync runs on its own every so often. Run it now to check it's working.</p>
-        <button type="button" className="btn" title="Run one Teams and Outlook sync pass now" disabled={busy || !enabled} onClick={syncNow}>
-          <Icon name="refresh" size={13} />
-          {busy ? "Syncing…" : "Sync now"}
-        </button>
+        <div className="row">
+          <button
+            type="button"
+            className="btn"
+            title="Run one Teams and Outlook sync pass now"
+            disabled={busy || !enabled}
+            onClick={syncNow}
+          >
+            <Icon name="refresh" size={13} />
+            {busy ? "Syncing…" : "Sync now"}
+          </button>
+        </div>
         {report && !report.blocked && (
           <p className="faint" role="status">
             Added {report.chats} chat {report.chats === 1 ? "day" : "days"}, {report.mail} {report.mail === 1 ? "email" : "emails"} and{" "}
@@ -1366,15 +1374,17 @@ function SyncPane() {
       <section className="sgroup">
         <h2 className="h3">Channels</h2>
         <p className="faint">1:1 and group chats sync automatically. Channels are off unless you choose them here.</p>
-        <button
-          type="button"
-          className="btn sm"
-          title="List your Teams channels to choose which to sync"
-          disabled={!signIn?.signedIn}
-          onClick={loadChannels}
-        >
-          {channels ? "Refresh channel list" : "Show my channels"}
-        </button>
+        <div className="row">
+          <button
+            type="button"
+            className="btn sm"
+            title="List your Teams channels to choose which to sync"
+            disabled={!signIn?.signedIn}
+            onClick={loadChannels}
+          >
+            {channels ? "Refresh channel list" : "Show my channels"}
+          </button>
+        </div>
         {channels && channels.length === 0 && <p className="faint">No channels found.</p>}
         {channels && channels.length > 0 && (
           <div className="card">

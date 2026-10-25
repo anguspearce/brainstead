@@ -373,7 +373,11 @@ function MeetingsCard() {
       <span className="ell grow" title={m.organizer ? `${m.subject} — ${m.organizer}` : m.subject}>
         {m.subject}
       </span>
-      {m.online && <Icon name="refresh" size={12} aria-label="Teams meeting" />}
+      {m.online && (
+        <span title="Online meeting" style={{ display: "inline-flex" }}>
+          <Icon name="globe" size={12} />
+        </span>
+      )}
     </div>
   );
   return (

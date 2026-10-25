@@ -36,6 +36,18 @@ pub fn get_chatsvc(client: &Client, url: &str) -> Result<Value, String> {
     read(resp, url)
 }
 
+/// A GET on the chat-service aggregator (teams and channels), which needs the Skype token alongside
+/// the CSA bearer.
+pub fn get_csa(client: &Client, url: &str) -> Result<Value, String> {
+    let spaces = auth::token(client, Service::Spaces)?;
+    let skype = skype_token(client, &spaces)?;
+    let csa = auth::token(client, Service::Csa)?;
+    let resp = web_headers(client.get(url).bearer_auth(&csa).header("Authentication", format!("skypetoken={skype}")))
+        .send()
+        .map_err(|e| e.to_string())?;
+    read(resp, url)
+}
+
 /// Reads a response as JSON, turning a non-2xx into an error naming the endpoint and status, so a
 /// changed or withdrawn Microsoft endpoint shows up plainly in Settings rather than breaking the sync.
 fn read(resp: reqwest::blocking::Response, url: &str) -> Result<Value, String> {
