@@ -1194,6 +1194,7 @@ function SyncPane() {
   const s = useStore(settings);
   const [signIn, setSignIn] = useState<Awaited<ReturnType<typeof api.syncSignInState>> | null>(null);
   const [channels, setChannels] = useState<{ id: string; topic: string }[] | null>(null);
+  const [loadingChannels, setLoadingChannels] = useState(false);
   const [report, setReport] = useState<import("./api").SyncReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [newIgnore, setNewIgnore] = useState("");
@@ -1230,10 +1231,12 @@ function SyncPane() {
   };
   const loadChannels = () => {
     setChannels(null);
+    setLoadingChannels(true);
     api
       .syncListChannels()
       .then(setChannels)
-      .catch((e) => toast(`Couldn't list channels: ${e}`, undefined, "bad"));
+      .catch((e) => toast(`Couldn't list channels: ${e}`, undefined, "bad"))
+      .finally(() => setLoadingChannels(false));
   };
   return (
     <>
@@ -1379,10 +1382,11 @@ function SyncPane() {
             type="button"
             className="btn sm"
             title="List your Teams channels to choose which to sync"
-            disabled={!signIn?.signedIn}
+            disabled={!signIn?.signedIn || loadingChannels}
             onClick={loadChannels}
           >
-            {channels ? "Refresh channel list" : "Show my channels"}
+            <Icon name="refresh" size={13} className={loadingChannels ? "spin" : undefined} />
+            {loadingChannels ? "Loading…" : channels ? "Refresh channel list" : "Show my channels"}
           </button>
         </div>
         {channels && channels.length === 0 && <p className="faint">No channels found.</p>}
@@ -1390,8 +1394,11 @@ function SyncPane() {
           <div className="card">
             {channels.map((c) => (
               <div key={c.id} className="srow">
+                <div className="t">
+                  <div className="pt">{c.topic}</div>
+                </div>
                 <Switch
-                  label={c.topic}
+                  label={`Sync ${c.topic}`}
                   on={chosen.includes(c.id)}
                   onChange={(v) => settings.update({ syncChannels: v ? [...chosen, c.id] : chosen.filter((x) => x !== c.id) })}
                 />
