@@ -201,8 +201,14 @@ pub struct Channel {
 /// The user's teams and their channels, from the chat-service aggregator (the conversations list
 /// doesn't carry channel names). Named "Team / Channel" so the picker is readable.
 pub fn channels(client: &Client, s: &SignIn) -> Result<Vec<Channel>, String> {
-    let base = s.csa_service.trim_end_matches('/');
-    if base.is_empty() {
+    // Prefer the aggregator address from the sign-in; for a sign-in from before it was stored, derive
+    // it from the chat-service address (same host and region, `/api/chatsvc/` → `/api/csa/`).
+    let base = if !s.csa_service.trim().is_empty() {
+        s.csa_service.trim_end_matches('/').to_string()
+    } else {
+        s.chat_service.trim_end_matches('/').replacen("/api/chatsvc/", "/api/csa/", 1)
+    };
+    if base.is_empty() || !base.contains("/api/csa/") {
         return Err("No channel service address in the sign-in; open Teams in the browser again.".into());
     }
     let url = format!("{base}/api/v3/teams/users/me?isPrefetch=false&enableMembershipSummary=true");
