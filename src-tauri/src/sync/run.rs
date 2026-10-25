@@ -150,6 +150,9 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
                 continue;
             }
         };
+        // The chat's partner across the whole thread, so a day where only the user wrote still names
+        // the other person (a 1:1 with no topic).
+        let partner = fetch::chat_display_name(&msgs, &me);
         // The first time a chat is seen, skip days older than the first-sync cutoff (and mark them
         // done, so they're never pulled later) — that's where the flood of old history would come
         // from. A chat already being synced only gets genuinely new days anyway.
@@ -177,7 +180,7 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
             if !ready {
                 continue;
             }
-            if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &p.sign_in.origin) {
+            if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &p.sign_in.origin, &day, &partner) {
                 if let Some(path) = deliver(p.data, p.vault, &cap, "teams", r) {
                     st.mark_chat_day(&conv.id, &day, Some(&path));
                     r.chats += 1;

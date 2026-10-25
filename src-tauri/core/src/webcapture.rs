@@ -256,7 +256,11 @@ pub fn render(c: &Capture, now: DateTime<Utc>, today: &str) -> (String, String) 
                 l.extend([String::new(), m.body.trim().to_string(), String::new(), "---".into(), String::new()]);
             }
             let prefix = if transcript { "Teams. Transcript." } else { "Teams. Chat." };
-            format!("{prefix} {title} - {}.md", meeting.unwrap_or(today))
+            // Name a transcript by the meeting's day and a chat by its conversation day (both carried
+            // in `meeting_date`), falling back to the capture day; never the capture day for a dated
+            // chat, so a backfilled day isn't misleadingly named with today.
+            let day = if transcript { meeting.unwrap_or(today) } else { t.meeting_day().unwrap_or(today) };
+            format!("{prefix} {title} - {day}.md")
         }
     };
     (name, l.join("\n"))
@@ -450,12 +454,17 @@ mod tests {
         }
         let (_, text) = render(&tr(json!({"meetingDate": "2026-10-02", "meetingStart": "late"})), at(), "2026-10-03");
         assert!(text.contains("\n**Meeting:** 2026-10-02\n"));
-        // A chat keeps the capture day.
+        // A chat carrying a day (the Teams and Outlook sync sets it to the conversation day) is named
+        // by that day, not the capture day, and still shows no Meeting line (that's transcript-only).
         let chat = cap(json!({"type": "teams", "url": "https://teams.microsoft.com/v2/", "title": "Standup", "meetingDate": "2026-10-02",
             "messages": [{"sender": "Lena", "body": "Ready?"}]}));
         let (name, text) = render(&chat, at(), "2026-10-03");
-        assert_eq!(name, "Teams. Chat. Standup - 2026-10-03.md");
+        assert_eq!(name, "Teams. Chat. Standup - 2026-10-02.md");
         assert!(!text.contains("**Meeting:**"));
+        // A chat with no day falls back to the capture day (an extension capture, which sets none).
+        let chat = cap(json!({"type": "teams", "url": "https://teams.microsoft.com/v2/", "title": "Standup",
+            "messages": [{"sender": "Lena", "body": "Ready?"}]}));
+        assert_eq!(render(&chat, at(), "2026-10-03").0, "Teams. Chat. Standup - 2026-10-03.md");
     }
 
     #[test]

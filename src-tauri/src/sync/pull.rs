@@ -168,6 +168,15 @@ fn pull_chats(
                 continue;
             }
         };
+        let partner = fetch::chat_display_name(&msgs, &me);
+        // What to call this chat in the result: its topic, else the partner, else a generic name.
+        let label = if !conv.topic.is_empty() {
+            conv.topic.clone()
+        } else if !partner.is_empty() {
+            partner.clone()
+        } else {
+            "Teams chat".to_string()
+        };
         for (day, day_msgs) in fetch::by_local_day(&msgs) {
             if day.as_str() < cutoff_day {
                 continue;
@@ -177,27 +186,20 @@ fn pull_chats(
             if !matches(&text, terms) {
                 continue;
             }
-            let title = conv.topic.clone();
             if st.chat_day_done(&conv.id, &day) && still_there(vault, st.chat_day_path(&conv.id, &day)) {
                 out.items.push(Item {
                     kind: "chat".into(),
-                    title: if title.is_empty() { "Teams chat".into() } else { title },
+                    title: label.clone(),
                     date: day.clone(),
                     path: st.chat_day_path(&conv.id, &day).unwrap_or("").to_string(),
                     already_had: true,
                 });
                 continue;
             }
-            if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &sign_in.origin) {
+            if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &sign_in.origin, &day, &partner) {
                 if let Some(path) = deliver(data, vault, &cap, "teams", out) {
                     st.mark_chat_day(&conv.id, &day, Some(&path));
-                    out.items.push(Item {
-                        kind: "chat".into(),
-                        title: if title.is_empty() { "Teams chat".into() } else { title },
-                        date: day,
-                        path,
-                        already_had: false,
-                    });
+                    out.items.push(Item { kind: "chat".into(), title: label.clone(), date: day, path, already_had: false });
                 }
             }
         }

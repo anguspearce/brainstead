@@ -136,22 +136,33 @@ pub fn parse_messages(body: &Value) -> Vec<ChatMessage> {
     msgs
 }
 
-/// Builds a Teams chat capture for one local day of a conversation. The title is the chat's topic,
-/// or the distinct other participants, or "Teams chat".
-pub fn chat_capture(conv: &Conv, day_msgs: &[ChatMessage], me: &str, url_base: &str) -> Option<Capture> {
+/// The distinct people other than the user who have written in a conversation, sorted — the chat's
+/// display name for a chat with no topic (for a 1:1, the other person). Empty when only the user has.
+pub fn chat_display_name(msgs: &[ChatMessage], me: &str) -> String {
+    let mut names: Vec<&str> = msgs.iter().map(|m| m.sender.as_str()).filter(|n| *n != me && *n != "Unknown").collect();
+    names.sort_unstable();
+    names.dedup();
+    names.join(", ")
+}
+
+/// Builds a Teams chat capture for one local `day` of a conversation. The title is the chat's topic,
+/// else the people who wrote that day, else `fallback` (the chat's partner across the whole thread, so
+/// a 1:1 day where only the user wrote still names the other person), else "Teams chat". The file is
+/// named by `day`, not the capture day, via `meeting_date`.
+pub fn chat_capture(conv: &Conv, day_msgs: &[ChatMessage], me: &str, url_base: &str, day: &str, fallback: &str) -> Option<Capture> {
     if day_msgs.is_empty() {
         return None;
     }
     let title = if !conv.topic.is_empty() {
         conv.topic.clone()
     } else {
-        let mut names: Vec<&str> = day_msgs.iter().map(|m| m.sender.as_str()).filter(|n| *n != me && *n != "Unknown").collect();
-        names.sort();
-        names.dedup();
-        if names.is_empty() {
-            "Teams chat".to_string()
+        let today_names = chat_display_name(day_msgs, me);
+        if !today_names.is_empty() {
+            today_names
+        } else if !fallback.is_empty() {
+            fallback.to_string()
         } else {
-            names.join(", ")
+            "Teams chat".to_string()
         }
     };
     let messages = day_msgs
@@ -171,7 +182,9 @@ pub fn chat_capture(conv: &Conv, day_msgs: &[ChatMessage], me: &str, url_base: &
         title,
         kind: Some("chat".into()),
         messages,
-        meeting_date: None,
+        // Carries the conversation day so the file is named by it (webcapture::render); a chat shows no
+        // **Meeting:** line (that's transcript-only), so this only affects the filename.
+        meeting_date: Some(day.to_string()),
         meeting_start: None,
     }))
 }
@@ -448,22 +461,40 @@ mod tests {
     }
 
     #[test]
-    fn titles_a_one_on_one_by_the_other_person() {
+    fn titles_a_one_on_one_by_the_other_person_and_names_the_file_by_the_day() {
         let conv = Conv { id: "19:x@unq.gbl.spaces".into(), topic: String::new(), kind: ConvKind::OneOnOne };
         let t = "2026-10-24T09:00:00Z".parse().unwrap();
         let msgs = vec![
             ChatMessage { id: "1".into(), sender: "Maya".into(), body: "hi".into(), time: t },
             ChatMessage { id: "2".into(), sender: "Me Myself".into(), body: "hello".into(), time: t },
         ];
-        let cap = chat_capture(&conv, &msgs, "Me Myself", "https://teams.microsoft.com").unwrap();
-        match cap {
+        let cap = chat_capture(&conv, &msgs, "Me Myself", "https://teams.microsoft.com", "2026-10-24", "Maya").unwrap();
+        match &cap {
             Capture::Teams(th) => {
                 assert_eq!(th.title, "Maya");
                 assert_eq!(th.messages.len(), 2);
                 assert_eq!(th.kind.as_deref(), Some("chat"));
+                assert_eq!(th.meeting_date.as_deref(), Some("2026-10-24"));
             }
             _ => panic!("expected a Teams capture"),
         }
+        // The file is named by the conversation day, not the capture day; no Meeting line for a chat.
+        let (name, text) = brainstead_core::webcapture::render(&cap, "2026-10-25T00:00:00Z".parse().unwrap(), "2026-10-25");
+        assert_eq!(name, "Teams. Chat. Maya - 2026-10-24.md");
+        assert!(!text.contains("**Meeting:**"), "a chat has no Meeting line");
+    }
+
+    #[test]
+    fn a_one_on_one_day_where_only_i_wrote_still_names_the_partner() {
+        let conv = Conv { id: "19:x@unq.gbl.spaces".into(), topic: String::new(), kind: ConvKind::OneOnOne };
+        let t = "2026-10-14T16:00:00Z".parse().unwrap();
+        let msgs = vec![ChatMessage { id: "1".into(), sender: "Me Myself".into(), body: "any update?".into(), time: t }];
+        let cap = chat_capture(&conv, &msgs, "Me Myself", "https://teams.microsoft.com", "2026-10-14", "Marnus Freeman").unwrap();
+        match cap {
+            Capture::Teams(th) => assert_eq!(th.title, "Marnus Freeman", "falls back to the partner"),
+            _ => panic!("expected a Teams capture"),
+        }
+        assert_eq!(chat_display_name(&msgs, "Me Myself"), "", "no other writers that day");
     }
 
     #[test]
