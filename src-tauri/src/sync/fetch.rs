@@ -336,9 +336,44 @@ fn meeting_thread_id(e: &Value) -> Option<String> {
 
 // ── Transcripts ────────────────────────────────────────────────────────────────────────
 
+/// The messages people typed in a meeting's chat, as webcapture messages, with a divider ahead of
+/// them — for folding into the meeting's transcript source (D-20261025-02). Empty on any failure or
+/// when the meeting had no chat, so it never blocks the transcript.
+fn meeting_chat(client: &Client, s: &SignIn, thread_id: &str) -> Vec<Message> {
+    let url = format!(
+        "{}/v1/users/ME/conversations/{}/messages?view=msnp24Equivalent|supportsMessageProperties&pageSize=200",
+        s.chat_service.trim_end_matches('/'),
+        urlencode(thread_id)
+    );
+    let msgs = api::get_chatsvc(client, &url).map(|b| parse_messages(&b)).unwrap_or_default();
+    if msgs.is_empty() {
+        return Vec::new();
+    }
+    let mut out = vec![Message {
+        sender: "In-meeting chat".to_string(),
+        from_address: None,
+        to: None,
+        cc: None,
+        recipients: None,
+        date: None,
+        body: "Messages posted in the meeting chat:".to_string(),
+    }];
+    out.extend(msgs.iter().map(|m| Message {
+        sender: m.sender.clone(),
+        from_address: None,
+        to: None,
+        cc: None,
+        recipients: None,
+        date: Some(m.time.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string()),
+        body: m.body.clone(),
+    }));
+    out
+}
+
 /// The transcript for a meeting thread, as a Teams transcript capture, when one exists. Best-effort:
-/// returns Ok(None) when the meeting had no transcript (not recorded, or still processing).
-pub fn transcript_capture(client: &Client, ev: &Event) -> Result<Option<Capture>, String> {
+/// returns Ok(None) when the meeting had no transcript (not recorded, or still processing). The
+/// meeting's chat, when any, is folded in after the transcript.
+pub fn transcript_capture(client: &Client, s: &SignIn, ev: &Event) -> Result<Option<Capture>, String> {
     let Some(thread_id) = &ev.thread_id else { return Ok(None) };
     let filter = format!("ItemProperties/Default/MeetingThreadId eq '{thread_id}'");
     let select = "ItemId,ItemProperties/Default/TranscriptJson,ItemProperties/Default/RecordingStartDateTime,Visualization";
@@ -361,7 +396,11 @@ pub fn transcript_capture(client: &Client, ev: &Event) -> Result<Option<Capture>
         return Err(format!("substrate.office.com answered {}", resp.status().as_u16()));
     }
     let body: Value = resp.json().map_err(|e| e.to_string())?;
-    Ok(parse_transcript(&body, ev))
+    let Some(cap) = parse_transcript(&body, ev) else { return Ok(None) };
+    // Fold the meeting chat in after the transcript, when there is one.
+    let Capture::Teams(mut thread) = cap else { return Ok(Some(cap)) };
+    thread.messages.extend(meeting_chat(client, s, thread_id));
+    Ok(Some(Capture::Teams(thread)))
 }
 
 pub fn parse_transcript(body: &Value, ev: &Event) -> Option<Capture> {

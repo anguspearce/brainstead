@@ -20,7 +20,7 @@ The first time it runs — and the first time it sees each new chat — it loads
 ## What syncs
 - **Chats**: every 1:1 and group chat, one source a day for each. A day's messages are written once the day is over, or once the chat has been quiet for a few hours.
 - **Channels**: off unless you choose them. **Show my channels** lists yours; tick the ones to sync.
-- **Meeting transcripts**: for meetings in your calendar, fetched after the meeting ends. A transcript becomes a meeting note as usual (Settings › AI assistants).
+- **Meeting transcripts**: for meetings in your calendar, fetched after the meeting ends, with anything typed in the meeting chat folded in after the transcript. A transcript becomes a meeting note as usual (Settings › AI assistants).
 - **Mail**: new messages in your Inbox. Mail Outlook files under Other is skipped, as is anything from a sender or domain in **Mail to skip**. Use **Don't sync this sender** on a synced email (its right-click menu) to add one, or type one here.
 
 ## Sync now

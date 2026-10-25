@@ -285,7 +285,7 @@ fn pull_transcripts(
             out.items.push(Item { kind: "transcript".into(), title: ev.subject.clone(), date, path: p.to_string(), already_had: true });
             continue;
         }
-        match fetch::transcript_capture(client, &ev) {
+        match fetch::transcript_capture(client, sign_in, &ev) {
             Ok(Some(cap)) => {
                 if let Some(path) = deliver(data, vault, &cap, "teams", Some(ev.start), out) {
                     st.mark_transcript(&id, Some(&path));

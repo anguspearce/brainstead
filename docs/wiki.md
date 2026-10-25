@@ -35,7 +35,7 @@ It uses the sign-in your open Teams tab already has. While Teams is open in your
 
 - **First sync**: the first run (and the first time each new chat is seen) loads only the last few days of history, so a big mailbox or long chat history can't flood the Inbox; set how many with **On first sync, load the last N days** (0 for everything). After that only new messages and mail come in.
 - **Chats**: every 1:1 and group chat, one source a day for each, written once the day is over or the chat has been quiet for a few hours. Channels are off until you choose them in Settings.
-- **Meeting transcripts**: for meetings in your calendar, fetched after the meeting ends, then turned into a meeting note as usual.
+- **Meeting transcripts**: for meetings in your calendar, fetched after the meeting ends, with anything typed in the meeting chat folded in after the transcript, then turned into a meeting note as usual.
 - **Mail**: new Inbox messages, skipping anything Outlook files under Other and any sender or domain in **Mail to skip**. Use **Don't sync this sender** on a synced email's right-click menu to add one.
 - **Today** shows your remaining meetings for the day while the sync is on.
 - **Sync now** in Settings runs a pass at once and reports what it added. A Microsoft service that doesn't answer is reported there; it never stops capturing.
