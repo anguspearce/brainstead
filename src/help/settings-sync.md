@@ -14,6 +14,9 @@ It uses the sign-in your open Teams tab already has. While Teams is open in your
 - If the sign-in lapses, the pane says **Not signed in** — open Teams in the browser and it comes back within a few minutes.
 - It is your own access, used only on this Mac. The calls go to Microsoft and nowhere else.
 
+## First sync
+The first time it runs — and the first time it sees each new chat — it loads only the last few days of history, so a big mailbox or a long chat history doesn't flood the Inbox all at once. Set how many days with **On first sync, load the last N days** (0 loads everything). After that it only picks up what's new.
+
 ## What syncs
 - **Chats**: every 1:1 and group chat, one source a day for each. A day's messages are written once the day is over, or once the chat has been quiet for a few hours.
 - **Channels**: off unless you choose them. **Show my channels** lists yours; tick the ones to sync.

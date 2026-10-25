@@ -27,6 +27,9 @@ pub struct State {
     pub mail: Vec<String>,
     /// Meeting thread ids whose transcript was already captured.
     pub transcripts: Vec<String>,
+    /// Set once the first sync pass has finished, so the "load N days on first sync" limit is applied
+    /// only that first time for mail (chats apply it per chat, the first time each is seen).
+    pub initialized: bool,
 }
 
 pub fn path(data: &Path) -> PathBuf {

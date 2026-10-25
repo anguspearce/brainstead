@@ -1246,6 +1246,20 @@ function SyncPane() {
           to Microsoft.
         </p>
         <Switch label="Sync Teams and Outlook" on={enabled} onChange={(v) => settings.update({ syncEnabled: v })} />
+        <label className="srow" style={{ gap: 8 }}>
+          <span>On first sync, load the last</span>
+          <input
+            type="number"
+            className="input"
+            style={{ width: "4.5em" }}
+            min={0}
+            max={3650}
+            title="How many days of history the first sync loads for each chat and the mailbox (0 = no limit). Stops a big mailbox or long chat history flooding the Inbox."
+            value={s.syncInitialDays ?? 7}
+            onChange={(e) => settings.update({ syncInitialDays: Math.max(0, Math.min(3650, Math.floor(Number(e.target.value) || 0))) })}
+          />
+          <span>days (0 = everything).</span>
+        </label>
         {s.readOnly && enabled && (
           <div className="doc-banner warn" role="status">
             <Icon name="info" size={14} />

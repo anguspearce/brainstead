@@ -33,6 +33,7 @@ On a Mac, turn on **Teams and Outlook sync** (Settings › Teams and Outlook syn
 
 It uses the sign-in your open Teams tab already has. While Teams is open in your browser, the **Teams capture** extension hands that sign-in to Brainstead, which keeps it in the Mac's Keychain and refreshes it itself — so keep Teams open in the browser at least once a day. It uses Teams' and Outlook's own web services, not Microsoft Graph.
 
+- **First sync**: the first run (and the first time each new chat is seen) loads only the last few days of history, so a big mailbox or long chat history can't flood the Inbox; set how many with **On first sync, load the last N days** (0 for everything). After that only new messages and mail come in.
 - **Chats**: every 1:1 and group chat, one source a day for each, written once the day is over or the chat has been quiet for a few hours. Channels are off until you choose them in Settings.
 - **Meeting transcripts**: for meetings in your calendar, fetched after the meeting ends, then turned into a meeting note as usual.
 - **Mail**: new Inbox messages, skipping anything Outlook files under Other and any sender or domain in **Mail to skip**. Use **Don't sync this sender** on a synced email's right-click menu to add one.

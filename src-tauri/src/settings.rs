@@ -36,6 +36,9 @@ pub struct Settings {
     pub sync_channels: Vec<String>,
     /// Senders or domains whose mail the sync skips ("Don't sync this sender").
     pub sync_ignore_senders: Vec<String>,
+    /// How many days of history the first sync loads (a chat the first time it's seen, and the first
+    /// mail run), so a big mailbox or long chat history can't flood the Inbox. 0 means no limit.
+    pub sync_initial_days: u32,
     /// Anything the window keeps that this side doesn't need to know about (sidebar state and the like).
     #[serde(flatten)]
     pub ui: serde_json::Map<String, serde_json::Value>,
@@ -56,6 +59,7 @@ impl Default for Settings {
             sync_enabled: false,
             sync_channels: Vec::new(),
             sync_ignore_senders: Vec::new(),
+            sync_initial_days: 7,
             ui: Default::default(),
         }
     }

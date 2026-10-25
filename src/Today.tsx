@@ -348,17 +348,33 @@ function MeetingsCard() {
   }, []);
   if (!meetings || meetings.length === 0) return null;
   const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  // After midday the backend also returns tomorrow's meetings; group them under a Tomorrow heading.
+  const todayKey = new Date().toDateString();
+  const today = meetings.filter((m) => new Date(m.start).toDateString() === todayKey);
+  const tomorrow = meetings.filter((m) => new Date(m.start).toDateString() !== todayKey);
+  const row = (m: import("./api").SyncMeeting, i: number) => (
+    <div key={i} className="rrow">
+      <span className="n">{time(m.start)}</span>
+      <span className="ell grow" title={m.organizer ? `${m.subject} — ${m.organizer}` : m.subject}>
+        {m.subject}
+      </span>
+      {m.online && <Icon name="refresh" size={12} aria-label="Teams meeting" />}
+    </div>
+  );
   return (
     <SideCard title="Upcoming meetings">
-      {meetings.map((m, i) => (
-        <div key={i} className="rrow">
-          <span className="n">{time(m.start)}</span>
-          <span className="ell grow" title={m.organizer ? `${m.subject} — ${m.organizer}` : m.subject}>
-            {m.subject}
-          </span>
-          {m.online && <Icon name="refresh" size={12} aria-label="Teams meeting" />}
-        </div>
-      ))}
+      {today.map(row)}
+      {tomorrow.length > 0 && (
+        <>
+          <div
+            className="rrow faint"
+            style={{ minHeight: 0, paddingTop: 8, textTransform: "uppercase", fontSize: "11px", letterSpacing: "0.04em" }}
+          >
+            Tomorrow
+          </div>
+          {tomorrow.map(row)}
+        </>
+      )}
     </SideCard>
   );
 }

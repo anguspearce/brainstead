@@ -50,6 +50,8 @@ export interface Settings {
   syncChannels?: string[];
   /** Senders or domains whose mail the sync skips ("Don't sync this sender"). */
   syncIgnoreSenders?: string[];
+  /** How many days of history the first sync loads (0 = no limit). */
+  syncInitialDays?: number;
   /** After a meeting note is made: ingest it (default on), then move its transcript to the Trash (default on). */
   meetingIngest?: boolean;
   meetingTrash?: boolean;

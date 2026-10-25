@@ -3228,6 +3228,7 @@ const settingRows = (): SettingRow[] => [
   ["meetingTrash", "AI assistants", "Then move the transcript to the Trash", "bool", true],
   ["ingestOnArrival", "AI assistants", "Ingest new sources as they arrive", "bool", false],
   ["syncEnabled", "Teams and Outlook sync", "Sync Teams and Outlook (macOS)", "bool", false],
+  ["syncInitialDays", "Teams and Outlook sync", "Days of history to load on first sync (0 = no limit)", "number", 7],
   ["refreshStale", "AI assistants", "Also refresh pages whose sources changed", "bool", false],
   ["summariesHere", "Jobs & schedule", "Brainstead runs the daily and weekly summaries", "bool", false],
   ["holdSummaries", "Jobs & schedule", "Hold the summaries for me", "bool", false],
