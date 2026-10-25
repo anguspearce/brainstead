@@ -236,6 +236,8 @@ pub fn parse_channels(body: &Value) -> Vec<Channel> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Mail {
     pub id: String,
+    /// The Outlook ConversationId: all messages of one thread share it.
+    pub conversation_id: String,
     pub subject: String,
     pub from: String,
     pub from_address: String,
@@ -245,20 +247,34 @@ pub struct Mail {
     pub web_link: String,
 }
 
+const MAIL_SELECT: &str = "Subject,From,ToRecipients,Body,ReceivedDateTime,WebLink,ConversationId";
+
 /// Recent Inbox messages, newest first.
 pub fn inbox(client: &Client, top: usize) -> Result<Vec<Mail>, String> {
     let url = format!(
-        "https://outlook.office.com/api/v2.0/me/mailfolders/inbox/messages?$top={top}&$orderby=ReceivedDateTime%20desc&$select=Subject,From,ToRecipients,Body,ReceivedDateTime,WebLink"
+        "https://outlook.office.com/api/v2.0/me/mailfolders/inbox/messages?$top={top}&$orderby=ReceivedDateTime%20desc&$select={MAIL_SELECT}"
     );
     let body = api::get_json(client, Service::Outlook, &url)?;
     Ok(parse_mail(&body))
+}
+
+/// Every message of one conversation across all folders (so a thread includes the user's own sent
+/// replies), oldest first.
+pub fn conversation(client: &Client, conversation_id: &str, top: usize) -> Result<Vec<Mail>, String> {
+    // Filter by ConversationId only — combining it with $orderby makes Outlook reject the query as an
+    // "InefficientFilter", so we sort by received time ourselves below.
+    let filter = format!("ConversationId eq '{}'", conversation_id.replace('\'', "''"));
+    let url = format!("https://outlook.office.com/api/v2.0/me/messages?$filter={}&$top={top}&$select={MAIL_SELECT}", urlencode(&filter));
+    let mut msgs = parse_mail(&api::get_json(client, Service::Outlook, &url)?);
+    msgs.sort_by_key(|m| m.received);
+    Ok(msgs)
 }
 
 /// Inbox and folders searched for `query` (Outlook REST `$search`, by relevance), newest handling
 /// left to the caller. Used by the on-demand pull.
 pub fn search_mail(client: &Client, query: &str, top: usize) -> Result<Vec<Mail>, String> {
     let url = format!(
-        "https://outlook.office.com/api/v2.0/me/messages?$search={}&$top={top}&$select=Subject,From,ToRecipients,Body,ReceivedDateTime,WebLink",
+        "https://outlook.office.com/api/v2.0/me/messages?$search={}&$top={top}&$select={MAIL_SELECT}",
         urlencode(&format!("\"{}\"", query.replace('"', "")))
     );
     Ok(parse_mail(&api::get_json(client, Service::Outlook, &url)?))
@@ -281,6 +297,7 @@ pub fn parse_mail(body: &Value) -> Vec<Mail> {
                     let is_html = m["Body"]["ContentType"].as_str().map(|t| t.eq_ignore_ascii_case("html")).unwrap_or(true);
                     Some(Mail {
                         id: m["Id"].as_str().unwrap_or("").to_string(),
+                        conversation_id: m["ConversationId"].as_str().unwrap_or("").to_string(),
                         subject: m["Subject"].as_str().unwrap_or("(no subject)").to_string(),
                         from: from["Name"].as_str().unwrap_or("Unknown").to_string(),
                         from_address: from["Address"].as_str().unwrap_or("").to_string(),
@@ -295,13 +312,19 @@ pub fn parse_mail(body: &Value) -> Vec<Mail> {
         .unwrap_or_default()
 }
 
-/// A single-message Outlook capture from one mail.
-pub fn mail_capture(m: &Mail) -> Capture {
-    Capture::Outlook(Thread {
-        url: if m.web_link.is_empty() { "https://outlook.office.com/mail/".into() } else { m.web_link.clone() },
-        title: m.subject.clone(),
-        kind: None,
-        messages: vec![Message {
+/// An Outlook capture for a whole email thread: one message block per mail, oldest first. A one-mail
+/// thread renders the same as a single email. `msgs` must be non-empty.
+pub fn thread_capture(msgs: &[Mail]) -> Option<Capture> {
+    let first = msgs.first()?;
+    // Title from the most recent message's subject (replies keep the subject, possibly "Re:").
+    let title = msgs.last().map(|m| m.subject.clone()).unwrap_or_else(|| first.subject.clone());
+    let link = msgs
+        .last()
+        .and_then(|m| (!m.web_link.is_empty()).then(|| m.web_link.clone()))
+        .unwrap_or_else(|| "https://outlook.office.com/mail/".into());
+    let messages = msgs
+        .iter()
+        .map(|m| Message {
             sender: m.from.clone(),
             from_address: Some(m.from_address.clone()).filter(|a| !a.is_empty()),
             to: Some(m.to.clone()).filter(|t| !t.is_empty()),
@@ -309,10 +332,9 @@ pub fn mail_capture(m: &Mail) -> Capture {
             recipients: None,
             date: Some(m.received.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string()),
             body: m.body.clone(),
-        }],
-        meeting_date: None,
-        meeting_start: None,
-    })
+        })
+        .collect();
+    Some(Capture::Outlook(Thread { url: link, title, kind: None, messages, meeting_date: None, meeting_start: None }))
 }
 
 // ── Calendar ───────────────────────────────────────────────────────────────────────────
@@ -606,22 +628,34 @@ mod tests {
     }
 
     #[test]
-    fn parses_mail_bodies_as_text() {
-        let body = json!({"value": [{
-            "Id": "AAA", "Subject": "Roadmap", "ReceivedDateTime": "2026-10-24T06:30:00Z",
-            "From": {"EmailAddress": {"Name": "Lena", "Address": "lena@acme.example"}},
-            "ToRecipients": [{"EmailAddress": {"Name": "Me", "Address": "me@acme.example"}}],
-            "Body": {"ContentType": "HTML", "Content": "<div>Point one</div><div>Point two</div>"},
-            "WebLink": "https://outlook.office.com/mail/id/AAA"
-        }]});
+    fn parses_mail_and_builds_a_thread_capture() {
+        let body = json!({"value": [
+            {
+                "Id": "AAA", "ConversationId": "conv1", "Subject": "Roadmap", "ReceivedDateTime": "2026-10-24T06:30:00Z",
+                "From": {"EmailAddress": {"Name": "Lena", "Address": "lena@acme.example"}},
+                "ToRecipients": [{"EmailAddress": {"Name": "Me", "Address": "me@acme.example"}}],
+                "Body": {"ContentType": "HTML", "Content": "<div>Point one</div><div>Point two</div>"},
+                "WebLink": "https://outlook.office.com/mail/id/AAA"
+            },
+            {
+                "Id": "BBB", "ConversationId": "conv1", "Subject": "Re: Roadmap", "ReceivedDateTime": "2026-10-24T07:00:00Z",
+                "From": {"EmailAddress": {"Name": "Me", "Address": "me@acme.example"}},
+                "ToRecipients": [{"EmailAddress": {"Name": "Lena", "Address": "lena@acme.example"}}],
+                "Body": {"ContentType": "Text", "Content": "Thanks."},
+                "WebLink": "https://outlook.office.com/mail/id/BBB"
+            }
+        ]});
         let mail = parse_mail(&body);
-        assert_eq!(mail.len(), 1);
+        assert_eq!(mail.len(), 2);
+        assert_eq!(mail[0].conversation_id, "conv1");
         assert_eq!(mail[0].from_address, "lena@acme.example");
         assert_eq!(mail[0].body, "Point one\nPoint two");
-        match mail_capture(&mail[0]) {
+        match thread_capture(&mail).unwrap() {
             Capture::Outlook(th) => {
-                assert_eq!(th.title, "Roadmap");
-                assert_eq!(th.messages[0].to.as_deref(), Some("Me"));
+                assert_eq!(th.title, "Re: Roadmap", "titled by the latest message");
+                assert_eq!(th.messages.len(), 2, "the whole thread, incl. the reply");
+                assert_eq!(th.messages[0].sender, "Lena");
+                assert_eq!(th.messages[1].sender, "Me");
             }
             _ => panic!("expected an Outlook capture"),
         }

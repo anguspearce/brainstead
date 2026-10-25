@@ -332,6 +332,21 @@ pub fn write(vault: &Path, c: &Capture, now: DateTime<Local>) -> Result<String, 
     Ok(format!("sources/{name}"))
 }
 
+/// Overwrites an existing source `rel` (vault-relative) with capture `c`, in place and atomically —
+/// for the Teams and Outlook sync topping up a chat day or an email thread as new messages arrive.
+/// Unlike [`write`], it keeps the same file name rather than claiming a free one, so the source grows
+/// instead of spawning copies. The file must already exist (the sync wrote it the first time); its
+/// name (which carries the day) is not recomputed.
+pub fn rewrite(vault: &Path, rel: &str, c: &Capture, now: DateTime<Local>) -> Result<(), WriteError> {
+    c.check().map_err(WriteError::Invalid)?;
+    let abs = vault.join(rel);
+    if !abs.is_file() {
+        return Err(WriteError::NotFound(format!("{rel} is no longer there to update.")));
+    }
+    let (_, text) = render(c, now.with_timezone(&Utc), &now.format("%Y-%m-%d").to_string());
+    write_atomic(&abs, text.as_bytes(), false)
+}
+
 /// The largest file that can be dropped onto Sources.
 pub const MAX_IMPORT_BYTES: u64 = 200 * 1024 * 1024;
 

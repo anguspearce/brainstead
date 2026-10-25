@@ -18,10 +18,13 @@ It uses the sign-in your open Teams tab already has. While Teams is open in your
 The first time it runs — and the first time it sees each new chat — it loads only the last few days of history, so a big mailbox or a long chat history doesn't flood the Inbox all at once. Set how many days with **On first sync, load the last N days** (0 loads everything). After that it only picks up what's new.
 
 ## What syncs
-- **Chats**: every 1:1 and group chat, one source a day for each. A day's messages are written once the day is over, or once the chat has been quiet for a few hours.
+- **Chats**: every 1:1 and group chat, one source per day for each, **topped up** in place as that day gains more messages.
 - **Channels**: off unless you choose them. **Show my channels** lists yours; tick the ones to sync.
 - **Meeting transcripts**: for meetings in your calendar, fetched after the meeting ends, with anything typed in the meeting chat folded in after the transcript. A transcript becomes a meeting note as usual (Settings › AI assistants).
-- **Mail**: new messages in your Inbox. Mail Outlook files under Other is skipped, as is anything from a sender or domain in **Mail to skip**. Use **Don't sync this sender** on a synced email (its right-click menu) to add one, or type one here.
+- **Mail**: one source per email **thread**, holding the whole conversation including your own replies, topped up as the thread grows. A new Inbox message brings its thread in; mail Outlook files under Other, and anything from a sender or domain in **Mail to skip**, are left out. Use **Don't sync this sender** on a synced email (its right-click menu) to add one, or type one here.
+
+## Keeping the wiki in step
+A chat day or a thread that's already been ingested and then gets more messages shows as **Changed** in Sources. With the daily check's **ingest changed sources again** on (Settings › AI assistants), the wiki catches up about once a day rather than re-ingesting on every new message; otherwise ingest it when you like from Sources.
 
 ## Sync now
 The sync runs on its own every so often. **Sync now** runs a pass at once and says what it added and any problems it hit. A problem (a Microsoft service that didn't answer) is shown and the rest of the pass still runs — it never stops captures.

@@ -19,9 +19,6 @@ use crate::{nativehost, platform, settings};
 
 /// How often the sync runs.
 const EVERY_MIN: u64 = 15;
-/// A chat's own day (today) is written once it's been quiet this long; earlier days are written as
-/// soon as the day is over (D-20261025-02).
-const QUIET_HOURS: i64 = 3;
 /// How far back to look for meetings whose transcript might now be ready.
 const TRANSCRIPT_LOOKBACK_HOURS: i64 = 48;
 /// How many recent Inbox messages to consider each pass.
@@ -128,6 +125,18 @@ fn deliver(
     }
 }
 
+/// Tops up an existing source in place (no capture event, so no immediate re-ingest): the file grows
+/// and becomes "changed since cited", which the daily check re-ingests. Returns whether it was written.
+fn rewrite(vault: &Path, path: &str, c: &brainstead_core::webcapture::Capture, r: &mut Report) -> bool {
+    match brainstead_core::webcapture::rewrite(vault, path, c, Local::now()) {
+        Ok(()) => true,
+        Err(e) => {
+            r.problems.push(e.to_string());
+            false
+        }
+    }
+}
+
 fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
     let convs = match fetch::conversations(&p.client, &p.sign_in) {
         Ok(c) => c,
@@ -137,8 +146,6 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
         }
     };
     let me = fetch::my_name(&p.sign_in);
-    let today = Local::now().format("%Y-%m-%d").to_string();
-    let now = Utc::now();
     let cutoff = p.cutoff.as_deref();
     for conv in convs {
         // 1:1 and group chats always; channels only when opted in; meeting chats are left to the
@@ -166,9 +173,27 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
         // from. A chat already being synced only gets genuinely new days anyway.
         let first_seen = !st.chats.contains_key(&conv.id);
         for (day, day_msgs) in fetch::by_local_day(&msgs) {
+            let count = day_msgs.len();
+            let when = day_msgs.last().map(|m| m.time);
             if st.chat_day_done(&conv.id, &day) {
+                // Already written: top it up in place if it has gained messages (D-20261025-07). Days
+                // written before top-up tracking adopt their current count once, without a rewrite.
+                if !st.chat_day_counted(&conv.id, &day) {
+                    st.set_chat_day_count(&conv.id, &day, count);
+                } else if count > st.chat_day_count(&conv.id, &day) {
+                    if let (Some(path), Some(cap)) = (
+                        st.chat_day_path(&conv.id, &day).map(str::to_string),
+                        fetch::chat_capture(&conv, &day_msgs, &me, &p.sign_in.origin, &day, &partner),
+                    ) {
+                        if rewrite(p.vault, &path, &cap, r) {
+                            st.set_chat_day_count(&conv.id, &day, count);
+                            r.chats += 1;
+                        }
+                    }
+                }
                 continue;
             }
+            // First time for this day: on a chat's first sync, skip (and mark) days older than the cap.
             if first_seen {
                 if let Some(cutoff) = cutoff {
                     if day.as_str() < cutoff {
@@ -177,21 +202,10 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
                     }
                 }
             }
-            // A past day is ready once it's over; today only once the chat has gone quiet.
-            let ready = if day < today {
-                true
-            } else if day == today {
-                day_msgs.last().map(|m| now - m.time >= Duration::hours(QUIET_HOURS)).unwrap_or(false)
-            } else {
-                false // a message dated in the future: leave it
-            };
-            if !ready {
-                continue;
-            }
             if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &p.sign_in.origin, &day, &partner) {
-                let when = day_msgs.last().map(|m| m.time);
                 if let Some(path) = deliver(p.data, p.vault, &cap, "teams", when, r) {
                     st.mark_chat_day(&conv.id, &day, Some(&path));
+                    st.set_chat_day_count(&conv.id, &day, count);
                     r.chats += 1;
                 }
             }
@@ -207,31 +221,58 @@ fn sync_mail(p: &Pass, st: &mut state::State, r: &mut Report) {
             return;
         }
     };
-    // On the first run, skip mail older than the first-sync cutoff (and mark it seen, so a later run
-    // doesn't pick it up). After that every message is genuinely new.
     let first_run = !st.initialized;
     let cutoff = p.cutoff.as_deref();
+    // The conversations with a fresh Inbox message this pass (deduped, newest first already). Mail is
+    // grouped one source per thread (D-20261025-07): an Inbox message flags its thread for syncing.
+    let mut seen = std::collections::HashSet::new();
     for m in mail {
-        if m.id.is_empty() || st.mail_done(&m.id) {
+        if m.conversation_id.is_empty() || !seen.insert(m.conversation_id.clone()) {
+            continue;
+        }
+        // Skip (for good this pass) a thread whose latest inbound message is from an ignored sender,
+        // or, on the first run, older than the cap.
+        if ignored(&m.from_address, &p.s.sync_ignore_senders) {
             continue;
         }
         if first_run {
             if let Some(cutoff) = cutoff {
                 if m.received.with_timezone(&Local).format("%Y-%m-%d").to_string().as_str() < cutoff {
-                    st.mark_mail(&m.id, None);
                     continue;
                 }
             }
         }
-        if ignored(&m.from_address, &p.s.sync_ignore_senders) {
-            st.mark_mail(&m.id, None); // don't reconsider it every pass
-            continue;
+        sync_thread(p, &m.conversation_id, st, r);
+    }
+}
+
+/// Writes or tops up one email thread's source. Fetches the whole conversation (incl. the user's own
+/// replies), writes a new thread source the first time, and rewrites it in place when it has grown.
+fn sync_thread(p: &Pass, conversation_id: &str, st: &mut state::State, r: &mut Report) {
+    let msgs = match fetch::conversation(&p.client, conversation_id, 100) {
+        Ok(m) => m,
+        Err(e) => {
+            r.problems.push(format!("Couldn't read a mail thread: {e}"));
+            return;
         }
-        let cap = fetch::mail_capture(&m);
-        if let Some(path) = deliver(p.data, p.vault, &cap, "outlook", Some(m.received), r) {
-            st.mark_mail(&m.id, Some(&path));
-            r.mail += 1;
+    };
+    let Some(cap) = fetch::thread_capture(&msgs) else { return };
+    let count = msgs.len();
+    let when = msgs.last().map(|m| m.received);
+    match st.thread_path(conversation_id).map(str::to_string) {
+        None => {
+            if let Some(path) = deliver(p.data, p.vault, &cap, "outlook", when, r) {
+                st.mark_thread(conversation_id, &path, count);
+                r.mail += 1;
+            }
         }
+        Some(path) if count > st.thread_count(conversation_id) => {
+            if rewrite(p.vault, &path, &cap, r) {
+                st.mark_thread(conversation_id, &path, count);
+                r.mail += 1;
+            }
+        }
+        Some(_) => {}
     }
 }
 

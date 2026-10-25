@@ -40,6 +40,16 @@ pub struct State {
     /// The vault path written for a meeting's transcript (thread id → `sources/…`).
     #[serde(default)]
     pub transcript_paths: BTreeMap<String, String>,
+    /// How many messages a chat day's source held when last written (`"<conv>\n<day>"` → count), so a
+    /// day that gains messages is topped up in place rather than frozen.
+    #[serde(default)]
+    pub chat_counts: BTreeMap<String, usize>,
+    /// Email threads captured, by Outlook ConversationId → the thread source's path.
+    #[serde(default)]
+    pub thread_paths: BTreeMap<String, String>,
+    /// How many messages a thread's source held when last written (ConversationId → count).
+    #[serde(default)]
+    pub thread_counts: BTreeMap<String, usize>,
 }
 
 fn chat_key(conv: &str, day: &str) -> String {
@@ -87,22 +97,36 @@ impl State {
         self.chat_paths.get(&chat_key(conv, day)).map(String::as_str)
     }
 
-    pub fn mail_done(&self, id: &str) -> bool {
-        self.mail.iter().any(|m| m == id)
+    /// How many messages this chat day's source held when last written (0 if never).
+    pub fn chat_day_count(&self, conv: &str, day: &str) -> usize {
+        self.chat_counts.get(&chat_key(conv, day)).copied().unwrap_or(0)
     }
 
-    pub fn mark_mail(&mut self, id: &str, path: Option<&str>) {
-        if !self.mail_done(id) {
-            self.mail.push(id.to_string());
-            cap(&mut self.mail);
-        }
-        if let Some(p) = path {
-            self.mail_paths.insert(id.to_string(), p.to_string());
-        }
+    /// Whether a count has ever been recorded for this chat day (false for days written before
+    /// top-up tracking existed, so they aren't needlessly rewritten once on upgrade).
+    pub fn chat_day_counted(&self, conv: &str, day: &str) -> bool {
+        self.chat_counts.contains_key(&chat_key(conv, day))
     }
 
-    pub fn mail_path(&self, id: &str) -> Option<&str> {
-        self.mail_paths.get(id).map(String::as_str)
+    /// Records the message count for a chat day's source (after writing or topping it up).
+    pub fn set_chat_day_count(&mut self, conv: &str, day: &str, count: usize) {
+        self.chat_counts.insert(chat_key(conv, day), count);
+    }
+
+    /// The thread source's path for an email conversation, when captured.
+    pub fn thread_path(&self, conv_id: &str) -> Option<&str> {
+        self.thread_paths.get(conv_id).map(String::as_str)
+    }
+
+    /// How many messages the thread source held when last written (0 if never).
+    pub fn thread_count(&self, conv_id: &str) -> usize {
+        self.thread_counts.get(conv_id).copied().unwrap_or(0)
+    }
+
+    /// Records a thread source's path and message count.
+    pub fn mark_thread(&mut self, conv_id: &str, path: &str, count: usize) {
+        self.thread_paths.insert(conv_id.to_string(), path.to_string());
+        self.thread_counts.insert(conv_id.to_string(), count);
     }
 
     pub fn transcript_done(&self, meeting: &str) -> bool {
@@ -144,13 +168,24 @@ mod tests {
         assert!(!s.chat_day_done("c1", "2026-10-25"));
         assert_eq!(s.chats["c1"].len(), 1);
         assert_eq!(s.chat_day_path("c1", "2026-10-24"), Some("sources/Teams. Chat. X - 2026-10-24.md"));
+        assert!(!s.chat_day_counted("c1", "2026-10-24"), "no count recorded yet");
+        s.set_chat_day_count("c1", "2026-10-24", 5);
+        assert!(s.chat_day_counted("c1", "2026-10-24"));
+        assert_eq!(s.chat_day_count("c1", "2026-10-24"), 5);
+
+        // Threads: recorded with their path and message count, re-recorded as they grow.
+        s.mark_thread("conv1", "sources/Email. Thread. Roadmap - 2026-10-24.md", 2);
+        assert_eq!(s.thread_path("conv1"), Some("sources/Email. Thread. Roadmap - 2026-10-24.md"));
+        assert_eq!(s.thread_count("conv1"), 2);
+        s.mark_thread("conv1", "sources/Email. Thread. Roadmap - 2026-10-24.md", 3);
+        assert_eq!(s.thread_count("conv1"), 3);
 
         for i in 0..(SEEN_CAP + 50) {
-            s.mark_mail(&format!("m{i}"), None);
+            s.mark_transcript(&format!("m{i}"), None);
         }
-        assert_eq!(s.mail.len(), SEEN_CAP);
-        assert!(s.mail_done(&format!("m{}", SEEN_CAP + 49)), "newest kept");
-        assert!(!s.mail_done("m0"), "oldest dropped");
+        assert_eq!(s.transcripts.len(), SEEN_CAP);
+        assert!(s.transcript_done(&format!("m{}", SEEN_CAP + 49)), "newest kept");
+        assert!(!s.transcript_done("m0"), "oldest dropped");
     }
 
     #[test]

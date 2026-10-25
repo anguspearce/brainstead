@@ -219,7 +219,8 @@ fn pull_mail(
     st: &mut state::State,
     out: &mut Outcome,
 ) {
-    // With a topic, search the mailbox for it; without, take the recent Inbox.
+    // With a topic, search the mailbox for it; without, take the recent Inbox. Mail is grouped one
+    // source per thread, so matching messages flag their conversation, then each thread is gathered.
     let mail = if query.trim().is_empty() { fetch::inbox(client, 60) } else { fetch::search_mail(client, query, 60) };
     let mail = match mail {
         Ok(m) => m,
@@ -228,29 +229,35 @@ fn pull_mail(
             return;
         }
     };
+    let mut seen = std::collections::HashSet::new();
     for m in mail {
-        if m.received < since || m.id.is_empty() {
+        if m.received < since || m.conversation_id.is_empty() || !seen.insert(m.conversation_id.clone()) {
             continue;
         }
-        // $search already matched; for an inbox listing without a query, matches() passes anyway.
+        // $search already matched the thread; for an inbox listing without a query, matches() passes.
         if query.trim().is_empty() && !matches(&format!("{} {}", m.subject, m.from), terms) {
             continue;
         }
-        let date = m.received.with_timezone(&Local).format("%Y-%m-%d").to_string();
-        if st.mail_done(&m.id) && still_there(vault, st.mail_path(&m.id)) {
-            out.items.push(Item {
-                kind: "email".into(),
-                title: m.subject.clone(),
-                date,
-                path: st.mail_path(&m.id).unwrap_or("").to_string(),
-                already_had: true,
-            });
+        // Already captured and still present → vend it; otherwise gather the whole conversation.
+        if let Some(path) = st.thread_path(&m.conversation_id).filter(|p| still_there(vault, Some(p))).map(str::to_string) {
+            let date = m.received.with_timezone(&Local).format("%Y-%m-%d").to_string();
+            out.items.push(Item { kind: "email".into(), title: m.subject, date, path, already_had: true });
             continue;
         }
-        let cap = fetch::mail_capture(&m);
-        if let Some(path) = deliver(data, vault, &cap, "outlook", Some(m.received), out) {
-            st.mark_mail(&m.id, Some(&path));
-            out.items.push(Item { kind: "email".into(), title: m.subject, date, path, already_had: false });
+        let thread = match fetch::conversation(client, &m.conversation_id, 100) {
+            Ok(t) => t,
+            Err(e) => {
+                out.problems.push(format!("Couldn't read a mail thread: {e}"));
+                continue;
+            }
+        };
+        let Some(cap) = fetch::thread_capture(&thread) else { continue };
+        let when = thread.last().map(|x| x.received);
+        let title = thread.last().map(|x| x.subject.clone()).unwrap_or(m.subject);
+        let date = when.unwrap_or(m.received).with_timezone(&Local).format("%Y-%m-%d").to_string();
+        if let Some(path) = deliver(data, vault, &cap, "outlook", when, out) {
+            st.mark_thread(&m.conversation_id, &path, thread.len());
+            out.items.push(Item { kind: "email".into(), title, date, path, already_had: false });
         }
     }
 }
