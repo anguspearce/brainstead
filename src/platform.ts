@@ -24,6 +24,9 @@ let current: Platform = detect();
 export const platform = (): Platform => current;
 export let isMac = current === "macos";
 export let isWindows = current === "windows";
+/** Teams and Outlook sync works where there's a secret store for the sign-in: macOS (Keychain) and
+ *  Windows (Credential Manager), not Linux yet. */
+export let hasSync = isMac || isWindows;
 /** ⌘ on macOS, Ctrl elsewhere. */
 export let modLabel = isMac ? "⌘" : "Ctrl";
 /** The file manager's name, for "Show in …". */
@@ -36,6 +39,7 @@ export function setPlatform(p: Platform) {
   current = p;
   isMac = p === "macos";
   isWindows = p === "windows";
+  hasSync = isMac || isWindows;
   modLabel = isMac ? "⌘" : "Ctrl";
   fileManager = isMac ? "Finder" : isWindows ? "Explorer" : "Files";
   terminalApp = isMac ? "Terminal" : "a terminal";

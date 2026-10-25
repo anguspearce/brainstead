@@ -5,7 +5,7 @@
 //! Teams and Outlook sync: reads the user's own chats, meeting transcripts, Inbox mail and calendar
 //! and writes them into `sources/` through the same path the capture extensions use, so the Inbox
 //! and "Ingest new sources as they arrive" work unchanged (D-20261025-01, D-20261025-02). The
-//! sign-in is handed over by the Teams extension while a Teams tab is open (`auth`); macOS only for
+//! sign-in is handed over by the Teams extension while a Teams tab is open (`auth`); macOS and Windows
 //! now. Everything the sync reads is the user's own, and it only ever reads.
 
 pub mod api;

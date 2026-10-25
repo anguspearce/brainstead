@@ -11,7 +11,7 @@ Sources are the files in your vault's `sources/` folder: captured emails and cha
 ## Add a source
 - Drag files from Finder (or Explorer) onto the Sources screen, or click **Import** and pick them. Each is copied into `sources/`, renamed if the name is taken. Folders, files already in the vault and files over 200 MB are refused.
 - Capture from the browser with the Outlook and Teams extensions (set up in [Settings › Capture extensions](app:settings/capture)). A capture lands in `sources/` as an `Email. …` or `Teams. …` note, and also waits in the [Inbox](app:inbox).
-- On a Mac, turn on [Teams and Outlook sync](app:settings/sync) to have your own chats, meeting transcripts and Inbox mail read in on their own, without the extension button.
+- On macOS and Windows, turn on [Teams and Outlook sync](app:settings/sync) to have your own chats, meeting transcripts and Inbox mail read in on their own, without the extension button.
 
 Nothing can be added while Read-only is on in [Settings › Vault](app:settings/vault).
 

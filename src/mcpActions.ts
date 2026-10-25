@@ -2227,7 +2227,7 @@ async function status(): Promise<string> {
 /** Settings › Capture extensions, as the pane shows it: the folder the extensions load from, the
  *  browsers that know Brainstead's capture host, and the last captures. */
 /** Teams and Outlook sync (Settings › Teams and Outlook sync), doing what the pane does: read its
- *  state, run a pass, turn it on or off, choose a channel, or skip a sender. macOS only. */
+ *  state, run a pass, turn it on or off, choose a channel, or skip a sender. macOS and Windows. */
 async function syncTool(a: Args): Promise<string> {
   const action = str(a, "action") ?? "get";
   const s = settings.get();
@@ -3260,7 +3260,7 @@ const settingRows = (): SettingRow[] => [
   ["meetingIngest", "AI assistants", "Ingest a meeting note once it's made", "bool", true],
   ["meetingTrash", "AI assistants", "Then move the transcript to the Trash", "bool", true],
   ["ingestOnArrival", "AI assistants", "Ingest new sources as they arrive", "bool", false],
-  ["syncEnabled", "Teams and Outlook sync", "Sync Teams and Outlook (macOS)", "bool", false],
+  ["syncEnabled", "Teams and Outlook sync", "Sync Teams and Outlook", "bool", false],
   ["syncInitialDays", "Teams and Outlook sync", "Days of history to load on first sync (0 = no limit)", "number", 7],
   ["refreshStale", "AI assistants", "Also refresh pages whose sources changed", "bool", false],
   ["summariesHere", "Jobs & schedule", "Brainstead runs the daily and weekly summaries", "bool", false],

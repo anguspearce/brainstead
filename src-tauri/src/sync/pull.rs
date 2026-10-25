@@ -6,7 +6,7 @@
 //! meeting transcripts about some topic over the last few days, and this gathers them into the vault
 //! and hands back the source paths to read. It reuses what the sync already pulled — an item already
 //! in the vault is vended, not fetched again — and pulls only what's missing (D-20261025-04). Reads
-//! only, like the rest of the sync; macOS only.
+//! only, like the rest of the sync; macOS and Windows (wherever there is a secret store).
 
 use chrono::{Duration, Local, Utc};
 use serde::Serialize;

@@ -27,7 +27,7 @@ import { ago, fmtCount, Popover, Seg, Switch } from "./ui";
 import { sayTest, speechSettingsChanged, voices } from "./speech/player";
 import { SpeedSlider, VoiceSelect } from "./speech/ReadAloud";
 import { DocButton, useIsGone } from "./docButton";
-import { accelLabel, captureDefault, fileManager, isMac, isWindows, keyLabel, terminalApp } from "./platform";
+import { accelLabel, captureDefault, fileManager, hasSync, isMac, isWindows, keyLabel, terminalApp } from "./platform";
 import { useFeatures } from "./features";
 
 const PANES: [SettingsPane, string, string][] = [
@@ -45,7 +45,7 @@ const PANES: [SettingsPane, string, string][] = [
 export function SettingsScreen() {
   const p = useStore(place).place;
   const features = useFeatures();
-  const panes = PANES.filter(([id]) => (id !== "permissions" || features.fullDiskAccess) && (id !== "sync" || isMac));
+  const panes = PANES.filter(([id]) => (id !== "permissions" || features.fullDiskAccess) && (id !== "sync" || hasSync));
   const pane = p.pane === "permissions" && !features.fullDiskAccess ? "general" : (p.pane ?? "general");
   const title = PANES.find((x) => x[0] === pane)?.[1] ?? "Settings";
   return (
@@ -1245,8 +1245,8 @@ function SyncPane() {
         <p className="muted">
           Brainstead reads your own Teams chats, meeting transcripts, Inbox mail and calendar and writes what's new into sources/, ready to
           ingest and listed in the Inbox — the same as a capture, without clicking. It uses the sign-in your open Teams tab already has,
-          handed over by the Teams extension, so keep Teams open in your browser; it reads only, and nothing leaves this Mac but the calls
-          to Microsoft.
+          handed over by the Teams extension, so keep Teams open in your browser; it reads only, and nothing leaves this computer but the
+          calls to Microsoft.
         </p>
         <Switch label="Sync Teams and Outlook" on={enabled} onChange={(v) => settings.update({ syncEnabled: v })} />
         <label className="srow" style={{ gap: 8 }}>
@@ -1288,7 +1288,7 @@ function SyncPane() {
               <button
                 type="button"
                 className="btn sm"
-                title="Forget the Teams sign-in on this Mac"
+                title="Forget the Teams sign-in on this computer"
                 onClick={() => void api.syncSignOut().then(refresh)}
               >
                 Sign out

@@ -310,7 +310,7 @@ pub fn today_meetings(data: &Path) -> Result<Vec<Event>, String> {
 }
 
 /// Starts the sync timer: a pass on launch (after a short delay) and every [`EVERY_MIN`] minutes,
-/// when sync is on. macOS only; elsewhere there's no sign-in store so a pass just blocks.
+/// when sync is on. A pass just blocks where there is no sign-in store (Linux).
 pub fn watch(_app: tauri::AppHandle) {
     let data = platform::data_dir();
     std::thread::Builder::new()

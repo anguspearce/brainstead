@@ -16,7 +16,7 @@ Sources (⌘0) are the files in `sources/`: emails, Teams chats and transcripts 
 
 - Drag files onto Sources, or click **Import**, to copy them in.
 - The **Outlook** and **Teams** Chrome extensions capture a thread, chat or meeting transcript into `sources/` with one click. Set them up in Settings › Capture extensions. Each capture also waits in the Inbox.
-- On a Mac, **[Teams and Outlook sync](#teams-and-outlook-sync)** can do the capturing for you, reading your own chats, transcripts and Inbox mail into `sources/` without a click.
+- On macOS and Windows, **[Teams and Outlook sync](#teams-and-outlook-sync)** can do the capturing for you, reading your own chats, transcripts and Inbox mail into `sources/` without a click.
 - Each source is **New**, **Changed** (since the pages citing it were written) or **Ingested**.
 - A row's button is what the source usually becomes: **Meeting note** for a Teams transcript, **Draft reply** for an email or chat thread, otherwise **Ingest**. Its ▾ has the rest: **Make and ingest a meeting note** or **Draft a reply** where they fit, **Ingest into the wiki**, **Ask about this source** and **Compare with…**. A file's right-click menu offers the same.
 - Transcripts, emails and chats are known by their names (`Teams. Transcript. …`, `Email. …`, `Teams. Chat. …`), in `sources/` or any folder under it.
@@ -29,7 +29,7 @@ Beside a source, its provenance says when it was ingested, by which model, and w
 
 ## Teams and Outlook sync
 
-On a Mac, turn on **Teams and Outlook sync** (Settings › Teams and Outlook sync) to let Brainstead read your own Teams chats, meeting transcripts, Inbox mail and calendar and write what's new into `sources/` on its own, without the extension button. Each item lands in the Inbox and is ingested like any capture; the sync reads only and never sends or changes anything in Teams or Outlook.
+On macOS and Windows, turn on **Teams and Outlook sync** (Settings › Teams and Outlook sync) to let Brainstead read your own Teams chats, meeting transcripts, Inbox mail and calendar and write what's new into `sources/` on its own, without the extension button. Each item lands in the Inbox and is ingested like any capture; the sync reads only and never sends or changes anything in Teams or Outlook.
 
 It uses the sign-in your open Teams tab already has. While Teams is open in your browser, the **Teams capture** extension hands that sign-in to Brainstead, which keeps it in the Mac's Keychain and refreshes it itself — so keep Teams open in the browser at least once a day. It uses Teams' and Outlook's own web services, not Microsoft Graph.
 

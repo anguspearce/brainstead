@@ -25,7 +25,7 @@ import { useVaultOpening, useVaultVersion, vaultStatus } from "./state";
 import { TopBar } from "./TopBar";
 import { ago, fmtCount, LayerTag, TableBand } from "./ui";
 import { iconizeEmoji } from "./md/fieldEmoji";
-import { captureDefault, isMac, keyLabel } from "./platform";
+import { captureDefault, hasSync, keyLabel } from "./platform";
 
 export function greeting(h: number, name?: string) {
   const g = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
@@ -232,7 +232,7 @@ export function TodayScreen() {
         </section>
         <aside className="tside">
           <ProcessCard />
-          {isMac && s.syncEnabled && <MeetingsCard />}
+          {hasSync && s.syncEnabled && <MeetingsCard />}
           <SummaryCard kind="weekly" />
           <SummaryCard kind="daily" />
           <HeldCard />
