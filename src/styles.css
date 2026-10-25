@@ -559,6 +559,25 @@ html[data-platform]:not([data-platform="macos"]) .tlspace {
 .tb-band .linkish {
   color: inherit;
 }
+
+/* A borderless icon button in a card header (the meetings card's Refresh). */
+.headbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: 0;
+  background: none;
+  color: var(--ink3);
+  cursor: pointer;
+}
+.headbtn:hover {
+  color: var(--ink);
+}
+.headbtn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
 .tb-band.none > :first-child {
   font-style: italic;
   font-weight: 500;

@@ -7,7 +7,7 @@
 // from the user's own Teams calendar — not Microsoft Graph (D-20261025-01).
 
 import { changes, decisions, health, held, pageName, startKnowledge } from "./knowledge";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, Draft, FileSummary, LatestSummary, ReviewsStatus, TaskRow } from "./api";
 import { fmtAccel } from "./Shortcuts";
 import { contextName, contextsInUse, unclarified, useInbox } from "./gtd";
@@ -336,25 +336,31 @@ function SideCard({ title, right, children }: { title: string; right?: React.Rea
  *  Nothing shows when there are none, so a quiet day adds no clutter. */
 function MeetingsCard() {
   const [meetings, setMeetings] = useState<import("./api").SyncMeeting[] | null>(null);
-  // Refresh on mount, when the window regains focus, and every five minutes while Today is open, so
-  // meetings that have ended drop off and new ones appear without reopening the screen.
+  const [busy, setBusy] = useState(false);
+  const live = useRef(true);
+  // Re-read the calendar from Outlook. A transient error keeps the current list rather than blanking.
+  const load = useCallback(() => {
+    setBusy(true);
+    return api
+      .syncTodayMeetings()
+      .then((m) => live.current && setMeetings(m))
+      .catch(() => live.current && setMeetings((prev) => prev ?? []))
+      .finally(() => live.current && setBusy(false));
+  }, []);
+  // On mount, when the window regains focus, and every five minutes while Today is open, so meetings
+  // that have ended drop off and new ones appear without reopening the screen.
   useEffect(() => {
-    let live = true;
-    const load = () =>
-      api
-        .syncTodayMeetings()
-        .then((m) => live && setMeetings(m))
-        .catch(() => live && setMeetings((prev) => prev ?? []));
+    live.current = true;
     load();
     const onFocus = () => load();
     window.addEventListener("focus", onFocus);
     const timer = window.setInterval(load, 5 * 60 * 1000);
     return () => {
-      live = false;
+      live.current = false;
       window.removeEventListener("focus", onFocus);
       window.clearInterval(timer);
     };
-  }, []);
+  }, [load]);
   if (!meetings || meetings.length === 0) return null;
   const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   // After midday the backend also returns tomorrow's meetings; group them under a Tomorrow heading.
@@ -371,7 +377,21 @@ function MeetingsCard() {
     </div>
   );
   return (
-    <SideCard title="Upcoming meetings">
+    <SideCard
+      title="Upcoming meetings"
+      right={
+        <button
+          type="button"
+          className="headbtn"
+          title="Re-read the calendar from Outlook"
+          disabled={busy}
+          aria-label="Refresh meetings"
+          onClick={() => void load()}
+        >
+          <Icon name="refresh" size={13} className={busy ? "spin" : undefined} />
+        </button>
+      }
+    >
       {today.map(row)}
       {tomorrow.length > 0 && (
         <>
