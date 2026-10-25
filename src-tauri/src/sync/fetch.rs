@@ -200,6 +200,16 @@ pub fn inbox(client: &Client, top: usize) -> Result<Vec<Mail>, String> {
     Ok(parse_mail(&body))
 }
 
+/// Inbox and folders searched for `query` (Outlook REST `$search`, by relevance), newest handling
+/// left to the caller. Used by the on-demand pull.
+pub fn search_mail(client: &Client, query: &str, top: usize) -> Result<Vec<Mail>, String> {
+    let url = format!(
+        "https://outlook.office.com/api/v2.0/me/messages?$search={}&$top={top}&$select=Subject,From,ToRecipients,Body,ReceivedDateTime,WebLink",
+        urlencode(&format!("\"{}\"", query.replace('"', "")))
+    );
+    Ok(parse_mail(&api::get_json(client, Service::Outlook, &url)?))
+}
+
 pub fn parse_mail(body: &Value) -> Vec<Mail> {
     body["value"]
         .as_array()

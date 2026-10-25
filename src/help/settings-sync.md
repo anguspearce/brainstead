@@ -26,5 +26,8 @@ The first time it runs — and the first time it sees each new chat — it loads
 ## Sync now
 The sync runs on its own every so often. **Sync now** runs a pass at once and says what it added and any problems it hit. A problem (a Microsoft service that didn't answer) is shown and the rest of the pass still runs — it never stops captures.
 
+## Ask an assistant to pull a topic
+With sync on, you can ask an assistant (in Ask, or any connected assistant) to gather a topic on demand — for example, “read the last week's emails, Teams chats and meeting transcripts about the Fit programme and write a note on how it's going”. It pulls the matching sources into the vault (reusing what's already there and fetching only what's missing), then reads them to write your note.
+
 ## Turning it off
 Switch **Sync Teams and Outlook** off to stop it, or **Sign out** to forget the sign-in. The capture extensions still work by hand either way.

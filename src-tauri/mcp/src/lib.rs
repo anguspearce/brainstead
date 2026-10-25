@@ -838,6 +838,14 @@ pub fn tools() -> Vec<Value> {
                 "id": {"type": "string", "description": "With channel or unchannel: the channel's conversation id, as action channels lists it."},
                 "reason": reason
             }), &[])),
+        tool("pull_teams_outlook", "Pull from Teams and Outlook", Change,
+            "Gather the user's own Teams chats, Inbox/mailbox mail and meeting transcripts about a topic over the last few days into the vault's sources/, and return the source paths to read (needs the app; macOS only; Teams and Outlook sync must be on and signed in). It reuses what's already in the vault — an item already pulled is vended, not fetched again — and pulls only what's missing, each written like a capture (in the Inbox, ingestable). Reads only. Use this to answer a request like “summarise how the Fit programme is going from the last week's emails, chats and meetings”: call it with query \"Fit programme\" and days 7, then read the returned sources with read_section or search and write the summary with create_note or edit_page. Only when the user asks.",
+            schema(json!({
+                "query": {"type": "string", "description": "The topic to gather, matched across chat text and names, mail (server-side search) and meeting subjects. Leave out for everything in the window."},
+                "days": {"type": "integer", "minimum": 1, "maximum": 90, "description": "How many days back to look (default 7)."},
+                "kinds": {"type": "array", "items": {"type": "string", "enum": ["chats", "mail", "transcripts"]}, "description": "Which to pull; all three when left out."},
+                "reason": reason
+            }), &[])),
         tool("glance", "The vault at a glance", Read,
             "Glance's counts, as Activity and Knowledge health show them (needs the app): notes and wiki pages by type and by tag, most first, and the files the most others link to.",
             schema(json!({}), &[])),
@@ -1276,6 +1284,7 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
         "open" => act("open", obj),
         "capture_extensions" => act("capture.status", obj),
         "teams_sync" => act("sync", obj),
+        "pull_teams_outlook" => act("sync.pull", obj),
         "list_assistants" => act("assistants.found", obj),
         "glance" => act("glance", obj),
         "app_status" => {

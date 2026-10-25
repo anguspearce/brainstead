@@ -109,12 +109,13 @@ fn cutoff_day(initial_days: u32) -> Option<String> {
     (initial_days > 0).then(|| (Local::now().date_naive() - Duration::days(i64::from(initial_days) - 1)).format("%Y-%m-%d").to_string())
 }
 
-fn deliver(data: &Path, vault: &Path, c: &brainstead_core::webcapture::Capture, ext: &str, r: &mut Report) -> bool {
+/// Writes a capture and returns its vault path, or None (recording the problem) on refusal.
+fn deliver(data: &Path, vault: &Path, c: &brainstead_core::webcapture::Capture, ext: &str, r: &mut Report) -> Option<String> {
     match nativehost::deliver(data, Some(vault), false, ext, c, true) {
-        Ok(_) => true,
+        Ok(path) => Some(path),
         Err(e) => {
             r.problems.push(e);
-            false
+            None
         }
     }
 }
@@ -160,7 +161,7 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
             if first_seen {
                 if let Some(cutoff) = cutoff {
                     if day.as_str() < cutoff {
-                        st.mark_chat_day(&conv.id, &day);
+                        st.mark_chat_day(&conv.id, &day, None);
                         continue;
                     }
                 }
@@ -177,8 +178,8 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
                 continue;
             }
             if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &p.sign_in.origin) {
-                if deliver(p.data, p.vault, &cap, "teams", r) {
-                    st.mark_chat_day(&conv.id, &day);
+                if let Some(path) = deliver(p.data, p.vault, &cap, "teams", r) {
+                    st.mark_chat_day(&conv.id, &day, Some(&path));
                     r.chats += 1;
                 }
             }
@@ -205,18 +206,18 @@ fn sync_mail(p: &Pass, st: &mut state::State, r: &mut Report) {
         if first_run {
             if let Some(cutoff) = cutoff {
                 if m.received.with_timezone(&Local).format("%Y-%m-%d").to_string().as_str() < cutoff {
-                    st.mark_mail(&m.id);
+                    st.mark_mail(&m.id, None);
                     continue;
                 }
             }
         }
         if ignored(&m.from_address, &p.s.sync_ignore_senders) {
-            st.mark_mail(&m.id); // don't reconsider it every pass
+            st.mark_mail(&m.id, None); // don't reconsider it every pass
             continue;
         }
         let cap = fetch::mail_capture(&m);
-        if deliver(p.data, p.vault, &cap, "outlook", r) {
-            st.mark_mail(&m.id);
+        if let Some(path) = deliver(p.data, p.vault, &cap, "outlook", r) {
+            st.mark_mail(&m.id, Some(&path));
             r.mail += 1;
         }
     }
@@ -238,8 +239,8 @@ fn sync_transcripts(p: &Pass, st: &mut state::State, r: &mut Report) {
         }
         match fetch::transcript_capture(&p.client, &ev) {
             Ok(Some(cap)) => {
-                if deliver(p.data, p.vault, &cap, "teams", r) {
-                    st.mark_transcript(&id);
+                if let Some(path) = deliver(p.data, p.vault, &cap, "teams", r) {
+                    st.mark_transcript(&id, Some(&path));
                     r.transcripts += 1;
                 }
             }
@@ -247,7 +248,7 @@ fn sync_transcripts(p: &Pass, st: &mut state::State, r: &mut Report) {
             // stop retrying meetings older than the lookback by marking very old ones done.
             Ok(None) => {
                 if now - ev.end > Duration::hours(TRANSCRIPT_LOOKBACK_HOURS) {
-                    st.mark_transcript(&id);
+                    st.mark_transcript(&id, None);
                 }
             }
             Err(e) => r.problems.push(format!("Couldn't fetch a transcript: {e}")),

@@ -93,10 +93,10 @@ export function runSourceAction(a: SourceAction, path: string): void {
  *  whole domain. Each entry is what goes in Settings › Teams and Outlook sync's skip list. */
 export function ignoreSenderItems(address: string): { entry: string; label: string; tip: string }[] {
   const addr = address.trim().toLowerCase();
-  const items = [{ entry: addr, label: `Don't sync ${addr}`, tip: `Stop syncing mail from ${addr}` }];
+  const items = [{ entry: addr, label: "Don't sync this sender", tip: `Stop syncing mail from ${addr}` }];
   const domain = addr.split("@")[1];
   if (domain) {
-    items.push({ entry: domain, label: `Don't sync anyone at ${domain}`, tip: `Stop syncing mail from any ${domain} address` });
+    items.push({ entry: domain, label: "Don't sync this domain", tip: `Stop syncing mail from any ${domain} address` });
   }
   return items;
 }

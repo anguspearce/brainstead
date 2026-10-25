@@ -2280,6 +2280,38 @@ async function syncTool(a: Args): Promise<string> {
   throw new Error("action is get, on, off, now, channels, channel, unchannel, ignore or unignore.");
 }
 
+/** On-demand pull from Teams and Outlook: gather the chats, mail and transcripts about a topic over
+ *  the last N days into the vault (reusing what's already there) and list the source paths to read. */
+async function syncPull(a: Args): Promise<string> {
+  const query = str(a, "query") ?? "";
+  const days = typeof a.days === "number" ? Math.max(1, Math.min(90, Math.floor(a.days))) : 7;
+  const kindsArg = Array.isArray(a.kinds) ? (a.kinds as string[]).filter((k) => ["chats", "mail", "transcripts"].includes(k)) : undefined;
+  const r = await api.syncPull(query, days, kindsArg);
+  if (r.blocked) throw new Error(r.blocked);
+  if (!r.items.length)
+    return `Nothing found for ${query ? `"${query}"` : "that window"} in the last ${days} days.${r.problems.length ? ` Problems: ${r.problems.join("; ")}.` : ""}`;
+  const pulled = r.items.filter((i) => !i.alreadyHad).length;
+  const byKind = (k: string) => r.items.filter((i) => i.kind === k);
+  const section = (k: string, label: string) => {
+    const items = byKind(k);
+    if (!items.length) return [];
+    return [
+      `${label} (${items.length}):`,
+      ...items.map(
+        (i) =>
+          `- ${i.date} · ${i.title}${i.path ? ` → ${i.path}` : " (already in the vault; find it with search)"}${i.alreadyHad ? "" : " [new]"}`,
+      ),
+    ];
+  };
+  return [
+    `${r.items.length} source(s) for ${query ? `"${query}"` : "the window"} over the last ${days} days — ${pulled} newly pulled, ${r.items.length - pulled} already in the vault. Read them with read_section or search, then write your summary.`,
+    ...section("email", "Emails"),
+    ...section("chat", "Teams chats"),
+    ...section("transcript", "Meeting transcripts"),
+    ...(r.problems.length ? ["", `Problems: ${r.problems.join("; ")}`] : []),
+  ].join("\n");
+}
+
 async function captureExtensions(): Promise<string> {
   const c = await api.captureStatus();
   const name = { outlook: "Outlook", teams: "Teams", other: "Other" } as const;
@@ -2713,6 +2745,7 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   "source.provenance": provenance,
   "capture.status": captureExtensions,
   sync: syncTool,
+  "sync.pull": syncPull,
   glance: glanceTool,
   automated: automated,
   suggestions: suggestions,

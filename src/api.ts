@@ -1319,6 +1319,12 @@ export const api = {
   syncNow: () => invoke<SyncReport>("sync_now"),
   syncTodayMeetings: () => invoke<SyncMeeting[]>("sync_today_meetings"),
   syncListChannels: () => invoke<{ id: string; topic: string }[]>("sync_list_channels"),
+  syncPull: (query: string, days: number, kinds?: string[]) =>
+    invoke<{
+      items: { kind: string; title: string; date: string; path: string; alreadyHad: boolean }[];
+      problems: string[];
+      blocked: string | null;
+    }>("sync_pull", { query, days, kinds }),
   // Dataview (src-tauri/src/dataview.rs, src/md/dataview/).
   /** Pages changed since generation `since` (0: all), and every page's path now. */
   dataviewPages: (since: number) => invoke<DvPagesDelta>("dataview_pages", { since }),

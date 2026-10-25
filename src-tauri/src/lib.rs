@@ -932,6 +932,7 @@ pub fn run() {
             sync::sync_now,
             sync::sync_today_meetings,
             sync::sync_list_channels,
+            sync::sync_pull,
             bookmarks,
             smart_lists,
             asset_find,

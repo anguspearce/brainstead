@@ -1,0 +1,301 @@
+// Copyright © 2026 Wayne Davies. Free software under the GNU General Public License, version 3 or later.
+// See LICENSE for the full text.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+//! On-demand pull (the `pull_teams_outlook` MCP tool): an assistant asks for the chats, mail and
+//! meeting transcripts about some topic over the last few days, and this gathers them into the vault
+//! and hands back the source paths to read. It reuses what the sync already pulled — an item already
+//! in the vault is vended, not fetched again — and pulls only what's missing (D-20261025-04). Reads
+//! only, like the rest of the sync; macOS only.
+
+use chrono::{Duration, Local, Utc};
+use serde::Serialize;
+
+use super::fetch::{self, ConvKind};
+use super::{auth, state};
+use crate::{nativehost, settings};
+
+/// One source the pull gathered.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Item {
+    /// "email", "chat" or "transcript".
+    pub kind: String,
+    pub title: String,
+    /// Local day (`YYYY-MM-DD`).
+    pub date: String,
+    /// The vault path to read, or empty when it was pulled before this feature stored paths (then the
+    /// assistant finds it with search).
+    pub path: String,
+    /// It was already in the vault (vended), not fetched now.
+    pub already_had: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Outcome {
+    pub items: Vec<Item>,
+    pub problems: Vec<String>,
+    pub blocked: Option<String>,
+}
+
+/// Which kinds to pull.
+#[derive(Clone, Copy)]
+pub struct Kinds {
+    pub chats: bool,
+    pub mail: bool,
+    pub transcripts: bool,
+}
+
+impl Kinds {
+    pub fn all() -> Kinds {
+        Kinds { chats: true, mail: true, transcripts: true }
+    }
+}
+
+/// Lowercased words of the query; empty means "no filter".
+fn terms(query: &str) -> Vec<String> {
+    query.split_whitespace().map(|w| w.to_ascii_lowercase()).collect()
+}
+
+/// Whether `text` contains every query term (case-insensitive). No terms → always matches.
+fn matches(text: &str, terms: &[String]) -> bool {
+    if terms.is_empty() {
+        return true;
+    }
+    let hay = text.to_ascii_lowercase();
+    terms.iter().all(|t| hay.contains(t))
+}
+
+/// Gathers the chats, mail and transcripts about `query` over the last `days` days into the vault,
+/// reusing what's already there. `query` empty means everything in the window.
+pub fn pull(data: &std::path::Path, query: &str, days: u32, kinds: Kinds) -> Outcome {
+    let mut out = Outcome::default();
+    let s = settings::load(&data.join("settings.json"));
+    let Some(vault) = s.vault_path.as_deref().filter(|p| !p.trim().is_empty()) else {
+        out.blocked = Some("No vault chosen.".into());
+        return out;
+    };
+    if s.read_only {
+        out.blocked = Some("The vault is read-only, so nothing new can be pulled in.".into());
+        return out;
+    }
+    let Some(sign_in) = auth::load() else {
+        out.blocked = Some("Not signed in. Open Teams in your browser so the extension hands the sign-in over.".into());
+        return out;
+    };
+    let vault = std::path::Path::new(vault);
+    let client = super::client();
+    let mut st = state::load(data);
+    let terms = terms(query);
+    let now = Utc::now();
+    let since = now - Duration::days(i64::from(days.max(1)));
+    let cutoff_day = since.with_timezone(&Local).format("%Y-%m-%d").to_string();
+
+    if kinds.chats {
+        pull_chats(&client, &sign_in, vault, data, &s, &mut st, &terms, &cutoff_day, &mut out);
+    }
+    if kinds.mail {
+        pull_mail(&client, vault, data, query, &terms, since, &mut st, &mut out);
+    }
+    if kinds.transcripts {
+        pull_transcripts(&client, &sign_in, vault, data, &terms, since, now, &mut st, &mut out);
+    }
+
+    if let Err(e) = state::save(data, &st) {
+        out.problems.push(format!("Couldn't save sync progress: {e}"));
+    }
+    out
+}
+
+fn deliver(
+    data: &std::path::Path,
+    vault: &std::path::Path,
+    c: &brainstead_core::webcapture::Capture,
+    ext: &str,
+    out: &mut Outcome,
+) -> Option<String> {
+    match nativehost::deliver(data, Some(vault), false, ext, c, true) {
+        Ok(path) => Some(path),
+        Err(e) => {
+            out.problems.push(e);
+            None
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn pull_chats(
+    client: &reqwest::blocking::Client,
+    sign_in: &auth::SignIn,
+    vault: &std::path::Path,
+    data: &std::path::Path,
+    s: &settings::Settings,
+    st: &mut state::State,
+    terms: &[String],
+    cutoff_day: &str,
+    out: &mut Outcome,
+) {
+    let convs = match fetch::conversations(client, sign_in) {
+        Ok(c) => c,
+        Err(e) => {
+            out.problems.push(format!("Couldn't list chats: {e}"));
+            return;
+        }
+    };
+    let me = fetch::my_name(sign_in);
+    for conv in convs {
+        let take = match conv.kind {
+            ConvKind::OneOnOne | ConvKind::Group => true,
+            ConvKind::Channel => s.sync_channels.iter().any(|c| c == &conv.id),
+            ConvKind::Meeting | ConvKind::Other => false,
+        };
+        if !take {
+            continue;
+        }
+        let msgs = match fetch::chat_messages(client, sign_in, &conv.id) {
+            Ok(m) => m,
+            Err(e) => {
+                out.problems.push(format!("Couldn't read a chat: {e}"));
+                continue;
+            }
+        };
+        for (day, day_msgs) in fetch::by_local_day(&msgs) {
+            if day.as_str() < cutoff_day {
+                continue;
+            }
+            // Does this day of this chat match the topic? (the chat's name, or any message in it)
+            let text = format!("{}\n{}", conv.topic, day_msgs.iter().map(|m| m.body.as_str()).collect::<Vec<_>>().join("\n"));
+            if !matches(&text, terms) {
+                continue;
+            }
+            let title = conv.topic.clone();
+            if st.chat_day_done(&conv.id, &day) {
+                out.items.push(Item {
+                    kind: "chat".into(),
+                    title: if title.is_empty() { "Teams chat".into() } else { title },
+                    date: day.clone(),
+                    path: st.chat_day_path(&conv.id, &day).unwrap_or("").to_string(),
+                    already_had: true,
+                });
+                continue;
+            }
+            if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &sign_in.origin) {
+                if let Some(path) = deliver(data, vault, &cap, "teams", out) {
+                    st.mark_chat_day(&conv.id, &day, Some(&path));
+                    out.items.push(Item {
+                        kind: "chat".into(),
+                        title: if title.is_empty() { "Teams chat".into() } else { title },
+                        date: day,
+                        path,
+                        already_had: false,
+                    });
+                }
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn pull_mail(
+    client: &reqwest::blocking::Client,
+    vault: &std::path::Path,
+    data: &std::path::Path,
+    query: &str,
+    terms: &[String],
+    since: chrono::DateTime<Utc>,
+    st: &mut state::State,
+    out: &mut Outcome,
+) {
+    // With a topic, search the mailbox for it; without, take the recent Inbox.
+    let mail = if query.trim().is_empty() { fetch::inbox(client, 60) } else { fetch::search_mail(client, query, 60) };
+    let mail = match mail {
+        Ok(m) => m,
+        Err(e) => {
+            out.problems.push(format!("Couldn't search mail: {e}"));
+            return;
+        }
+    };
+    for m in mail {
+        if m.received < since || m.id.is_empty() {
+            continue;
+        }
+        // $search already matched; for an inbox listing without a query, matches() passes anyway.
+        if query.trim().is_empty() && !matches(&format!("{} {}", m.subject, m.from), terms) {
+            continue;
+        }
+        let date = m.received.with_timezone(&Local).format("%Y-%m-%d").to_string();
+        if st.mail_done(&m.id) {
+            out.items.push(Item {
+                kind: "email".into(),
+                title: m.subject.clone(),
+                date,
+                path: st.mail_path(&m.id).unwrap_or("").to_string(),
+                already_had: true,
+            });
+            continue;
+        }
+        let cap = fetch::mail_capture(&m);
+        if let Some(path) = deliver(data, vault, &cap, "outlook", out) {
+            st.mark_mail(&m.id, Some(&path));
+            out.items.push(Item { kind: "email".into(), title: m.subject, date, path, already_had: false });
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn pull_transcripts(
+    client: &reqwest::blocking::Client,
+    sign_in: &auth::SignIn,
+    vault: &std::path::Path,
+    data: &std::path::Path,
+    terms: &[String],
+    since: chrono::DateTime<Utc>,
+    now: chrono::DateTime<Utc>,
+    st: &mut state::State,
+    out: &mut Outcome,
+) {
+    let events = match fetch::calendar(client, sign_in, since, now) {
+        Ok(e) => e,
+        Err(e) => {
+            out.problems.push(format!("Couldn't read the calendar: {e}"));
+            return;
+        }
+    };
+    for ev in events {
+        let Some(id) = ev.thread_id.clone() else { continue };
+        if ev.end > now || !matches(&format!("{} {}", ev.subject, ev.organizer), terms) {
+            continue;
+        }
+        let date = ev.start.with_timezone(&Local).format("%Y-%m-%d").to_string();
+        if st.transcript_done(&id) {
+            if let Some(p) = st.transcript_path(&id) {
+                out.items.push(Item { kind: "transcript".into(), title: ev.subject.clone(), date, path: p.to_string(), already_had: true });
+            }
+            continue;
+        }
+        match fetch::transcript_capture(client, &ev) {
+            Ok(Some(cap)) => {
+                if let Some(path) = deliver(data, vault, &cap, "teams", out) {
+                    st.mark_transcript(&id, Some(&path));
+                    out.items.push(Item { kind: "transcript".into(), title: ev.subject, date, path, already_had: false });
+                }
+            }
+            Ok(None) => {} // no transcript for this meeting
+            Err(e) => out.problems.push(format!("Couldn't fetch a transcript: {e}")),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn matches_requires_every_term() {
+        let t = terms("Fit Program");
+        assert!(matches("notes about the FIT program rollout", &t));
+        assert!(!matches("the program is on track", &t), "missing 'fit'");
+        assert!(matches("anything", &terms("")), "no terms matches all");
+    }
+}

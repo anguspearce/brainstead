@@ -39,6 +39,7 @@ It uses the sign-in your open Teams tab already has. While Teams is open in your
 - **Mail**: new Inbox messages, skipping anything Outlook files under Other and any sender or domain in **Mail to skip**. Use **Don't sync this sender** on a synced email's right-click menu to add one.
 - **Today** shows your remaining meetings for the day while the sync is on.
 - **Sync now** in Settings runs a pass at once and reports what it added. A Microsoft service that doesn't answer is reported there; it never stops capturing.
+- **On demand, through an assistant.** With sync on, an assistant can pull a topic in for you: ask something like “read the last week's emails, Teams chats and meeting transcripts about the Fit programme and write a note on how it's going”. It gathers the matching sources into `sources/` (reusing what's already there, fetching only what's missing) and then reads them to write your note (the `pull_teams_outlook` tool).
 
 ## Ingest
 

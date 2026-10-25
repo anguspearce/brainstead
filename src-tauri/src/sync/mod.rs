@@ -12,6 +12,7 @@ pub mod api;
 pub mod auth;
 pub mod fetch;
 pub mod html;
+pub mod pull;
 pub mod run;
 pub mod state;
 
@@ -61,6 +62,28 @@ pub fn sync_sign_out() -> Result<(), String> {
 #[tauri::command]
 pub async fn sync_now() -> run::Report {
     tauri::async_runtime::spawn_blocking(|| run::run_once(&platform::data_dir())).await.unwrap_or_default()
+}
+
+/// On-demand pull for an assistant: gather the chats, mail and transcripts about `query` over the
+/// last `days` days into the vault (reusing what's there) and return the source paths to read.
+#[tauri::command]
+pub async fn sync_pull(query: Option<String>, days: Option<u32>, kinds: Option<Vec<String>>) -> pull::Outcome {
+    tauri::async_runtime::spawn_blocking(move || {
+        let q = query.unwrap_or_default();
+        let want = kinds.unwrap_or_default();
+        let k = if want.is_empty() {
+            pull::Kinds::all()
+        } else {
+            pull::Kinds {
+                chats: want.iter().any(|x| x == "chats"),
+                mail: want.iter().any(|x| x == "mail"),
+                transcripts: want.iter().any(|x| x == "transcripts"),
+            }
+        };
+        pull::pull(&platform::data_dir(), &q, days.unwrap_or(7), k)
+    })
+    .await
+    .unwrap_or_default()
 }
 
 /// A channel the user can choose to sync (Settings): its id and name.
