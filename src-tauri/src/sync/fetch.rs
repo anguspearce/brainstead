@@ -358,15 +358,7 @@ fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
     if msgs.is_empty() {
         return Vec::new();
     }
-    let mut out = vec![Message {
-        sender: "In-meeting chat".to_string(),
-        from_address: None,
-        to: None,
-        cc: None,
-        recipients: None,
-        date: None,
-        body: "Messages posted in the meeting chat:".to_string(),
-    }];
+    let mut out = vec![divider("In-meeting chat", "Messages typed in the meeting chat during the meeting:")];
     out.extend(msgs.iter().map(|m| Message {
         sender: m.sender.clone(),
         from_address: None,
@@ -406,10 +398,21 @@ pub fn transcript_capture(client: &Client, s: &SignIn, ev: &Event) -> Result<Opt
     }
     let body: Value = resp.json().map_err(|e| e.to_string())?;
     let Some(cap) = parse_transcript(&body, ev) else { return Ok(None) };
-    // Fold the meeting chat in after the transcript, when there is one.
     let Capture::Teams(mut thread) = cap else { return Ok(Some(cap)) };
-    thread.messages.extend(meeting_chat(client, s, ev));
+    // Fold the meeting chat in after the transcript, when there is one. Both parts are then labelled
+    // with a divider so a reader (or the meeting-note model) can tell the spoken transcript from the
+    // typed chat; a transcript with no chat is left unlabelled, as before.
+    let chat = meeting_chat(client, s, ev);
+    if !chat.is_empty() {
+        thread.messages.insert(0, divider("Meeting transcript", "What was said in the meeting (times are offsets from the start):"));
+        thread.messages.extend(chat);
+    }
     Ok(Some(Capture::Teams(thread)))
+}
+
+/// A heading-only message used to label a section within a capture.
+fn divider(heading: &str, note: &str) -> Message {
+    Message { sender: heading.to_string(), from_address: None, to: None, cc: None, recipients: None, date: None, body: note.to_string() }
 }
 
 pub fn parse_transcript(body: &Value, ev: &Event) -> Option<Capture> {
