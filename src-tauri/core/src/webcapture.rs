@@ -17,6 +17,9 @@ use std::sync::LazyLock;
 
 /// The most threads one combined capture takes (the extension's popup has the same cap).
 pub const MAX_BATCH_THREADS: usize = 25;
+/// The heading of the divider the Teams and Outlook sync inserts before a meeting's folded-in chat;
+/// shared so `render` can tell a transcript carries chat and note it at the top.
+pub const MEETING_CHAT_HEADING: &str = "In-meeting chat";
 /// The largest capture accepted, in bytes of JSON.
 pub const MAX_BYTES: usize = 16 * 1024 * 1024;
 
@@ -247,6 +250,14 @@ pub fn render(c: &Capture, now: DateTime<Utc>, today: &str) -> (String, String) 
                 });
             }
             l.push(format!("**Captured:** {captured}"));
+            // When the meeting chat has been folded in (a divider message marks it), say so up top so
+            // a reader knows the note holds both the spoken transcript and the typed chat.
+            if t.messages.iter().any(|m| m.sender == MEETING_CHAT_HEADING) {
+                l.push(
+                    "**Contains:** the spoken transcript, then the in-meeting chat (typed messages), each under its own heading below."
+                        .into(),
+                );
+            }
             l.extend([String::new(), "---".into(), String::new()]);
             for m in &t.messages {
                 l.push(match &m.date {
@@ -465,6 +476,15 @@ mod tests {
         let chat = cap(json!({"type": "teams", "url": "https://teams.microsoft.com/v2/", "title": "Standup",
             "messages": [{"sender": "Lena", "body": "Ready?"}]}));
         assert_eq!(render(&chat, at(), "2026-10-03").0, "Teams. Chat. Standup - 2026-10-03.md");
+        // A transcript that carries the folded-in meeting chat is marked with a Contains line up top.
+        let with_chat = tr(json!({"meetingDate": "2026-10-02", "messages": [
+            {"sender": "Maya", "date": "0:14", "body": "Let's start."},
+            {"sender": MEETING_CHAT_HEADING, "body": "Messages typed in the meeting chat during the meeting:"},
+            {"sender": "Lena", "date": "2026-10-02 10:05", "body": "Slides are great."}]}));
+        let (_, text) = render(&with_chat, at(), "2026-10-03");
+        assert!(text.contains("**Contains:** the spoken transcript, then the in-meeting chat"), "{text}");
+        // A plain transcript has no Contains line.
+        assert!(!render(&tr(json!({"meetingDate": "2026-10-02"})), at(), "2026-10-03").1.contains("**Contains:**"));
     }
 
     #[test]

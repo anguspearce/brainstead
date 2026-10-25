@@ -358,7 +358,8 @@ fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
     if msgs.is_empty() {
         return Vec::new();
     }
-    let mut out = vec![divider("In-meeting chat", "Messages typed in the meeting chat during the meeting:")];
+    let mut out =
+        vec![divider(brainstead_core::webcapture::MEETING_CHAT_HEADING, "Messages typed in the meeting chat during the meeting:")];
     out.extend(msgs.iter().map(|m| Message {
         sender: m.sender.clone(),
         from_address: None,
