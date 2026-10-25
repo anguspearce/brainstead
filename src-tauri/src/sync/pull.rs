@@ -108,6 +108,14 @@ pub fn pull(data: &std::path::Path, query: &str, days: u32, kinds: Kinds) -> Out
     out
 }
 
+/// Whether a recorded source is still a file in the vault. The pull vends it only when it's really
+/// there, so a source the user deleted is fetched again. An item synced before paths were stored has
+/// no path to check, so it's treated as gone and re-materialised (which can duplicate a pre-path item
+/// that is in fact still present; everything synced since stores its path, so that shrinks away).
+fn still_there(vault: &std::path::Path, path: Option<&str>) -> bool {
+    path.is_some_and(|p| vault.join(p).exists())
+}
+
 fn deliver(
     data: &std::path::Path,
     vault: &std::path::Path,
@@ -170,7 +178,7 @@ fn pull_chats(
                 continue;
             }
             let title = conv.topic.clone();
-            if st.chat_day_done(&conv.id, &day) {
+            if st.chat_day_done(&conv.id, &day) && still_there(vault, st.chat_day_path(&conv.id, &day)) {
                 out.items.push(Item {
                     kind: "chat".into(),
                     title: if title.is_empty() { "Teams chat".into() } else { title },
@@ -225,7 +233,7 @@ fn pull_mail(
             continue;
         }
         let date = m.received.with_timezone(&Local).format("%Y-%m-%d").to_string();
-        if st.mail_done(&m.id) {
+        if st.mail_done(&m.id) && still_there(vault, st.mail_path(&m.id)) {
             out.items.push(Item {
                 kind: "email".into(),
                 title: m.subject.clone(),
@@ -268,10 +276,9 @@ fn pull_transcripts(
             continue;
         }
         let date = ev.start.with_timezone(&Local).format("%Y-%m-%d").to_string();
-        if st.transcript_done(&id) {
-            if let Some(p) = st.transcript_path(&id) {
-                out.items.push(Item { kind: "transcript".into(), title: ev.subject.clone(), date, path: p.to_string(), already_had: true });
-            }
+        if st.transcript_done(&id) && still_there(vault, st.transcript_path(&id)) {
+            let p = st.transcript_path(&id).unwrap_or("");
+            out.items.push(Item { kind: "transcript".into(), title: ev.subject.clone(), date, path: p.to_string(), already_had: true });
             continue;
         }
         match fetch::transcript_capture(client, &ev) {
