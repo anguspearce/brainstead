@@ -136,7 +136,9 @@ fn captures(svc: &VaultService, root: &Path) -> Vec<InboxItem> {
         .zip(ingested)
         .filter(|(_, ing)| !ing)
         .map(|((path, c), _)| {
-            let stamp = chrono::DateTime::parse_from_rfc3339(&c.at)
+            // Date a synced item by when it happened (its message/meeting time), else by capture time.
+            let when = c.item_date.as_deref().unwrap_or(&c.at);
+            let stamp = chrono::DateTime::parse_from_rfc3339(when)
                 .ok()
                 .map(|t| t.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M").to_string());
             InboxItem { kind: "capture", text: stem(&path), path, line: 0, line_text: c.what, stamp, block: None }

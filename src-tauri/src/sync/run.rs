@@ -109,9 +109,17 @@ fn cutoff_day(initial_days: u32) -> Option<String> {
     (initial_days > 0).then(|| (Local::now().date_naive() - Duration::days(i64::from(initial_days) - 1)).format("%Y-%m-%d").to_string())
 }
 
-/// Writes a capture and returns its vault path, or None (recording the problem) on refusal.
-fn deliver(data: &Path, vault: &Path, c: &brainstead_core::webcapture::Capture, ext: &str, r: &mut Report) -> Option<String> {
-    match nativehost::deliver(data, Some(vault), false, ext, c, true) {
+/// Writes a capture and returns its vault path, or None (recording the problem) on refusal. `when` is
+/// the item's own time, so the Inbox dates it by when it happened rather than when it was captured.
+fn deliver(
+    data: &Path,
+    vault: &Path,
+    c: &brainstead_core::webcapture::Capture,
+    ext: &str,
+    when: Option<chrono::DateTime<Utc>>,
+    r: &mut Report,
+) -> Option<String> {
+    match nativehost::deliver(data, Some(vault), false, ext, c, true, when.map(|t| t.to_rfc3339())) {
         Ok(path) => Some(path),
         Err(e) => {
             r.problems.push(e);
@@ -181,7 +189,8 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
                 continue;
             }
             if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &p.sign_in.origin, &day, &partner) {
-                if let Some(path) = deliver(p.data, p.vault, &cap, "teams", r) {
+                let when = day_msgs.last().map(|m| m.time);
+                if let Some(path) = deliver(p.data, p.vault, &cap, "teams", when, r) {
                     st.mark_chat_day(&conv.id, &day, Some(&path));
                     r.chats += 1;
                 }
@@ -219,7 +228,7 @@ fn sync_mail(p: &Pass, st: &mut state::State, r: &mut Report) {
             continue;
         }
         let cap = fetch::mail_capture(&m);
-        if let Some(path) = deliver(p.data, p.vault, &cap, "outlook", r) {
+        if let Some(path) = deliver(p.data, p.vault, &cap, "outlook", Some(m.received), r) {
             st.mark_mail(&m.id, Some(&path));
             r.mail += 1;
         }
@@ -242,7 +251,7 @@ fn sync_transcripts(p: &Pass, st: &mut state::State, r: &mut Report) {
         }
         match fetch::transcript_capture(&p.client, &ev) {
             Ok(Some(cap)) => {
-                if let Some(path) = deliver(p.data, p.vault, &cap, "teams", r) {
+                if let Some(path) = deliver(p.data, p.vault, &cap, "teams", Some(ev.start), r) {
                     st.mark_transcript(&id, Some(&path));
                     r.transcripts += 1;
                 }

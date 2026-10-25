@@ -121,9 +121,10 @@ fn deliver(
     vault: &std::path::Path,
     c: &brainstead_core::webcapture::Capture,
     ext: &str,
+    when: Option<chrono::DateTime<Utc>>,
     out: &mut Outcome,
 ) -> Option<String> {
-    match nativehost::deliver(data, Some(vault), false, ext, c, true) {
+    match nativehost::deliver(data, Some(vault), false, ext, c, true, when.map(|t| t.to_rfc3339())) {
         Ok(path) => Some(path),
         Err(e) => {
             out.problems.push(e);
@@ -197,7 +198,8 @@ fn pull_chats(
                 continue;
             }
             if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &sign_in.origin, &day, &partner) {
-                if let Some(path) = deliver(data, vault, &cap, "teams", out) {
+                let when = day_msgs.last().map(|m| m.time);
+                if let Some(path) = deliver(data, vault, &cap, "teams", when, out) {
                     st.mark_chat_day(&conv.id, &day, Some(&path));
                     out.items.push(Item { kind: "chat".into(), title: label.clone(), date: day, path, already_had: false });
                 }
@@ -246,7 +248,7 @@ fn pull_mail(
             continue;
         }
         let cap = fetch::mail_capture(&m);
-        if let Some(path) = deliver(data, vault, &cap, "outlook", out) {
+        if let Some(path) = deliver(data, vault, &cap, "outlook", Some(m.received), out) {
             st.mark_mail(&m.id, Some(&path));
             out.items.push(Item { kind: "email".into(), title: m.subject, date, path, already_had: false });
         }
@@ -285,7 +287,7 @@ fn pull_transcripts(
         }
         match fetch::transcript_capture(client, &ev) {
             Ok(Some(cap)) => {
-                if let Some(path) = deliver(data, vault, &cap, "teams", out) {
+                if let Some(path) = deliver(data, vault, &cap, "teams", Some(ev.start), out) {
                     st.mark_transcript(&id, Some(&path));
                     out.items.push(Item { kind: "transcript".into(), title: ev.subject, date, path, already_had: false });
                 }

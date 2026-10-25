@@ -81,6 +81,10 @@ pub struct Captured {
     /// unattended. Absent on older captures (reads as false).
     #[serde(default)]
     pub sync: bool,
+    /// The item's own date/time (RFC 3339): a chat's last message, a mail's received time, a meeting's
+    /// start — so the Inbox shows when it happened, not when it was captured. None for a button capture.
+    #[serde(default, rename = "itemDate")]
+    pub item_date: Option<String>,
 }
 
 fn extension_of(origin: &str) -> &'static str {
@@ -119,7 +123,7 @@ fn handle(data: &Path, origin: &str, v: Value) -> Value {
         Ok(c) => c,
         Err(e) => return json!({"ok": false, "message": format!("Brainstead doesn't know this capture: {e}")}),
     };
-    let result = deliver(data, vault.as_deref(), s.read_only, &ext, &c, false);
+    let result = deliver(data, vault.as_deref(), s.read_only, &ext, &c, false, None);
     match result {
         Ok(path) => {
             let filename = path.trim_start_matches("sources/").to_string();
@@ -134,7 +138,15 @@ fn handle(data: &Path, origin: &str, v: Value) -> Value {
 /// button press (so the app can ingest it unattended). The vault path, or why it was refused; a
 /// refusal is recorded too, so it shows in the Inbox strip and Settings. Shared by the native host
 /// and the in-app sync (`sync::run`).
-pub fn deliver(data: &Path, vault: Option<&Path>, read_only: bool, ext: &str, c: &Capture, sync: bool) -> Result<String, String> {
+pub fn deliver(
+    data: &Path,
+    vault: Option<&Path>,
+    read_only: bool,
+    ext: &str,
+    c: &Capture,
+    sync: bool,
+    item_date: Option<String>,
+) -> Result<String, String> {
     let what = c.what().to_string();
     let result = match vault {
         None => Err("Brainstead has no vault chosen yet. Open Brainstead and choose one.".to_string()),
@@ -150,6 +162,7 @@ pub fn deliver(data: &Path, vault: Option<&Path>, read_only: bool, ext: &str, c:
             error: result.as_ref().err().cloned(),
             at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             sync,
+            item_date,
         },
     );
     result
@@ -462,6 +475,7 @@ mod tests {
             error: None,
             at: format!("2026-10-03T10:{:02}:{:02}.000Z", i / 60, i % 60),
             sync: false,
+            item_date: None,
         };
         // An older install: captures.json only. Its captures seed the Inbox list.
         write_list(&data.path().join("captures.json"), &[cap(0)]);

@@ -355,6 +355,8 @@ export interface Captured {
   at: string;
   /** Made by the Teams and Outlook sync rather than an extension button (ingested unattended). */
   sync?: boolean;
+  /** The item's own date/time (RFC 3339): a chat's last message, a mail's received time, a meeting's start. */
+  itemDate?: string | null;
 }
 
 /** The Teams and Outlook sign-in state (Settings › Teams and Outlook sync). */
