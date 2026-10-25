@@ -336,14 +336,23 @@ function SideCard({ title, right, children }: { title: string; right?: React.Rea
  *  Nothing shows when there are none, so a quiet day adds no clutter. */
 function MeetingsCard() {
   const [meetings, setMeetings] = useState<import("./api").SyncMeeting[] | null>(null);
+  // Refresh on mount, when the window regains focus, and every five minutes while Today is open, so
+  // meetings that have ended drop off and new ones appear without reopening the screen.
   useEffect(() => {
     let live = true;
-    api
-      .syncTodayMeetings()
-      .then((m) => live && setMeetings(m))
-      .catch(() => live && setMeetings([]));
+    const load = () =>
+      api
+        .syncTodayMeetings()
+        .then((m) => live && setMeetings(m))
+        .catch(() => live && setMeetings((prev) => prev ?? []));
+    load();
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
+    const timer = window.setInterval(load, 5 * 60 * 1000);
     return () => {
       live = false;
+      window.removeEventListener("focus", onFocus);
+      window.clearInterval(timer);
     };
   }, []);
   if (!meetings || meetings.length === 0) return null;
