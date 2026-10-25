@@ -339,13 +339,22 @@ fn meeting_thread_id(e: &Value) -> Option<String> {
 /// The messages people typed in a meeting's chat, as webcapture messages, with a divider ahead of
 /// them — for folding into the meeting's transcript source (D-20261025-02). Empty on any failure or
 /// when the meeting had no chat, so it never blocks the transcript.
-fn meeting_chat(client: &Client, s: &SignIn, thread_id: &str) -> Vec<Message> {
+fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
+    let Some(thread_id) = &ev.thread_id else { return Vec::new() };
     let url = format!(
         "{}/v1/users/ME/conversations/{}/messages?view=msnp24Equivalent|supportsMessageProperties&pageSize=200",
         s.chat_service.trim_end_matches('/'),
         urlencode(thread_id)
     );
-    let msgs = api::get_chatsvc(client, &url).map(|b| parse_messages(&b)).unwrap_or_default();
+    // A recurring meeting's chat thread carries every session's messages, so keep only this meeting's
+    // day (local) — the chat that belongs with this transcript.
+    let day = ev.start.with_timezone(&Local).date_naive();
+    let msgs: Vec<ChatMessage> = api::get_chatsvc(client, &url)
+        .map(|b| parse_messages(&b))
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|m| m.time.with_timezone(&Local).date_naive() == day)
+        .collect();
     if msgs.is_empty() {
         return Vec::new();
     }
@@ -399,7 +408,7 @@ pub fn transcript_capture(client: &Client, s: &SignIn, ev: &Event) -> Result<Opt
     let Some(cap) = parse_transcript(&body, ev) else { return Ok(None) };
     // Fold the meeting chat in after the transcript, when there is one.
     let Capture::Teams(mut thread) = cap else { return Ok(Some(cap)) };
-    thread.messages.extend(meeting_chat(client, s, thread_id));
+    thread.messages.extend(meeting_chat(client, s, ev));
     Ok(Some(Capture::Teams(thread)))
 }
 
