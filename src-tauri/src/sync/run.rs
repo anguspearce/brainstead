@@ -181,13 +181,17 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
                 if !st.chat_day_counted(&conv.id, &day) {
                     st.set_chat_day_count(&conv.id, &day, count);
                 } else if count > st.chat_day_count(&conv.id, &day) {
-                    if let (Some(path), Some(cap)) = (
-                        st.chat_day_path(&conv.id, &day).map(str::to_string),
-                        fetch::chat_capture(&conv, &day_msgs, &me, &p.sign_in.origin, &day, &partner),
-                    ) {
-                        if rewrite(p.vault, &path, &cap, r) {
-                            st.set_chat_day_count(&conv.id, &day, count);
-                            r.chats += 1;
+                    // Top up the day's source in place. A source the user has trashed is skipped
+                    // (not resurrected), and its stored count left alone, so that if it's restored
+                    // later the "grew" check fires again and brings it back up to date.
+                    if let Some(path) = st.chat_day_path(&conv.id, &day).map(str::to_string) {
+                        if p.vault.join(&path).is_file() {
+                            if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &p.sign_in.origin, &day, &partner) {
+                                if rewrite(p.vault, &path, &cap, r) {
+                                    st.set_chat_day_count(&conv.id, &day, count);
+                                    r.chats += 1;
+                                }
+                            }
                         }
                     }
                 }
@@ -266,8 +270,10 @@ fn sync_thread(p: &Pass, conversation_id: &str, st: &mut state::State, r: &mut R
                 r.mail += 1;
             }
         }
+        // Top up the thread in place. A trashed source is skipped (not resurrected) with its stored
+        // count kept, so a restore later trips the "grew" check and brings the thread up to date.
         Some(path) if count > st.thread_count(conversation_id) => {
-            if rewrite(p.vault, &path, &cap, r) {
+            if p.vault.join(&path).is_file() && rewrite(p.vault, &path, &cap, r) {
                 st.mark_thread(conversation_id, &path, count);
                 r.mail += 1;
             }
