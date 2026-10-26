@@ -260,30 +260,38 @@ fn sync_thread(p: &Pass, conversation_id: &str, st: &mut state::State, r: &mut R
             return;
         }
     };
-    let attachments = if p.s.sync_mail_attachments {
-        super::attachments::for_thread(&super::attachments::Target { data: p.data, vault: p.vault }, &msgs, st, &mut r.problems)
-    } else {
-        Vec::new()
-    };
-    let Some(cap) = fetch::thread_capture(&msgs, &attachments) else { return };
     let count = msgs.len();
     let when = msgs.last().map(|m| m.received);
+    // The thread's attachments are gathered only when its source is about to be written, so an
+    // unchanged or trashed thread costs no attachment calls and brings nothing in.
+    let capture = |st: &mut state::State, r: &mut Report| {
+        let attachments = if p.s.sync_mail_attachments {
+            super::attachments::for_thread(&super::attachments::Target { data: p.data, vault: p.vault }, &msgs, st, &mut r.problems)
+        } else {
+            Vec::new()
+        };
+        fetch::thread_capture(&msgs, &attachments)
+    };
     match st.thread_path(conversation_id).map(str::to_string) {
         None => {
-            if let Some(path) = deliver(p.data, p.vault, &cap, "outlook", when, r) {
-                st.mark_thread(conversation_id, &path, count);
-                r.mail += 1;
+            if let Some(cap) = capture(st, r) {
+                if let Some(path) = deliver(p.data, p.vault, &cap, "outlook", when, r) {
+                    st.mark_thread(conversation_id, &path, count);
+                    r.mail += 1;
+                }
             }
         }
         // Top up the thread in place. A trashed source is skipped (not resurrected) with its stored
         // count kept, so a restore later trips the "grew" check and brings the thread up to date.
-        Some(path) if count > st.thread_count(conversation_id) => {
-            if p.vault.join(&path).is_file() && rewrite(p.vault, &path, &cap, r) {
-                st.mark_thread(conversation_id, &path, count);
-                r.mail += 1;
+        Some(path) if count > st.thread_count(conversation_id) && p.vault.join(&path).is_file() => {
+            if let Some(cap) = capture(st, r) {
+                if rewrite(p.vault, &path, &cap, r) {
+                    st.mark_thread(conversation_id, &path, count);
+                    r.mail += 1;
+                }
             }
         }
-        Some(_) => {}
+        _ => {}
     }
 }
 
