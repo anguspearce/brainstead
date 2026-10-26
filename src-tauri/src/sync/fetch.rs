@@ -456,12 +456,12 @@ pub fn transcript_capture(client: &Client, s: &SignIn, ev: &Event) -> Result<Opt
         .header("Accept", "application/json")
         .header("Prefer", r#"substrate.flexibleschema,outlook.data-source="Substrate",exchange.behavior="SubstrateFiles""#)
         .send()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Couldn't reach Substrate for a transcript: {e}"))?;
     if !resp.status().is_success() {
         return Err(format!("substrate.office.com answered {}", resp.status().as_u16()));
     }
-    let body: Value = resp.json().map_err(|e| e.to_string())?;
-    let Some(cap) = parse_transcript(&body, ev) else { return Ok(None) };
+    let body: Value = resp.json().map_err(|e| format!("Substrate gave an unreadable answer: {e}"))?;
+    let Some(cap) = parse_transcript(&body, ev)? else { return Ok(None) };
     let Capture::Teams(mut thread) = cap else { return Ok(Some(cap)) };
     // Fold the meeting chat in after the transcript, when there is one. Both parts are then labelled
     // with a divider so a reader (or the meeting-note model) can tell the spoken transcript from the
@@ -479,7 +479,18 @@ fn divider(heading: &str, note: &str) -> Message {
     Message { sender: heading.to_string(), from_address: None, to: None, cc: None, recipients: None, date: None, body: note.to_string() }
 }
 
-pub fn parse_transcript(body: &Value, ev: &Event) -> Option<Capture> {
+/// A transcript item's own recording start, as a UTC time, when it has a readable one.
+fn recording_time(item: &Value) -> Option<DateTime<Utc>> {
+    item["ItemProperties"]["Default"]["RecordingStartDateTime"]
+        .as_str()
+        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+        .map(|t| t.with_timezone(&Utc))
+}
+
+/// The transcript for this meeting occurrence, or Ok(None) when none matches (so the sitting waits for
+/// its own). Err carries a flag when a transcript is picked whose own recording day disagrees with the
+/// day we'd file it under — a cross-check so a mis-dated transcript is surfaced, not silently written.
+pub fn parse_transcript(body: &Value, ev: &Event) -> Result<Option<Capture>, String> {
     // A recurring meeting's whole series shares one MeetingThreadId, so Substrate returns a transcript
     // for every occurrence. Pick the one recorded during *this* occurrence — matched by its recording
     // start falling in the meeting's window — not just the newest on the series. Otherwise an earlier
@@ -487,23 +498,29 @@ pub fn parse_transcript(body: &Value, ev: &Event) -> Option<Capture> {
     // with this occurrence's date (the Oct bi-weekly landing an earlier sitting under today's date).
     let lo = ev.start - chrono::Duration::hours(1);
     let hi = ev.end + chrono::Duration::hours(6);
-    let item = body["value"].as_array()?.iter().find(|i| {
-        let d = &i["ItemProperties"]["Default"];
-        d["TranscriptJson"].is_string()
-            && d["RecordingStartDateTime"]
-                .as_str()
-                .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-                .is_some_and(|t| {
-                    let t = t.with_timezone(&Utc);
-                    t >= lo && t <= hi
-                })
-    })?;
-    let raw = item["ItemProperties"]["Default"]["TranscriptJson"].as_str()?;
-    let data: Value = serde_json::from_str(raw).ok()?;
-    let entries = data["entries"].as_array()?;
-    if entries.is_empty() {
-        return None;
+    let Some(item) = body["value"].as_array().into_iter().flatten().find(|i| {
+        i["ItemProperties"]["Default"]["TranscriptJson"].is_string()
+            && recording_time(i).is_some_and(|t| t >= lo && t <= hi)
+    }) else {
+        return Ok(None);
+    };
+    // Cross-check: the chosen transcript's own recording day must agree with the occurrence we file it
+    // under. It does by construction of the window above; this guards a future change to the matching,
+    // or a transcript that isn't this sitting's, from mis-dating a note silently.
+    let want = ev.start.with_timezone(&Local).date_naive();
+    if let Some(got) = recording_time(item).map(|t| t.with_timezone(&Local).date_naive()) {
+        if got != want {
+            return Err(format!(
+                "A transcript for “{}” was recorded {got} but the meeting is {want}; skipped so it isn't filed under the wrong date.",
+                ev.subject
+            ));
+        }
     }
+    let raw = item["ItemProperties"]["Default"]["TranscriptJson"].as_str().ok_or("A transcript had no text.")?;
+    let data: Value = serde_json::from_str(raw).map_err(|e| format!("A transcript was unreadable: {e}"))?;
+    let Some(entries) = data["entries"].as_array().filter(|e| !e.is_empty()) else {
+        return Ok(None);
+    };
     let messages = entries
         .iter()
         .filter_map(|e| {
@@ -523,20 +540,17 @@ pub fn parse_transcript(body: &Value, ev: &Event) -> Option<Capture> {
         })
         .collect::<Vec<_>>();
     if messages.is_empty() {
-        return None;
+        return Ok(None);
     }
     let start_local = ev.start.with_timezone(&Local);
-    Some(Capture::Teams(Thread {
-        url: item["ItemProperties"]["Default"]["RecordingStartDateTime"]
-            .as_str()
-            .map(|_| "https://teams.microsoft.com/".to_string())
-            .unwrap_or_else(|| "https://teams.microsoft.com/".to_string()),
+    Ok(Some(Capture::Teams(Thread {
+        url: "https://teams.microsoft.com/".to_string(),
         title: ev.subject.clone(),
         kind: Some("transcript".into()),
         messages,
         meeting_date: Some(start_local.format("%Y-%m-%d").to_string()),
         meeting_start: Some(start_local.format("%H:%M").to_string()),
-    }))
+    })))
 }
 
 /// Percent-encodes a path/query segment (conversation ids and OData filters carry `:`, `@`, spaces).
@@ -706,7 +720,7 @@ mod tests {
         // Newest first, as Substrate returns them: an earlier sitting of the same recurring series, then
         // this occurrence's. The earlier one must not be taken for this meeting.
         let body = json!({"value": [item("2026-11-07T13:01:00Z"), item("2026-10-24T13:02:00Z")]});
-        match parse_transcript(&body, &ev).unwrap() {
+        match parse_transcript(&body, &ev).unwrap().unwrap() {
             Capture::Teams(th) => {
                 assert_eq!(th.kind.as_deref(), Some("transcript"));
                 assert_eq!(th.title, "Steerco");
@@ -717,8 +731,13 @@ mod tests {
             _ => panic!("expected a Teams transcript capture"),
         }
         // No transcript present → None.
-        assert!(parse_transcript(&json!({"value": []}), &ev).is_none());
+        assert!(parse_transcript(&json!({"value": []}), &ev).unwrap().is_none());
         // Only an off-occurrence transcript (this sitting's isn't ready yet) → None, not the wrong one.
-        assert!(parse_transcript(&json!({"value": [item("2026-10-10T13:00:00Z")]}), &ev).is_none());
+        assert!(parse_transcript(&json!({"value": [item("2026-10-10T13:00:00Z")]}), &ev).unwrap().is_none());
+        // Cross-check: a transcript that is in the window but recorded on a different day (here a
+        // multi-day event) is flagged, not filed under the wrong date.
+        let multiday = Event { end: "2026-10-27T12:00:00Z".parse().unwrap(), ..ev.clone() };
+        let err = parse_transcript(&json!({"value": [item("2026-10-26T12:00:00Z")]}), &multiday).unwrap_err();
+        assert!(err.contains("2026-10-26") && err.contains("2026-10-24"), "{err}");
     }
 }

@@ -313,7 +313,7 @@ fn sync_transcripts(p: &Pass, st: &mut state::State, r: &mut Report) {
                     st.mark_transcript(&id, None);
                 }
             }
-            Err(e) => r.problems.push(format!("Couldn't fetch a transcript: {e}")),
+            Err(e) => r.problems.push(e),
         }
     }
 }
