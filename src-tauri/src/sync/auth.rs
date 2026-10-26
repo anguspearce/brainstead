@@ -2,12 +2,14 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! The sign-in the sync reads the user's own Teams and Outlook with (D-20261025-01). While a Teams
-//! tab is open in the user's browser, the Teams extension hands the page's sign-in to the app
-//! through the native host; the app keeps it in the login Keychain (`platform::secret_*`), never in
-//! a file, and uses it to read the user's chats, mail and calendar. A service token is obtained from
-//! the refresh token the standard way (an OAuth refresh_token grant against the user's own Microsoft
-//! tenant), exactly as the Teams web app itself does; the sync only ever reads.
+//! The sign-in the sync reads the user's own Teams and Outlook with (D-20261025-01, D-20261026-01).
+//! While a Teams tab is open in the user's browser, the Teams extension hands the page's live access
+//! tokens to the app through the native host every few minutes; the app keeps the latest set in the
+//! login Keychain (`platform::secret_*`), never in a file, and uses only those to read the user's
+//! chats, mail and calendar. It never mints its own tokens (no refresh-token grant): some tenants
+//! reject app-refreshed tokens, and using only the browser's own tokens keeps the sync's access to
+//! exactly what the browser already has. When the handed-over tokens expire (Teams closed for a
+//! while), a read just reports that the user should reopen Teams. The sync only ever reads.
 
 use std::collections::BTreeMap;
 
@@ -35,15 +37,6 @@ pub enum Service {
 }
 
 impl Service {
-    pub fn scope(self) -> &'static str {
-        match self {
-            Service::Spaces => "https://api.spaces.skype.com/.default offline_access",
-            Service::Outlook => "https://outlook.office.com/.default offline_access",
-            Service::Substrate => "https://substrate.office.com/.default offline_access",
-            Service::Csa => "https://chatsvcagg.teams.microsoft.com/.default offline_access",
-        }
-    }
-
     pub fn key(self) -> &'static str {
         match self {
             Service::Spaces => "spaces",
@@ -65,11 +58,12 @@ pub struct Token {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct SignIn {
-    /// The Teams page the sign-in came from; sent as the Origin when refreshing, which the Teams
-    /// web-app client requires.
+    /// The Teams page the sign-in came from (kept for reference; the sync no longer refreshes tokens).
     pub origin: String,
     pub client_id: String,
     pub tenant: String,
+    /// The MSAL refresh token from the handover. Kept as a marker that a real session was handed over;
+    /// the sync does not use it to mint tokens (D-20261026-01).
     pub refresh_token: String,
     /// Cached service tokens, by [`Service::key`].
     pub tokens: BTreeMap<String, Token>,
@@ -126,17 +120,18 @@ pub fn forget() -> Result<(), String> {
     platform::secret_delete(ACCOUNT)
 }
 
-/// What Settings shows.
+/// What Settings shows. Signed in means we currently hold at least one unexpired token from a
+/// handover — once they all expire (Teams closed in the browser for a while), it reads as not
+/// signed in, prompting the user to reopen Teams.
 pub fn state() -> SignInState {
     match load() {
-        Some(s) => SignInState { signed_in: !s.refresh_token.is_empty(), handed_over: Some(s.handed_over) },
+        Some(s) => {
+            let now = now_secs();
+            let signed_in = s.tokens.values().any(|t| t.expires > now + MARGIN_SECS);
+            SignInState { signed_in, handed_over: Some(s.handed_over) }
+        }
         None => SignInState { signed_in: false, handed_over: None },
     }
-}
-
-/// Microsoft's token endpoint for the user's tenant.
-fn token_endpoint(tenant: &str) -> String {
-    format!("https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token")
 }
 
 /// Builds a sign-in from a handover message from the Teams extension. The message carries the Teams
@@ -157,7 +152,7 @@ pub fn from_handover(v: &Value) -> Option<SignIn> {
     let middle_tier = gtm["item"]["middleTier"].as_str().unwrap_or("").to_string();
     let csa_service = gtm["item"]["chatSvcAggAfd"].as_str().unwrap_or("").to_string();
 
-    // Carry over any still-valid service tokens from the page, so the first sync needn't refresh.
+    // The page's own live access tokens, as handed over — the only tokens the sync uses.
     let now = now_secs();
     let mut tokens = BTreeMap::new();
     for svc in [Service::Spaces, Service::Outlook, Service::Substrate, Service::Csa] {
@@ -199,64 +194,20 @@ fn best_page_token(ats: &[Value], svc: Service, now: i64) -> Option<Token> {
         .max_by_key(|t| t.expires)
 }
 
-/// The response from Microsoft's token endpoint.
-#[derive(Deserialize)]
-struct GrantResponse {
-    access_token: Option<String>,
-    refresh_token: Option<String>,
-    error: Option<String>,
-    error_description: Option<String>,
-}
-
-/// A valid access token for `svc`, from the cache when it still has time left, otherwise obtained
-/// afresh from the refresh token and cached. A refreshed sign-in (the new refresh token Microsoft
-/// returns, and the new token) is written back to the Keychain.
-pub fn token(client: &reqwest::blocking::Client, svc: Service) -> Result<String, String> {
-    let mut s = load().ok_or("Not signed in to Teams. Open Teams in your browser so the extension can hand the sign-in over.")?;
-    let now = now_secs();
-    if let Some(t) = s.tokens.get(svc.key()) {
-        if t.expires > now + MARGIN_SECS {
-            return Ok(t.token.clone());
+/// A valid access token for `svc` from the latest handover. The sync only ever uses the tokens the
+/// browser itself holds (handed over by the Teams extension while a Teams tab is open) — it never
+/// mints its own, because some tenants reject app-refreshed tokens and because it keeps the sync's
+/// access strictly to what the browser already has (D-20261026-01). A token not present or expired is
+/// an error asking the user to keep Teams open so the extension hands a fresh one over.
+pub fn token(svc: Service) -> Result<String, String> {
+    let s = load().ok_or("Not signed in to Teams. Open Teams in your browser so the extension hands the sign-in over.")?;
+    match s.tokens.get(svc.key()) {
+        Some(t) if t.expires > now_secs() + MARGIN_SECS => Ok(t.token.clone()),
+        _ => {
+            Err("The Teams sign-in has gone stale. Keep Teams open in your browser (Chrome) so the extension hands a fresh one over."
+                .into())
         }
     }
-    let (access, new_refresh) = refresh(client, &s, svc.scope())?;
-    let expires = jwt_expiry(&access);
-    s.tokens.insert(svc.key().to_string(), Token { token: access.clone(), expires });
-    if let Some(rt) = new_refresh {
-        s.refresh_token = rt;
-    }
-    store(&s)?;
-    Ok(access)
-}
-
-/// Exchanges the refresh token for an access token for `scope` (OAuth refresh_token grant against the
-/// user's own tenant). Returns the access token and, when the endpoint rotated it, a new refresh
-/// token. An invalid-grant error means the sign-in has lapsed and the user must reopen Teams.
-fn refresh(client: &reqwest::blocking::Client, s: &SignIn, scope: &str) -> Result<(String, Option<String>), String> {
-    let origin = if s.origin.is_empty() { "https://teams.microsoft.com" } else { &s.origin };
-    let resp = client
-        .post(token_endpoint(&s.tenant))
-        .header("Origin", origin)
-        .form(&[
-            ("grant_type", "refresh_token"),
-            ("client_id", s.client_id.as_str()),
-            ("refresh_token", s.refresh_token.as_str()),
-            ("scope", scope),
-        ])
-        .send()
-        .map_err(|e| format!("Couldn't reach Microsoft sign-in: {e}"))?;
-    let status = resp.status();
-    let body: GrantResponse = resp.json().map_err(|e| format!("Microsoft sign-in gave an unreadable answer: {e}"))?;
-    if !status.is_success() {
-        if body.error.as_deref() == Some("invalid_grant") {
-            let _ = forget();
-            return Err("Your Teams sign-in has lapsed. Open Teams in your browser to sign in again.".into());
-        }
-        let msg = body.error_description.or(body.error).unwrap_or_else(|| status.to_string());
-        return Err(format!("Microsoft sign-in refused: {}", msg.lines().next().unwrap_or("").trim()));
-    }
-    let access = body.access_token.ok_or("Microsoft sign-in returned no token.")?;
-    Ok((access, body.refresh_token))
 }
 
 #[cfg(test)]

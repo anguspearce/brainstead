@@ -21,14 +21,14 @@ fn web_headers(req: reqwest::blocking::RequestBuilder) -> reqwest::blocking::Req
 
 /// A GET returning JSON, with the bearer token for `svc`. A non-2xx is an error carrying the status.
 pub fn get_json(client: &Client, svc: Service, url: &str) -> Result<Value, String> {
-    let token = auth::token(client, svc)?;
+    let token = auth::token(svc)?;
     let resp = web_headers(client.get(url).bearer_auth(token)).send().map_err(|e| e.to_string())?;
     read(resp, url)
 }
 
 /// A GET on chatsvc / the middle tier, which need the Skype token alongside the Spaces bearer.
 pub fn get_chatsvc(client: &Client, url: &str) -> Result<Value, String> {
-    let spaces = auth::token(client, Service::Spaces)?;
+    let spaces = auth::token(Service::Spaces)?;
     let skype = skype_token(client, &spaces)?;
     let resp = web_headers(client.get(url).bearer_auth(&spaces).header("Authentication", format!("skypetoken={skype}")))
         .send()
@@ -39,9 +39,9 @@ pub fn get_chatsvc(client: &Client, url: &str) -> Result<Value, String> {
 /// A GET on the chat-service aggregator (teams and channels), which needs the Skype token alongside
 /// the CSA bearer.
 pub fn get_csa(client: &Client, url: &str) -> Result<Value, String> {
-    let spaces = auth::token(client, Service::Spaces)?;
+    let spaces = auth::token(Service::Spaces)?;
     let skype = skype_token(client, &spaces)?;
-    let csa = auth::token(client, Service::Csa)?;
+    let csa = auth::token(Service::Csa)?;
     let resp = web_headers(client.get(url).bearer_auth(&csa).header("Authentication", format!("skypetoken={skype}")))
         .send()
         .map_err(|e| e.to_string())?;

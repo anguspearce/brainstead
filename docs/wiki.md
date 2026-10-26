@@ -31,7 +31,7 @@ Beside a source, its provenance says when it was ingested, by which model, and w
 
 On macOS and Windows, turn on **Teams and Outlook sync** (Settings › Teams and Outlook sync) to let Brainstead read your own Teams chats, meeting transcripts, Inbox mail and calendar and write what's new into `sources/` on its own, without the extension button. Each item lands in the Inbox and is ingested like any capture; the sync reads only and never sends or changes anything in Teams or Outlook.
 
-It uses the sign-in your open Teams tab already has. While Teams is open in your browser, the **Teams capture** extension hands that sign-in to Brainstead, which keeps it in the Mac's Keychain and refreshes it itself — so keep Teams open in the browser at least once a day. It uses Teams' and Outlook's own web services, not Microsoft Graph.
+It uses the tokens your open Teams tab already has. While Teams is open in your browser, the **Teams capture** extension hands those tokens to Brainstead every few minutes; Brainstead keeps the latest set (in the Keychain on macOS, Credential Manager on Windows) and uses only those, never minting its own — so keep Teams open in your browser. It uses Teams' and Outlook's own web services, not Microsoft Graph.
 
 - **First sync**: the first run (and the first time each new chat is seen) loads only the last few days of history, so a big mailbox or long chat history can't flood the Inbox; set how many with **On first sync, load the last N days** (0 for everything). After that only new messages and mail come in.
 - **Chats**: every 1:1 and group chat, one source per day for each, topped up in place as that day gains messages. Channels are off until you choose them in Settings.

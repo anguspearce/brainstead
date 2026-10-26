@@ -354,7 +354,7 @@ async function sendToBrainstead(message) {
 // it goes to the local app only. Capturing by button is unchanged; this is separate and silent.
 
 const HANDOVER_ALARM = "brainstead-signin-handover";
-const HANDOVER_PERIOD_MIN = 30;
+const HANDOVER_PERIOD_MIN = 15;
 
 /** Read the Teams page's sign-in from localStorage. Runs in the page (localStorage is the page's
  *  origin). Returns the refresh/access-token entries and Teams' region settings — no decoding. */

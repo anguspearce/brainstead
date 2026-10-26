@@ -8,10 +8,10 @@ summary: Read your own Teams chats, meeting transcripts, Inbox mail and calendar
 With **Teams and Outlook sync** on, Brainstead reads your own Teams chats, meeting transcripts, Inbox mail and calendar and writes what's new into the vault's `sources/` folder — the same files the [capture extensions](app:settings/capture) make, listed in the [Inbox](app:inbox) and ingested like any capture, but without a button press. It reads only; it never sends, replies or changes anything in Teams or Outlook. macOS and Windows.
 
 ## How it signs in
-It uses the sign-in your open Teams tab already has. While Teams is open in your browser, the Teams extension hands that sign-in to Brainstead; Brainstead keeps it in your computer's secure store (the Keychain on macOS, Credential Manager on Windows) and refreshes it itself. So:
+It uses the tokens your open Teams tab already has. While Teams is open in your browser, the Teams extension hands those tokens to Brainstead every few minutes; Brainstead keeps the latest set in your computer's secure store (the Keychain on macOS, Credential Manager on Windows) and uses only those — it never mints its own, so its access never exceeds what your browser already has. So:
 
-- Keep the **Teams capture** extension loaded, and open Teams in your browser at least once a day.
-- If the sign-in lapses, the pane says **Not signed in** — open Teams in the browser and it comes back within a few minutes.
+- **Keep Teams open in your browser** (Chrome) and the **Teams capture** extension loaded. That's what keeps the tokens fresh.
+- If you close Teams for a while the tokens go stale and the pane shows **Not signed in** — reopen Teams and it comes back within a few minutes.
 - It is your own access, used only on this computer. The calls go to Microsoft and nowhere else.
 
 ## First sync

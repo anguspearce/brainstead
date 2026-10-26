@@ -449,7 +449,7 @@ pub fn transcript_capture(client: &Client, s: &SignIn, ev: &Event) -> Result<Opt
         urlencode(select),
     );
     // WorkingSetFiles needs the Substrate token and this Prefer header.
-    let token = auth::token(client, Service::Substrate)?;
+    let token = auth::token(Service::Substrate)?;
     let resp = client
         .get(&url)
         .bearer_auth(token)
