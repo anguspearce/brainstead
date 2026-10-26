@@ -25,7 +25,8 @@ pub struct State {
     pub chats: BTreeMap<String, Vec<String>>,
     /// Ids of mail messages already captured, newest last.
     pub mail: Vec<String>,
-    /// Meeting thread ids whose transcript was already captured.
+    /// Per-occurrence keys (thread id + the occurrence's local day) whose transcript was already
+    /// captured; a recurring meeting's series shares one thread id, so the day disambiguates sittings.
     pub transcripts: Vec<String>,
     /// Set once the first sync pass has finished, so the "load N days on first sync" limit is applied
     /// only that first time for mail (chats apply it per chat, the first time each is seen).
@@ -37,7 +38,7 @@ pub struct State {
     /// The vault path written for a mail message (id → `sources/…`).
     #[serde(default)]
     pub mail_paths: BTreeMap<String, String>,
-    /// The vault path written for a meeting's transcript (thread id → `sources/…`).
+    /// The vault path written for a meeting's transcript (per-occurrence key → `sources/…`).
     #[serde(default)]
     pub transcript_paths: BTreeMap<String, String>,
     /// How many messages a chat day's source held when last written (`"<conv>\n<day>"` → count), so a

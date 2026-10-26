@@ -292,7 +292,10 @@ fn sync_transcripts(p: &Pass, st: &mut state::State, r: &mut Report) {
         }
     };
     for ev in events {
-        let Some(id) = ev.thread_id.clone() else { continue };
+        let Some(thread) = ev.thread_id.clone() else { continue };
+        // A recurring meeting's whole series shares one thread id; key the state per occurrence (thread
+        // id + the occurrence's local day) so each sitting is captured once and none shadows another.
+        let id = format!("{thread}#{}", ev.start.with_timezone(&Local).date_naive());
         if ev.end > now || st.transcript_done(&id) {
             continue; // not finished yet, or already done
         }

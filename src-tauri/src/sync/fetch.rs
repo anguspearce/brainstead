@@ -480,7 +480,24 @@ fn divider(heading: &str, note: &str) -> Message {
 }
 
 pub fn parse_transcript(body: &Value, ev: &Event) -> Option<Capture> {
-    let item = body["value"].as_array()?.iter().find(|i| i["ItemProperties"]["Default"]["TranscriptJson"].is_string())?;
+    // A recurring meeting's whole series shares one MeetingThreadId, so Substrate returns a transcript
+    // for every occurrence. Pick the one recorded during *this* occurrence — matched by its recording
+    // start falling in the meeting's window — not just the newest on the series. Otherwise an earlier
+    // occurrence's transcript is taken for a meeting whose own transcript isn't ready yet and stamped
+    // with this occurrence's date (the Oct bi-weekly landing an earlier sitting under today's date).
+    let lo = ev.start - chrono::Duration::hours(1);
+    let hi = ev.end + chrono::Duration::hours(6);
+    let item = body["value"].as_array()?.iter().find(|i| {
+        let d = &i["ItemProperties"]["Default"];
+        d["TranscriptJson"].is_string()
+            && d["RecordingStartDateTime"]
+                .as_str()
+                .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+                .is_some_and(|t| {
+                    let t = t.with_timezone(&Utc);
+                    t >= lo && t <= hi
+                })
+    })?;
     let raw = item["ItemProperties"]["Default"]["TranscriptJson"].as_str()?;
     let data: Value = serde_json::from_str(raw).ok()?;
     let entries = data["entries"].as_array()?;
@@ -685,18 +702,23 @@ mod tests {
             {"speakerDisplayName": "", "text": "  ", "startOffset": "00:00:02.0000000"},
         ]})
         .to_string();
-        let body = json!({"value": [{"ItemProperties": {"Default": {"TranscriptJson": tj}}}]});
+        let item = |rec: &str| json!({"ItemProperties": {"Default": {"TranscriptJson": tj, "RecordingStartDateTime": rec}}});
+        // Newest first, as Substrate returns them: an earlier sitting of the same recurring series, then
+        // this occurrence's. The earlier one must not be taken for this meeting.
+        let body = json!({"value": [item("2026-11-07T13:01:00Z"), item("2026-10-24T13:02:00Z")]});
         match parse_transcript(&body, &ev).unwrap() {
             Capture::Teams(th) => {
                 assert_eq!(th.kind.as_deref(), Some("transcript"));
                 assert_eq!(th.title, "Steerco");
                 assert_eq!(th.messages.len(), 1, "empty line dropped");
                 assert_eq!(th.messages[0].sender, "Maya");
-                assert!(th.meeting_date.is_some());
+                assert_eq!(th.meeting_date.as_deref(), Some("2026-10-24"), "dated by this occurrence");
             }
             _ => panic!("expected a Teams transcript capture"),
         }
         // No transcript present → None.
         assert!(parse_transcript(&json!({"value": []}), &ev).is_none());
+        // Only an off-occurrence transcript (this sitting's isn't ready yet) → None, not the wrong one.
+        assert!(parse_transcript(&json!({"value": [item("2026-10-10T13:00:00Z")]}), &ev).is_none());
     }
 }
