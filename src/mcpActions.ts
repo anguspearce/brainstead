@@ -2234,7 +2234,7 @@ async function syncTool(a: Args): Promise<string> {
   if (action === "get") {
     const [state, meetings] = await Promise.all([
       api.syncSignInState(),
-      s.syncEnabled ? api.syncTodayMeetings().catch(() => []) : Promise.resolve([]),
+      s.syncEnabled ? api.syncTodayMeetings().catch(() => api.syncCachedMeetings()) : Promise.resolve([]),
     ]);
     const ignore = s.syncIgnoreSenders ?? [];
     return [

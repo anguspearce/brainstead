@@ -333,24 +333,38 @@ function SideCard({ title, right, children }: { title: string; right?: React.Rea
 }
 
 /** Today's remaining Teams meetings, from the sync's calendar (Settings › Teams and Outlook sync).
- *  Nothing shows when there are none, so a quiet day adds no clutter. */
+ *  Shows the last read at once and swaps in a fresh read only when it differs, so the card doesn't
+ *  vanish or flicker while the calendar is re-read. Nothing shows when there are none, so a quiet
+ *  day adds no clutter. */
 function MeetingsCard() {
   const [meetings, setMeetings] = useState<import("./api").SyncMeeting[] | null>(null);
   const [busy, setBusy] = useState(false);
   const live = useRef(true);
-  // Re-read the calendar from Outlook. A transient error keeps the current list rather than blanking.
-  const load = useCallback(() => {
-    setBusy(true);
-    return api
-      .syncTodayMeetings()
-      .then((m) => live.current && setMeetings(m))
-      .catch(() => live.current && setMeetings((prev) => prev ?? []))
-      .finally(() => live.current && setBusy(false));
+  const keep = useCallback((m: import("./api").SyncMeeting[]) => {
+    if (!live.current) return;
+    setMeetings((prev) => (prev && JSON.stringify(prev) === JSON.stringify(m) ? prev : m));
   }, []);
-  // On mount, when the window regains focus, and every five minutes while Today is open, so meetings
-  // that have ended drop off and new ones appear without reopening the screen.
+  // Re-read the calendar from Outlook. A transient error keeps the current list rather than blanking.
+  // Only a refresh the user asked for spins the button; the background ones are silent.
+  const load = useCallback(
+    (shown = false) => {
+      if (shown) setBusy(true);
+      return api
+        .syncTodayMeetings()
+        .then(keep)
+        .catch(() => live.current && setMeetings((prev) => prev ?? []))
+        .finally(() => shown && live.current && setBusy(false));
+    },
+    [keep],
+  );
+  // The cached list first, then on mount, when the window regains focus, and every five minutes while
+  // Today is open, so meetings that have ended drop off and new ones appear without reopening the screen.
   useEffect(() => {
     live.current = true;
+    api
+      .syncCachedMeetings()
+      .then((m) => live.current && setMeetings((prev) => prev ?? m))
+      .catch(() => {});
     load();
     const onFocus = () => load();
     window.addEventListener("focus", onFocus);
@@ -390,7 +404,7 @@ function MeetingsCard() {
           title="Re-read the calendar from Outlook"
           disabled={busy}
           aria-label="Refresh meetings"
-          onClick={() => void load()}
+          onClick={() => void load(true)}
         >
           <Icon name="refresh" size={13} className={busy ? "spin" : undefined} />
         </button>

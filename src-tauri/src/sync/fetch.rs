@@ -498,10 +498,11 @@ pub fn parse_transcript(body: &Value, ev: &Event) -> Result<Option<Capture>, Str
     // with this occurrence's date (the Oct bi-weekly landing an earlier sitting under today's date).
     let lo = ev.start - chrono::Duration::hours(1);
     let hi = ev.end + chrono::Duration::hours(6);
-    let Some(item) = body["value"].as_array().into_iter().flatten().find(|i| {
-        i["ItemProperties"]["Default"]["TranscriptJson"].is_string()
-            && recording_time(i).is_some_and(|t| t >= lo && t <= hi)
-    }) else {
+    let Some(item) =
+        body["value"].as_array().into_iter().flatten().find(|i| {
+            i["ItemProperties"]["Default"]["TranscriptJson"].is_string() && recording_time(i).is_some_and(|t| t >= lo && t <= hi)
+        })
+    else {
         return Ok(None);
     };
     // Cross-check: the chosen transcript's own recording day must agree with the occurrence we file it

@@ -931,6 +931,7 @@ pub fn run() {
             sync::sync_sign_out,
             sync::sync_now,
             sync::sync_today_meetings,
+            sync::sync_cached_meetings,
             sync::sync_list_channels,
             sync::sync_pull,
             bookmarks,

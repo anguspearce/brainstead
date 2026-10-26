@@ -36,7 +36,7 @@ pub fn accept_handover(v: &serde_json::Value) -> Result<(), String> {
 }
 
 /// A meeting for the Today screen (dates as RFC 3339 strings, so no extra chrono features are needed).
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeetingDto {
     pub subject: String,
@@ -105,23 +105,80 @@ pub async fn sync_list_channels() -> Result<Vec<Channel>, String> {
     .map_err(|e| e.to_string())?
 }
 
-/// Upcoming Teams meetings for the Today screen.
+/// Upcoming Teams meetings for the Today screen, read fresh from the calendar. A successful read is
+/// also kept in `meetings.json`, so Today can show the last list at once ([`sync_cached_meetings`]).
 #[tauri::command]
 pub async fn sync_today_meetings() -> Result<Vec<MeetingDto>, String> {
     tauri::async_runtime::spawn_blocking(|| {
-        run::today_meetings(&platform::data_dir()).map(|events| {
-            events
-                .into_iter()
-                .map(|e| MeetingDto {
-                    subject: e.subject,
-                    start: e.start.to_rfc3339(),
-                    end: e.end.to_rfc3339(),
-                    organizer: e.organizer,
-                    online: e.online,
-                })
-                .collect()
-        })
+        let data = platform::data_dir();
+        let meetings: Vec<MeetingDto> = run::today_meetings(&data)?
+            .into_iter()
+            .map(|e| MeetingDto {
+                subject: e.subject,
+                start: e.start.to_rfc3339(),
+                end: e.end.to_rfc3339(),
+                organizer: e.organizer,
+                online: e.online,
+            })
+            .collect();
+        // Best effort: the cache only saves Today a wait, so failing to write it isn't an error.
+        let path = data.join(MEETINGS_CACHE);
+        let tmp = path.with_extension("json.tmp");
+        if let Ok(json) = serde_json::to_vec(&meetings) {
+            if std::fs::write(&tmp, json).is_ok() {
+                let _ = brainstead_core::write::rename(&tmp, &path);
+            }
+        }
+        Ok(meetings)
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Where the last calendar read for Today is kept, in the app's data folder.
+const MEETINGS_CACHE: &str = "meetings.json";
+
+/// The meetings from the last successful calendar read that haven't ended yet — instant, no network.
+/// Empty when sync is off or nothing has been read yet.
+#[tauri::command]
+pub fn sync_cached_meetings() -> Vec<MeetingDto> {
+    let data = platform::data_dir();
+    if !crate::settings::load(&data.join("settings.json")).sync_enabled {
+        return vec![];
+    }
+    cached_meetings(&data.join(MEETINGS_CACHE), chrono::Utc::now())
+}
+
+fn cached_meetings(path: &std::path::Path, now: chrono::DateTime<chrono::Utc>) -> Vec<MeetingDto> {
+    let Some(list) = std::fs::read(path).ok().and_then(|b| serde_json::from_slice::<Vec<MeetingDto>>(&b).ok()) else {
+        return vec![];
+    };
+    list.into_iter().filter(|m| chrono::DateTime::parse_from_rfc3339(&m.end).is_ok_and(|end| end >= now)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cached_meetings_drop_ended_ones_and_tolerate_a_missing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(MEETINGS_CACHE);
+        let now = chrono::Utc::now();
+        assert!(cached_meetings(&path, now).is_empty(), "nothing read yet");
+        let meeting = |subject: &str, end: chrono::DateTime<chrono::Utc>| MeetingDto {
+            subject: subject.into(),
+            start: (end - chrono::Duration::minutes(30)).to_rfc3339(),
+            end: end.to_rfc3339(),
+            organizer: "Maya".into(),
+            online: true,
+        };
+        let list =
+            vec![meeting("Standup", now - chrono::Duration::minutes(5)), meeting("Orbit App review", now + chrono::Duration::hours(1))];
+        std::fs::write(&path, serde_json::to_vec(&list).unwrap()).unwrap();
+        let kept: Vec<String> = cached_meetings(&path, now).into_iter().map(|m| m.subject).collect();
+        assert_eq!(kept, vec!["Orbit App review"]);
+        std::fs::write(&path, "{ not json").unwrap();
+        assert!(cached_meetings(&path, now).is_empty(), "a damaged cache reads as empty");
+    }
 }

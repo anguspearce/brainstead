@@ -1320,6 +1320,8 @@ export const api = {
   syncSignOut: () => invoke<void>("sync_sign_out"),
   syncNow: () => invoke<SyncReport>("sync_now"),
   syncTodayMeetings: () => invoke<SyncMeeting[]>("sync_today_meetings"),
+  /** The last calendar read's meetings that haven't ended — instant, no network. */
+  syncCachedMeetings: () => invoke<SyncMeeting[]>("sync_cached_meetings"),
   syncListChannels: () => invoke<{ id: string; topic: string }[]>("sync_list_channels"),
   syncPull: (query: string, days: number, kinds?: string[]) =>
     invoke<{
