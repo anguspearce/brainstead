@@ -31,7 +31,7 @@ pub fn client() -> Client {
 /// Takes the sign-in a Teams-extension handover carried (`auth::from_handover`) and keeps it. Called
 /// from the native host when the extension hands over.
 pub fn accept_handover(v: &serde_json::Value) -> Result<(), String> {
-    let sign_in = auth::from_handover(v).ok_or("The Teams sign-in handover had no refresh token.")?;
+    let sign_in = auth::from_handover(v).ok_or("The Teams sign-in handover had no live sign-in to use.")?;
     auth::store(&sign_in)
 }
 

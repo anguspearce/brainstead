@@ -398,7 +398,9 @@ async function handOverSignIn() {
       continue; // a tab still loading, or one we can't script
     }
     const page = results?.[0]?.result;
-    if (page?.rt && page.gtm) {
+    // Teams no longer keeps a refresh token in the page, and Brainstead doesn't use one: the live
+    // access tokens are what it needs.
+    if (page?.ats?.length && page.gtm) {
       try {
         await chrome.runtime.sendNativeMessage(HOST, { type: "sign-in", ...page });
         return; // one good hand-over is enough

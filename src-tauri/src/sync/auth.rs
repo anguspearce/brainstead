@@ -62,8 +62,8 @@ pub struct SignIn {
     pub origin: String,
     pub client_id: String,
     pub tenant: String,
-    /// The MSAL refresh token from the handover. Kept as a marker that a real session was handed over;
-    /// the sync does not use it to mint tokens (D-20261026-01).
+    /// The MSAL refresh token from the handover, when the page still keeps one there (Teams has stopped
+    /// doing so). Unused: the sync does not mint tokens (D-20261026-01).
     pub refresh_token: String,
     /// Cached service tokens, by [`Service::key`].
     pub tokens: BTreeMap<String, Token>,
@@ -136,13 +136,13 @@ pub fn state() -> SignInState {
 
 /// Builds a sign-in from a handover message from the Teams extension. The message carries the Teams
 /// page's own sign-in state (`origin`, the MSAL refresh-token and access-token entries, and Teams'
-/// region settings), which the extension read from the open tab. Returns None if there's no refresh
-/// token to go on.
+/// region settings), which the extension read from the open tab. Returns None if it carries no live
+/// token the sync uses, so a handover from a signed-out tab doesn't replace a good sign-in.
 pub fn from_handover(v: &Value) -> Option<SignIn> {
     let origin = v["origin"].as_str()?.to_string();
-    let rt = v["rt"].as_object()?;
-    let refresh_token = rt.get("secret")?.as_str()?.to_string();
-    let client_id = rt.get("clientId")?.as_str()?.to_string();
+    let rt = &v["rt"];
+    let refresh_token = rt["secret"].as_str().unwrap_or("").to_string();
+    let client_id = rt["clientId"].as_str().unwrap_or("").to_string();
     let ats = v["ats"].as_array().cloned().unwrap_or_default();
     let tenant = ats.iter().find_map(|a| a["realm"].as_str()).unwrap_or("common").to_string();
 
@@ -159,6 +159,9 @@ pub fn from_handover(v: &Value) -> Option<SignIn> {
         if let Some(best) = best_page_token(&ats, svc, now) {
             tokens.insert(svc.key().to_string(), best);
         }
+    }
+    if tokens.is_empty() {
+        return None;
     }
 
     Some(SignIn {
@@ -254,9 +257,23 @@ mod tests {
     }
 
     #[test]
-    fn a_handover_without_a_refresh_token_is_refused() {
+    fn a_handover_with_no_live_token_is_refused() {
         let v = json!({ "origin": "https://teams.microsoft.com", "ats": [], "gtm": "{}" });
         assert!(from_handover(&v).is_none());
+    }
+
+    #[test]
+    fn a_handover_needs_no_refresh_token() {
+        // Teams no longer keeps a refresh token in the page; the access tokens are enough.
+        let now = now_secs();
+        let v = json!({
+            "origin": "https://teams.cloud.microsoft",
+            "ats": [{ "secret": jwt("https://api.spaces.skype.com", "Authorization.ReadWrite", now + 3600), "realm": "t" }],
+            "gtm": "{}",
+        });
+        let s = from_handover(&v).expect("a sign-in");
+        assert_eq!(s.refresh_token, "");
+        assert!(s.tokens.contains_key(Service::Spaces.key()));
     }
 
     #[test]
@@ -266,7 +283,10 @@ mod tests {
         let v = json!({
             "origin": "https://teams.microsoft.com",
             "rt": { "credentialType": "RefreshToken", "secret": "r", "clientId": "c" },
-            "ats": [{ "secret": jwt("https://outlook.office.com", "Calendars.Read", now + 3600), "realm": "t" }],
+            "ats": [
+                { "secret": jwt("https://outlook.office.com", "Calendars.Read", now + 3600), "realm": "t" },
+                { "secret": jwt("https://api.spaces.skype.com", "Authorization.ReadWrite", now + 3600), "realm": "t" },
+            ],
             "gtm": "{}",
         });
         let s = from_handover(&v).unwrap();
