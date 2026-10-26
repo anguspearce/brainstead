@@ -52,6 +52,8 @@ export interface Settings {
   syncIgnoreSenders?: string[];
   /** How many days of history the first sync loads (0 = no limit). */
   syncInitialDays?: number;
+  /** Bring a synced email's attachments into sources/ (PDF and Office files up to 30 MB). On by default. */
+  syncMailAttachments?: boolean;
   /** After a meeting note is made: ingest it (default on), then move its transcript to the Trash (default on). */
   meetingIngest?: boolean;
   meetingTrash?: boolean;

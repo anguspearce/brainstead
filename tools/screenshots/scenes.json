@@ -232,6 +232,11 @@
     "pane": "capture"
   },
   {
+    "name": "settings-sync",
+    "screen": "settings",
+    "pane": "sync"
+  },
+  {
     "name": "trash",
     "screen": "trash"
   },

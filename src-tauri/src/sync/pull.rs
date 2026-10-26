@@ -96,7 +96,7 @@ pub fn pull(data: &std::path::Path, query: &str, days: u32, kinds: Kinds) -> Out
         pull_chats(&client, &sign_in, vault, data, &s, &mut st, &terms, &cutoff_day, &mut out);
     }
     if kinds.mail {
-        pull_mail(&client, vault, data, query, &terms, since, &mut st, &mut out);
+        pull_mail(&client, vault, data, query, &terms, since, s.sync_mail_attachments, &mut st, &mut out);
     }
     if kinds.transcripts {
         pull_transcripts(&client, &sign_in, vault, data, &terms, since, now, &mut st, &mut out);
@@ -216,6 +216,7 @@ fn pull_mail(
     query: &str,
     terms: &[String],
     since: chrono::DateTime<Utc>,
+    attachments: bool,
     st: &mut state::State,
     out: &mut Outcome,
 ) {
@@ -251,7 +252,12 @@ fn pull_mail(
                 continue;
             }
         };
-        let Some(cap) = fetch::thread_capture(&thread) else { continue };
+        let files = if attachments {
+            super::attachments::for_thread(&super::attachments::Target { data, vault }, &thread, st, &mut out.problems)
+        } else {
+            Vec::new()
+        };
+        let Some(cap) = fetch::thread_capture(&thread, &files) else { continue };
         let when = thread.last().map(|x| x.received);
         let title = thread.last().map(|x| x.subject.clone()).unwrap_or(m.subject);
         let date = when.unwrap_or(m.received).with_timezone(&Local).format("%Y-%m-%d").to_string();

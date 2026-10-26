@@ -13,7 +13,7 @@ use serde_json::Value;
 use super::api;
 use super::auth::{self, Service, SignIn};
 use super::html;
-use brainstead_core::webcapture::{Capture, Message, Thread};
+use brainstead_core::webcapture::{Attachment, Capture, Message, Thread};
 
 /// A chat message, once read from chatsvc.
 #[derive(Debug, Clone, PartialEq)]
@@ -22,6 +22,35 @@ pub struct ChatMessage {
     pub sender: String,
     pub body: String,
     pub time: DateTime<Utc>,
+    /// Files shared with the message. They live in OneDrive or SharePoint, so only their links come.
+    pub files: Vec<SharedFile>,
+}
+
+/// A file shared in a Teams chat: its name and where it lives.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SharedFile {
+    pub name: String,
+    pub url: String,
+}
+
+/// The files a chat message shares (its `files` property, sent as JSON text or as an array).
+fn shared_files(m: &Value) -> Vec<SharedFile> {
+    let files = match &m["properties"]["files"] {
+        Value::String(t) => serde_json::from_str(t).unwrap_or(Value::Null),
+        v => v.clone(),
+    };
+    files
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|f| {
+                    let url = f["objectUrl"].as_str().filter(|u| u.starts_with("https://"))?;
+                    let name = f["fileName"].as_str().or(f["title"].as_str()).map(str::trim).filter(|n| !n.is_empty())?;
+                    Some(SharedFile { name: name.to_string(), url: url.to_string() })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// A conversation in the user's list.
@@ -117,7 +146,9 @@ pub fn parse_messages(body: &Value) -> Vec<ChatMessage> {
                     }
                     let content = m["content"].as_str().unwrap_or("");
                     let body = if mt == "RichText/Html" { html::to_text(content) } else { content.trim().to_string() };
-                    if body.is_empty() {
+                    // A message that only shares a file has no text but is kept, for the file's link.
+                    let files = shared_files(m);
+                    if body.is_empty() && files.is_empty() {
                         return None;
                     }
                     let time = m["originalarrivaltime"].as_str().or_else(|| m["composetime"].as_str())?;
@@ -127,6 +158,7 @@ pub fn parse_messages(body: &Value) -> Vec<ChatMessage> {
                         sender: m["imdisplayname"].as_str().filter(|s| !s.is_empty()).unwrap_or("Unknown").to_string(),
                         body,
                         time,
+                        files,
                     })
                 })
                 .collect()
@@ -175,6 +207,11 @@ pub fn chat_capture(conv: &Conv, day_msgs: &[ChatMessage], me: &str, url_base: &
             recipients: None,
             date: Some(m.time.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string()),
             body: m.body.clone(),
+            attachments: m
+                .files
+                .iter()
+                .map(|f| Attachment { name: f.name.clone(), url: Some(f.url.clone()), ..Default::default() })
+                .collect(),
         })
         .collect();
     Some(Capture::Teams(Thread {
@@ -245,9 +282,11 @@ pub struct Mail {
     pub received: DateTime<Utc>,
     pub body: String,
     pub web_link: String,
+    /// Outlook says it carries attachments (inline images in a signature count).
+    pub has_attachments: bool,
 }
 
-const MAIL_SELECT: &str = "Subject,From,ToRecipients,Body,ReceivedDateTime,WebLink,ConversationId";
+const MAIL_SELECT: &str = "Subject,From,ToRecipients,Body,ReceivedDateTime,WebLink,ConversationId,HasAttachments";
 
 /// Recent Inbox messages, newest first.
 pub fn inbox(client: &Client, top: usize) -> Result<Vec<Mail>, String> {
@@ -305,6 +344,7 @@ pub fn parse_mail(body: &Value) -> Vec<Mail> {
                         received,
                         body: if is_html { html::to_text(content) } else { content.trim().to_string() },
                         web_link: m["WebLink"].as_str().unwrap_or("").to_string(),
+                        has_attachments: m["HasAttachments"].as_bool().unwrap_or(false),
                     })
                 })
                 .collect()
@@ -312,9 +352,74 @@ pub fn parse_mail(body: &Value) -> Vec<Mail> {
         .unwrap_or_default()
 }
 
+/// What kind of attachment Outlook says it is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AttachmentKind {
+    /// A file carried in the message.
+    File,
+    /// An attached email or calendar item.
+    Item,
+    /// A link to a file in OneDrive or SharePoint.
+    Reference,
+}
+
+/// An attachment's details, without its content.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MailAttachment {
+    pub id: String,
+    pub name: String,
+    pub size: u64,
+    /// Shown in the body (a signature logo, a pasted picture) rather than attached.
+    pub inline: bool,
+    pub kind: AttachmentKind,
+    /// Where a reference attachment's file lives.
+    pub url: Option<String>,
+}
+
+/// A message's attachments, without their content.
+pub fn attachments(client: &Client, message_id: &str) -> Result<Vec<MailAttachment>, String> {
+    let url = format!("https://outlook.office.com/api/v2.0/me/messages/{}/attachments?$select=Name,Size,IsInline", urlencode(message_id));
+    Ok(parse_attachments(&api::get_json(client, Service::Outlook, &url)?))
+}
+
+pub fn parse_attachments(body: &Value) -> Vec<MailAttachment> {
+    body["value"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .map(|x| {
+                    let kind = match x["@odata.type"].as_str().unwrap_or("").rsplit('.').next() {
+                        Some("ItemAttachment") => AttachmentKind::Item,
+                        Some("ReferenceAttachment") => AttachmentKind::Reference,
+                        _ => AttachmentKind::File,
+                    };
+                    MailAttachment {
+                        id: x["Id"].as_str().unwrap_or("").to_string(),
+                        name: x["Name"].as_str().filter(|n| !n.trim().is_empty()).unwrap_or("attachment").trim().to_string(),
+                        size: x["Size"].as_u64().unwrap_or(0),
+                        inline: x["IsInline"].as_bool().unwrap_or(false),
+                        kind,
+                        url: x["SourceUrl"].as_str().filter(|u| u.starts_with("https://")).map(str::to_string),
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A file attachment's content. `client` should allow for a large download.
+pub fn attachment_bytes(client: &Client, message_id: &str, attachment_id: &str) -> Result<Vec<u8>, String> {
+    use base64::Engine;
+    let url = format!("https://outlook.office.com/api/v2.0/me/messages/{}/attachments/{}", urlencode(message_id), urlencode(attachment_id));
+    let body = api::get_json(client, Service::Outlook, &url)?;
+    let content = body["ContentBytes"].as_str().ok_or("Outlook sent the attachment without its content.")?;
+    base64::engine::general_purpose::STANDARD.decode(content).map_err(|e| format!("Couldn't read the attachment's content: {e}"))
+}
+
 /// An Outlook capture for a whole email thread: one message block per mail, oldest first. A one-mail
 /// thread renders the same as a single email. `msgs` must be non-empty.
-pub fn thread_capture(msgs: &[Mail]) -> Option<Capture> {
+/// `attachments` holds each message's files, by position (shorter or empty when there are none).
+pub fn thread_capture(msgs: &[Mail], attachments: &[Vec<Attachment>]) -> Option<Capture> {
     let first = msgs.first()?;
     // Title from the most recent message's subject (replies keep the subject, possibly "Re:").
     let title = msgs.last().map(|m| m.subject.clone()).unwrap_or_else(|| first.subject.clone());
@@ -324,7 +429,8 @@ pub fn thread_capture(msgs: &[Mail]) -> Option<Capture> {
         .unwrap_or_else(|| "https://outlook.office.com/mail/".into());
     let messages = msgs
         .iter()
-        .map(|m| Message {
+        .enumerate()
+        .map(|(i, m)| Message {
             sender: m.from.clone(),
             from_address: Some(m.from_address.clone()).filter(|a| !a.is_empty()),
             to: Some(m.to.clone()).filter(|t| !t.is_empty()),
@@ -332,6 +438,7 @@ pub fn thread_capture(msgs: &[Mail]) -> Option<Capture> {
             recipients: None,
             date: Some(m.received.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string()),
             body: m.body.clone(),
+            attachments: attachments.get(i).cloned().unwrap_or_default(),
         })
         .collect();
     Some(Capture::Outlook(Thread { url: link, title, kind: None, messages, meeting_date: None, meeting_start: None }))
@@ -431,6 +538,7 @@ fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
         recipients: None,
         date: Some(m.time.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string()),
         body: m.body.clone(),
+        attachments: Vec::new(),
     }));
     out
 }
@@ -476,7 +584,16 @@ pub fn transcript_capture(client: &Client, s: &SignIn, ev: &Event) -> Result<Opt
 
 /// A heading-only message used to label a section within a capture.
 fn divider(heading: &str, note: &str) -> Message {
-    Message { sender: heading.to_string(), from_address: None, to: None, cc: None, recipients: None, date: None, body: note.to_string() }
+    Message {
+        sender: heading.to_string(),
+        from_address: None,
+        to: None,
+        cc: None,
+        recipients: None,
+        date: None,
+        body: note.to_string(),
+        attachments: Vec::new(),
+    }
 }
 
 /// A transcript item's own recording start, as a UTC time, when it has a readable one.
@@ -537,6 +654,7 @@ pub fn parse_transcript(body: &Value, ev: &Event) -> Result<Option<Capture>, Str
                 recipients: None,
                 date: e["startOffset"].as_str().map(|s| s.trim_end_matches("0000").to_string()),
                 body: text.to_string(),
+                attachments: Vec::new(),
             })
         })
         .collect::<Vec<_>>();
@@ -594,6 +712,65 @@ mod tests {
     }
 
     #[test]
+    fn parses_attachments_and_lists_them_under_their_message() {
+        let body = json!({"value": [
+            {"@odata.type": "#Microsoft.OutlookServices.FileAttachment", "Id": "f1", "Name": "Orbit App proposal.pdf", "Size": 2048, "IsInline": false},
+            {"@odata.type": "#Microsoft.OutlookServices.FileAttachment", "Id": "f2", "Name": "logo.png", "Size": 900, "IsInline": true},
+            {"@odata.type": "#Microsoft.OutlookServices.ItemAttachment", "Id": "i1", "Name": "Fwd: Budget", "Size": 5000, "IsInline": false},
+            {"@odata.type": "#Microsoft.OutlookServices.ReferenceAttachment", "Id": "r1", "Name": "Plan.docx", "SourceUrl": "https://acme-my.sharepoint.com/personal/maya/Documents/Plan.docx"}
+        ]});
+        let a = parse_attachments(&body);
+        assert_eq!(a.len(), 4);
+        assert_eq!((a[0].kind, a[0].size, a[0].inline), (AttachmentKind::File, 2048, false));
+        assert!(a[1].inline);
+        assert_eq!(a[2].kind, AttachmentKind::Item);
+        assert_eq!(a[3].kind, AttachmentKind::Reference);
+        assert_eq!(a[3].url.as_deref(), Some("https://acme-my.sharepoint.com/personal/maya/Documents/Plan.docx"));
+
+        let mail = parse_mail(&json!({"value": [{
+            "Id": "AAA", "ConversationId": "conv1", "Subject": "Proposal", "ReceivedDateTime": "2026-10-24T06:30:00Z",
+            "From": {"EmailAddress": {"Name": "Lena", "Address": "lena@acme.example"}},
+            "Body": {"ContentType": "Text", "Content": "Attached."}, "HasAttachments": true
+        }]}));
+        assert!(mail[0].has_attachments);
+        let files = vec![vec![Attachment {
+            name: "Orbit App proposal.pdf".into(),
+            path: Some("sources/Email. Attachment. Orbit App proposal - 2026-10-24.pdf".into()),
+            ..Default::default()
+        }]];
+        match thread_capture(&mail, &files).unwrap() {
+            Capture::Outlook(th) => assert_eq!(th.messages[0].attachments, files[0]),
+            _ => panic!("expected an Outlook capture"),
+        }
+    }
+
+    #[test]
+    fn keeps_a_chat_message_that_only_shares_a_file() {
+        let files = r#"[{"fileName": "Orbit App plan.pdf", "objectUrl": "https://acme-my.sharepoint.com/personal/maya/Documents/Microsoft Teams Chat Files/Orbit App plan.pdf"}]"#;
+        let body = json!({"messages": [
+            {"id": "1", "messagetype": "RichText/Html", "content": "", "imdisplayname": "Maya", "originalarrivaltime": "2026-10-24T09:00:00.000Z", "properties": {"files": files}},
+            {"id": "2", "messagetype": "RichText/Html", "content": "", "imdisplayname": "Maya", "originalarrivaltime": "2026-10-24T09:01:00.000Z"}
+        ]});
+        let msgs = parse_messages(&body);
+        assert_eq!(msgs.len(), 1, "an empty message without a file is still dropped");
+        assert_eq!(
+            msgs[0].files,
+            [SharedFile {
+                name: "Orbit App plan.pdf".into(),
+                url: "https://acme-my.sharepoint.com/personal/maya/Documents/Microsoft Teams Chat Files/Orbit App plan.pdf".into()
+            }]
+        );
+        let conv = Conv { id: "19:x@unq.gbl.spaces".into(), topic: "".into(), kind: ConvKind::OneOnOne };
+        match chat_capture(&conv, &msgs, "Me", "https://teams.cloud.microsoft", "2026-10-24", "Maya").unwrap() {
+            Capture::Teams(th) => {
+                assert_eq!(th.messages[0].attachments[0].url.as_deref(), Some(msgs[0].files[0].url.as_str()));
+                assert_eq!(th.messages[0].attachments[0].path, None, "linked, not brought in");
+            }
+            _ => panic!("expected a Teams capture"),
+        }
+    }
+
+    #[test]
     fn parses_chat_messages_and_skips_system_events() {
         let body = json!({"messages": [
             {"id": "2", "messagetype": "RichText/Html", "content": "<p>Hi &amp; bye</p>", "imdisplayname": "Maya", "originalarrivaltime": "2026-10-24T09:00:00.000Z"},
@@ -612,8 +789,8 @@ mod tests {
         let conv = Conv { id: "19:x@unq.gbl.spaces".into(), topic: String::new(), kind: ConvKind::OneOnOne };
         let t = "2026-10-24T09:00:00Z".parse().unwrap();
         let msgs = vec![
-            ChatMessage { id: "1".into(), sender: "Maya".into(), body: "hi".into(), time: t },
-            ChatMessage { id: "2".into(), sender: "Me Myself".into(), body: "hello".into(), time: t },
+            ChatMessage { id: "1".into(), sender: "Maya".into(), body: "hi".into(), time: t, files: vec![] },
+            ChatMessage { id: "2".into(), sender: "Me Myself".into(), body: "hello".into(), time: t, files: vec![] },
         ];
         let cap = chat_capture(&conv, &msgs, "Me Myself", "https://teams.microsoft.com", "2026-10-24", "Maya").unwrap();
         match &cap {
@@ -635,7 +812,7 @@ mod tests {
     fn a_one_on_one_day_where_only_i_wrote_still_names_the_partner() {
         let conv = Conv { id: "19:x@unq.gbl.spaces".into(), topic: String::new(), kind: ConvKind::OneOnOne };
         let t = "2026-10-14T16:00:00Z".parse().unwrap();
-        let msgs = vec![ChatMessage { id: "1".into(), sender: "Me Myself".into(), body: "any update?".into(), time: t }];
+        let msgs = vec![ChatMessage { id: "1".into(), sender: "Me Myself".into(), body: "any update?".into(), time: t, files: vec![] }];
         let cap = chat_capture(&conv, &msgs, "Me Myself", "https://teams.microsoft.com", "2026-10-14", "Marnus Freeman").unwrap();
         match cap {
             Capture::Teams(th) => assert_eq!(th.title, "Marnus Freeman", "falls back to the partner"),
@@ -682,7 +859,8 @@ mod tests {
         assert_eq!(mail[0].conversation_id, "conv1");
         assert_eq!(mail[0].from_address, "lena@acme.example");
         assert_eq!(mail[0].body, "Point one\nPoint two");
-        match thread_capture(&mail).unwrap() {
+        assert!(!mail[0].has_attachments);
+        match thread_capture(&mail, &[]).unwrap() {
             Capture::Outlook(th) => {
                 assert_eq!(th.title, "Re: Roadmap", "titled by the latest message");
                 assert_eq!(th.messages.len(), 2, "the whole thread, incl. the reply");

@@ -51,6 +51,16 @@ pub struct State {
     /// How many messages a thread's source held when last written (ConversationId → count).
     #[serde(default)]
     pub thread_counts: BTreeMap<String, usize>,
+    /// Email attachments brought into `sources/` ([`attachment_key`] → the file's path), so each is
+    /// downloaded once however often its thread is rewritten.
+    #[serde(default)]
+    pub attachment_paths: BTreeMap<String, String>,
+}
+
+/// An attachment's key: its thread, its message's received time and its name. Outlook's message and
+/// attachment ids change when a message moves folder, so they aren't used.
+pub fn attachment_key(conv_id: &str, received: &str, name: &str) -> String {
+    format!("{conv_id}\n{received}\n{name}")
 }
 
 fn chat_key(conv: &str, day: &str) -> String {
@@ -125,6 +135,14 @@ impl State {
     }
 
     /// Records a thread source's path and message count.
+    pub fn attachment_path(&self, key: &str) -> Option<&str> {
+        self.attachment_paths.get(key).map(String::as_str)
+    }
+
+    pub fn mark_attachment(&mut self, key: &str, path: &str) {
+        self.attachment_paths.insert(key.to_string(), path.to_string());
+    }
+
     pub fn mark_thread(&mut self, conv_id: &str, path: &str, count: usize) {
         self.thread_paths.insert(conv_id.to_string(), path.to_string());
         self.thread_counts.insert(conv_id.to_string(), count);

@@ -260,7 +260,12 @@ fn sync_thread(p: &Pass, conversation_id: &str, st: &mut state::State, r: &mut R
             return;
         }
     };
-    let Some(cap) = fetch::thread_capture(&msgs) else { return };
+    let attachments = if p.s.sync_mail_attachments {
+        super::attachments::for_thread(&super::attachments::Target { data: p.data, vault: p.vault }, &msgs, st, &mut r.problems)
+    } else {
+        Vec::new()
+    };
+    let Some(cap) = fetch::thread_capture(&msgs, &attachments) else { return };
     let count = msgs.len();
     let when = msgs.last().map(|m| m.received);
     match st.thread_path(conversation_id).map(str::to_string) {

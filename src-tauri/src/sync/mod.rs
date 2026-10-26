@@ -9,6 +9,7 @@
 //! now. Everything the sync reads is the user's own, and it only ever reads.
 
 pub mod api;
+pub mod attachments;
 pub mod auth;
 pub mod fetch;
 pub mod html;

@@ -168,6 +168,34 @@ pub fn deliver(
     result
 }
 
+/// Writes a file the Teams and Outlook sync brought in (an email attachment) into `sources/` as
+/// `name`, or a free name beside it, and notes it like a capture, so it reaches the Inbox and is
+/// ingested as it arrives. Its vault path.
+pub fn deliver_file(
+    data: &Path,
+    vault: &Path,
+    ext: &str,
+    what: &str,
+    name: &str,
+    bytes: &[u8],
+    item_date: Option<String>,
+) -> Result<String, String> {
+    let result = webcapture::write_file(vault, name, bytes).map_err(|e| e.to_string());
+    note(
+        data,
+        Captured {
+            extension: ext.to_string(),
+            what: what.to_string(),
+            path: result.as_ref().ok().cloned(),
+            error: result.as_ref().err().cloned(),
+            at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            sync: true,
+            item_date,
+        },
+    );
+    result
+}
+
 /// The captures noted so far, newest first.
 pub fn recent(data: &Path) -> Vec<Captured> {
     read_list(&data.join("captures.json")).unwrap_or_default()

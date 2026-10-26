@@ -6,7 +6,8 @@
 //! previous app wrote them (its `routes/owa.ts` and `routes/teams.ts`): the same filenames, no
 //! frontmatter, a `**Source:**` link and `**Captured:**` time, then one block per message. A free
 //! name is picked so nothing is overwritten, and a OneDrive conflict copy beside it refuses. Files
-//! dropped onto the Sources screen are copied into `sources/` the same way.
+//! dropped onto the Sources screen, and email attachments the sync brings in, are written into
+//! `sources/` the same way.
 
 use crate::write::{check_conflict_copies, write_atomic, WriteError};
 use chrono::{DateTime, Local, SecondsFormat, Utc};
@@ -40,6 +41,51 @@ pub struct Message {
     #[serde(default)]
     pub date: Option<String>,
     pub body: String,
+    /// Files that came with the message (the Teams and Outlook sync sets these; the extensions don't),
+    /// listed under the body.
+    #[serde(default)]
+    pub attachments: Vec<Attachment>,
+}
+
+/// A file that came with a message: brought into `sources/` (`path`), only linked (`url`, a file
+/// shared in a Teams chat), or neither, with `note` saying why it wasn't brought in.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+pub struct Attachment {
+    pub name: String,
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+impl Attachment {
+    /// The attachment's list line: a wiki link to the source it became (by vault path), a link to
+    /// where it's shared, or its name, with the note after.
+    fn line(&self) -> String {
+        let name = self.name.replace(['[', ']', '|'], " ");
+        let what = match (&self.path, &self.url) {
+            // The full vault path, so whoever reads the thread (an assistant too) finds the file
+            // without a search; links resolve by name, so the index sees it as a link either way.
+            (Some(p), _) => format!("[[{p}|{name}]]"),
+            (None, Some(u)) => format!("[{name}]({})", u.replace(' ', "%20").replace('(', "%28").replace(')', "%29")),
+            (None, None) => name,
+        };
+        match self.note.as_deref().filter(|n| !n.is_empty()) {
+            Some(n) => format!("- {what} — {n}"),
+            None => format!("- {what}"),
+        }
+    }
+}
+
+/// The `**Attachments:**` list under a message's body, when it has any.
+fn attachment_lines(m: &Message, out: &mut Vec<String>) {
+    if !m.attachments.is_empty() {
+        out.extend(["**Attachments:**".to_string(), String::new()]);
+        out.extend(m.attachments.iter().map(Attachment::line));
+        out.push(String::new());
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -189,7 +235,9 @@ fn message_lines(m: &Message, level: usize, out: &mut Vec<String>) {
     if let Some(cc) = m.cc.as_ref().filter(|c| !c.is_empty()) {
         out.extend([format!("**Cc:** {cc}"), String::new()]);
     }
-    out.extend([m.body.trim().to_string(), String::new(), "---".into(), String::new()]);
+    out.extend([m.body.trim().to_string(), String::new()]);
+    attachment_lines(m, out);
+    out.extend(["---".into(), String::new()]);
 }
 
 fn reading_pane_note(kind: Option<&str>) -> Option<String> {
@@ -264,7 +312,9 @@ pub fn render(c: &Capture, now: DateTime<Utc>, today: &str) -> (String, String) 
                     Some(d) if !d.is_empty() => format!("## {} — {d}", m.sender),
                     _ => format!("## {}", m.sender),
                 });
-                l.extend([String::new(), m.body.trim().to_string(), String::new(), "---".into(), String::new()]);
+                l.extend([String::new(), m.body.trim().to_string(), String::new()]);
+                attachment_lines(m, &mut l);
+                l.extend(["---".into(), String::new()]);
             }
             let prefix = if transcript { "Teams. Transcript." } else { "Teams. Chat." };
             // Name a transcript by the meeting's day and a chat by its conversation day (both carried
@@ -370,11 +420,17 @@ pub fn import_file(vault: &Path, from: &Path) -> Result<String, WriteError> {
     if canon_from.starts_with(&canon_vault) {
         return Err(WriteError::Exists(format!("“{name}” is already in the vault.")));
     }
+    let bytes = std::fs::read(from).map_err(|e| WriteError::Io(format!("Couldn't read “{name}”: {e}")))?;
+    write_file(vault, &name, &bytes)
+}
+
+/// Writes `bytes` into `sources/` as `name`, or a free name beside it; its vault path. For a dropped
+/// file and an email attachment the sync brings in.
+pub fn write_file(vault: &Path, name: &str, bytes: &[u8]) -> Result<String, WriteError> {
     let dir = vault.join("sources");
     std::fs::create_dir_all(&dir).map_err(|e| WriteError::Io(e.to_string()))?;
-    let bytes = std::fs::read(from).map_err(|e| WriteError::Io(format!("Couldn't read “{name}”: {e}")))?;
-    let name = claim_name(&dir, &name)?;
-    fill_claim(&dir.join(&name), &bytes)?;
+    let name = claim_name(&dir, name)?;
+    fill_claim(&dir.join(&name), bytes)?;
     Ok(format!("sources/{name}"))
 }
 
@@ -402,6 +458,31 @@ mod tests {
         assert_eq!(clean_title("Re: [Orbit] #42 ^up | done"), "Re Orbit 42 up done");
         let wide = clean_title(&"日本".repeat(60));
         assert!(wide.len() <= TITLE_BYTES && wide.chars().count() <= 80, "{}", wide.len());
+    }
+
+    #[test]
+    fn lists_attachments_under_their_message() {
+        let c = cap(json!({"type": "outlook", "url": "https://outlook.office.com/mail/id/1", "title": "Proposal",
+        "messages": [{"sender": "Maya", "body": "Attached.", "attachments": [
+            {"name": "Proposal.pdf", "path": "sources/Email. Attachment. Proposal - 2026-10-03.pdf"},
+            {"name": "Plan (v2).docx", "url": "https://acme-my.sharepoint.com/personal/maya/Plan (v2).docx", "note": "a shared link, not brought in"},
+            {"name": "photo.png", "note": "not brought in: not a kind of file ingest reads"}
+        ]}]}));
+        let text = render(&c, at(), "2026-10-03").1;
+        assert!(
+            text.contains(
+                "Attached.\n\n**Attachments:**\n\n\
+                 - [[sources/Email. Attachment. Proposal - 2026-10-03.pdf|Proposal.pdf]]\n\
+                 - [Plan (v2).docx](https://acme-my.sharepoint.com/personal/maya/Plan%20%28v2%29.docx) — a shared link, not brought in\n\
+                 - photo.png — not brought in: not a kind of file ingest reads\n\n---\n"
+            ),
+            "{text}"
+        );
+        // The link resolves to the attachment's source by name, as the index reads links.
+        assert_eq!(
+            crate::links::key("sources/Email. Attachment. Proposal - 2026-10-03.pdf"),
+            "email. attachment. proposal - 2026-10-03.pdf"
+        );
     }
 
     #[test]

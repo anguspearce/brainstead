@@ -39,6 +39,8 @@ pub struct Settings {
     /// How many days of history the first sync loads (a chat the first time it's seen, and the first
     /// mail run), so a big mailbox or long chat history can't flood the Inbox. 0 means no limit.
     pub sync_initial_days: u32,
+    /// Bring email attachments into `sources/` with their thread (`sync::attachments`). On by default.
+    pub sync_mail_attachments: bool,
     /// Anything the window keeps that this side doesn't need to know about (sidebar state and the like).
     #[serde(flatten)]
     pub ui: serde_json::Map<String, serde_json::Value>,
@@ -60,6 +62,7 @@ impl Default for Settings {
             sync_channels: Vec::new(),
             sync_ignore_senders: Vec::new(),
             sync_initial_days: 7,
+            sync_mail_attachments: true,
             ui: Default::default(),
         }
     }

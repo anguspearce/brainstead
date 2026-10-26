@@ -1263,6 +1263,21 @@ function SyncPane() {
           />
           <span>days (0 = everything).</span>
         </label>
+        <div className="srow">
+          <Icon name="mail" style={{ color: (s.syncMailAttachments ?? true) ? "var(--green)" : "var(--ink3)" }} />
+          <div className="t">
+            <div className="pt">Bring in email attachments</div>
+            <div className="faint">
+              PDF, Word, PowerPoint, Excel and text files up to 30 MB, each its own source, linked from its thread. Others are listed by
+              name.
+            </div>
+          </div>
+          <Switch
+            label="Bring in email attachments"
+            on={s.syncMailAttachments ?? true}
+            onChange={(v) => settings.update({ syncMailAttachments: v })}
+          />
+        </div>
         {s.readOnly && enabled && (
           <div className="doc-banner warn" role="status">
             <Icon name="info" size={14} />

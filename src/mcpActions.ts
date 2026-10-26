@@ -3262,6 +3262,7 @@ const settingRows = (): SettingRow[] => [
   ["ingestOnArrival", "AI assistants", "Ingest new sources as they arrive", "bool", false],
   ["syncEnabled", "Teams and Outlook sync", "Sync Teams and Outlook", "bool", false],
   ["syncInitialDays", "Teams and Outlook sync", "Days of history to load on first sync (0 = no limit)", "number", 7],
+  ["syncMailAttachments", "Teams and Outlook sync", "Bring in email attachments", "bool", true],
   ["refreshStale", "AI assistants", "Also refresh pages whose sources changed", "bool", false],
   ["summariesHere", "Jobs & schedule", "Brainstead runs the daily and weekly summaries", "bool", false],
   ["holdSummaries", "Jobs & schedule", "Hold the summaries for me", "bool", false],
