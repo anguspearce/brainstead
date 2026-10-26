@@ -10,7 +10,7 @@ import appIconLight from "../src-tauri/icons/about-light.png";
 import { Icon, TrayMark } from "./icons";
 import { nav, place, SettingsPane } from "./nav";
 import { chooseVault, FullDiskAccessCard, useRecheckOnFocus } from "./Permissions";
-import { useVaultVersion, vaultStatus } from "./state";
+import { lastSeen, useVaultVersion, vaultStatus } from "./state";
 import { LookPicker } from "./LookPicker";
 import { DEFAULT_SCRIPTS, TemplaterDocsLink } from "./notes/TemplateRun";
 import { useDocDefaults, useDocLook } from "./docLook";
@@ -1193,7 +1193,8 @@ const EXTENSIONS: { id: "outlook-capture" | "teams-capture"; ext: "outlook" | "t
 function SyncPane() {
   const s = useStore(settings);
   const [signIn, setSignIn] = useState<Awaited<ReturnType<typeof api.syncSignInState>> | null>(null);
-  const [channels, setChannels] = useState<{ id: string; topic: string }[] | null>(null);
+  // The last channel list shows again on reopening Settings; the button fetches a fresh one.
+  const [channels, setChannels] = useState(() => lastSeen.get<{ id: string; topic: string }[]>("sync:channels"));
   const [loadingChannels, setLoadingChannels] = useState(false);
   const [report, setReport] = useState<import("./api").SyncReport | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1230,11 +1231,10 @@ function SyncPane() {
       .finally(() => setBusy(false));
   };
   const loadChannels = () => {
-    setChannels(null);
     setLoadingChannels(true);
     api
       .syncListChannels()
-      .then(setChannels)
+      .then((c) => setChannels(lastSeen.set("sync:channels", c)))
       .catch((e) => toast(`Couldn't list channels: ${e}`, undefined, "bad"))
       .finally(() => setLoadingChannels(false));
   };

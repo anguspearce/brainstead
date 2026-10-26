@@ -11,7 +11,7 @@ import { ActivityDay, api, FileSummary, LogEntry } from "./api";
 import { Icon } from "./icons";
 import { fieldIcon, fieldsAsWords, fieldTip, splitTaskFields } from "./taskFields";
 import { openDoc, useViewState } from "./nav";
-import { useVaultVersion } from "./state";
+import { lastSeen, useVaultVersion } from "./state";
 import { useGlance, VaultGlance } from "./Glance";
 import { TopBar } from "./TopBar";
 import { fmtCount, LayerTag, SearchBox, Seg, TableBand, useDebounced } from "./ui";
@@ -23,7 +23,8 @@ const PAGE = 200;
 export function ActivityScreen() {
   const version = useVaultVersion();
   const glance = useGlance();
-  const [data, setData] = useState<{ log: LogEntry[]; days: ActivityDay[] } | null>(null);
+  // The last load shows at once on reopening, while the log is read again.
+  const [data, setData] = useState(() => lastSeen.get<{ log: LogEntry[]; days: ActivityDay[] }>("activity"));
   const [error, setError] = useState("");
   const [q, setQ] = useViewState("activity.q", "");
   const [action, setAction] = useViewState<string | null>("activity.action", null);
@@ -41,7 +42,7 @@ export function ActivityScreen() {
       .activity()
       .then((d) => {
         if (!live) return;
-        setData(d);
+        setData(lastSeen.set("activity", d));
         setError("");
       })
       .catch((e) => live && setError(String(e)));

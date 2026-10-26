@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, FileSummary, Graph, GraphNode } from "./api";
 import { Icon } from "./icons";
 import { nav, openDoc, place, useViewState } from "./nav";
-import { useVaultVersion } from "./state";
+import { lastSeen, useVaultVersion } from "./state";
 import { useStore } from "./store";
 import { askLink, askQuote, TopBar } from "./TopBar";
 import { fmtCount, LayerTag, Popover, SearchBox, Seg } from "./ui";
@@ -39,7 +39,9 @@ export function GraphScreen() {
   const mode: Mode = here.path ? "around" : savedMode === "around" && center ? "around" : "wiki";
   const around = mode === "around" && !!center;
 
-  const [g, setG] = useState<Graph | null>(null);
+  // The last graph for this view shows at once on reopening, while it is worked out again.
+  const graphKey = `graph:${around ? center : ""}:${depth}`;
+  const [g, setG] = useState(() => lastSeen.get<Graph>(graphKey));
   const [error, setError] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
   const [fit, setFit] = useState(0);
@@ -50,11 +52,13 @@ export function GraphScreen() {
 
   useEffect(() => {
     let live = true;
+    const was = lastSeen.get<Graph>(graphKey);
+    if (was) setG(was);
     api
       .graph(around ? center : null, depth)
       .then((x) => {
         if (!live) return;
-        setG(x);
+        setG(lastSeen.set(graphKey, x));
         setError("");
       })
       .catch((e) => live && setError(String(e)));

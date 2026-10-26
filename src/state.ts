@@ -32,6 +32,19 @@ export const vaultVersion = new Store<{ n: number; changes: VaultChanges | null 
 export const useVaultVersion = () => useStore(vaultVersion).n;
 export const permissions = new Store<Permissions | null>(null);
 
+/** What a screen last loaded, so reopening it shows that at once while it reloads. In memory only,
+ *  and per vault, so switching vaults never shows the other one's. */
+const seen = new Map<string, unknown>();
+const seenKey = (key: string) => `${vaultStatus.get().vaultPath ?? ""}\n${key}`;
+export const lastSeen = {
+  get: <T>(key: string): T | null => (seen.get(seenKey(key)) as T | undefined) ?? null,
+  /** Keeps `value` under `key` and returns it. */
+  set: <T>(key: string, value: T): T => {
+    seen.set(seenKey(key), value);
+    return value;
+  },
+};
+
 /** The vault is still being opened or indexed: what can't be read yet isn't a failure, and views
  *  reload when it's ready (the version bump above). */
 export function useVaultOpening(): boolean {

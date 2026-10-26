@@ -18,7 +18,7 @@ import { Markdown } from "./md/Markdown";
 import { reportEditError } from "./taskModel";
 import { toast } from "./Toast";
 import { ReadOnlyBanner, TopBar } from "./TopBar";
-import { useVaultVersion } from "./state";
+import { lastSeen, useVaultVersion } from "./state";
 import { nav, openDoc, place, useViewState } from "./nav";
 import { Dialog, Seg } from "./ui";
 import { draftNotes, followThrough, keepNote, noteFile, specOf, specOk, trashTranscript } from "./meetingFlow";
@@ -156,7 +156,8 @@ async function ingestExisting(transcript: string, note: string) {
 }
 
 export function MeetingScreen() {
-  const [all, setList] = useState<Transcript[] | null>(null);
+  // The last list shows at once on reopening, while the transcripts are read again.
+  const [all, setList] = useState(() => lastSeen.get<Transcript[]>("transcripts"));
   // Only the transcripts still to do, unless the switch says all.
   const [show, setShow] = useViewState<"todo" | "all">("meeting:show", "todo");
   const list = useMemo(() => (all && show === "todo" ? all.filter((t) => !t.done) : all), [all, show]);
@@ -170,8 +171,8 @@ export function MeetingScreen() {
     let live = true;
     api
       .meetingTranscripts()
-      .then((l) => live && setList(l))
-      .catch(() => live && setList([]));
+      .then((l) => live && setList(lastSeen.set("transcripts", l)))
+      .catch(() => live && setList((was) => was ?? []));
     return () => {
       live = false;
     };
