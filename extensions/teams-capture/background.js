@@ -408,12 +408,27 @@ async function renewSignIn(tab) {
  *  sign-in that stops arriving can be explained. Holds no tokens. */
 const LAST_HANDOVER_KEY = "signin-last-handover";
 
+/** How long one step of a hand-over may take. A tab Chrome has frozen never answers a script, and
+ *  without a limit the hand-over would wait on it for good. */
+const STEP_MS = 20_000;
+
+/** `p`, or a rejection saying `what` took too long. */
+function inTime(p, what) {
+  let timer;
+  const late = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} took over ${STEP_MS / 1000}s`)), STEP_MS);
+  });
+  return Promise.race([p, late]).finally(() => clearTimeout(timer));
+}
+
 async function handOverSignIn() {
   const notes = [];
-  const outcome = await handOver(notes).catch((e) => `failed: ${e?.message || e}`);
-  chrome.storage.local
-    .set({ [LAST_HANDOVER_KEY]: { at: new Date().toISOString(), version: chrome.runtime.getManifest().version, outcome, notes } })
-    .catch(() => {});
+  const record = (outcome) =>
+    chrome.storage.local
+      .set({ [LAST_HANDOVER_KEY]: { at: new Date().toISOString(), version: chrome.runtime.getManifest().version, outcome, notes } })
+      .catch(() => {});
+  await record("started");
+  record(await handOver(notes).catch((e) => `failed: ${e?.message || e}`));
 }
 
 async function handOver(notes) {
@@ -441,10 +456,11 @@ async function handOver(notes) {
     }
     let results;
     try {
-      results = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readSignIn });
+      results = await inTime(chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readSignIn }), "reading the tab");
     } catch (e) {
-      notes.push(`tab ${tab.id} couldn't be read: ${e?.message || e}`);
-      continue; // a tab still loading, or one we can't script
+      // A tab still loading, one we can't script, or one Chrome has frozen: reloading wakes a frozen one.
+      notes.push(`tab ${tab.id} couldn't be read: ${e?.message || e}; ${await renewSignIn(tab)}`);
+      continue;
     }
     const page = results?.[0]?.result;
     // Teams no longer keeps a refresh token in the page, and Brainstead doesn't use one: the live
@@ -453,11 +469,10 @@ async function handOver(notes) {
     if (page?.ats?.length && page.gtm) {
       let answer;
       try {
-        const reply = await chrome.runtime.sendNativeMessage(HOST, {
-          type: "sign-in",
-          ...page,
-          version: chrome.runtime.getManifest().version,
-        });
+        const reply = await inTime(
+          chrome.runtime.sendNativeMessage(HOST, { type: "sign-in", ...page, version: chrome.runtime.getManifest().version }),
+          "Brainstead's answer",
+        );
         answer = reply?.ok ? "handed over" : `Brainstead refused: ${reply?.message || "no answer"}`;
       } catch (e) {
         // Brainstead not running or not registered yet; try again on the next alarm.
