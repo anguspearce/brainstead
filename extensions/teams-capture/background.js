@@ -387,23 +387,36 @@ function readSignIn() {
  *  later. Never a tab the user is looking at or one playing sound (a call), and at most once in
  *  RELOAD_GAP_MS; otherwise it waits for the next hand-over. */
 async function renewSignIn(tab) {
-  if (tab.audible) return;
+  if (tab.audible) return "not reloaded: in a call";
   if (tab.active) {
     const win = await chrome.windows.get(tab.windowId).catch(() => null);
-    if (win?.focused) return;
+    if (win?.focused) return "not reloaded: you're looking at it";
   }
   const last = (await chrome.storage.local.get(LAST_RELOAD_KEY))[LAST_RELOAD_KEY] || 0;
-  if (Date.now() - last < RELOAD_GAP_MS) return;
+  if (Date.now() - last < RELOAD_GAP_MS) return "not reloaded: reloaded in the last 45 minutes";
   await chrome.storage.local.set({ [LAST_RELOAD_KEY]: Date.now() });
   try {
     await chrome.tabs.reload(tab.id);
     chrome.alarms.create(AFTER_RELOAD_ALARM, { delayInMinutes: 1 });
+    return "reloaded";
   } catch (_) {
-    /* the tab went away */
+    return "not reloaded: the tab went away";
   }
 }
 
+/** What the last hand-over attempt did, kept in chrome.storage.local (`signin-last-handover`) so a
+ *  sign-in that stops arriving can be explained. Holds no tokens. */
+const LAST_HANDOVER_KEY = "signin-last-handover";
+
 async function handOverSignIn() {
+  const notes = [];
+  const outcome = await handOver(notes).catch((e) => `failed: ${e?.message || e}`);
+  chrome.storage.local
+    .set({ [LAST_HANDOVER_KEY]: { at: new Date().toISOString(), version: chrome.runtime.getManifest().version, outcome, notes } })
+    .catch(() => {});
+}
+
+async function handOver(notes) {
   let tabs;
   try {
     tabs = await chrome.tabs.query({
@@ -414,21 +427,23 @@ async function handOverSignIn() {
         "https://teams.office365.us/*",
       ],
     });
-  } catch (_) {
-    return;
+  } catch (e) {
+    return `couldn't list tabs: ${e?.message || e}`;
   }
+  if (!tabs.length) return "no Teams tab open";
   for (const tab of tabs) {
     // Keep Chrome's Memory Saver from putting the tab to sleep: a sleeping tab can't be read, so
     // its sign-in would stop being handed over.
     chrome.tabs.update(tab.id, { autoDiscardable: false }).catch(() => {});
     if (tab.discarded) {
-      await renewSignIn(tab);
+      notes.push(`tab ${tab.id} asleep: ${await renewSignIn(tab)}`);
       continue;
     }
     let results;
     try {
       results = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readSignIn });
-    } catch (_) {
+    } catch (e) {
+      notes.push(`tab ${tab.id} couldn't be read: ${e?.message || e}`);
       continue; // a tab still loading, or one we can't script
     }
     const page = results?.[0]?.result;
@@ -436,16 +451,28 @@ async function handOverSignIn() {
     // access tokens are what it needs. The version lets Brainstead say when Chrome is still running
     // an older copy of this extension (an unpacked one only updates when it's reloaded).
     if (page?.ats?.length && page.gtm) {
+      let answer;
       try {
-        await chrome.runtime.sendNativeMessage(HOST, { type: "sign-in", ...page, version: chrome.runtime.getManifest().version });
-      } catch (_) {
+        const reply = await chrome.runtime.sendNativeMessage(HOST, {
+          type: "sign-in",
+          ...page,
+          version: chrome.runtime.getManifest().version,
+        });
+        answer = reply?.ok ? "handed over" : `Brainstead refused: ${reply?.message || "no answer"}`;
+      } catch (e) {
         // Brainstead not running or not registered yet; try again on the next alarm.
+        answer = `Brainstead unreachable: ${e?.message || e}`;
       }
       // Hand over what there is, then renew it if a token the sync uses is about to run out.
-      if (globalThis.brainsteadSignIn.due(page.ats, Date.now() / 1000).length) await renewSignIn(tab);
-      return; // one good hand-over is enough
+      const due = globalThis.brainsteadSignIn.due(page.ats, Date.now() / 1000);
+      if (due.length) {
+        notes.push(`due: ${due.join(", ")}; ${await renewSignIn(tab)}`);
+      }
+      return answer; // one good hand-over is enough
     }
+    notes.push(`tab ${tab.id} has ${page?.ats?.length || 0} tokens${page?.gtm ? "" : ", no region settings"}`);
   }
+  return "no tab had a sign-in to hand over";
 }
 
 chrome.alarms.create(HANDOVER_ALARM, { periodInMinutes: HANDOVER_PERIOD_MIN });
