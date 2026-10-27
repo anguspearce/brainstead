@@ -23,6 +23,7 @@ It's the [Outlook capture](../outlook-capture/README.md) extension ported to Tea
 2. Chrome → `chrome://extensions` → switch on **Developer mode**.
 3. **Load unpacked** → choose this folder (`extensions/teams-capture/`). Settings › Capture extensions has a Reveal in Finder button for it (Show in Explorer on Windows).
 4. Pin the extension to the toolbar.
+5. For the Teams and Outlook sync: Chrome → Settings › Performance → **Always keep these sites active** → add `teams.cloud.microsoft` and `teams.microsoft.com`. Energy Saver (on by default on battery) otherwise freezes the background Teams tab, and a frozen tab can't hand the sign-in over.
 
 The manifest carries a fixed public key, so the extension's ID is the same on every computer, and Brainstead's helper accepts only that ID (Chrome checks it against the helper's manifest). There's nothing to copy or paste.
 
