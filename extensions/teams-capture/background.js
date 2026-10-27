@@ -353,8 +353,15 @@ async function sendToBrainstead(message) {
 // Teams tab and hands it to Brainstead's host on a timer. It never leaves the user's own machine —
 // it goes to the local app only. Capturing by button is unchanged; this is separate and silent.
 
+importScripts("sign-in-freshness.js");
+
 const HANDOVER_ALARM = "brainstead-signin-handover";
 const HANDOVER_PERIOD_MIN = 15;
+/** A one-off hand-over a minute after a reload, once Teams has fetched fresh tokens. */
+const AFTER_RELOAD_ALARM = "brainstead-signin-after-reload";
+/** At most one reload in this long, so a token Teams doesn't renew on load can't cause a loop. */
+const RELOAD_GAP_MS = 45 * 60 * 1000;
+const LAST_RELOAD_KEY = "signin-last-reload";
 
 /** Read the Teams page's sign-in from localStorage. Runs in the page (localStorage is the page's
  *  origin). Returns the refresh/access-token entries and Teams' region settings — no decoding. */
@@ -368,12 +375,32 @@ function readSignIn() {
       const e = JSON.parse(v);
       if (e && e.credentialType === "RefreshToken" && e.secret && e.clientId) out.rt = e;
       if (e && e.credentialType === "AccessToken" && e.secret)
-        out.ats.push({ target: e.target, realm: e.realm, clientId: e.clientId, secret: e.secret });
+        out.ats.push({ target: e.target, realm: e.realm, clientId: e.clientId, secret: e.secret, expiresOn: e.expiresOn });
     } catch (_) {
       /* not a JSON MSAL entry */
     }
   }
   return out;
+}
+
+/** Reloads a background Teams tab so Teams fetches fresh tokens, then hands them over a minute
+ *  later. Never a tab the user is looking at or one playing sound (a call), and at most once in
+ *  RELOAD_GAP_MS; otherwise it waits for the next hand-over. */
+async function renewSignIn(tab) {
+  if (tab.audible) return;
+  if (tab.active) {
+    const win = await chrome.windows.get(tab.windowId).catch(() => null);
+    if (win?.focused) return;
+  }
+  const last = (await chrome.storage.local.get(LAST_RELOAD_KEY))[LAST_RELOAD_KEY] || 0;
+  if (Date.now() - last < RELOAD_GAP_MS) return;
+  await chrome.storage.local.set({ [LAST_RELOAD_KEY]: Date.now() });
+  try {
+    await chrome.tabs.reload(tab.id);
+    chrome.alarms.create(AFTER_RELOAD_ALARM, { delayInMinutes: 1 });
+  } catch (_) {
+    /* the tab went away */
+  }
 }
 
 async function handOverSignIn() {
@@ -391,6 +418,13 @@ async function handOverSignIn() {
     return;
   }
   for (const tab of tabs) {
+    // Keep Chrome's Memory Saver from putting the tab to sleep: a sleeping tab can't be read, so
+    // its sign-in would stop being handed over.
+    chrome.tabs.update(tab.id, { autoDiscardable: false }).catch(() => {});
+    if (tab.discarded) {
+      await renewSignIn(tab);
+      continue;
+    }
     let results;
     try {
       results = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readSignIn });
@@ -403,18 +437,19 @@ async function handOverSignIn() {
     if (page?.ats?.length && page.gtm) {
       try {
         await chrome.runtime.sendNativeMessage(HOST, { type: "sign-in", ...page });
-        return; // one good hand-over is enough
       } catch (_) {
         // Brainstead not running or not registered yet; try again on the next alarm.
-        return;
       }
+      // Hand over what there is, then renew it if a token the sync uses is about to run out.
+      if (globalThis.brainsteadSignIn.due(page.ats, Date.now() / 1000).length) await renewSignIn(tab);
+      return; // one good hand-over is enough
     }
   }
 }
 
 chrome.alarms.create(HANDOVER_ALARM, { periodInMinutes: HANDOVER_PERIOD_MIN });
 chrome.alarms.onAlarm.addListener((a) => {
-  if (a.name === HANDOVER_ALARM) handOverSignIn();
+  if (a.name === HANDOVER_ALARM || a.name === AFTER_RELOAD_ALARM) handOverSignIn();
 });
 chrome.runtime.onStartup.addListener(handOverSignIn);
 chrome.runtime.onInstalled.addListener(handOverSignIn);

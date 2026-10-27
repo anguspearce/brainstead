@@ -37,6 +37,16 @@ pub enum Service {
 }
 
 impl Service {
+    /// What the sync reads with it, as Settings names it.
+    pub fn what(self) -> &'static str {
+        match self {
+            Service::Spaces => "chats",
+            Service::Outlook => "mail",
+            Service::Substrate => "transcripts",
+            Service::Csa => "channel list",
+        }
+    }
+
     pub fn key(self) -> &'static str {
         match self {
             Service::Spaces => "spaces",
@@ -84,6 +94,9 @@ pub struct SignIn {
 pub struct SignInState {
     pub signed_in: bool,
     pub handed_over: Option<String>,
+    /// What the sync can't reach while signed in, because that service's token is missing or has
+    /// run out: "chats", "mail", "transcripts", "channel list".
+    pub stale: Vec<String>,
 }
 
 pub fn now_secs() -> i64 {
@@ -128,9 +141,14 @@ pub fn state() -> SignInState {
         Some(s) => {
             let now = now_secs();
             let signed_in = s.tokens.values().any(|t| t.expires > now + MARGIN_SECS);
-            SignInState { signed_in, handed_over: Some(s.handed_over) }
+            let stale = [Service::Spaces, Service::Outlook, Service::Substrate, Service::Csa]
+                .into_iter()
+                .filter(|svc| s.tokens.get(svc.key()).is_none_or(|t| t.expires <= now + MARGIN_SECS))
+                .map(|svc| svc.what().to_string())
+                .collect();
+            SignInState { signed_in, handed_over: Some(s.handed_over), stale }
         }
-        None => SignInState { signed_in: false, handed_over: None },
+        None => SignInState { signed_in: false, handed_over: None, stale: Vec::new() },
     }
 }
 

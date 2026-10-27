@@ -365,6 +365,8 @@ export interface Captured {
 export interface SyncSignIn {
   signedIn: boolean;
   handedOver: string | null;
+  /** What the sync can't reach while signed in, its token missing or run out: "chats", "mail", "transcripts", "channel list". */
+  stale: string[];
 }
 
 /** What one sync pass did. */

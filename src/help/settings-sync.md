@@ -11,6 +11,8 @@ With **Teams and Outlook sync** on, Brainstead reads your own Teams chats, meeti
 It uses the tokens your open Teams tab already has. While Teams is open in your browser, the Teams extension hands those tokens to Brainstead every few minutes; Brainstead keeps the latest set in your computer's secure store (the Keychain on macOS, Credential Manager on Windows) and uses only those — it never mints its own, so its access never exceeds what your browser already has. So:
 
 - **Keep Teams open in your browser** (Chrome) and the **Teams capture** extension loaded. That's what keeps the tokens fresh.
+- **The extension keeps a background Teams tab fresh.** It stops Chrome putting the tab to sleep, and when a token the sync uses is about to run out (Teams only renews one when it next needs it), it reloads the tab so Teams fetches new ones, then hands them over. It never reloads a tab you're looking at or one playing sound (a call), and at most once every 45 minutes.
+- If one service's token has gone stale, the Sign-in card says which (**Gone stale: transcripts**, say); the rest of the sync carries on.
 - If you close Teams for a while the tokens go stale and the pane shows **Not signed in** — reopen Teams and it comes back within a few minutes.
 - It is your own access, used only on this computer. The calls go to Microsoft and nowhere else.
 

@@ -1295,8 +1295,13 @@ function SyncPane() {
               <div className="pt">{signIn?.signedIn ? "Signed in" : "Not signed in"}</div>
               <div className="faint">
                 {signIn?.signedIn
-                  ? `Handed over ${signIn.handedOver ? ago(new Date(signIn.handedOver).getTime()) : "recently"}. Open Teams in your browser each day to keep it fresh.`
+                  ? `Handed over ${signIn.handedOver ? ago(new Date(signIn.handedOver).getTime()) : "recently"}. Keep Teams open in a Chrome tab; the extension keeps it fresh.`
                   : "Open Teams in Chrome (with the Teams extension loaded) so it can hand the sign-in over. It arrives within a few minutes."}
+                {signIn?.signedIn && signIn.stale.length > 0 && (
+                  <div style={{ color: "var(--amber)" }}>
+                    Gone stale: {signIn.stale.join(", ")}. Those wait until Teams renews them, within the hour while its tab is open.
+                  </div>
+                )}
               </div>
             </div>
             {signIn?.signedIn && (

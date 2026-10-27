@@ -2240,7 +2240,7 @@ async function syncTool(a: Args): Promise<string> {
     return [
       `Teams and Outlook sync is ${s.syncEnabled ? "on" : "off"}.`,
       state.signedIn
-        ? `Signed in (handed over ${state.handedOver ? new Date(state.handedOver).toISOString().slice(0, 16).replace("T", " ") : "recently"}).`
+        ? `Signed in (handed over ${state.handedOver ? new Date(state.handedOver).toISOString().slice(0, 16).replace("T", " ") : "recently"}).${state.stale.length ? ` Gone stale, waiting for Teams to renew: ${state.stale.join(", ")}.` : ""}`
         : "Not signed in — open Teams in the browser so the extension hands the sign-in over.",
       `1:1 and group chats sync automatically; channels chosen: ${(s.syncChannels ?? []).length}.`,
       ignore.length ? `Mail skipped from: ${ignore.join(", ")}.` : "No senders skipped.",
