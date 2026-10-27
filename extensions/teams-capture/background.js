@@ -433,10 +433,11 @@ async function handOverSignIn() {
     }
     const page = results?.[0]?.result;
     // Teams no longer keeps a refresh token in the page, and Brainstead doesn't use one: the live
-    // access tokens are what it needs.
+    // access tokens are what it needs. The version lets Brainstead say when Chrome is still running
+    // an older copy of this extension (an unpacked one only updates when it's reloaded).
     if (page?.ats?.length && page.gtm) {
       try {
-        await chrome.runtime.sendNativeMessage(HOST, { type: "sign-in", ...page });
+        await chrome.runtime.sendNativeMessage(HOST, { type: "sign-in", ...page, version: chrome.runtime.getManifest().version });
       } catch (_) {
         // Brainstead not running or not registered yet; try again on the next alarm.
       }

@@ -12,6 +12,7 @@ It uses the tokens your open Teams tab already has. While Teams is open in your 
 
 - **Keep Teams open in your browser** (Chrome) and the **Teams capture** extension loaded. That's what keeps the tokens fresh.
 - **The extension keeps a background Teams tab fresh.** It stops Chrome putting the tab to sleep, and when a token the sync uses is about to run out (Teams only renews one when it next needs it), it reloads the tab so Teams fetches new ones, then hands them over. It never reloads a tab you're looking at or one playing sound (a call), and at most once every 45 minutes.
+- If Chrome is still running an older copy of the Teams extension than this version of Brainstead ships, the Sign-in card says so: reload the extension at chrome://extensions. Chrome only picks up an updated unpacked extension when it's reloaded, and an old copy may not keep the sign-in fresh.
 - If one service's token has gone stale, the Sign-in card says which (**Gone stale: transcripts**, say); the rest of the sync carries on.
 - If you close Teams for a while the tokens go stale and the pane shows **Not signed in** — reopen Teams and it comes back within a few minutes.
 - It is your own access, used only on this computer. The calls go to Microsoft and nowhere else.

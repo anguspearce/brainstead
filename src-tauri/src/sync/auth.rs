@@ -86,6 +86,10 @@ pub struct SignIn {
     pub csa_service: String,
     /// When the extension last handed the sign-in over (RFC 3339).
     pub handed_over: String,
+    /// The Teams extension's version, as it sent it with the handover (empty from versions before
+    /// 1.1.8, which didn't send one).
+    #[serde(default)]
+    pub extension_version: String,
 }
 
 /// What Settings shows about the sign-in — nothing secret.
@@ -97,6 +101,23 @@ pub struct SignInState {
     /// What the sync can't reach while signed in, because that service's token is missing or has
     /// run out: "chats", "mail", "transcripts", "channel list".
     pub stale: Vec<String>,
+    /// The Teams extension Chrome is running, when it's older than the one this build ships (Chrome
+    /// only loads an unpacked extension's new files when it's reloaded): "" for one too old to say.
+    pub extension_outdated: Option<String>,
+    /// The Teams extension version this build ships.
+    pub extension_shipped: String,
+}
+
+/// The Teams extension version this build ships, from its manifest.
+pub fn shipped_extension_version() -> String {
+    let m: Value = serde_json::from_str(include_str!("../../../extensions/teams-capture/manifest.json")).unwrap_or(Value::Null);
+    m["version"].as_str().unwrap_or("").to_string()
+}
+
+/// Whether version `a` (dotted numbers; empty for unknown) is older than `b`.
+fn older(a: &str, b: &str) -> bool {
+    let parts = |v: &str| v.split('.').map(|n| n.parse::<u64>().unwrap_or(0)).collect::<Vec<_>>();
+    a.is_empty() || parts(a) < parts(b)
 }
 
 pub fn now_secs() -> i64 {
@@ -146,9 +167,17 @@ pub fn state() -> SignInState {
                 .filter(|svc| s.tokens.get(svc.key()).is_none_or(|t| t.expires <= now + MARGIN_SECS))
                 .map(|svc| svc.what().to_string())
                 .collect();
-            SignInState { signed_in, handed_over: Some(s.handed_over), stale }
+            let shipped = shipped_extension_version();
+            let extension_outdated = older(&s.extension_version, &shipped).then(|| s.extension_version.clone());
+            SignInState { signed_in, handed_over: Some(s.handed_over), stale, extension_outdated, extension_shipped: shipped }
         }
-        None => SignInState { signed_in: false, handed_over: None, stale: Vec::new() },
+        None => SignInState {
+            signed_in: false,
+            handed_over: None,
+            stale: Vec::new(),
+            extension_outdated: None,
+            extension_shipped: shipped_extension_version(),
+        },
     }
 }
 
@@ -192,6 +221,7 @@ pub fn from_handover(v: &Value) -> Option<SignIn> {
         middle_tier,
         csa_service,
         handed_over: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        extension_version: v["version"].as_str().unwrap_or("").to_string(),
     })
 }
 
@@ -242,6 +272,16 @@ mod tests {
         use base64::Engine;
         let enc = |v: &Value| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(serde_json::to_vec(v).unwrap());
         format!("{}.{}.sig", enc(&json!({"alg": "RS256"})), enc(&json!({"aud": aud, "scp": scp, "exp": exp})))
+    }
+
+    #[test]
+    fn spots_an_older_extension() {
+        assert!(older("", "1.1.8"), "too old to send a version");
+        assert!(older("1.1.7", "1.1.8"));
+        assert!(older("1.9", "1.10"), "compared as numbers");
+        assert!(!older("1.1.8", "1.1.8"));
+        assert!(!older("1.2.0", "1.1.8"));
+        assert!(!shipped_extension_version().is_empty());
     }
 
     #[test]

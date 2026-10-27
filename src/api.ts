@@ -367,6 +367,10 @@ export interface SyncSignIn {
   handedOver: string | null;
   /** What the sync can't reach while signed in, its token missing or run out: "chats", "mail", "transcripts", "channel list". */
   stale: string[];
+  /** The Teams extension version Chrome is running, when older than the one this build ships ("" when too old to say). */
+  extensionOutdated: string | null;
+  /** The Teams extension version this build ships. */
+  extensionShipped: string;
 }
 
 /** What one sync pass did. */

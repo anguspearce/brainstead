@@ -4,7 +4,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { api, AppInfo, CliInfo, CliName, Skill, Theme } from "./api";
+import { api, AppInfo, CliInfo, CliName, Skill, SyncSignIn, Theme } from "./api";
 import appIconDark from "../src-tauri/icons/128x128@2x.png";
 import appIconLight from "../src-tauri/icons/about-light.png";
 import { Icon, TrayMark } from "./icons";
@@ -84,6 +84,12 @@ export function SettingsScreen() {
 }
 
 /** "Control+Alt+Space" as the platform writes it: ⌃⌥Space on macOS, Ctrl+Alt+Space elsewhere. */
+/** The Sign-in card's (and the MCP sync get's) line when Chrome runs an older Teams extension than this build ships. */
+export function extensionOutdatedText(s: Pick<SyncSignIn, "extensionOutdated" | "extensionShipped">): string {
+  const running = s.extensionOutdated ? `version ${s.extensionOutdated}` : "an older version";
+  return `Chrome is running ${running} of the Teams extension; this app ships ${s.extensionShipped}. Reload it at chrome://extensions so it keeps the sign-in fresh.`;
+}
+
 export function prettyShortcut(spec: string): string {
   return accelLabel(spec);
 }
@@ -1301,6 +1307,9 @@ function SyncPane() {
                   <div style={{ color: "var(--amber)" }}>
                     Gone stale: {signIn.stale.join(", ")}. Those wait until Teams renews them, within the hour while its tab is open.
                   </div>
+                )}
+                {signIn?.handedOver && signIn.extensionOutdated !== null && (
+                  <div style={{ color: "var(--amber)" }}>{extensionOutdatedText(signIn)}</div>
                 )}
               </div>
             </div>

@@ -118,7 +118,17 @@ import { IMAGE_EXT } from "./md/wikilinks";
 import { nav, place, Screen, SettingsPane } from "./nav";
 import { focusMode } from "./focus";
 import { DEFAULT_SCHEDULE, DEFAULT_WEEKLY_REVIEW } from "./Jobs";
-import { foundDetail, handedOver, INSTALL, languageName, SCREEN_NAME, scriptsFolder, terminalCommands, WEBSITE } from "./Settings";
+import {
+  extensionOutdatedText,
+  foundDetail,
+  handedOver,
+  INSTALL,
+  languageName,
+  SCREEN_NAME,
+  scriptsFolder,
+  terminalCommands,
+  WEBSITE,
+} from "./Settings";
 import { choice, prepStep, WEEKLY_STATE_CHANGED } from "./weeklyPrep";
 import { draftNotes, followThrough, isTranscriptPath, keepNote, noteFile, specOf, specOk, trashTranscript } from "./meetingFlow";
 import { DONE as MEETING_DONE, needsDate, noteExists, TYPES as MEETING_TYPES } from "./Meeting";
@@ -2240,7 +2250,7 @@ async function syncTool(a: Args): Promise<string> {
     return [
       `Teams and Outlook sync is ${s.syncEnabled ? "on" : "off"}.`,
       state.signedIn
-        ? `Signed in (handed over ${state.handedOver ? new Date(state.handedOver).toISOString().slice(0, 16).replace("T", " ") : "recently"}).${state.stale.length ? ` Gone stale, waiting for Teams to renew: ${state.stale.join(", ")}.` : ""}`
+        ? `Signed in (handed over ${state.handedOver ? new Date(state.handedOver).toISOString().slice(0, 16).replace("T", " ") : "recently"}).${state.stale.length ? ` Gone stale, waiting for Teams to renew: ${state.stale.join(", ")}.` : ""}${state.handedOver && state.extensionOutdated !== null ? ` ${extensionOutdatedText(state)}` : ""}`
         : "Not signed in — open Teams in the browser so the extension hands the sign-in over.",
       `1:1 and group chats sync automatically; channels chosen: ${(s.syncChannels ?? []).length}.`,
       ignore.length ? `Mail skipped from: ${ignore.join(", ")}.` : "No senders skipped.",
