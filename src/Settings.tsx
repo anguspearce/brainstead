@@ -1214,7 +1214,12 @@ function SyncPane() {
     refresh();
     const again = () => refresh();
     window.addEventListener("focus", again);
-    return () => window.removeEventListener("focus", again);
+    // A hand-over arrives through the extension's helper, not this window, so check now and then.
+    const timer = window.setInterval(again, 60_000);
+    return () => {
+      window.removeEventListener("focus", again);
+      window.clearInterval(timer);
+    };
   }, []);
   const enabled = !!s.syncEnabled;
   const ignore = s.syncIgnoreSenders ?? [];
