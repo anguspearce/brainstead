@@ -84,10 +84,10 @@ export function SettingsScreen() {
 }
 
 /** "Control+Alt+Space" as the platform writes it: ⌃⌥Space on macOS, Ctrl+Alt+Space elsewhere. */
-/** The Sign-in card's (and the MCP sync get's) line when Chrome runs an older Teams extension than this build ships. */
+/** The Sign-in card's (and the MCP sync get's) line when the last handover came from an older Teams extension than this build ships. */
 export function extensionOutdatedText(s: Pick<SyncSignIn, "extensionOutdated" | "extensionShipped">): string {
-  const running = s.extensionOutdated ? `version ${s.extensionOutdated}` : "an older version";
-  return `Chrome is running ${running} of the Teams extension; this app ships ${s.extensionShipped}. Reload it at chrome://extensions so it keeps the sign-in fresh.`;
+  const from = s.extensionOutdated ? `version ${s.extensionOutdated}` : "an older version";
+  return `The last sign-in came from ${from} of the Teams extension; this app ships ${s.extensionShipped}. Reload it at chrome://extensions if you haven't; this clears at its next hand-over, within 15 minutes.`;
 }
 
 export function prettyShortcut(spec: string): string {
