@@ -1070,6 +1070,11 @@ export const api = {
   wikiMeta: () => invoke<WikiMeta[]>("wiki_meta"),
   /** A PowerPoint or Excel file's text by slide or sheet. */
   sourceParts: (path: string) => invoke<{ kind: string; parts: { label: string; text: string }[] }>("source_parts", { path }),
+  /** Where the window's maximise button is, in physical pixels, for Windows 11's snap layouts
+   *  (src-tauri/src/platform/snap_win.rs); null when it isn't shown. */
+  windowMaxButton: (rect: [number, number, number, number] | null) => invoke<void>("window_max_button", { rect }),
+  /** The pointer went over (true) or off the maximise button's snap-layout window. */
+  onMaxButtonHover: (f: (over: boolean) => void): Promise<UnlistenFn> => listen<boolean>("window-controls-hover", (e) => f(e.payload)),
   /** Spelling and grammar, by macOS's checker; offsets are UTF-16 (src-tauri/src/platform/spell.rs). */
   spellCheck: (text: string, lang: string | null) => invoke<[number, number][]>("spell_check", { text, lang }),
   spellGrammar: (text: string, lang: string | null) =>

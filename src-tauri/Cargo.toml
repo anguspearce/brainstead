@@ -84,7 +84,7 @@ windows-sys = { version = "0.61", features = ["Win32_Globalization"] }
 # has them (platform/spell_win.rs).
 # The text in images and the copy a model is shown, through Windows' imaging and text
 # recognition (platform/image_win.rs).
-windows = { version = "0.62", features = ["Foundation", "Foundation_Collections", "Graphics_Imaging", "Media_Ocr", "Storage_Streams", "Win32_Foundation", "Win32_Globalization", "Win32_System_Com", "Win32_Security_Credentials"] }
+windows = { version = "0.62", features = ["Foundation", "Foundation_Collections", "Graphics_Imaging", "Media_Ocr", "Storage_Streams", "Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_Security_Credentials", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 windows-future = "0.3"
 harper-core = { version = "2", default-features = false, features = ["concurrent"] }
 

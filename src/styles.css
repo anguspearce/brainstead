@@ -256,7 +256,10 @@ html[data-platform="windows"] .tlspace {
   padding: 0;
   cursor: default;
 }
-.winctl button:hover {
+
+/* .hover: the pointer is on the snap-layout window over maximise (src-tauri/src/platform/snap_win.rs). */
+.winctl button:hover,
+.winctl button.hover {
   background: var(--hover);
   color: var(--ink);
 }

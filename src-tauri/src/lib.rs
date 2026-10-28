@@ -319,6 +319,12 @@ async fn wiki_meta(app: AppHandle) -> Result<Vec<brainstead_core::lists::WikiMet
         .map_err(|e| e.to_string())?
 }
 
+/// The window's maximise button moved (src/WindowControls.tsx): see `platform::set_max_button`.
+#[tauri::command]
+fn window_max_button(window: tauri::WebviewWindow, rect: Option<(i32, i32, i32, i32)>) {
+    platform::set_max_button(&window, rect);
+}
+
 // Spelling and grammar for the editor. Not async: AppKit's checker wants the main thread.
 #[tauri::command]
 fn spell_check(text: String, lang: Option<String>) -> Vec<(usize, usize)> {
@@ -833,6 +839,7 @@ pub fn run() {
             updates::update_check,
             source_parts,
             spell_check,
+            window_max_button,
             spell_grammar,
             spell_guesses,
             spell_accept,

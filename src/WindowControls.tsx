@@ -8,9 +8,15 @@
 // window's close request, the same path as the native X: src-tauri/src/lib.rs hides the window or
 // quits (asking about unsaved edits first), never a hard close. Nothing here renders on macOS,
 // where the window keeps its traffic lights, or on Linux, which keeps its native title bar.
+//
+// Windows 11 offers its snap layouts over the maximise button only to a window that answers the
+// system's hit-test there, which the page can't: src-tauri/src/platform/snap_win.rs puts a window
+// of its own over the button, told where it is here, and reports when the pointer is on it (the
+// page gets no hover of its own there) and does the click.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { api } from "./api";
 import { isWindows } from "./platform";
 
 const Glyph = ({ d }: { d: string }) => (
@@ -21,13 +27,31 @@ const Glyph = ({ d }: { d: string }) => (
 
 export function WindowControls() {
   const [maximised, setMaximised] = useState(false);
+  const [hover, setHover] = useState(false);
+  const max = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!isWindows) return;
     const w = getCurrentWindow();
-    const read = () => void w.isMaximized().then(setMaximised, () => {});
+    // The snap-layout window goes over the button, in the window's physical pixels.
+    const place = () => {
+      const b = max.current?.getBoundingClientRect();
+      const r = window.devicePixelRatio || 1;
+      void api
+        .windowMaxButton(b ? [Math.round(b.left * r), Math.round(b.top * r), Math.round(b.width * r), Math.round(b.height * r)] : null)
+        .catch(() => {});
+    };
+    const read = () => {
+      void w.isMaximized().then(setMaximised, () => {});
+      place();
+    };
     read();
-    const off = w.onResized(read).catch(() => () => {});
-    return () => void off.then((f) => f());
+    window.addEventListener("resize", read);
+    const off = [w.onResized(read), w.onScaleChanged(read), api.onMaxButtonHover(setHover)].map((o) => o.catch(() => () => {}));
+    return () => {
+      window.removeEventListener("resize", read);
+      off.forEach((o) => void o.then((f) => f()));
+      void api.windowMaxButton(null).catch(() => {});
+    };
   }, []);
   if (!isWindows) return null;
   const w = () => getCurrentWindow();
@@ -37,8 +61,10 @@ export function WindowControls() {
         <Glyph d="M0 5.5h10" />
       </button>
       <button
+        ref={max}
         type="button"
         tabIndex={-1}
+        className={hover ? "hover" : undefined}
         title={maximised ? "Restore" : "Maximise"}
         aria-label={maximised ? "Restore" : "Maximise"}
         onClick={() => void w().toggleMaximize()}

@@ -19,6 +19,8 @@ mod macos;
 mod now_playing;
 #[cfg(target_os = "macos")]
 mod quick_look;
+#[cfg(windows)]
+mod snap_win;
 #[cfg(target_os = "macos")]
 mod speech;
 #[cfg(target_os = "macos")]
@@ -52,6 +54,16 @@ pub fn about_panel(name: &str, version: &str, copyright: &str, icon_png: &[u8], 
     about::show(name, version, copyright, icon_png, link, url);
     #[cfg(not(target_os = "macos"))]
     let _ = (name, version, copyright, icon_png, link, url);
+}
+
+/// Where the page's maximise button is (x, y, width, height in physical pixels of the window's
+/// client area), so Windows 11 offers its snap layouts over it (platform/snap_win.rs); `None` when
+/// it isn't shown. Nothing elsewhere: macOS has its own button, Linux its own title bar.
+pub fn set_max_button(w: &tauri::WebviewWindow, rect: Option<(i32, i32, i32, i32)>) {
+    #[cfg(windows)]
+    snap_win::set_max_button(w, rect);
+    #[cfg(not(windows))]
+    let _ = (w, rect);
 }
 
 /// A quick preview of a file without opening it: the Quick Look panel over `w` on macOS (as Finder's
