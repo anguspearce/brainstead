@@ -90,6 +90,10 @@ pub struct SignIn {
     /// 1.1.8, which didn't send one).
     #[serde(default)]
     pub extension_version: String,
+    /// Services whose token Microsoft turned down (a 401: signed out, or the session ended) →
+    /// a fingerprint of that token, so the same dead token handed over again isn't used.
+    #[serde(default)]
+    pub rejected: BTreeMap<String, String>,
 }
 
 /// What Settings shows about the sign-in — nothing secret.
@@ -101,6 +105,9 @@ pub struct SignInState {
     /// What the sync can't reach while signed in, because that service's token is missing or has
     /// run out: "chats", "mail", "transcripts", "channel list".
     pub stale: Vec<String>,
+    /// What Microsoft turned the sign-in down for (a 401), until a new sign-in is handed over:
+    /// "chats", "mail", … Signing in again to Teams (or Outlook, for mail) in Chrome clears it.
+    pub rejected: Vec<String>,
     /// The Teams extension Chrome is running, when it's older than the one this build ships (Chrome
     /// only loads an unpacked extension's new files when it's reloaded): "" for one too old to say.
     pub extension_outdated: Option<String>,
@@ -162,19 +169,24 @@ pub fn state() -> SignInState {
         Some(s) => {
             let now = now_secs();
             let signed_in = s.tokens.values().any(|t| t.expires > now + MARGIN_SECS);
-            let stale = [Service::Spaces, Service::Outlook, Service::Substrate, Service::Csa]
+            let all = [Service::Spaces, Service::Outlook, Service::Substrate, Service::Csa];
+            let rejected: Vec<String> =
+                all.into_iter().filter(|svc| s.rejected.contains_key(svc.key())).map(|svc| svc.what().to_string()).collect();
+            let stale = all
                 .into_iter()
+                .filter(|svc| !s.rejected.contains_key(svc.key()))
                 .filter(|svc| s.tokens.get(svc.key()).is_none_or(|t| t.expires <= now + MARGIN_SECS))
                 .map(|svc| svc.what().to_string())
                 .collect();
             let shipped = shipped_extension_version();
             let extension_outdated = older(&s.extension_version, &shipped).then(|| s.extension_version.clone());
-            SignInState { signed_in, handed_over: Some(s.handed_over), stale, extension_outdated, extension_shipped: shipped }
+            SignInState { signed_in, handed_over: Some(s.handed_over), stale, rejected, extension_outdated, extension_shipped: shipped }
         }
         None => SignInState {
             signed_in: false,
             handed_over: None,
             stale: Vec::new(),
+            rejected: Vec::new(),
             extension_outdated: None,
             extension_shipped: shipped_extension_version(),
         },
@@ -222,6 +234,7 @@ pub fn from_handover(v: &Value) -> Option<SignIn> {
         csa_service,
         handed_over: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         extension_version: v["version"].as_str().unwrap_or("").to_string(),
+        rejected: BTreeMap::new(),
     })
 }
 
@@ -253,6 +266,38 @@ pub fn with_mail_handover(old: Option<SignIn>, v: &Value) -> Option<SignIn> {
     Some(s)
 }
 
+/// A short fingerprint of a token (the end of its signature), to recognise it again.
+fn fingerprint(token: &str) -> String {
+    token.chars().rev().take(16).collect()
+}
+
+/// Microsoft turned `svc`'s token down (a 401): drops it and remembers it, so the sync says to sign
+/// in again rather than retrying it, until a different token for `svc` is handed over.
+pub fn reject(svc: Service) {
+    let Some(mut s) = load() else { return };
+    if let Some(t) = s.tokens.remove(svc.key()) {
+        s.rejected.insert(svc.key().to_string(), fingerprint(&t.token));
+        let _ = store(&s);
+    }
+}
+
+/// A handed-over sign-in with what the earlier one had rejected applied: a service handed the same
+/// dead token again stays rejected (and the token is dropped); one handed a new token is cleared.
+pub fn keep_rejected(mut new: SignIn, old: Option<&SignIn>) -> SignIn {
+    let mut still = BTreeMap::new();
+    for (k, fp) in old.map(|o| o.rejected.clone()).unwrap_or_default() {
+        match new.tokens.get(&k) {
+            Some(t) if fingerprint(&t.token) != fp => {}
+            _ => {
+                new.tokens.remove(&k);
+                still.insert(k, fp);
+            }
+        }
+    }
+    new.rejected = still;
+    new
+}
+
 /// The longest-lived unexpired access token in the page for `svc`.
 fn best_page_token(ats: &[Value], svc: Service, now: i64) -> Option<Token> {
     ats.iter()
@@ -280,6 +325,13 @@ fn best_page_token(ats: &[Value], svc: Service, now: i64) -> Option<Token> {
 /// an error asking the user to keep Teams open so the extension hands a fresh one over.
 pub fn token(svc: Service) -> Result<String, String> {
     let s = load().ok_or("Not signed in to Teams. Open Teams in your browser so the extension hands the sign-in over.")?;
+    if s.rejected.contains_key(svc.key()) {
+        let app = if svc == Service::Outlook { "Outlook" } else { "Teams" };
+        return Err(format!(
+            "Microsoft turned down the {} sign-in. If {app} in Chrome asks you to sign in, do so; the extension hands the new sign-in over within 15 minutes.",
+            svc.what()
+        ));
+    }
     match s.tokens.get(svc.key()) {
         Some(t) if t.expires > now_secs() + MARGIN_SECS => Ok(t.token.clone()),
         _ => {
@@ -368,6 +420,32 @@ mod tests {
         assert!(again.tokens.contains_key(Service::Outlook.key()));
         // An Outlook tab with no mail token changes nothing.
         assert!(with_mail_handover(None, &json!({ "ats": [] })).is_none());
+    }
+
+    #[test]
+    fn a_rejected_token_stays_rejected_until_a_new_one_arrives() {
+        let now = now_secs();
+        let dead = jwt("https://api.spaces.skype.com", "Authorization.ReadWrite", now + 3600);
+        let handover = |t: &str| {
+            json!({ "origin": "https://teams.cloud.microsoft", "ats": [
+                { "secret": t, "realm": "t" },
+                { "secret": jwt("https://substrate.office.com", "x", now + 3600), "realm": "t" },
+            ], "gtm": "{}" })
+        };
+        let mut old = from_handover(&handover(&dead)).unwrap();
+        // As reject() does on a 401.
+        let t = old.tokens.remove(Service::Spaces.key()).unwrap();
+        old.rejected.insert(Service::Spaces.key().into(), fingerprint(&t.token));
+        // The same dead token handed over again stays out.
+        let again = keep_rejected(from_handover(&handover(&dead)).unwrap(), Some(&old));
+        assert!(!again.tokens.contains_key(Service::Spaces.key()));
+        assert!(again.rejected.contains_key(Service::Spaces.key()));
+        assert!(again.tokens.contains_key(Service::Substrate.key()));
+        // A new one (after signing in again) clears it.
+        let fresh = jwt("https://api.spaces.skype.com", "Authorization.ReadWrite", now + 7200);
+        let back = keep_rejected(from_handover(&handover(&fresh)).unwrap(), Some(&again));
+        assert!(back.tokens.contains_key(Service::Spaces.key()));
+        assert!(back.rejected.is_empty());
     }
 
     #[test]

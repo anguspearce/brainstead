@@ -85,6 +85,12 @@ export function SettingsScreen() {
 
 /** "Control+Alt+Space" as the platform writes it: ⌃⌥Space on macOS, Ctrl+Alt+Space elsewhere. */
 /** The Sign-in card's (and the MCP sync get's) line when the last handover came from an older Teams extension than this build ships. */
+/** The Sign-in card's (and the MCP sync get's) line when Microsoft turned the sign-in down for some services. */
+export function rejectedText(rejected: string[]): string {
+  const apps = [...new Set(rejected.map((r) => (r === "mail" ? "Outlook" : "Teams")))].join(" and ");
+  return `Signed out: ${rejected.join(", ")}. Microsoft turned the sign-in down; if ${apps} in Chrome asks you to sign in, do so, and it's picked up within 15 minutes.`;
+}
+
 export function extensionOutdatedText(s: Pick<SyncSignIn, "extensionOutdated" | "extensionShipped">): string {
   const from = s.extensionOutdated ? `version ${s.extensionOutdated}` : "an older version";
   return `The last sign-in came from ${from} of the Teams extension; this app ships ${s.extensionShipped}. Reload it at chrome://extensions if you haven't; this clears at its next hand-over, within 15 minutes.`;
@@ -1312,6 +1318,9 @@ function SyncPane() {
                   <div style={{ color: "var(--amber)" }}>
                     Gone stale: {signIn.stale.join(", ")}. Those wait until Teams renews them, within the hour while its tab is open.
                   </div>
+                )}
+                {signIn?.signedIn && signIn.rejected.length > 0 && (
+                  <div style={{ color: "var(--amber)" }}>{rejectedText(signIn.rejected)}</div>
                 )}
                 {signIn?.handedOver && signIn.extensionOutdated !== null && (
                   <div style={{ color: "var(--amber)" }}>{extensionOutdatedText(signIn)}</div>

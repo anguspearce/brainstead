@@ -23,7 +23,16 @@ fn web_headers(req: reqwest::blocking::RequestBuilder) -> reqwest::blocking::Req
 pub fn get_json(client: &Client, svc: Service, url: &str) -> Result<Value, String> {
     let token = auth::token(svc)?;
     let resp = web_headers(client.get(url).bearer_auth(token)).send().map_err(|e| e.to_string())?;
-    read(resp, url)
+    read(turned_down(resp, svc), url)
+}
+
+/// Marks `svc`'s token rejected when Microsoft answers 401 (signed out, or the session ended), so
+/// Settings says to sign in again; the response itself goes on to be read as usual.
+pub fn turned_down(resp: reqwest::blocking::Response, svc: Service) -> reqwest::blocking::Response {
+    if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+        auth::reject(svc);
+    }
+    resp
 }
 
 /// A GET on chatsvc / the middle tier, which need the Skype token alongside the Spaces bearer.
@@ -33,7 +42,7 @@ pub fn get_chatsvc(client: &Client, url: &str) -> Result<Value, String> {
     let resp = web_headers(client.get(url).bearer_auth(&spaces).header("Authentication", format!("skypetoken={skype}")))
         .send()
         .map_err(|e| e.to_string())?;
-    read(resp, url)
+    read(turned_down(resp, Service::Spaces), url)
 }
 
 /// A GET on the chat-service aggregator (teams and channels), which needs the Skype token alongside
@@ -45,7 +54,7 @@ pub fn get_csa(client: &Client, url: &str) -> Result<Value, String> {
     let resp = web_headers(client.get(url).bearer_auth(&csa).header("Authentication", format!("skypetoken={skype}")))
         .send()
         .map_err(|e| e.to_string())?;
-    read(resp, url)
+    read(turned_down(resp, Service::Csa), url)
 }
 
 /// Reads a response as JSON, turning a non-2xx into an error naming the endpoint and status, so a
@@ -74,6 +83,6 @@ fn skype_token(client: &Client, spaces: &str) -> Result<String, String> {
         .body("{}")
         .send()
         .map_err(|e| e.to_string())?;
-    let body = read(resp, "https://authsvc.teams.microsoft.com/v1.0/authz")?;
+    let body = read(turned_down(resp, Service::Spaces), "https://authsvc.teams.microsoft.com/v1.0/authz")?;
     body["tokens"]["skypeToken"].as_str().map(str::to_string).ok_or_else(|| "The Teams auth service returned no Skype token.".into())
 }

@@ -565,6 +565,7 @@ pub fn transcript_capture(client: &Client, s: &SignIn, ev: &Event) -> Result<Opt
         .header("Prefer", r#"substrate.flexibleschema,outlook.data-source="Substrate",exchange.behavior="SubstrateFiles""#)
         .send()
         .map_err(|e| format!("Couldn't reach Substrate for a transcript: {e}"))?;
+    let resp = api::turned_down(resp, Service::Substrate);
     if !resp.status().is_success() {
         return Err(format!("substrate.office.com answered {}", resp.status().as_u16()));
     }
