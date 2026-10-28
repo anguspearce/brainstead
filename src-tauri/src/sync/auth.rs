@@ -225,6 +225,34 @@ pub fn from_handover(v: &Value) -> Option<SignIn> {
     })
 }
 
+/// A Teams handover with the earlier sign-in's live tokens for the services it lacks kept, so the
+/// mail token the Outlook extension handed over survives a Teams page that has none.
+pub fn keep_missing(mut new: SignIn, old: Option<SignIn>) -> SignIn {
+    let now = now_secs();
+    for (k, t) in old.map(|o| o.tokens).unwrap_or_default() {
+        if t.expires > now + MARGIN_SECS {
+            new.tokens.entry(k).or_insert(t);
+        }
+    }
+    new
+}
+
+/// The sign-in with the mail token from an Outlook-extension handover (an Outlook on the web tab's
+/// tokens) put in, or None when the tab has no live one. Nothing else changes; with no sign-in yet it
+/// starts one holding only the mail token.
+pub fn with_mail_handover(old: Option<SignIn>, v: &Value) -> Option<SignIn> {
+    let ats = v["ats"].as_array().cloned().unwrap_or_default();
+    let token = best_page_token(&ats, Service::Outlook, now_secs())?;
+    let mut s = old.unwrap_or_else(|| SignIn {
+        origin: v["origin"].as_str().unwrap_or("").to_string(),
+        tenant: ats.iter().find_map(|a| a["realm"].as_str()).unwrap_or("common").to_string(),
+        handed_over: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        ..SignIn::default()
+    });
+    s.tokens.insert(Service::Outlook.key().to_string(), token);
+    Some(s)
+}
+
 /// The longest-lived unexpired access token in the page for `svc`.
 fn best_page_token(ats: &[Value], svc: Service, now: i64) -> Option<Token> {
     ats.iter()
@@ -312,6 +340,34 @@ mod tests {
         assert!(s.tokens.contains_key(Service::Outlook.key()));
         assert!(!s.tokens.contains_key(Service::Substrate.key()));
         assert_eq!(s.tokens.len(), 2);
+    }
+
+    #[test]
+    fn the_outlook_tab_supplies_the_mail_token() {
+        let now = now_secs();
+        let teams = json!({
+            "origin": "https://teams.cloud.microsoft",
+            "ats": [{ "secret": jwt("https://api.spaces.skype.com", "Authorization.ReadWrite", now + 3600), "realm": "t" }],
+            "gtm": "{}",
+        });
+        let outlook = json!({
+            "origin": "https://outlook.cloud.microsoft",
+            "ats": [
+                { "secret": jwt("https://outlook.office.com", "Mail.ReadWrite Calendars.ReadWrite", now + 3600), "realm": "t" },
+                { "secret": jwt("https://substrate.office.com", "SubstrateSearch-Internal.ReadWrite", now + 3600), "realm": "t" },
+            ],
+        });
+        // Only the mail token is taken from the Outlook tab; the Teams sign-in is otherwise untouched.
+        let s = with_mail_handover(from_handover(&teams), &outlook).expect("a sign-in");
+        assert_eq!(s.origin, "https://teams.cloud.microsoft");
+        assert!(s.tokens.contains_key(Service::Outlook.key()));
+        assert!(s.tokens.contains_key(Service::Spaces.key()));
+        assert!(!s.tokens.contains_key(Service::Substrate.key()));
+        // A later Teams handover without a mail token keeps the Outlook tab's.
+        let again = keep_missing(from_handover(&teams).unwrap(), Some(s));
+        assert!(again.tokens.contains_key(Service::Outlook.key()));
+        // An Outlook tab with no mail token changes nothing.
+        assert!(with_mail_handover(None, &json!({ "ats": [] })).is_none());
     }
 
     #[test]

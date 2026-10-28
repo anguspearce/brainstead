@@ -14,10 +14,10 @@
 
 (() => {
   // The services the sync uses, by what the token's scopes name (Brainstead's sync/auth.rs picks
-  // the same ones by audience).
+  // the same ones by audience). Not mail: its token comes from the Outlook extension
+  // (D-20261028-02), and reloading Teams doesn't reliably fetch one.
   const SERVICES = [
     { name: "chats", test: (t) => t.includes("api.spaces.skype.com") },
-    { name: "mail", test: (t) => t.includes("outlook.office.com") && t.includes("mail.read") },
     { name: "transcripts", test: (t) => t.includes("substrate.office.com") },
     { name: "channel list", test: (t) => t.includes("chatsvcagg.teams.microsoft.com") },
   ];

@@ -111,10 +111,9 @@ fn handle(data: &Path, origin: &str, v: Value) -> Value {
     // The Teams extension hands over the open tab's sign-in, so the app can sync the user's own
     // chats, mail and calendar (D-20261025-01). It carries no capture to write.
     if v.get("type").and_then(Value::as_str) == Some("sign-in") {
-        if ext != "teams" {
-            return json!({"ok": false, "message": "Only the Teams extension hands over the sign-in."});
-        }
-        return match crate::sync::accept_handover(&v) {
+        // The Outlook extension hands over only the mail token, from an Outlook on the web tab.
+        let accepted = if ext == "outlook" { crate::sync::accept_mail_handover(&v) } else { crate::sync::accept_handover(&v) };
+        return match accepted {
             Ok(()) => json!({"ok": true}),
             Err(message) => json!({"ok": false, "message": message}),
         };

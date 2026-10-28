@@ -38,9 +38,13 @@ describe("due", () => {
     expect(due([...fresh, at("https://api.spaces.skype.com//x", -100)], now)).toEqual([]);
   });
 
-  it("counts a missing token as due, and an Outlook token without mail as missing", () => {
-    const noMail = fresh.map((a) => (a.target.includes("outlook") ? at("https://outlook.office.com//Calendars.Read", 600) : a));
-    expect(due(noMail, now)).toEqual(["mail"]);
-    expect(due([], now)).toEqual(["chats", "mail", "transcripts", "channel list"]);
+  it("counts a missing token as due, but not mail, which the Outlook extension supplies", () => {
+    expect(
+      due(
+        fresh.filter((a) => !a.target.includes("outlook")),
+        now,
+      ),
+    ).toEqual([]);
+    expect(due([], now)).toEqual(["chats", "transcripts", "channel list"]);
   });
 });

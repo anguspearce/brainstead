@@ -15,6 +15,10 @@ Microsoft Graph isn't available, so this extension runs in your already signed-i
 
 The manifest carries a fixed public key, so the extension's ID is the same on every computer, and Brainstead's helper accepts only that ID (Chrome checks it against the helper's manifest). There's nothing to copy or paste.
 
+## Mail for the Teams and Outlook sync
+
+While an Outlook on the web tab is open, the extension hands that tab's Outlook token to Brainstead every 15 minutes (and when Chrome starts or the extension is reloaded), so the sync can read your Inbox. Brainstead takes only the mail token from it; the rest of the sync's sign-in comes from the Teams extension. To keep Chrome's Energy Saver from freezing the tab on battery, add `outlook.cloud.microsoft` and `outlook.office.com` under Chrome's Settings › Performance › **Always keep these sites active**. What the last hand-over did is kept in the extension's storage (`signin-last-handover`), never a token.
+
 ## Use: one thread
 
 1. Open a thread in Outlook on the Web.

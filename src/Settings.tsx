@@ -1306,7 +1306,7 @@ function SyncPane() {
               <div className="pt">{signIn?.signedIn ? "Signed in" : "Not signed in"}</div>
               <div className="faint">
                 {signIn?.signedIn
-                  ? `Handed over ${signIn.handedOver ? ago(new Date(signIn.handedOver).getTime()) : "recently"}. Keep Teams open in a Chrome tab; the extension keeps it fresh.`
+                  ? `Handed over ${signIn.handedOver ? ago(new Date(signIn.handedOver).getTime()) : "recently"}. Keep Teams, and Outlook for mail, open in Chrome tabs; the extensions keep it fresh.`
                   : "Open Teams in Chrome (with the Teams extension loaded) so it can hand the sign-in over. It arrives within a few minutes."}
                 {signIn?.signedIn && signIn.stale.length > 0 && (
                   <div style={{ color: "var(--amber)" }}>

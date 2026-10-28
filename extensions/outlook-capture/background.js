@@ -19,7 +19,7 @@
 // open, and this loop is awaiting `executeScript` (or a native message) more or
 // less continuously — the longest gap is one `openRowAndSettle` call, ~8s worst
 // case. That's why there is no `chrome.alarms` keepalive here: it would buy
-// nothing and cost a permission.
+// nothing. (The alarm at the end is for handing the mail sign-in over.)
 //
 // STATE
 //
@@ -552,3 +552,79 @@ async function openRowAndSettle(convid, prevSignature, hintScrollTop) {
   }
   return { ok: false, reason: "pane-did-not-change" };
 }
+
+// ---------------------------------------------------------- mail sign-in ----
+
+// Brainstead's Teams and Outlook sync reads mail with the token Outlook on the web already holds:
+// every 15 minutes, while an Outlook tab is open, this hands that tab's Outlook token over
+// (D-20261028-02). Teams' own page stopped reliably keeping one that can read mail. The rest of the
+// sync's sign-in still comes from the Teams extension; Brainstead takes only the mail token from here.
+
+importScripts("sign-in-reader.js");
+
+const MAIL_HANDOVER_ALARM = "brainstead-mail-handover";
+/** What the last hand-over did, in chrome.storage.local, so mail that stops arriving can be
+ *  explained. Holds no tokens. */
+const LAST_HANDOVER_KEY = "signin-last-handover";
+/** How long reading a tab or Brainstead's answer may take: a tab Chrome has frozen never answers. */
+const STEP_MS = 20_000;
+
+function inTime(p, what) {
+  let timer;
+  const late = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} took over ${STEP_MS / 1000}s`)), STEP_MS);
+  });
+  return Promise.race([p, late]).finally(() => clearTimeout(timer));
+}
+
+async function handOverMailSignIn() {
+  const notes = [];
+  const outcome = await handOverMail(notes).catch((e) => `failed: ${e?.message || e}`);
+  chrome.storage.local
+    .set({ [LAST_HANDOVER_KEY]: { at: new Date().toISOString(), version: chrome.runtime.getManifest().version, outcome, notes } })
+    .catch(() => {});
+}
+
+async function handOverMail(notes) {
+  const tabs = (await chrome.tabs.query({})).filter((t) => OWA_HOST_RE.test(t.url || ""));
+  if (!tabs.length) return "no Outlook tab open";
+  for (const tab of tabs) {
+    // Keep Chrome's Memory Saver from putting the tab to sleep, so its sign-in stays readable.
+    chrome.tabs.update(tab.id, { autoDiscardable: false }).catch(() => {});
+    if (tab.discarded) {
+      notes.push(`tab ${tab.id} asleep`);
+      continue;
+    }
+    let page;
+    try {
+      const results = await inTime(
+        chrome.scripting.executeScript({ target: { tabId: tab.id }, func: globalThis.brainsteadReadSignIn }),
+        "reading the tab",
+      );
+      page = results?.[0]?.result;
+    } catch (e) {
+      notes.push(`tab ${tab.id} couldn't be read: ${e?.message || e}`);
+      continue;
+    }
+    if (page?.seen) notes.push(`tab ${tab.id} keeps ${JSON.stringify(page.seen)}`);
+    delete page?.seen;
+    if (!page?.ats?.length) continue;
+    try {
+      const reply = await inTime(
+        chrome.runtime.sendNativeMessage(HOST, { type: "sign-in", ...page, version: chrome.runtime.getManifest().version }),
+        "Brainstead's answer",
+      );
+      return reply?.ok ? "handed over" : `Brainstead refused: ${reply?.message || "no answer"}`;
+    } catch (e) {
+      return `Brainstead unreachable: ${e?.message || e}`;
+    }
+  }
+  return "no tab had a sign-in to hand over";
+}
+
+chrome.alarms.create(MAIL_HANDOVER_ALARM, { periodInMinutes: 15 });
+chrome.alarms.onAlarm.addListener((a) => {
+  if (a.name === MAIL_HANDOVER_ALARM) handOverMailSignIn();
+});
+chrome.runtime.onStartup.addListener(handOverMailSignIn);
+chrome.runtime.onInstalled.addListener(handOverMailSignIn);
