@@ -79,7 +79,7 @@ arboard = { version = "3.6", default-features = false }
 # size from the user's locale.
 webview2-com = "0.39"
 windows-core = "0.62"
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_DataExchange", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Security", "Win32_System_DataExchange", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 # Spelling (Windows' spell checker) and grammar (Harper, on the PC), as Two-edged Sword's journal
 # has them (platform/spell_win.rs).
 # The text in images and the copy a model is shown, through Windows' imaging and text

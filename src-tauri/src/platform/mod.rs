@@ -48,8 +48,9 @@ pub fn data_dir() -> PathBuf {
 
 /// Makes this the only copy of the app in the user's session, before anything else starts. On
 /// Windows a second copy hands its arguments to the first (`tray::second_launch` there, through the
-/// single-instance plugin's window) and exits here, before the log, settings or index are touched:
-/// the plugin alone decides too late (`single_instance_win`). Elsewhere this does nothing: the
+/// single-instance plugin's window) and exits here, before the log, settings or index are touched,
+/// or says so and exits when the first copy takes no hand-over within a minute: the plugin alone
+/// decides too late (`single_instance_win`). Elsewhere this does nothing: the
 /// plugin decides on Linux, and macOS opens one copy of an app bundle itself.
 pub fn claim_single_instance(identifier: &str) {
     #[cfg(windows)]
