@@ -943,7 +943,10 @@ html[data-platform]:not([data-platform="macos"]) .tlspace {
   align-items: center;
   justify-content: center;
 }
-.scrim.top {
+
+/* The palette's scrim, with the dialog near the top. Its modifier is not "top": that is the top
+   bar's class, whose height, padding and border would apply to the scrim and shrink it to a band. */
+.scrim.upper {
   align-items: flex-start;
   padding-top: 96px;
 }
