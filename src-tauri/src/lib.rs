@@ -570,6 +570,14 @@ fn scene() -> Option<String> {
     std::env::var("BRAINSTEAD_SCENE").ok().filter(|s| !s.is_empty())
 }
 
+/// Whether this copy takes part in the one-copy-per-session lock. Not a screenshot scene, which
+/// runs beside the app on purpose, nor a copy with its own data folder (`BRAINSTEAD_DATA`, a dev
+/// copy): the lock is the app identifier's, shared by every build, and that copy has its own index
+/// and bridge.
+fn shares_instance_lock() -> bool {
+    scene().is_none() && std::env::var_os("BRAINSTEAD_DATA").is_none()
+}
+
 /// The window's background before the page paints, in step with --ground in src/styles.css and
 /// the splash in index.html.
 fn ground(dark: bool) -> (u8, u8, u8) {
@@ -776,6 +784,13 @@ fn logs_reveal() -> Result<(), String> {
 }
 
 pub fn run() {
+    let context = tauri::generate_context!();
+    // One copy per session, settled before the log, settings and index are touched: on Windows a
+    // second copy hands over here and exits. The plugin below is the channel it hands over through,
+    // and decides on its own only on Linux (`platform::claim_single_instance`).
+    if shares_instance_lock() {
+        platform::claim_single_instance(&context.config().identifier);
+    }
     let data = platform::data_dir();
     let settings_path = data.join("settings.json");
     let (settings, settings_warning) = settings::load_checked(&settings_path);
@@ -789,11 +804,11 @@ pub fn run() {
     let builder = tauri::Builder::default();
     // First of the plugins, as the plugin requires: a second launch hands over to this copy, which
     // shows its window, rather than running a second copy on the same index, bridge and capture
-    // shortcut. Not for a screenshot scene, which runs beside the app on purpose, nor for a copy
-    // with its own data folder (`BRAINSTEAD_DATA`, a dev copy): the lock is the app identifier's,
-    // shared by every build, and that copy has its own index and bridge.
+    // shortcut. On Windows the plugin's own check comes too late to be relied on (its mutex is taken
+    // before its window exists, and a copy started in between runs on), so `claim_single_instance`
+    // above has settled it by now and the plugin is the hand-over channel.
     #[cfg(any(windows, target_os = "linux"))]
-    let builder = if scene().is_none() && std::env::var_os("BRAINSTEAD_DATA").is_none() {
+    let builder = if shares_instance_lock() {
         builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| tray::second_launch(app, &args)))
     } else {
         builder
@@ -1048,7 +1063,7 @@ pub fn run() {
             ingest::settle_stale();
             // The capture extensions' host, registered with each browser (not by a screenshot demo,
             // and not by a dev build: that would point the browsers at target/debug).
-            if scene().is_none() && std::env::var_os("BRAINSTEAD_DATA").is_none() && !cfg!(debug_assertions) {
+            if shares_instance_lock() && !cfg!(debug_assertions) {
                 std::thread::spawn(nativehost::register);
             }
             nativehost::watch(app.handle().clone());
@@ -1178,7 +1193,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application")
         .run(|app, ev| {
             if let tauri::RunEvent::ExitRequested { api, code, .. } = &ev {
