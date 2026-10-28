@@ -9,6 +9,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { focusMode } from "./focus";
 import { imageView } from "./ImageViewer";
 import { toast } from "./Toast";
+import { sceneSignIn } from "./SyncDot";
 import { UpdateView, updateView } from "./Update";
 import { fixNameOpen } from "./FixName";
 import { shortcutsOpen } from "./Shortcuts";
@@ -75,6 +76,8 @@ export interface Scene {
   taskMenu?: string;
   /** A toast to show, with an Undo button. */
   toast?: string;
+  /** The top bar's Teams and Outlook dot, with the sync on: connected, mail gone stale, or not signed in. */
+  syncDot?: "ok" | "stale" | "off";
   /** The update dialog: offering a sample version, downloading it, or saying it's up to date. */
   update?: "offer" | "downloading" | "message";
 }
@@ -263,6 +266,17 @@ export function applyScene(sc: Scene) {
   if (sc.reading) readingScene.set(sc.reading);
   if (sc.toast) toast(sc.toast, { label: "Undo", run: () => {} });
   if (sc.update) updateView.set(sampleUpdate(sc.update));
+  if (sc.syncDot) {
+    settings.update({ syncEnabled: true });
+    const base = { handedOver: "2026-10-28T07:00:00Z", stale: [], rejected: [], extensionOutdated: null, extensionShipped: "1.1.16" };
+    sceneSignIn.set(
+      sc.syncDot === "ok"
+        ? { ...base, signedIn: true }
+        : sc.syncDot === "stale"
+          ? { ...base, signedIn: true, stale: ["mail"] }
+          : { ...base, signedIn: false, handedOver: null },
+    );
+  }
 }
 
 /** The update scenes' dialog: a made-up next version with notes as tools/update_files.py writes them. */

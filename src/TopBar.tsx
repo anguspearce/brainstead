@@ -8,6 +8,7 @@ import { Icon } from "./icons";
 import { nav, place } from "./nav";
 import { settings, useStore } from "./store";
 import { HelpButton } from "./help/HelpDrawer";
+import { SyncDot } from "./SyncDot";
 import { Popover } from "./ui";
 import { dragRegion, keyLabel } from "./platform";
 
@@ -165,6 +166,7 @@ export function TopBar({ title, sub, children, ask }: { title: string; sub?: str
       <div className="sp" />
       {children}
       {ask && <AskButton ask={ask} />}
+      <SyncDot />
       <HelpButton />
     </div>
   );

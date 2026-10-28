@@ -501,6 +501,21 @@ html[data-platform]:not([data-platform="macos"]) .tlspace {
   color: var(--ink);
   font-weight: 600;
 }
+
+/* The Teams and Outlook dot (SyncDot). */
+.top .syncdot .d {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink3);
+}
+.top .syncdot .d.ok {
+  background: var(--green);
+}
+.top .syncdot .d.warn {
+  background: var(--amber);
+}
+
 .top .sp {
   flex: 1;
 }

@@ -237,6 +237,16 @@
     "pane": "sync"
   },
   {
+    "name": "sync-dot",
+    "screen": "today",
+    "syncDot": "stale"
+  },
+  {
+    "name": "sync-dot-ok",
+    "screen": "today",
+    "syncDot": "ok"
+  },
+  {
     "name": "trash",
     "screen": "trash"
   },

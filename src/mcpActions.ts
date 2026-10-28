@@ -11,6 +11,7 @@
 // recorded in Changes with Revert.
 
 import { compareMarkdown, compareNote } from "./skills/Compare";
+import { extensionOutdatedText, rejectedText } from "./syncStatus";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import moment from "moment";
 import { listen } from "@tauri-apps/api/event";
@@ -118,18 +119,7 @@ import { IMAGE_EXT } from "./md/wikilinks";
 import { nav, place, Screen, SettingsPane } from "./nav";
 import { focusMode } from "./focus";
 import { DEFAULT_SCHEDULE, DEFAULT_WEEKLY_REVIEW } from "./Jobs";
-import {
-  extensionOutdatedText,
-  rejectedText,
-  foundDetail,
-  handedOver,
-  INSTALL,
-  languageName,
-  SCREEN_NAME,
-  scriptsFolder,
-  terminalCommands,
-  WEBSITE,
-} from "./Settings";
+import { foundDetail, handedOver, INSTALL, languageName, SCREEN_NAME, scriptsFolder, terminalCommands, WEBSITE } from "./Settings";
 import { choice, prepStep, WEEKLY_STATE_CHANGED } from "./weeklyPrep";
 import { draftNotes, followThrough, isTranscriptPath, keepNote, noteFile, specOf, specOk, trashTranscript } from "./meetingFlow";
 import { DONE as MEETING_DONE, needsDate, noteExists, TYPES as MEETING_TYPES } from "./Meeting";
