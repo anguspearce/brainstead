@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // The window's own minimise, maximise and close buttons, at the top right on Windows, where the
-// main window has no native title bar (src-tauri/tauri.windows.conf.json). They're the size and
-// place of the native ones, so the hand finds them where Windows puts them. Close goes through the
+// main window has no native title bar (src-tauri/tauri.windows.conf.json). They're where Windows
+// puts its own and as wide, and as tall as the top bar, so their glyphs sit on its centre line. Close goes through the
 // window's close request, the same path as the native X: src-tauri/src/lib.rs hides the window or
 // quits (asking about unsaved edits first), never a hard close. Nothing here renders on macOS,
 // where the window keeps its traffic lights, or on Linux, which keeps its native title bar.
@@ -46,8 +46,12 @@ export function WindowControls() {
     };
     read();
     window.addEventListener("resize", read);
+    // The button's own size changes too (the bar's height, the page's zoom) without the window's.
+    const sized = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
+    if (max.current) sized?.observe(max.current);
     const off = [w.onResized(read), w.onScaleChanged(read), api.onMaxButtonHover(setHover)].map((o) => o.catch(() => () => {}));
     return () => {
+      sized?.disconnect();
       window.removeEventListener("resize", read);
       off.forEach((o) => void o.then((f) => f()));
       void api.windowMaxButton(null).catch(() => {});

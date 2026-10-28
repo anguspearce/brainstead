@@ -65,6 +65,10 @@
      Settings, Meeting notes, the weekly steps), and a list beside a record (Projects, Changes). */
   --pane-left: 260px;
   --pane-list: 400px;
+
+  /* Every screen's top bar, its divider included; the help drawer opens under it and the window's
+     own buttons on Windows fill it. */
+  --top-h: 52px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -234,8 +238,9 @@ html[data-platform="windows"] .tlspace {
   height: 12px;
 }
 
-/* The window's own buttons on Windows, the size and place of the native ones (46 by 32), over
-   every screen and dialog as the native ones are. Close turns Windows' red. */
+/* The window's own buttons on Windows: as wide as the native ones (46px) and as tall as the top
+   bar above its divider, the glyph centred and the hover filling the whole button. Over every
+   screen and dialog, as the native ones are. Close turns Windows' red. */
 .winctl {
   position: fixed;
   top: 0;
@@ -245,7 +250,7 @@ html[data-platform="windows"] .tlspace {
 }
 .winctl button {
   width: 46px;
-  height: 32px;
+  height: calc(var(--top-h) - 1px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -263,8 +268,15 @@ html[data-platform="windows"] .tlspace {
   background: var(--hover);
   color: var(--ink);
 }
+.winctl button:active {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
 .winctl button.close:hover {
   background: #c42b1c;
+  color: #fff;
+}
+.winctl button.close:active {
+  background: rgb(196 43 28 / 85%);
   color: #fff;
 }
 .winctl button:focus-visible {
@@ -524,7 +536,7 @@ html[data-platform="windows"] .top {
   min-height: 0;
 }
 .top {
-  height: 52px;
+  height: var(--top-h);
   flex: none;
   display: flex;
   align-items: center;
@@ -9296,7 +9308,7 @@ button.hc {
 /* the help drawer (src/help/HelpDrawer.tsx): on the right under the top bar, as the mock */
 .help-drawer {
   position: fixed;
-  top: 52px;
+  top: var(--top-h);
   right: 0;
   bottom: 0;
   z-index: 40;

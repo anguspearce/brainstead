@@ -175,7 +175,13 @@ export function Tooltips() {
         else setTip({ text, side: "below", x, y: r.bottom + 6 });
       }, 450);
     };
+    // The pointer left the page: off the window, or onto a window over it (on Windows, the one over
+    // the maximise button, src-tauri/src/platform/snap_win.rs).
+    const out = (e: MouseEvent) => {
+      if (!e.relatedTarget) hide();
+    };
     document.addEventListener("mouseover", over);
+    document.addEventListener("mouseout", out);
     document.addEventListener("mousemove", move, { passive: true });
     document.addEventListener("mousedown", hide, true);
     document.addEventListener("scroll", hide, true);
@@ -183,6 +189,7 @@ export function Tooltips() {
     return () => {
       hide();
       document.removeEventListener("mouseover", over);
+      document.removeEventListener("mouseout", out);
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mousedown", hide, true);
       document.removeEventListener("scroll", hide, true);
