@@ -163,7 +163,8 @@ export function TopBar({ title, sub, children, ask }: { title: string; sub?: str
           </>
         )}
       </div>
-      <div className="sp" />
+      {/* The bar's empty middle drags the window too: the script acts on the pressed element only. */}
+      <div className="sp" {...dragRegion()} />
       {children}
       {ask && <AskButton ask={ask} />}
       <SyncDot />

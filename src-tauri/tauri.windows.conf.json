@@ -9,6 +9,8 @@
         "height": 840,
         "minWidth": 1040,
         "minHeight": 640,
+        "decorations": false,
+        "shadow": true,
         "visible": false
       },
       {

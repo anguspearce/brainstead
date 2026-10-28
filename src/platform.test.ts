@@ -111,10 +111,12 @@ describe("vaultFile", () => {
 });
 
 describe("dragRegion", () => {
-  it("is on macOS only", () => {
+  it("is where the window has no title bar: macOS and Windows", () => {
     setPlatform("macos");
     expect(dragRegion()).toEqual({ "data-tauri-drag-region": true });
     setPlatform("windows");
+    expect(dragRegion()).toEqual({ "data-tauri-drag-region": true });
+    setPlatform("linux");
     expect(dragRegion()).toEqual({});
   });
 });

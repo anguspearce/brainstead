@@ -38,6 +38,7 @@ import { TrashScreen } from "./notes/Trash";
 import { nav, place, Screen, whenFree } from "./nav";
 import { Palette } from "./Palette";
 import { Welcome } from "./Permissions";
+import { WindowControls } from "./WindowControls";
 import { Scene } from "./scene";
 import { Placeholder } from "./Screens";
 import { SearchScreen } from "./Search";
@@ -183,6 +184,7 @@ export default function App({ scene }: { scene: Scene | null }) {
     return (
       <>
         <Welcome />
+        <WindowControls />
         <Tooltips />
       </>
     );
@@ -216,6 +218,7 @@ export default function App({ scene }: { scene: Scene | null }) {
       <UpdateHost />
       <QuitDialog />
       <Toasts />
+      <WindowControls />
     </div>
   );
 }

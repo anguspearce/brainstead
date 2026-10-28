@@ -223,9 +223,54 @@ input {
   flex: none;
 }
 
-/* Windows and Linux have a native title bar, so there are no traffic lights to leave room for. */
-html[data-platform]:not([data-platform="macos"]) .tlspace {
+/* Linux has a native title bar, so there are no traffic lights to leave room for. */
+html[data-platform="linux"] .tlspace {
   height: 0;
+}
+
+/* Windows has no title bar either (src/WindowControls.tsx draws the window's buttons at the top
+   right): just enough room that the brand sits level with the top bar's title. */
+html[data-platform="windows"] .tlspace {
+  height: 12px;
+}
+
+/* The window's own buttons on Windows, the size and place of the native ones (46 by 32), over
+   every screen and dialog as the native ones are. Close turns Windows' red. */
+.winctl {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+}
+.winctl button {
+  width: 46px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink2);
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  cursor: default;
+}
+.winctl button:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.winctl button.close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+.winctl button:focus-visible {
+  outline-offset: -2px;
+}
+
+/* The bars keep clear of the window's buttons. */
+html[data-platform="windows"] .top {
+  padding-right: 156px;
 }
 .brand {
   display: flex;
