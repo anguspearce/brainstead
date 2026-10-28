@@ -23,6 +23,7 @@ import { startMoves } from "./moves";
 import { isTranscriptPath } from "./meetingFlow";
 import { loadFeatures } from "./features";
 import { applyPlatform, blockBrowserKeys } from "./platform";
+import { applyInterfaceSize } from "./interfaceSize";
 
 // WebKit's own right-click menu offers Reload, which throws away the app's state. Keep it only
 // where it's useful — in text fields and on selected text — and leave custom menus to their owners.
@@ -41,6 +42,7 @@ async function start() {
   settings.loadFrom(s);
   applyTheme(s.theme);
   applyReadSize(s.readSize);
+  await applyInterfaceSize(s.interfaceSize);
   installFlushers();
   const scene = parseScene(sceneJson);
   // A note that's gone since (renamed or deleted elsewhere) opens Today instead of an error.

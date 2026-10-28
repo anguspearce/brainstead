@@ -20,6 +20,7 @@
     "dialog:allow-save",
     "dialog:allow-confirm",
     "core:webview:allow-print",
+    "core:webview:allow-set-webview-zoom",
     "opener:allow-open-url",
     "opener:allow-default-urls"
   ]

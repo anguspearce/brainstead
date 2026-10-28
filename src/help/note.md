@@ -71,7 +71,7 @@ Notes, wiki pages, sources and templates share the top bar: View, Edit and Sourc
 
 Some pages add buttons before these: a wiki page has **Refresh from sources**; a captured email or Teams thread has **Draft a reply**; another source has **Doc check**; a template has **Test run** and **Templater docs ↗**.
 
-Text size sets document text from 12 to 24 px for every note. `⌘=` and `⌘-` change it and `⌘0` resets it to 15 px.
+Text size sets document text from 12 to 24 px for every note. `⌘=` and `⌘-` change it and `⌘0` resets it to 15 px. It's separate from the whole window's [Interface size](help:settings-general) (`⇧⌘=` `⇧⌘-` `⇧⌘0`), which scales this text too.
 
 ## Rename, copy, export and more
 Rename edits the type, title and date, and shows the new filename and every link it will change; click **Rename & update links**. The note stays in its folder, and a message offers **Undo** (or press `⌘Z`).

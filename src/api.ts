@@ -34,6 +34,8 @@ export interface Settings {
   captureShortcut?: string;
   /** Document text size in px (the A/A control on a document's top bar). */
   readSize?: number;
+  /** The whole window's size as a percentage, 80 to 150 (Settings › General › Appearance; src/interfaceSize.ts). */
+  interfaceSize?: number;
   /** Back/forward history and where in it the window is, kept across restarts (src/nav.ts). */
   places?: { stack: import("./nav").Place[]; i: number };
   /** The Projects screen's order, dragged by hand: areas by name, projects by path. What isn't in

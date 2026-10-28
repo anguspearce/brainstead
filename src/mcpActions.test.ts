@@ -17,6 +17,8 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (p: string) => p,
 }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
+// Interface size zooms the window itself (src/interfaceSize.ts); here there is none.
+vi.mock("@tauri-apps/api/webviewWindow", () => ({ getCurrentWebviewWindow: () => ({ setZoom: vi.fn(async () => {}) }) }));
 
 import type { InboxItem, TaskRow } from "./api";
 import { findTask, Listing, runAction, taskLineOut } from "./mcpActions";
@@ -1773,6 +1775,14 @@ describe("MCP actions", () => {
       expect(await run("settings", { action: "set", key: "readSize", value: 18 })).toBe("A note's Text size (12 to 24, px) is now 18.");
       expect(settings.get().readSize).toBe(18);
       await expect(run("settings", { action: "set", key: "readSize", value: 30 })).rejects.toThrow(/12 to 24/);
+      // Interface size: the whole window, snapped to the slider's steps; the zoom itself needs the window.
+      expect(await run("settings")).toContain("interfaceSize · Settings › General › Appearance › Interface size (80 to 150, %): 100");
+      expect(await run("settings", { action: "set", key: "interfaceSize", value: 125 })).toBe(
+        "Settings › General › Appearance › Interface size (80 to 150, %) is now 130.",
+      );
+      expect(settings.get().interfaceSize).toBe(130);
+      await expect(run("settings", { action: "set", key: "interfaceSize", value: 160 })).rejects.toThrow(/80 to 150/);
+      await expect(run("settings", { action: "set", key: "interfaceSize", value: 70 })).rejects.toThrow(/80 to 150/);
       answers.capture_shortcut_status = () => ["Control+Shift+K", null];
       expect(await run("settings", { action: "set", key: "captureShortcut", value: "shift+control+k" })).toMatch(
         /is now "Control\+Shift\+K", registered with the system/,
@@ -1787,7 +1797,7 @@ describe("MCP actions", () => {
       expect(await run("settings", { action: "set", key: "captureShortcut", value: "Super+Space" })).toMatch(
         /set to "Super\+Space", but it isn't working: The system wouldn't give/,
       );
-      settings.update({ readSize: undefined, captureShortcut: undefined });
+      settings.update({ readSize: undefined, interfaceSize: undefined, captureShortcut: undefined });
     });
   });
 

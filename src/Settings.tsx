@@ -17,6 +17,7 @@ import { DEFAULT_SCRIPTS, TemplaterDocsLink } from "./notes/TemplateRun";
 import { useDocDefaults, useDocLook } from "./docLook";
 import { Markdown } from "./md/Markdown";
 import { applyTheme, settings, settingsError, useStore } from "./store";
+import { INTERFACE_SIZE, clampInterfaceSize, setInterfaceSize } from "./interfaceSize";
 import { toast } from "./Toast";
 import { errText } from "./notes/actions";
 import { Switchover } from "./Switchover";
@@ -364,8 +365,51 @@ function General() {
             applyTheme(t);
           }}
         />
+        <InterfaceSize />
       </section>
     </>
+  );
+}
+
+/** Interface size: the whole window at a percentage (src/interfaceSize.ts), applied as the slider moves. */
+function InterfaceSize() {
+  const size = clampInterfaceSize(useStore(settings).interfaceSize);
+  return (
+    <div className="ifacesize">
+      <div className="eyebrow">Interface size · {size}%</div>
+      <div className="row">
+        <input
+          type="range"
+          min={INTERFACE_SIZE.min}
+          max={INTERFACE_SIZE.max}
+          step={INTERFACE_SIZE.step}
+          value={size}
+          onChange={(e) => void setInterfaceSize(+e.target.value)}
+          aria-label="Interface size"
+          style={{ flex: 1 }}
+        />
+        <span
+          title={
+            size === INTERFACE_SIZE.default
+              ? "The interface is already the usual size"
+              : keyLabel("Set the interface back to the usual size (⇧⌘0)")
+          }
+        >
+          <button
+            type="button"
+            className="btn sm"
+            disabled={size === INTERFACE_SIZE.default}
+            onClick={() => void setInterfaceSize(INTERFACE_SIZE.default)}
+          >
+            Reset to {INTERFACE_SIZE.default}%
+          </button>
+        </span>
+      </div>
+      <p className="faint">
+        Everything in the window, from the sidebar to the text, bigger or smaller together. {keyLabel("⇧⌘=")} and {keyLabel("⇧⌘-")} change
+        it anywhere and {keyLabel("⇧⌘0")} puts it back. A note's Text size comes on top of it.
+      </p>
+    </div>
   );
 }
 

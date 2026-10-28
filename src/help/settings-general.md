@@ -39,3 +39,6 @@ Type your first name under **Your name**, as Teams writes it. Today greets you b
 
 ## Choose light or dark
 **Appearance** sets the app to **System**, **Light** or **Dark**. Changing it also sets documents back to following the app; to give notes their own light or dark, use [Settings › Notes](app:settings/notes).
+
+## Make everything bigger or smaller
+**Interface size** scales the whole window together, from 80% to 150% in steps of 10: the sidebar, lists, buttons, popovers, dialogs and the text of notes. Drag the slider and the window follows; **Reset to 100%** puts it back. `⇧⌘=` and `⇧⌘-` change it from any screen and `⇧⌘0` resets it; on a Mac the **View** menu has the same three. It's kept for this computer, not in the vault, so each machine has its own. A note's [Text size](help:note) (`⌘=` `⌘-` `⌘0`, 12 to 24 px) is separate and comes on top: 120% with 18 px text shows a 21.6 px body. The quick capture and menu-bar windows are sized to what they hold and stay at 100%. An assistant can read and change it when you ask (`interfaceSize`, a percentage).

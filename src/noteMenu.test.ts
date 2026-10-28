@@ -20,7 +20,8 @@ describe("the menu's keys where there's no menu bar", () => {
     for (const [id, acc] of WINDOW_KEYS) {
       const quoted = id.startsWith("help:") ? `with_id("${id}", "Brainstead Help").accelerator("${acc}")` : `("${id}", "`;
       expect(rs, id).toContain(quoted);
-      if (id.startsWith("note:")) expect(rs).toMatch(new RegExp(`\\("${id}", "[^"]+", Some\\("${acc.replace(/[.+]/g, "\\$&")}"\\)\\)`));
+      if (id.startsWith("note:") || id.startsWith("view:"))
+        expect(rs).toMatch(new RegExp(`\\("${id}", "[^"]+", Some\\("${acc.replace(/[.+]/g, "\\$&")}"\\)\\)`));
     }
   });
 
@@ -30,6 +31,13 @@ describe("the menu's keys where there's no menu bar", () => {
     expect(menuKey(press("KeyC", { ctrl: true, alt: true }))).toBe("note:copy-path");
     expect(menuKey(press("Period", { ctrl: true }))).toBe("note:focus");
     expect(menuKey(press("Slash", { ctrl: true, shift: true }))).toBe("help:open");
+    // Interface size, by the key's place: Shift+= is + on a US keyboard and something else elsewhere.
+    expect(menuKey(press("Equal", { ctrl: true, shift: true }))).toBe("view:interface-bigger");
+    expect(menuKey(press("Minus", { ctrl: true, shift: true }))).toBe("view:interface-smaller");
+    expect(menuKey(press("Digit0", { ctrl: true, shift: true }))).toBe("view:interface-usual");
+    // Without Shift they're a note's Text size (src/Doc.tsx) and the Sources screen.
+    expect(menuKey(press("Equal", { ctrl: true }))).toBeNull();
+    expect(menuKey(press("Digit0", { ctrl: true }))).toBeNull();
     expect(menuKey(press("KeyC", { ctrl: true }))).toBeNull();
     expect(menuKey(press("KeyP", { shift: true }))).toBeNull();
     // Save and New Note have the window's own handlers.
