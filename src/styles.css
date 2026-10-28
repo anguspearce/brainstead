@@ -2229,8 +2229,10 @@ details.callout[open] .callout-chev {
   gap: 8px;
   max-width: 420px;
 }
-.ifacesize input[type="range"] {
-  accent-color: var(--accent);
+.ifacesize .pct {
+  min-width: 44px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 /* tasks */

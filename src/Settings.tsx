@@ -17,7 +17,7 @@ import { DEFAULT_SCRIPTS, TemplaterDocsLink } from "./notes/TemplateRun";
 import { useDocDefaults, useDocLook } from "./docLook";
 import { Markdown } from "./md/Markdown";
 import { applyTheme, settings, settingsError, useStore } from "./store";
-import { INTERFACE_SIZE, clampInterfaceSize, setInterfaceSize } from "./interfaceSize";
+import { INTERFACE_SIZE, clampInterfaceSize, stepInterfaceSize } from "./interfaceSize";
 import { toast } from "./Toast";
 import { errText } from "./notes/actions";
 import { Switchover } from "./Switchover";
@@ -371,23 +371,35 @@ function General() {
   );
 }
 
-/** Interface size: the whole window at a percentage (src/interfaceSize.ts), applied as the slider moves. */
+/** Interface size: the whole window at a percentage (src/interfaceSize.ts), a step at a time. Buttons,
+ *  not a slider: the control itself zooms with the window, so a slider would move under the pointer. */
 function InterfaceSize() {
   const size = clampInterfaceSize(useStore(settings).interfaceSize);
   return (
     <div className="ifacesize">
-      <div className="eyebrow">Interface size · {size}%</div>
+      <div className="eyebrow">Interface size</div>
       <div className="row">
-        <input
-          type="range"
-          min={INTERFACE_SIZE.min}
-          max={INTERFACE_SIZE.max}
-          step={INTERFACE_SIZE.step}
-          value={size}
-          onChange={(e) => void setInterfaceSize(+e.target.value)}
-          aria-label="Interface size"
-          style={{ flex: 1 }}
-        />
+        <button
+          type="button"
+          className="btn sm"
+          disabled={size <= INTERFACE_SIZE.min}
+          title={keyLabel(`Everything ${INTERFACE_SIZE.step}% smaller (⇧⌘-)`)}
+          onClick={() => void stepInterfaceSize(-1)}
+        >
+          Smaller
+        </button>
+        <span className="pct" aria-label="Interface size">
+          {size}%
+        </span>
+        <button
+          type="button"
+          className="btn sm"
+          disabled={size >= INTERFACE_SIZE.max}
+          title={keyLabel(`Everything ${INTERFACE_SIZE.step}% bigger (⇧⌘=)`)}
+          onClick={() => void stepInterfaceSize(1)}
+        >
+          Bigger
+        </button>
         <span
           title={
             size === INTERFACE_SIZE.default
@@ -395,12 +407,7 @@ function InterfaceSize() {
               : keyLabel("Set the interface back to the usual size (⇧⌘0)")
           }
         >
-          <button
-            type="button"
-            className="btn sm"
-            disabled={size === INTERFACE_SIZE.default}
-            onClick={() => void setInterfaceSize(INTERFACE_SIZE.default)}
-          >
+          <button type="button" className="btn sm" disabled={size === INTERFACE_SIZE.default} onClick={() => void stepInterfaceSize(0)}>
             Reset to {INTERFACE_SIZE.default}%
           </button>
         </span>

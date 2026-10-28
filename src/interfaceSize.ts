@@ -7,7 +7,8 @@
 // page zoom on macOS), so the sidebar, lists, dialogs and note text grow together and canvases
 // (the graph, PDFs) stay sharp; the stylesheet's px sizes are untouched. Text size (readSize) is
 // separate and comes on top: 120% with 18 px text shows a 21.6 px body. Kept per machine in app
-// settings, as readSize is. The capture and menu-bar windows are sized to their content and stay at 100%.
+// settings, as readSize is. The capture and menu-bar windows are sized to their content and stay at
+// 100%: only the main window has the zoom permission (src-tauri/capabilities/main.json).
 
 import { api } from "./api";
 import { settings } from "./store";
@@ -34,10 +35,12 @@ export async function applyInterfaceSize(pct: number | undefined): Promise<numbe
   return v;
 }
 
-/** Sets the interface size: the window zooms at once and the setting is saved. */
+/** Sets the interface size: the setting first, so a held key steps from the size just chosen
+ *  rather than the one the window has reached, then the window zooms. */
 export async function setInterfaceSize(pct: number): Promise<number> {
-  const v = await applyInterfaceSize(pct);
+  const v = clampInterfaceSize(pct);
   settings.update({ interfaceSize: v });
+  await applyInterfaceSize(v);
   return v;
 }
 

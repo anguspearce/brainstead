@@ -42,7 +42,6 @@ async function start() {
   settings.loadFrom(s);
   applyTheme(s.theme);
   applyReadSize(s.readSize);
-  await applyInterfaceSize(s.interfaceSize);
   installFlushers();
   const scene = parseScene(sceneJson);
   // A note that's gone since (renamed or deleted elsewhere) opens Today instead of an error.
@@ -73,6 +72,8 @@ async function start() {
     );
     return;
   }
+  // The main window alone (the two above are sized to their content), before anything is drawn.
+  await applyInterfaceSize(s.interfaceSize);
   await Promise.all([startStatus(), recheckPermissions(), startAsk().catch((e) => console.error("ask", e))]);
   // A note renamed or trashed by an assistant, a run or Changes: the screens follow it.
   startMoves();

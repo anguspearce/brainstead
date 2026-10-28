@@ -112,7 +112,7 @@ import {
 import { DOC_ACCENTS, DOC_STYLES, docDefaults, lookOf, withOwnLook } from "./docLook";
 import { loadVoices, speechSettingsChanged, voiceLabel, voices } from "./speech/player";
 import { applyReadSize, applyTheme, READ_SIZE, settings } from "./store";
-import { INTERFACE_SIZE, setInterfaceSize } from "./interfaceSize";
+import { clampInterfaceSize, INTERFACE_SIZE, setInterfaceSize } from "./interfaceSize";
 import { imageView } from "./ImageViewer";
 import { TOPICS } from "./help";
 import { HelpView, openHelp } from "./help/HelpDrawer";
@@ -3395,8 +3395,8 @@ async function settingsTool(a: Args): Promise<string> {
       throw new Error(
         `${key} is a whole number from ${INTERFACE_SIZE.min} to ${INTERFACE_SIZE.max} (%), in steps of ${INTERFACE_SIZE.step}.`,
       );
-    // The slider's steps, as the screen snaps them.
-    v = Math.round((v as number) / INTERFACE_SIZE.step) * INTERFACE_SIZE.step;
+    // To the nearest step, as the screen does.
+    v = clampInterfaceSize(v as number);
   } else if (kind === "shortcut") {
     v = shortcutSpec(String(v ?? ""));
   } else if (kind === "choice" || kind === "model") {
