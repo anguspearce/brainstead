@@ -16,6 +16,7 @@ import {
   blankChat,
   type Chat,
   cliOf,
+  effortLabel,
   exchanges,
   closeChat,
   fallbackTitle,
@@ -42,9 +43,10 @@ describe("Ask state", () => {
     expect(cliOf("agy:gemini-3")).toBe("antigravity");
     expect(cliOf("copilot:auto")).toBe("copilot");
     expect(cliOf("gpt-5.5")).toBe("codex");
-    const found = [{ cli: "claude" as const, path: "/x", version: "2", models: [{ id: "claude:sonnet", name: "Sonnet" }] }];
+    const found = [{ cli: "claude" as const, path: "/x", version: "2", models: [{ id: "claude:sonnet", name: "Sonnet" }], efforts: [] }];
     expect(modelLabel("claude:sonnet", found)).toBe("Claude Code · Sonnet");
     expect(modelLabel("gpt-5.5", null)).toBe("ChatGPT · gpt-5.5");
+    expect(["low", "xhigh", "max"].map(effortLabel)).toEqual(["Low", "Extra high", "Max"]);
   });
 
   it("finishes a turn whose ask-done the window missed, with Rust's answer, once", async () => {

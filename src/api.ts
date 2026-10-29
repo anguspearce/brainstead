@@ -63,6 +63,9 @@ export interface Settings {
   /** A model per background job (summaries, weekprep, find, ingest, meeting, clarify, contradictions, skills); a
    *  job not named uses `askModel`. */
   jobModels?: Record<string, string>;
+  /** An effort level per assistant (Settings › AI assistants › Found on this computer), one of its
+   *  CliInfo `efforts`; an assistant not named uses its CLI's own default for the model. */
+  effort?: Partial<Record<CliName, string>>;
   /** Prompts sent in Ask, oldest first, for ↑ in the message box (the last 200). */
   askHistory?: string[];
   /** Tasks' saved lists (a view with its filters), by name. */
@@ -1596,6 +1599,8 @@ export interface CliInfo {
   path: string | null;
   version: string | null;
   models: { id: string; name: string }[];
+  /** The effort levels it can be set to, lowest first (brainstead_core::ask::Cli::efforts). */
+  efforts: string[];
 }
 
 export type AskEvent =

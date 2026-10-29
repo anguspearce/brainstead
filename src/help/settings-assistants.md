@@ -3,7 +3,7 @@ title: Settings › AI assistants
 kind: screen
 screens: [settings/assistants]
 order: 33
-summary: Which AI assistants Brainstead found, which model chats and jobs use, and the ingest switches.
+summary: Which AI assistants Brainstead found and their effort, which model chats and jobs use, and the ingest switches.
 ---
 Brainstead doesn't have a model of its own. It runs the AI assistants' command-line tools installed on this computer, signed in with your own account, with the vault as their working folder. They read the vault directly and change it only through Brainstead's tools.
 
@@ -30,6 +30,9 @@ With **Also refresh pages whose sources changed** on, the daily check in [Settin
 
 ## See which assistants are installed
 **Found on this computer** lists Claude Code, Codex, Antigravity and Copilot, with each one's version, how many models it offers and where it is. If one is missing, **How to install** opens its install instructions in your browser. If one is installed but lists no models, open Terminal, run it and sign in. Click **Look again** after installing or signing in. An assistant can read this list, and look again, too.
+
+## Set how hard an assistant thinks
+Each assistant installed has an effort menu on its row in **Found on this computer**: **Default effort**, or **Low**, **Medium**, **High**, **Extra high** and **Max** (Codex stops at Extra high). More effort gives more careful answers, more slowly and using more of your plan. The level is used for everything that assistant runs: chats in [Ask](app:ask) and background jobs. **Default effort**, the default, passes none, so the assistant uses its own for each model. Not every model takes every level: Claude Code runs a level a model lacks at the highest it has below it, and the others may stop with an error, which the chat shows; pick a lower level then. An assistant can read or set it too, when you ask.
 
 ## See which vault skills Brainstead now does itself
 If the vault has Claude Code skills that Brainstead now does on its own screens, **Skills Brainstead does now** lists them and the screen each opens. Picking one in Ask's `/` list opens that screen. The vault's copies keep working in Claude Code until you retire them with **Retire them** under Moving over in [Settings › General](app:settings/general), which moves them to the Trash.

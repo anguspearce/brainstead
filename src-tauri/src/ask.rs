@@ -78,6 +78,8 @@ pub struct CliInfo {
     version: Option<String>,
     /// Codex's and Antigravity's come from the signed-in account; Claude's are its aliases.
     models: Vec<Model>,
+    /// The effort levels Settings › AI assistants offers for it (`Cli::efforts`).
+    efforts: &'static [&'static str],
 }
 
 fn version(bin: &platform::Program) -> Option<String> {
@@ -134,6 +136,7 @@ pub async fn ask_clis() -> Vec<CliInfo> {
                 let bin = find(cli);
                 CliInfo {
                     cli,
+                    efforts: cli.efforts(),
                     version: bin.as_ref().and_then(version),
                     models: bin.as_ref().map(|b| models(cli, b)).unwrap_or_default(),
                     path: bin.map(|p| p.path.to_string_lossy().into_owned()),
@@ -158,6 +161,15 @@ pub struct DoneMsg {
     pub chat_id: String,
     #[serde(flatten)]
     pub outcome: Outcome,
+}
+
+/// The effort level set for `cli` in Settings › AI assistants (`effort.<cli>`); None leaves it to
+/// the CLI's own default for the model.
+fn cli_effort(app: &AppHandle, cli: Cli) -> Option<String> {
+    let key = serde_json::to_value(cli).ok()?;
+    let st = app.state::<crate::AppState>();
+    let s = st.settings.lock().unwrap();
+    s.ui.get("effort")?.get(key.as_str()?)?.as_str().map(str::to_string)
 }
 
 /// The model a job uses: its own from Settings › AI assistants (`jobModels`), else the default
@@ -272,7 +284,8 @@ pub fn run_with_images(
     let Some(vault) = app.state::<VaultService>().root() else { return fail("No vault is open.".into()) };
     let vault_s = vault.to_string_lossy().into_owned();
     let mcp = mcp.filter(|_| cli.takes_mcp());
-    let req = Request { prompt, model, session, system, vault: &vault_s, mcp, images };
+    let effort = cli_effort(app, cli);
+    let req = Request { prompt, model, session, system, vault: &vault_s, mcp, images, effort: effort.as_deref() };
     let launch = match ask::args(cli, &req) {
         Ok(l) => l,
         Err(e) => return fail(e),
