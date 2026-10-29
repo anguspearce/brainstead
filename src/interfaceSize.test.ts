@@ -10,7 +10,7 @@ describe("the interface size", () => {
     expect(clampInterfaceSize(undefined)).toBe(INTERFACE_SIZE.default);
     expect(clampInterfaceSize(NaN)).toBe(INTERFACE_SIZE.default);
     expect(clampInterfaceSize(120)).toBe(120);
-    // A hand-edited settings.json snaps to the slider's steps and stays readable.
+    // A hand-edited settings.json snaps to the setting's steps and stays readable.
     expect(clampInterfaceSize(125)).toBe(130);
     expect(clampInterfaceSize(112)).toBe(110);
     expect(clampInterfaceSize(40)).toBe(INTERFACE_SIZE.min);

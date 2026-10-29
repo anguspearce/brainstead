@@ -1775,7 +1775,7 @@ describe("MCP actions", () => {
       expect(await run("settings", { action: "set", key: "readSize", value: 18 })).toBe("A note's Text size (12 to 24, px) is now 18.");
       expect(settings.get().readSize).toBe(18);
       await expect(run("settings", { action: "set", key: "readSize", value: 30 })).rejects.toThrow(/12 to 24/);
-      // Interface size: the whole window, snapped to the slider's steps; the zoom itself needs the window.
+      // Interface size: the whole window, snapped to the setting's steps; the zoom itself needs the window.
       expect(await run("settings")).toContain("interfaceSize · Settings › General › Appearance › Interface size (80 to 150, %): 100");
       expect(await run("settings", { action: "set", key: "interfaceSize", value: 125 })).toBe(
         "Settings › General › Appearance › Interface size (80 to 150, %) is now 130.",
