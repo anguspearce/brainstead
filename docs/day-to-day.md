@@ -58,6 +58,8 @@ On Windows, ⌘ is Ctrl, ⌥ is Alt and ⇧ is Shift. Press `?` on any screen, c
 
 Settings (⌘,) has General, Notes, Vault, AI assistants, Jobs & schedule, Capture extensions, Permissions (Mac only) and About. Press `?` on each for what's in it.
 
+**Interface size** (General › Appearance) makes everything in the window bigger or smaller together, from 80% to 150% in steps of 10: the sidebar, lists, buttons, dialogs and the text of notes. ⇧⌘= and ⇧⌘- (Ctrl+Shift+= and Ctrl+Shift+- on Windows) change it from anywhere, ⇧⌘0 puts it back to 100%, and the View menu has the three on a Mac. It's kept per computer, not in the vault. A note's **Text size** (⌘= ⌘- ⌘0, on the note's ⋯ menu) is separate and comes on top: 120% with 18 px text shows a 21.6 px body.
+
 ## In the background
 
 - **Updates.** Brainstead checks for a new version 20 seconds after it opens and then once a day, and offers it in its window the next time the window has the focus, with what's new in it: **Install and Restart**, **Later** (asked again at the next day's check) or **Skip This Version**. Brainstead › Check for Updates… checks now. Installing shows the download's progress, then restarts. An update waits while something is running (Ask answering, an ingest, a summary, the daily check), and restarting asks about unsaved edits first, as quitting does. On Windows, which has no menu bar, it's **Check for Updates…** in Settings › About, and the installer shows its progress, closes Brainstead and opens the new version; the Windows update reaches each release a few minutes after the Mac's.

@@ -65,6 +65,7 @@ Counts that need you, such as overdue tasks, the Inbox and changes held for you,
 | ⌘1 … ⌘9, ⌘0 (Ctrl+1 … 0 on Windows) | Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki, Sources |
 | ⌘[ ⌘] | Back, forward |
 | ⌘Z | Undo the last change |
+| ⇧⌘= ⇧⌘- ⇧⌘0 (Ctrl+Shift+= … on Windows) | Interface size: everything bigger, smaller, or back to 100% |
 | ⌘, | Settings |
 | ? | Help for this screen |
 

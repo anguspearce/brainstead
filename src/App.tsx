@@ -33,6 +33,7 @@ import { NotesScreen, SourcesScreen, TemplatesScreen, WikiScreen } from "./Lists
 import { QueryBuilderHost } from "./editor/QueryBuilder";
 import { SpellMenuHost } from "./editor/SpellMenu";
 import { startNoteMenu } from "./noteMenu";
+import { startInterfaceSizeMenu } from "./interfaceSize";
 import { NoteDialogs } from "./notes/NoteDialogs";
 import { TrashScreen } from "./notes/Trash";
 import { nav, place, Screen, whenFree } from "./nav";
@@ -135,9 +136,9 @@ export default function App({ scene }: { scene: Scene | null }) {
     return () => void off.then((f) => f());
   }, []);
 
-  // The menu bar's Note and Help menus.
+  // The menu bar's Note, View and Help menus.
   useEffect(() => {
-    const off = [startNoteMenu(), startHelpMenu()];
+    const off = [startNoteMenu(), startInterfaceSizeMenu(), startHelpMenu()];
     return () => off.forEach((o) => void o.then((f) => f()));
   }, []);
 

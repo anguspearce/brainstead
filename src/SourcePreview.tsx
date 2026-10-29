@@ -120,6 +120,15 @@ function PdfView({ url }: { url: string }) {
   const [cur, setCur] = useState(1);
   // 1 fits the width; the steps go by quarters.
   const [zoom, setZoom] = useState(1);
+  // The pixel density: it changes with the Interface size (src/interfaceSize.ts) and a move between
+  // screens, and the pages are drawn at it.
+  const [dpr, setDpr] = useState(() => window.devicePixelRatio);
+  useEffect(() => {
+    const mq = window.matchMedia(`(resolution: ${dpr}dppx)`);
+    const changed = () => setDpr(window.devicePixelRatio);
+    mq.addEventListener("change", changed);
+    return () => mq.removeEventListener("change", changed);
+  }, [dpr]);
   const [texts, setTexts] = useState<string[]>([]);
   const [q, setQ] = useState("");
   const [hit, setHit] = useState(0);
@@ -164,7 +173,7 @@ function PdfView({ url }: { url: string }) {
         const page = await pdf.getPage(i);
         const v1 = page.getViewport({ scale: 1 });
         const scale = width / v1.width;
-        const vp = page.getViewport({ scale: scale * window.devicePixelRatio });
+        const vp = page.getViewport({ scale: scale * dpr });
         const c = document.createElement("canvas");
         c.width = vp.width;
         c.height = vp.height;
@@ -178,7 +187,7 @@ function PdfView({ url }: { url: string }) {
     return () => {
       live = false;
     };
-  }, [pages, zoom]);
+  }, [pages, zoom, dpr]);
 
   // The page most in view.
   useEffect(() => {

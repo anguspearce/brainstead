@@ -45,6 +45,14 @@ const ITEMS: &[(&str, &str, Option<&str>)] = &[
     ("note:trash", "Move to the Trash", None),
 ];
 
+/// The View menu's Interface size items (src/interfaceSize.ts): the whole window bigger or smaller
+/// by a step, or back to 100%. Shift on a note's Text size keys, so the two never meet.
+const VIEW_ITEMS: &[(&str, &str, Option<&str>)] = &[
+    ("view:interface-bigger", "Bigger Interface", Some("Shift+CmdOrCtrl+Equal")),
+    ("view:interface-smaller", "Smaller Interface", Some("Shift+CmdOrCtrl+Minus")),
+    ("view:interface-usual", "Usual Interface Size", Some("Shift+CmdOrCtrl+0")),
+];
+
 /// The label an item has on this system: Windows names its file manager in its own words.
 fn label(id: &str, label: &'static str) -> &'static str {
     if cfg!(windows) && id == "note:reveal" {
@@ -97,7 +105,7 @@ fn accel(a: &'static str) -> &'static str {
     }
 }
 
-/// Puts the menu bar up and routes its Note items to the window. Not on Windows, which has none,
+/// Puts the menu bar up and routes its Note and View items to the window. Not on Windows, which has none,
 /// as Two-edged Sword and Tidemark have none there: the window takes the Note and Help menus' keys
 /// itself (src/noteMenu.ts), and Check for Updates… is in Settings › About.
 pub fn install(app: &AppHandle) -> tauri::Result<()> {
@@ -124,6 +132,35 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
     // After the app menu and File on macOS; first elsewhere.
     let at = if cfg!(target_os = "macos") { 2 } else { 0 };
     menu.insert(&sub.build()?, at.min(menu.items()?.len()))?;
+    // View: Interface size, after the platform's own items (macOS has Enter Full Screen), or a View
+    // menu of its own after Note.
+    let mut view_items = Vec::new();
+    for &(id, label, acc) in VIEW_ITEMS {
+        let mut b = MenuItemBuilder::with_id(id, label);
+        if let Some(a) = acc {
+            b = b.accelerator(a);
+        }
+        view_items.push(b.build(app)?);
+    }
+    let view = menu.items()?.into_iter().find_map(|i| match i {
+        MenuItemKind::Submenu(s) if s.text().is_ok_and(|t| t == "View") => Some(s),
+        _ => None,
+    });
+    match view {
+        Some(v) => {
+            v.append(&PredefinedMenuItem::separator(app)?)?;
+            for i in &view_items {
+                v.append(i)?;
+            }
+        }
+        None => {
+            let mut v = SubmenuBuilder::new(app, "View");
+            for i in &view_items {
+                v = v.item(i);
+            }
+            menu.insert(&v.build()?, (at + 1).min(menu.items()?.len()))?;
+        }
+    }
     // Help: the drawer (src/help/HelpDrawer.tsx) and the shortcut sheet, added to the platform's
     // Help menu (macOS keeps its search field at the top), or a Help menu of its own.
     let help_open = MenuItemBuilder::with_id("help:open", "Brainstead Help").accelerator("Shift+CmdOrCtrl+Slash").build(app)?;
@@ -178,8 +215,9 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
             // edits, then "Quit Brainstead?".
             "app:quit" => crate::tray::tray_quit(app.clone()),
             "app:updates" => crate::updates::check_now(app),
-            // The window acts on the Note and Help items (src/noteMenu.ts, src/help/HelpDrawer.tsx).
-            _ if id.starts_with("note:") || id.starts_with("help:") => {
+            // The window acts on the Note, View and Help items (src/noteMenu.ts,
+            // src/interfaceSize.ts, src/help/HelpDrawer.tsx).
+            _ if id.starts_with("note:") || id.starts_with("view:") || id.starts_with("help:") => {
                 if let Some(w) = app.get_webview_window("main") {
                     let _ = w.show();
                     let _ = w.set_focus();

@@ -2227,6 +2227,20 @@ details.callout[open] .callout-chev {
   align-self: flex-start;
 }
 
+/* Settings › General › Appearance: Interface size */
+.ifacesize {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 420px;
+}
+.ifacesize .pct {
+  min-width: 44px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 /* tasks */
 .cb {
   width: 17px;

@@ -23,6 +23,7 @@ import { startMoves } from "./moves";
 import { isTranscriptPath } from "./meetingFlow";
 import { loadFeatures } from "./features";
 import { applyPlatform, blockBrowserKeys } from "./platform";
+import { applyInterfaceSize } from "./interfaceSize";
 
 // WebKit's own right-click menu offers Reload, which throws away the app's state. Keep it only
 // where it's useful — in text fields and on selected text — and leave custom menus to their owners.
@@ -71,6 +72,8 @@ async function start() {
     );
     return;
   }
+  // The main window alone (the two above are sized to their content), before anything is drawn.
+  await applyInterfaceSize(s.interfaceSize);
   await Promise.all([startStatus(), recheckPermissions(), startAsk().catch((e) => console.error("ask", e))]);
   // A note renamed or trashed by an assistant, a run or Changes: the screens follow it.
   startMoves();

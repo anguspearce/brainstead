@@ -112,6 +112,7 @@ import {
 import { DOC_ACCENTS, DOC_STYLES, docDefaults, lookOf, withOwnLook } from "./docLook";
 import { loadVoices, speechSettingsChanged, voiceLabel, voices } from "./speech/player";
 import { applyReadSize, applyTheme, READ_SIZE, settings } from "./store";
+import { clampInterfaceSize, INTERFACE_SIZE, setInterfaceSize } from "./interfaceSize";
 import { imageView } from "./ImageViewer";
 import { TOPICS } from "./help";
 import { HelpView, openHelp } from "./help/HelpDrawer";
@@ -3178,7 +3179,7 @@ async function taskLists(a: Args): Promise<string> {
 
 // ---- Settings
 
-type SettingKind = "bool" | "time" | "text" | "number" | "day" | "theme" | "choice" | "model" | "speed" | "size" | "shortcut";
+type SettingKind = "bool" | "time" | "text" | "number" | "day" | "theme" | "choice" | "model" | "speed" | "size" | "percent" | "shortcut";
 /** A choice setting's choices, as its menu offers them: each value and how the screen names it. */
 type Choices = () => Promise<[string, string][]> | [string, string][];
 /** What the settings tool can change, by key: its pane, label, kind and default, a choice's
@@ -3199,6 +3200,7 @@ async function modelChoices(): Promise<[string, string][]> {
 const settingRows = (): SettingRow[] => [
   ["ownerName", "General", "Your name", "text", ""],
   ["theme", "General", "Appearance (system, light or dark)", "theme", "system"],
+  ["interfaceSize", "General", "Appearance › Interface size (80 to 150, %)", "percent", INTERFACE_SIZE.default],
   ["openAtLogin", "General", "Open at login", "bool", false],
   ["menuBar", "General", "Show in the menu bar", "bool", true],
   ["menuBarOnly", "General", `Only in the menu bar when the window is closed${isMac ? "" : " (Mac only; no effect here)"}`, "bool", false],
@@ -3387,6 +3389,14 @@ async function settingsTool(a: Args): Promise<string> {
     v = Number(v);
     if (!Number.isInteger(v) || (v as number) < READ_SIZE.min || (v as number) > READ_SIZE.max)
       throw new Error(`${key} is a whole number from ${READ_SIZE.min} to ${READ_SIZE.max} (px).`);
+  } else if (kind === "percent") {
+    v = Number(v);
+    if (!Number.isInteger(v) || (v as number) < INTERFACE_SIZE.min || (v as number) > INTERFACE_SIZE.max)
+      throw new Error(
+        `${key} is a whole number from ${INTERFACE_SIZE.min} to ${INTERFACE_SIZE.max} (%), in steps of ${INTERFACE_SIZE.step}.`,
+      );
+    // To the nearest step, as the screen does.
+    v = clampInterfaceSize(v as number);
   } else if (kind === "shortcut") {
     v = shortcutSpec(String(v ?? ""));
   } else if (kind === "choice" || kind === "model") {
@@ -3414,6 +3424,8 @@ async function settingsTool(a: Args): Promise<string> {
     applyTheme(v as Settings["theme"]);
   } else if (kind === "size") {
     settings.update({ readSize: applyReadSize(v as number) });
+  } else if (kind === "percent") {
+    await setInterfaceSize(v as number);
   } else settings.update({ [key!]: v } as Partial<Settings>);
   await settings.flush();
   if (key === "speechVoice" || key === "speechRate") speechSettingsChanged();

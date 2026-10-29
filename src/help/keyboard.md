@@ -18,6 +18,7 @@ Keys are shown for this computer: Windows uses Ctrl, Alt and Shift where the Mac
 - `⌘[` `⌘]` — Back, forward
 - `⌘1 … ⌘9` `⌘0` — Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki, Sources
 - `⌘,` — Settings
+- `⇧⌘=` `⇧⌘-` `⇧⌘0` — Bigger, smaller, usual interface size (everything in the window; [Settings › General](app:settings/general))
 - `?` — Help for this screen
 - `Esc` — Clear the screen's search box
 - `⇧⌘?` — Brainstead Help (Help menu)

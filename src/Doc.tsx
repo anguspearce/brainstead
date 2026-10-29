@@ -1098,13 +1098,14 @@ function Compare({ theirs, mine, onClose }: { theirs: string; mine: string; onCl
 
 const setReadSize = (px: number) => settings.update({ readSize: applyReadSize(px) });
 
-/** ⌘+ / ⌘− / ⌘0 change the text size while `on` (a note or page is open). */
+/** ⌘+ / ⌘− / ⌘0 change the text size while `on` (a note or page is open). With Shift they're the
+ *  Interface size's (src/interfaceSize.ts), so a shifted = (+ on a US keyboard) isn't taken here. */
 function useTextSizeKeys(on: boolean) {
   useEffect(() => {
     if (!on) return;
     const set = setReadSize;
     const k = (e: KeyboardEvent) => {
-      if (!isMod(e) || e.altKey || strayCtrl(e)) return;
+      if (!isMod(e) || e.altKey || e.shiftKey || strayCtrl(e)) return;
       const cur = settings.get().readSize ?? READ_SIZE.default;
       if (e.key === "=" || e.key === "+") set(cur + 1);
       else if (e.key === "-") set(cur - 1);

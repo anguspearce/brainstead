@@ -17,6 +17,7 @@ import { DEFAULT_SCRIPTS, TemplaterDocsLink } from "./notes/TemplateRun";
 import { useDocDefaults, useDocLook } from "./docLook";
 import { Markdown } from "./md/Markdown";
 import { applyTheme, settings, settingsError, useStore } from "./store";
+import { INTERFACE_SIZE, clampInterfaceSize, stepInterfaceSize } from "./interfaceSize";
 import { toast } from "./Toast";
 import { errText } from "./notes/actions";
 import { Switchover } from "./Switchover";
@@ -364,8 +365,58 @@ function General() {
             applyTheme(t);
           }}
         />
+        <InterfaceSize />
       </section>
     </>
+  );
+}
+
+/** Interface size: the whole window at a percentage (src/interfaceSize.ts), a step at a time. Buttons,
+ *  not a slider: the control itself zooms with the window, so a slider would move under the pointer. */
+function InterfaceSize() {
+  const size = clampInterfaceSize(useStore(settings).interfaceSize);
+  return (
+    <div className="ifacesize">
+      <div className="eyebrow">Interface size</div>
+      <div className="row">
+        <button
+          type="button"
+          className="btn sm"
+          disabled={size <= INTERFACE_SIZE.min}
+          title={keyLabel(`Everything ${INTERFACE_SIZE.step}% smaller (⇧⌘-)`)}
+          onClick={() => void stepInterfaceSize(-1)}
+        >
+          Smaller
+        </button>
+        <span className="pct" aria-label="Interface size">
+          {size}%
+        </span>
+        <button
+          type="button"
+          className="btn sm"
+          disabled={size >= INTERFACE_SIZE.max}
+          title={keyLabel(`Everything ${INTERFACE_SIZE.step}% bigger (⇧⌘=)`)}
+          onClick={() => void stepInterfaceSize(1)}
+        >
+          Bigger
+        </button>
+        <span
+          title={
+            size === INTERFACE_SIZE.default
+              ? "The interface is already the usual size"
+              : keyLabel("Set the interface back to the usual size (⇧⌘0)")
+          }
+        >
+          <button type="button" className="btn sm" disabled={size === INTERFACE_SIZE.default} onClick={() => void stepInterfaceSize(0)}>
+            Reset to {INTERFACE_SIZE.default}%
+          </button>
+        </span>
+      </div>
+      <p className="faint">
+        Everything in the window, from the sidebar to the text, bigger or smaller together. {keyLabel("⇧⌘=")} and {keyLabel("⇧⌘-")} change
+        it anywhere and {keyLabel("⇧⌘0")} puts it back. A note's Text size comes on top of it.
+      </p>
+    </div>
   );
 }
 
