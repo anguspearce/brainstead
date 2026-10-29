@@ -12,10 +12,9 @@ are the app (not `--mcp` servers, not the capture extensions' host) and reads th
 "started" since the burst began, a "second launch handed over" line from each of the other copies,
 and no "capture shortcut: … already registered" from a doubled start. Passes when exactly one copy
 is left and every hand-over arrived. `--quit` quits that copy afterwards (`Brainstead --quit`, as
-the install script does; a debug build needs `npm run dev` up to answer it). `--exe` is a build with
-the fix (`npm run tauri build`, or the debug build): the default is the installed app, which has the
-bug until it's reinstalled. `BRAINSTEAD_DATA` is honoured for the log folder, though a copy started
-with it set doesn't take the lock at all.
+the install script does; a debug build needs `npm run dev` up to answer it). `--exe` is the build to
+test (`npm run tauri build`, or the debug build); the default is the installed app. `BRAINSTEAD_DATA`
+is honoured for the log folder, though a copy started with it set doesn't take the lock at all.
 """
 
 import argparse
