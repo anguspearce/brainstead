@@ -41,8 +41,8 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 use vault::VaultService;
 
-// Not DECORATIONS: the window's config decides those (none on Windows since 2026-10-28), and a
-// state file saved by an earlier version would put the native title bar back.
+// Not DECORATIONS: the window's config decides those (none on Windows), and a state file saved
+// while the window still had them would put the native title bar back.
 const STATE_FLAGS: StateFlags = StateFlags::all().difference(StateFlags::VISIBLE.union(StateFlags::DECORATIONS));
 
 /// Takes a lock even when a panic poisoned it: what it guards is plain data (settings, an index
