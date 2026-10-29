@@ -18,7 +18,7 @@ globalThis.brainsteadReadSignIn = async function readSignIn() {
     gtm: null,
     seen: { keys: localStorage.length, encrypted: 0, decrypted: 0, targets: [], problems: [] },
   };
-  const plain = []; // entries kept unencrypted: the only ones on older MSAL, leftovers on newer
+  const plain = []; // entries kept unencrypted: all of them on older MSAL, some on newer
   const take = (e, into = out.ats) => {
     if (e && e.credentialType === "RefreshToken" && e.secret && e.clientId) out.rt = e;
     if (e && e.credentialType === "AccessToken" && e.secret) {
@@ -77,17 +77,18 @@ globalThis.brainsteadReadSignIn = async function readSignIn() {
         false,
         ["decrypt"],
       );
-      const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(12) }, key, unb64(e.data));
-      take(JSON.parse(new TextDecoder().decode(plain)));
+      const clear = await crypto.subtle.decrypt({ name: "AES-GCM", iv: new Uint8Array(12) }, key, unb64(e.data));
+      take(JSON.parse(new TextDecoder().decode(clear)));
       out.seen.decrypted++;
     } catch (err) {
       out.seen.problems.push(`decrypting: ${err?.name || err}`);
     }
   }
   if (!base && out.seen.encrypted) out.seen.problems.push("no cache key cookie");
-  // Once the page keeps its tokens encrypted, the plain ones are what an earlier sign-in left behind,
-  // possibly signed out since (Microsoft then rejects them though they look unexpired).
-  if (!out.seen.decrypted) out.ats.push(...plain);
+  // Teams keeps some tokens plain and some encrypted, so both go over. A plain one may be what an
+  // earlier sign-in left behind, signed out since: Brainstead picks the longest-lived token for each
+  // service (the newest), and stops using one Microsoft turns down.
+  out.ats.push(...plain);
   out.seen.problems = [...new Set(out.seen.problems)];
   return out;
 };

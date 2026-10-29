@@ -3,7 +3,7 @@
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Rt5GJPD+O8ho1EPu4e3omlNDL0BO10ORSivFl8U6QtZZHzR7DX/p6RcJAEhjs2D6CKkJQRWdmiJO9EdROcZdTvqPdVXjTJhQWWkczBvDIRz0ACOjsN7aImyvEibHreB5cs2fXK1brBOoIkjcX5liQguA1BQ/npjf98lggP9vvhu6exqpi9dOSLSdnFOhTCyeU8335ZKOx+xwjC4fe1/6rbbd0qHnGnSRoeB7UeomRM97iQzpRvJ/kgRux3ZH08I7pyV6qyQWPsYy9fasjH0gSdDc5w0A8wX2q418H/1SBbMvBovPZ//j2CVYLnNRERTfWVBYBa+F/LhILq24E1+0QIDAQAB",
   "name": "Brainstead \u2014 Teams capture",
   "description": "Send the open Microsoft Teams chat, channel thread or meeting transcript to Brainstead's sources.",
-  "version": "1.1.16",
+  "version": "1.1.17",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
