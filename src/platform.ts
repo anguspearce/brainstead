@@ -60,11 +60,12 @@ export function vaultFile(root: string, rel: string): string {
 }
 
 /**
- * `data-tauri-drag-region` on macOS only, spread onto an element: there the window has no title
- * bar and its top is dragged by these. Windows has its own title bar, and an element it drags the
- * window by no longer scrolls or takes clicks.
+ * `data-tauri-drag-region`, spread onto an element, where the window has no title bar (macOS and
+ * Windows; Linux keeps its own) and is dragged by these instead. Tauri's drag script acts on a
+ * press on the element itself, not on its children, so a bar's buttons and fields keep their
+ * clicks; the element itself no longer scrolls or takes clicks, so it goes on empty space only.
  */
-export const dragRegion = (): { "data-tauri-drag-region"?: true } => (isMac ? { "data-tauri-drag-region": true } : {});
+export const dragRegion = (): { "data-tauri-drag-region"?: true } => (isMac || isWindows ? { "data-tauri-drag-region": true } : {});
 
 /** Sets `data-platform` on the root element, which the stylesheet reads. */
 export function applyPlatform() {

@@ -65,6 +65,10 @@
      Settings, Meeting notes, the weekly steps), and a list beside a record (Projects, Changes). */
   --pane-left: 260px;
   --pane-list: 400px;
+
+  /* Every screen's top bar, its divider included; the help drawer opens under it and the window's
+     own buttons on Windows fill it. */
+  --top-h: 52px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -223,9 +227,65 @@ input {
   flex: none;
 }
 
-/* Windows and Linux have a native title bar, so there are no traffic lights to leave room for. */
-html[data-platform]:not([data-platform="macos"]) .tlspace {
+/* Linux has a native title bar, so there are no traffic lights to leave room for. */
+html[data-platform="linux"] .tlspace {
   height: 0;
+}
+
+/* Windows has no title bar either (src/WindowControls.tsx draws the window's buttons at the top
+   right): just enough room that the brand sits level with the top bar's title. */
+html[data-platform="windows"] .tlspace {
+  height: 12px;
+}
+
+/* The window's own buttons on Windows: as wide as the native ones (46px) and as tall as the top
+   bar above its divider, the glyph centred and the hover filling the whole button. Over every
+   screen and dialog, as the native ones are. Close turns Windows' red. */
+.winctl {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+}
+.winctl button {
+  width: 46px;
+  height: calc(var(--top-h) - 1px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink2);
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  cursor: default;
+}
+
+/* .hover: the pointer is on the snap-layout window over maximise (src-tauri/src/platform/snap_win.rs). */
+.winctl button:hover,
+.winctl button.hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.winctl button:active {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+.winctl button.close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+.winctl button.close:active {
+  background: rgb(196 43 28 / 85%);
+  color: #fff;
+}
+.winctl button:focus-visible {
+  outline-offset: -2px;
+}
+
+/* The bars keep clear of the window's buttons. */
+html[data-platform="windows"] .top {
+  padding-right: 156px;
 }
 .brand {
   display: flex;
@@ -479,7 +539,7 @@ html[data-platform]:not([data-platform="macos"]) .tlspace {
   min-height: 0;
 }
 .top {
-  height: 52px;
+  height: var(--top-h);
   flex: none;
   display: flex;
   align-items: center;
@@ -9268,7 +9328,7 @@ button.hc {
 /* the help drawer (src/help/HelpDrawer.tsx): on the right under the top bar, as the mock */
 .help-drawer {
   position: fixed;
-  top: 52px;
+  top: var(--top-h);
   right: 0;
   bottom: 0;
   z-index: 40;

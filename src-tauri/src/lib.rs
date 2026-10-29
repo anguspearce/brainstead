@@ -41,7 +41,9 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 use vault::VaultService;
 
-const STATE_FLAGS: StateFlags = StateFlags::all().difference(StateFlags::VISIBLE);
+// Not DECORATIONS: the window's config decides those (none on Windows), and a state file saved
+// while the window still had them would put the native title bar back.
+const STATE_FLAGS: StateFlags = StateFlags::all().difference(StateFlags::VISIBLE.union(StateFlags::DECORATIONS));
 
 /// Takes a lock even when a panic poisoned it: what it guards is plain data (settings, an index
 /// whose transaction rolled back), and one bad file mustn't take the app down with it.
@@ -315,6 +317,12 @@ async fn wiki_meta(app: AppHandle) -> Result<Vec<brainstead_core::lists::WikiMet
     tauri::async_runtime::spawn_blocking(move || app.state::<VaultService>().with_index(|ix, _| ix.wiki_meta()))
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// The window's maximise button moved (src/WindowControls.tsx): see `platform::set_max_button`.
+#[tauri::command]
+fn window_max_button(window: tauri::WebviewWindow, rect: Option<(i32, i32, i32, i32)>) {
+    platform::set_max_button(&window, rect);
 }
 
 // Spelling and grammar for the editor. Not async: AppKit's checker wants the main thread.
@@ -846,6 +854,7 @@ pub fn run() {
             updates::update_check,
             source_parts,
             spell_check,
+            window_max_button,
             spell_grammar,
             spell_guesses,
             spell_accept,
