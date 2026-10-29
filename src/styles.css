@@ -256,7 +256,10 @@ html[data-platform]:not([data-platform="macos"]) .tlspace {
   margin-left: auto;
 }
 
-/* Out to the sidebar's right edge (its padding taken back inside), so the scrollbar sits against it. */
+/* Out to the sidebar's right edge (its padding taken back inside), so the scrollbar sits against it.
+   The other three sides get 3px of room, taken back the same way: the scroll box clips, so a selected
+   row's ring (1px, with a 2px blur) and the focus outline (2px, offset 1px) would otherwise be cut
+   flat where they cross its edge. */
 .sidescroll {
   display: flex;
   flex-direction: column;
@@ -264,8 +267,8 @@ html[data-platform]:not([data-platform="macos"]) .tlspace {
   overflow-y: auto;
   min-height: 0;
   flex: 1;
-  margin-right: -12px;
-  padding-right: 12px;
+  margin: -3px -12px -3px -3px;
+  padding: 3px 12px 3px 3px;
 }
 
 /* A bookmark's row, with its × on hover (bookmark removed, the note kept). */
@@ -940,7 +943,10 @@ html[data-platform]:not([data-platform="macos"]) .tlspace {
   align-items: center;
   justify-content: center;
 }
-.scrim.top {
+
+/* The palette's scrim, with the dialog near the top. Its modifier is not "top": that is the top
+   bar's class, whose height, padding and border would apply to the scrim and shrink it to a band. */
+.scrim.upper {
   align-items: flex-start;
   padding-top: 96px;
 }

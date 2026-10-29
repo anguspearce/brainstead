@@ -431,7 +431,7 @@ export function Palette({ onClose }: { onClose: () => void }) {
   };
   return (
     <div
-      className="scrim top"
+      className="scrim upper"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
