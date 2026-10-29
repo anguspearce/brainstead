@@ -19,6 +19,8 @@ mod macos;
 mod now_playing;
 #[cfg(target_os = "macos")]
 mod quick_look;
+#[cfg(windows)]
+mod single_instance_win;
 #[cfg(target_os = "macos")]
 mod speech;
 #[cfg(target_os = "macos")]
@@ -42,6 +44,19 @@ pub use tray::{place_tray_window, tray_icon, tray_window_resized};
 /// tests). The rule is in core, which the standalone MCP server shares.
 pub fn data_dir() -> PathBuf {
     brainstead_core::paths::data_dir()
+}
+
+/// Makes this the only copy of the app in the user's session, before anything else starts. On
+/// Windows a second copy hands its arguments to the first (`tray::second_launch` there, through the
+/// single-instance plugin's window) and exits here, before the log, settings or index are touched,
+/// or says so and exits when the first copy takes no hand-over within a minute: the plugin alone
+/// decides too late (`single_instance_win`). Elsewhere this does nothing: the
+/// plugin decides on Linux, and macOS opens one copy of an app bundle itself.
+pub fn claim_single_instance(identifier: &str) {
+    #[cfg(windows)]
+    single_instance_win::claim(identifier);
+    #[cfg(not(windows))]
+    let _ = identifier;
 }
 
 /// The About panel with `link` under the copyright, clickable, opening `url`: macOS's standard

@@ -185,6 +185,8 @@ pub fn tray_quit(app: AppHandle) {
 /// the app's identifier and so its single-instance lock, is ignored.
 #[cfg(any(windows, target_os = "linux"))]
 pub fn second_launch(app: &AppHandle, args: &[String]) {
+    // The log's proof that a hand-over arrived (tools/single_instance_burst.py counts them).
+    crate::applog!("second launch handed over: {}", args.iter().skip(1).cloned().collect::<Vec<_>>().join(" "));
     if !args.iter().any(|a| a == "--quit") {
         show_main(app);
         return;
