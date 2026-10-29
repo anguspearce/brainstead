@@ -100,8 +100,10 @@ import {
   ask,
   CLI_LABEL,
   clis,
+  cliOf,
   DEFAULT_MODEL,
   effortLabel,
+  effortSaved,
   findClis,
   isSaved,
   keepChat,
@@ -3116,10 +3118,12 @@ async function chatsTool(a: Args): Promise<string | Listing> {
     const turns = full.transcript.filter((t) => t.role === "user" || t.role === "assistant");
     return {
       text: [
-        `${c.title} (${turns.length} messages):`,
+        `${c.title} (${turns.length} messages, ${c.effort ? `${effortLabel(c.effort)} effort` : "Default effort"}):`,
         ...turns.map((t) => `\n${t.role === "user" ? "User" : "Assistant"}: ${t.text}`),
       ].join("\n"),
-      structured: { chat: { file: c.filename, title: c.title, messages: turns.map((t) => ({ role: t.role, text: t.text })) } },
+      structured: {
+        chat: { file: c.filename, title: c.title, effort: c.effort ?? null, messages: turns.map((t) => ({ role: t.role, text: t.text })) },
+      },
     };
   }
   if (action === "rename") {
@@ -3138,12 +3142,28 @@ async function chatsTool(a: Args): Promise<string | Listing> {
       ? `Pinned “${c.title}”: it's kept whatever happens.`
       : `Unpinned “${c.title}”${saved(c) ? "" : "; as it isn't saved, it's deleted once it's closed and 20 newer chats are in History"}.`;
   }
+  if (action === "effort") {
+    // As the menu beside the chat's model in Ask: its assistant's levels, by id or name.
+    const want = String(a.effort ?? "")
+      .trim()
+      .toLowerCase();
+    const cli = cliOf(c.model ?? DEFAULT_MODEL);
+    await findClis(!clis.get()?.length);
+    const levels = clis.get()?.find((x) => x.cli === cli)?.efforts ?? [];
+    const level = want ? levels.find((l) => l === want || effortLabel(l).toLowerCase() === want) : null;
+    if (level === undefined)
+      throw new Error(`effort for ${CLI_LABEL[cli]} is one of: ${levels.join(", ") || "none here"}, or empty for Default effort.`);
+    await effortSaved(c, level);
+    const said = level ? `${effortLabel(level)} effort` : "Default effort (the assistant's own for each model)";
+    noted(`set the chat “${c.title}” to ${said}`);
+    return `“${c.title}” runs at ${said} from its next message. New chats still start with the effort set in Settings › AI assistants.`;
+  }
   if (action === "trash") {
     await trashSaved(c);
     noted(`moved the chat “${c.title}” to the Trash`);
     return `Moved “${c.title}” to the Trash.`;
   }
-  throw new Error("action is list, read, rename, pin, unpin or trash.");
+  throw new Error("action is list, read, rename, pin, unpin, effort or trash.");
 }
 
 // ---- Tasks' saved lists

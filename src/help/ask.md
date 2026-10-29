@@ -26,6 +26,9 @@ Save needs the vault to be writable. While it's read-only, a saved chat's new tu
 ## Choose the assistant and model
 Ask works with Claude Code, Codex, Antigravity and Copilot, whichever are installed and signed in. Pick the model with the button beside **Send** before your first message. Each chat keeps the model it started with: to use another, start a new chat. New chats start with the model set in [Settings › AI assistants](app:settings/assistants), which also shows which assistants were found. For Claude Code, the top bar shows how much of the model's context the chat has used.
 
+## Choose how hard it thinks
+The menu beside the model sets the chat's effort: **Default effort** (the assistant's own for each model), or **Low** to **Max**. A new chat starts with the effort set for its assistant in [Settings › AI assistants](app:settings/assistants); changing it here changes this chat only, from its next message, and works after the first message too. More effort gives more careful answers, more slowly and using more of your plan.
+
 ## Write a message
 An empty chat offers three example questions and Brainstead's own skills; click one to type it into the box. With no assistant installed, it says **No assistant found** and what to install.
 

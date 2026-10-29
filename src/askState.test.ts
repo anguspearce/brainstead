@@ -27,9 +27,12 @@ import {
   save,
   send,
   sessionOf,
+  setEffort,
+  setModel,
   toSaved,
   unqueue,
 } from "./askState";
+import { settings } from "./store";
 
 describe("Ask state", () => {
   beforeEach(() => {
@@ -152,10 +155,28 @@ describe("Ask state", () => {
     ]);
   });
 
+  it("starts a chat at its assistant's effort from Settings, and changes the chat's own only", async () => {
+    settings.update({ effort: { claude: "high" } });
+    const id = newChat("claude:sonnet");
+    expect(ask.get().chats.find((c) => c.id === id)!.effort).toBe("high");
+    // Another model on the same assistant keeps the chat's level; another assistant starts from its own.
+    await setEffort(id, "low");
+    setModel(id, "claude:opus");
+    expect(ask.get().chats.find((c) => c.id === id)!.effort).toBe("low");
+    setModel(id, "gpt-5.5");
+    expect(ask.get().chats.find((c) => c.id === id)!.effort).toBeNull();
+    setModel(id, "claude:sonnet");
+    await setEffort(id, "max");
+    send(id, "first");
+    expect(invoke).toHaveBeenCalledWith("ask_send", expect.objectContaining({ chatId: id, effort: "max" }));
+    expect(settings.get().effort).toEqual({ claude: "high" });
+    settings.update({ effort: undefined });
+  });
+
   it("queues messages while it answers and sends them in order", () => {
     const id = newChat("claude:sonnet");
     send(id, "first");
-    expect(invoke).toHaveBeenCalledWith("ask_send", { chatId: id, prompt: "first", model: "claude:sonnet", session: null });
+    expect(invoke).toHaveBeenCalledWith("ask_send", { chatId: id, prompt: "first", model: "claude:sonnet", session: null, effort: null });
     send(id, "second");
     send(id, "third");
     expect(ask.get().chats[0].queue).toEqual(["second", "third"]);

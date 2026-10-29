@@ -1406,8 +1406,8 @@ export const api = {
   onWeekprepChanged: (f: () => void): Promise<UnlistenFn> => listen("weekprep-changed", () => f()),
   // Ask (src-tauri/src/ask.rs, src/askState.ts).
   askClis: () => invoke<CliInfo[]>("ask_clis"),
-  askSend: (chatId: string, prompt: string, model: string, session: string | null) =>
-    invoke<void>("ask_send", { chatId, prompt, model, session }),
+  askSend: (chatId: string, prompt: string, model: string, session: string | null, effort: string | null) =>
+    invoke<void>("ask_send", { chatId, prompt, model, session, effort }),
   askCancel: (chatId: string) => invoke<void>("ask_cancel", { chatId }),
   /** How a chat's latest turn stands, for an `ask-done` the window missed. */
   askOutcome: (chatId: string) => invoke<{ running: boolean; done: AskDone | null }>("ask_outcome", { chatId }),
@@ -1633,6 +1633,8 @@ export interface ChatSummary {
   claudeSessionId: string | null;
   sessionId: string | null;
   model: string | null;
+  /** The effort level it runs at, one of its CLI's `efforts`; none for the CLI's own default. */
+  effort?: string | null;
   createdAt: string;
   updatedAt: string;
   contextTokens: number | null;

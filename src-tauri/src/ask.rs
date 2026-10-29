@@ -163,8 +163,9 @@ pub struct DoneMsg {
     pub outcome: Outcome,
 }
 
-/// The effort level set for `cli` in Settings › AI assistants (`effort.<cli>`); None leaves it to
-/// the CLI's own default for the model.
+/// The effort level set for `cli` in Settings › AI assistants (`effort.<cli>`), which jobs run at
+/// (an Ask chat runs at its own, which starts as this one); None leaves it to the CLI's own default
+/// for the model.
 fn cli_effort(app: &AppHandle, cli: Cli) -> Option<String> {
     let key = serde_json::to_value(cli).ok()?;
     let st = app.state::<crate::AppState>();
@@ -276,6 +277,25 @@ pub fn run_with_images(
     images: &[PathBuf],
     on: &mut dyn FnMut(&Event),
 ) -> Outcome {
+    let effort = cli_effort(app, Cli::route(model));
+    run_at(app, chat_id, prompt, model, session, system, mcp, images, effort.as_deref(), on)
+}
+
+/// `run_with_images` at `effort` rather than the one set for the CLI: an Ask chat runs at its own
+/// (None: the CLI's own default).
+#[allow(clippy::too_many_arguments)]
+fn run_at(
+    app: &AppHandle,
+    chat_id: &str,
+    prompt: &str,
+    model: &str,
+    session: Option<&str>,
+    system: &str,
+    mcp: Option<&ask::Mcp>,
+    images: &[PathBuf],
+    effort: Option<&str>,
+    on: &mut dyn FnMut(&Event),
+) -> Outcome {
     let fail = |e: String| Outcome { error: Some(e), ..Default::default() };
     let cli = Cli::route(model);
     let Some(bin) = find(cli) else {
@@ -284,8 +304,7 @@ pub fn run_with_images(
     let Some(vault) = app.state::<VaultService>().root() else { return fail("No vault is open.".into()) };
     let vault_s = vault.to_string_lossy().into_owned();
     let mcp = mcp.filter(|_| cli.takes_mcp());
-    let effort = cli_effort(app, cli);
-    let req = Request { prompt, model, session, system, vault: &vault_s, mcp, images, effort: effort.as_deref() };
+    let req = Request { prompt, model, session, system, vault: &vault_s, mcp, images, effort };
     let launch = match ask::args(cli, &req) {
         Ok(l) => l,
         Err(e) => return fail(e),
@@ -382,9 +401,17 @@ fn feed_stdin(child: &mut std::process::Child, input: Option<String>) -> Option<
 /// The longest a model run may take before it's stopped.
 const RUN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
-/// Asks in the background; the answer comes as events.
+/// Asks in the background; the answer comes as events. `effort` is the chat's own (None: the CLI's
+/// own default), whatever is set for the CLI in Settings.
 #[tauri::command]
-pub fn ask_send(app: AppHandle, chat_id: String, prompt: String, model: String, session: Option<String>) -> Result<(), String> {
+pub fn ask_send(
+    app: AppHandle,
+    chat_id: String,
+    prompt: String,
+    model: String,
+    session: Option<String>,
+    effort: Option<String>,
+) -> Result<(), String> {
     if app.state::<Arc<Running>>().busy(&chat_id) {
         return Err("This chat is still answering.".into());
     }
@@ -402,7 +429,7 @@ pub fn ask_send(app: AppHandle, chat_id: String, prompt: String, model: String, 
                 system = format!("{system}\n{h}");
             }
             let prompt = brainstead_core::workflows::expand(&prompt).unwrap_or(prompt);
-            run(&app, &chat_id, &prompt, &model, session.as_deref(), &system, mcp.as_ref(), &mut |_| {})
+            run_at(&app, &chat_id, &prompt, &model, session.as_deref(), &system, mcp.as_ref(), &[], effort.as_deref(), &mut |_| {})
         }))
         .unwrap_or_else(|_| Outcome {
             error: Some("Brainstead stopped this answer because something went wrong; its log has the details (Settings › About).".into()),

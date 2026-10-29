@@ -6151,6 +6151,9 @@ code.noscript {
 .askbar .sp {
   flex: 1;
 }
+.askbar select.sel {
+  font-size: 12px;
+}
 .ibtn.send {
   background: var(--accent);
   color: var(--on-accent);

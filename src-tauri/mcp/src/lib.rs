@@ -630,17 +630,18 @@ pub fn tools() -> Vec<Value> {
                 "chat": {"type": "string", "description": "The chat's file or title, from list_chats. The chat open in Ask when left out."}
             }), &[])),
         tool("list_chats", "Ask's chats", Read,
-            "Brainstead's Ask chats (needs the app): list gives them, newest first, with each one's file, whether it's saved in the vault and whether it's pinned; read gives one's messages. Rename, pin or trash one with chats; save one to the vault with save_chat.",
+            "Brainstead's Ask chats (needs the app): list gives them, newest first, with each one's file, whether it's saved in the vault and whether it's pinned; read gives one's messages and its effort. Rename, pin, set the effort of or trash one with chats; save one to the vault with save_chat.",
             schema(json!({
                 "action": {"type": "string", "enum": ["list", "read"], "description": "Default list."},
                 "chat": {"type": "string", "description": "For read: the chat's file or title, from list."}
             }), &[])),
         tool("chats", "Rename, pin or trash a chat", Destroy,
-            "Changes one of Brainstead's Ask chats (needs the app): rename renames it (its tab and, when saved, its note); pin and unpin are History's Pin and Unpin (a pinned chat is kept whatever happens; closed chats that aren't saved or pinned are deleted once 20 newer ones are in History); trash moves it to the Trash, as History's Move to the Trash does. list_chats lists them. Only when the user asks.",
+            "Changes one of Brainstead's Ask chats (needs the app): rename renames it (its tab and, when saved, its note); pin and unpin are History's Pin and Unpin (a pinned chat is kept whatever happens; closed chats that aren't saved or pinned are deleted once 20 newer ones are in History); effort sets the effort the chat runs at from its next message, as the menu beside its model in Ask does, without changing the effort new chats start with (settings' effort.<cli>); trash moves it to the Trash, as History's Move to the Trash does. list_chats lists them. Only when the user asks.",
             schema(json!({
-                "action": {"type": "string", "enum": ["rename", "pin", "unpin", "trash"]},
+                "action": {"type": "string", "enum": ["rename", "pin", "unpin", "effort", "trash"]},
                 "chat": {"type": "string", "description": "The chat's file or title, from list_chats."},
-                "title": {"type": "string", "description": "For rename: the new title."}
+                "title": {"type": "string", "description": "For rename: the new title."},
+                "effort": {"type": "string", "description": "For effort: one of the chat's assistant's levels, by id or name (low, medium, high, xhigh or Extra high, max; Codex has no max), or empty for Default effort, the assistant's own."}
             }), &["action", "chat"])),
         tool("list_transcripts", "Transcripts to write up", Read,
             "Teams meeting transcripts in Sources still without a meeting note (needs the app), or with show all every transcript, the done ones saying why (ingested, or linked from a note), as the screen's Show › All does. Each row has the transcript's path and what Brainstead guesses it is: its type, its name or who it was with, and its date, flagged when the date is only the day it was captured; as the screen marks them, the note it would make when that exists already, what to check with the user, and whether a note is being drafted or was drafted from it. Write one up with start_run meeting_note, giving the right date when it's flagged, and another name or date when its note exists.",
@@ -1245,7 +1246,7 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
         "save_chat" => act("chat.save", obj),
         "weekly_step" => act("weekly.step", obj),
         "list_chats" => act("chats", acting(obj, name, &["list", "read"], "list", &["title"])?),
-        "chats" => act("chats", acting(obj, name, &["rename", "pin", "unpin", "trash"], "", &[])?),
+        "chats" => act("chats", acting(obj, name, &["rename", "pin", "unpin", "effort", "trash"], "", &[])?),
         "health_issue" => act("health.issue", obj),
         "list_contradictions" => act("contradictions", acting(obj, name, &["list"], "list", &["id", "as"])?),
         "contradictions" => act("contradictions", acting(obj, name, &["mark", "save"], "", &[])?),

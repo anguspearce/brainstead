@@ -86,6 +86,12 @@ export function fallbackTitle(question: string): string {
 
 const uid = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
+/** The effort a new chat on `model` starts with: the one set for its assistant in Settings › AI
+ *  assistants, or null for the assistant's own default. */
+export function effortFor(model: string): string | null {
+  return settings.get().effort?.[cliOf(model)] ?? null;
+}
+
 export function blankChat(model: string): Chat {
   return {
     filename: "",
@@ -94,6 +100,7 @@ export function blankChat(model: string): Chat {
     claudeSessionId: null,
     sessionId: null,
     model,
+    effort: effortFor(model),
     createdAt: "",
     updatedAt: "",
     contextTokens: null,
@@ -205,7 +212,7 @@ export function newChat(model = settings.get().askModel ?? DEFAULT_MODEL): strin
   // An empty new tab is reused rather than stacked.
   const empty = ask.get().chats.find((c) => !c.filename && !c.transcript.length && !c.busy && !c.review);
   if (empty) {
-    setChats((cs) => cs.map((c) => (c.id === empty.id ? { ...c, model } : c)), empty.id);
+    setChats((cs) => cs.map((c) => (c.id === empty.id ? { ...c, model, effort: effortFor(model) } : c)), empty.id);
     return empty.id;
   }
   const c = blankChat(model);
@@ -226,8 +233,17 @@ export function closeChat(id: string) {
 }
 
 export function setModel(id: string, model: string) {
-  update(id, (c) => (c.transcript.length ? c : { ...c, model }));
+  // Another assistant has its own levels, so the chat starts again from the one set for it.
+  const same = (c: Chat) => cliOf(c.model ?? DEFAULT_MODEL) === cliOf(model);
+  update(id, (c) => (c.transcript.length ? c : { ...c, model, effort: same(c) ? c.effort : effortFor(model) }));
   settings.update({ askModel: model });
+}
+
+/** This chat's effort from its next message on (null: the assistant's own default). Settings › AI
+ *  assistants, which new chats start from, isn't changed. */
+export async function setEffort(id: string, effort: string | null) {
+  update(id, (c) => ({ ...c, effort }));
+  if (ask.get().chats.find((c) => c.id === id)?.transcript.length) await save(id);
 }
 
 /** Opens a saved chat in a tab (or goes to its tab). */
@@ -266,7 +282,7 @@ function start(id: string, text: string) {
   }));
   const c = ask.get().chats.find((x) => x.id === id)!;
   api
-    .askSend(id, text, c.model ?? DEFAULT_MODEL, sessionOf(c))
+    .askSend(id, text, c.model ?? DEFAULT_MODEL, sessionOf(c), c.effort ?? null)
     .then(() => sent.add(id))
     .catch((e) => finish({ chatId: id, text: "", session: null, error: String(e) }));
 }
@@ -524,6 +540,13 @@ export async function pinSaved(c: ChatSummary, pin: boolean) {
   if (open) return setPinned(open.id, pin);
   const full = await api.chatRead(c.filename);
   await api.chatSave({ ...full, state: pin ? "pinned" : "archived" });
+}
+
+export async function effortSaved(c: ChatSummary, effort: string | null) {
+  const open = ask.get().chats.find((x) => x.filename === c.filename);
+  if (open) return setEffort(open.id, effort);
+  const full = await api.chatRead(c.filename);
+  await api.chatSave({ ...full, effort });
 }
 
 export async function keepSaved(c: ChatSummary) {

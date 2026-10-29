@@ -22,6 +22,7 @@ import {
   clis,
   cliOf,
   DEFAULT_MODEL,
+  effortLabel,
   fallbackTitle,
   findClis,
   isSaved,
@@ -33,6 +34,7 @@ import {
   selectChat,
   shown,
   send,
+  setEffort,
   setModel,
   stop,
   unqueue,
@@ -766,6 +768,7 @@ function Composer({ c, found }: { c: Chat; found: CliInfo[] | null }) {
 
   const model = c.model ?? DEFAULT_MODEL;
   const locked = c.transcript.length > 0;
+  const efforts = found?.find((x) => x.cli === cliOf(model) && x.path)?.efforts ?? [];
   return (
     <div className="askfoot">
       <div className="askcol">
@@ -863,6 +866,22 @@ function Composer({ c, found }: { c: Chat; found: CliInfo[] | null }) {
                 {!locked && <Icon name="chevdown" size={12} />}
               </button>
             </span>
+            {!!efforts.length && (
+              <select
+                className="sel"
+                aria-label="Effort for this chat"
+                title={`How hard ${CLI_LABEL[cliOf(model)]} thinks for this chat, from the next message on. New chats start with the effort set in Settings › AI assistants.`}
+                value={c.effort ?? ""}
+                onChange={(e) => void setEffort(c.id, e.target.value || null)}
+              >
+                <option value="">Default effort</option>
+                {efforts.map((l) => (
+                  <option key={l} value={l}>
+                    {effortLabel(l)} effort
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               type="button"
               className="ibtn send"

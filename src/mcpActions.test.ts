@@ -28,7 +28,7 @@ import { nav } from "./nav";
 import { imageView } from "./ImageViewer";
 import { followUp } from "./Ingest";
 import { isMac, keyLabel, platform, setPlatform, terminalApp } from "./platform";
-import { findClis } from "./askState";
+import { clis, findClis } from "./askState";
 
 const row = (over: Partial<TaskRow>): TaskRow => ({
   path: "Me. To Do List.md",
@@ -834,7 +834,7 @@ describe("MCP actions", () => {
       });
       expect(await run("chats")).toMatch(/Orbit App plan · 2026-10-05 09:00 · not saved/);
       expect(await run("chats", { action: "read", chat: "orbit app plan" })).toBe(
-        "Orbit App plan (2 messages):\n\nUser: Hi\n\nAssistant: Hello",
+        "Orbit App plan (2 messages, Default effort):\n\nUser: Hi\n\nAssistant: Hello",
       );
       await run("chats", { action: "rename", chat: "local:a.json", title: "Launch" });
       expect(calls.find(([c]) => c === "chat_rename")![1]).toEqual({ filename: "local:a.json", title: "Launch" });
@@ -1541,6 +1541,32 @@ describe("MCP actions", () => {
       expect(await run("chats", { action: "pin", chat: "Orbit App plan" })).toMatch(/pinned already/);
       expect(await run("chats", { action: "unpin", chat: "Orbit App plan" })).toBe("Unpinned “Orbit App plan”.");
       expect(calls.filter(([x]) => x === "chat_save").at(-1)![1]!.chat).toMatchObject({ state: "archived" });
+    });
+
+    it("sets a chat's own effort, as the menu beside its model does, leaving Settings' alone", async () => {
+      const c = {
+        filename: "Chat. Orbit App plan.md",
+        id: "a",
+        title: "Orbit App plan",
+        model: "claude:sonnet",
+        updatedAt: "2026-10-05T09:00:00",
+      };
+      answers.chats_list = () => [c];
+      answers.chat_read = () => ({ ...c, transcript: [] });
+      answers.ask_clis = () => [
+        { cli: "claude", path: "/usr/local/bin/claude", version: "2", models: [], efforts: ["low", "medium", "high", "xhigh", "max"] },
+      ];
+      await findClis(true);
+      // The assistants found are kept between calls: later tests look for their own.
+      onTestFinished(() => clis.set(null));
+      expect(await run("chats", { action: "effort", chat: "Orbit App plan", effort: "Extra high" })).toMatch(
+        /^“Orbit App plan” runs at Extra high effort from its next message\./,
+      );
+      expect(calls.find(([x]) => x === "chat_save")![1]!.chat).toMatchObject({ effort: "xhigh" });
+      expect(settings.get().effort).toBeUndefined();
+      await expect(run("chats", { action: "effort", chat: "Orbit App plan", effort: "ultra" })).rejects.toThrow(/one of: low, medium/);
+      await run("chats", { action: "effort", chat: "Orbit App plan", effort: "" });
+      expect(calls.filter(([x]) => x === "chat_save").at(-1)![1]!.chat).toMatchObject({ effort: null });
     });
 
     it("rebuilds the index, unless it's being built already", async () => {
