@@ -5,7 +5,7 @@ screens: [search]
 order: 10
 summary: Search the whole vault, filter by layer and date, and keep searches you run often.
 ---
-Search looks through the text, titles, headings and tags of every note, wiki page and source. Open it from **Search** in the sidebar, with `⌘7` or `⌘⇧F`, or from `⌘K` with **Search everything**.
+Search looks through the text, titles, headings and tags of every note, wiki page and source. Open it from **Search** in the sidebar, with `⌘8` or `⌘⇧F`, or from `⌘K` with **Search everything**.
 
 ## Write a search
 Type at least two characters. Words match in any form, so `launch` finds `launching`, and files with more of your words rank higher. Each result shows its best passage, matches marked, and how many passages match.

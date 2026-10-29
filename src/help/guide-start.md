@@ -18,7 +18,7 @@ The top of the sidebar is the daily flow: [Today](app:today), Inbox, Tasks, Proj
 
 While the vault is read-only, a **Read-only** pill at the end of that line opens [Settings › Vault](app:settings/vault). If the tasks can't be loaded, Today and Tasks show a warning sign instead of a count.
 
-`⌘1` to `⌘9`, then `⌘0`, go to Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki and Sources.
+`⌘1` to `⌘9`, then `⌘0`, go to Today, Inbox, Tasks, Projects, Weekly review, Ask, Workspace, Search, Notes and Wiki.
 
 Messages at the bottom go after a few seconds, except an error, which stays until you close it with its ×. If a screen fails, it offers **Try again**, **Go to Today** and **Copy error details**.
 

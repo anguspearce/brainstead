@@ -22,5 +22,8 @@ A chat stays outside the vault until you click **Save** in [Ask](app:ask)'s top 
 ## Choose the model
 Pick the model with the button beside **Send** before your first message. A chat keeps the model it started with, so start a new chat to use another, or click **Ask another model** under an answer. New chats start with the model set in [Settings › AI assistants](app:settings/assistants), which also shows which assistants were found.
 
+## Work in your own repos
+Ask works on the vault. To run Claude Code, Codex or a shell in a repo or folder of your own, open the [Workspace](app:workspace) with `⌘7`, add the folder your repos are in, and start a session there. It reads the vault but changes it only through Brainstead, so its changes are in [Changes](app:review) too.
+
 ## Ask about Brainstead itself
 Ask how to do something in Brainstead, such as "how do I rename a note?", and the assistant answers from this help, saying so when the help doesn't cover it. Try it in [Ask](app:ask) now. What an assistant may change, and what's held for you, is in [Assistants and Brainstead's tools](help:assistants).

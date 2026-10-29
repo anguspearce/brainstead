@@ -32,9 +32,9 @@ describe("palette layout", () => {
     expect([key("Today"), key("Changes"), key("Search"), key("Ask"), key("Sources"), key("Settings"), key("Graph")]).toEqual([
       "⌘1",
       undefined,
-      "⌘7",
+      "⌘8",
       "⌘6",
-      "⌘0",
+      undefined,
       "⌘,",
       undefined,
     ]);

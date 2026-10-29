@@ -25,6 +25,7 @@ These happen at once with no `⌘Z`, and only when you ask:
 - Moving over ([Settings › General](app:settings/general)): ticking items, and **Retire them** once **The other app is stopped** is ticked. The other app's skills and scripts go to the Trash, where you can restore them.
 - Going through the Weekly review, and marking a [contradiction](app:contradictions) resolved or ignored.
 - Knowledge health's **Ignore**, **Ignore all** and **Show again**.
+- The [Workspace](app:workspace): adding, pinning and removing folders, starting a session, typing into one (as **Wrap up** does) and stopping one. An assistant never starts or types into a session when nobody is watching.
 - Ask's chats (rename, pin, move to the Trash), Tasks' saved lists, and a note's own look.
 - Settings, except the vault, **Read-only** and the folders left out, which are yours to change. This includes how long [Changes](app:review) keeps its history, **Rebuild index**, and your tools that start Claude Code sessions.
 - Runs, with their progress and **Stop**: an ingest, the daily or weekly summary, the weekly review's preparation, the daily check, Find tasks and projects, a contradictions check, a meeting note from a transcript, **Write Current state**, bookmark triage, a drafted reply (never sent, and revised when you ask for a change), a doc check and a comparison of two documents. They use the models set in [Settings › AI assistants](app:settings/assistants). What a run changes in the vault is listed in Changes, and an assistant can undo a run when you ask.

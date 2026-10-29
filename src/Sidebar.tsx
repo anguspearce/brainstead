@@ -11,6 +11,7 @@ import { settings, useStore } from "./store";
 import { projectFlag, useInbox, useProjects } from "./gtd";
 import { unclarified } from "./Inbox";
 import { ask } from "./askState";
+import { startWorkspace, waitingCount, workspace } from "./workspaceState";
 import { docChecks, docChecksUnseen, startDocChecks } from "./docChecks";
 import { isActive, runs, startRuns } from "./Ingest";
 import { localToday } from "./md/taskQuery";
@@ -39,6 +40,12 @@ export const DAILY: Item[] = [
   { screen: "projects", label: "Projects", icon: "project" },
   { screen: "weekly", label: "Weekly review", icon: "calendar" },
   { screen: "ask", label: "Ask", icon: "ask" },
+  {
+    screen: "workspace",
+    label: "Workspace",
+    icon: "terminal",
+    tip: "your own Claude Code, Codex or shell sessions in your repos and folders",
+  },
 ];
 
 export const LIBRARY: Item[] = [
@@ -84,7 +91,7 @@ export function layerOf(path: string): Layer {
 
 /** ⌘1 to ⌘9, then ⌘0, go to the sidebar's first ten rows, in its order (a note's View, Edit and
  *  Source are ⌥⌘1 to ⌥⌘3). */
-export const HOTKEYS: Screen[] = ["today", "inbox", "tasks", "projects", "weekly", "ask", "search", "notes", "wiki", "sources"];
+export const HOTKEYS: Screen[] = ["today", "inbox", "tasks", "projects", "weekly", "ask", "workspace", "search", "notes", "wiki"];
 
 /** A screen's hotkey: ⌘1 … ⌘9, and ⌘0 for the tenth. */
 export const hotkey = (s: Screen): string | null => {
@@ -341,6 +348,17 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
       n: unread,
       hot: true,
       busy: answering ? `${answering === 1 ? "A chat is" : `${answering} chats are`} being answered` : undefined,
+    };
+  // Workspace: sessions asking you something, bold like Ask's unread; a spinner while any works.
+  useEffect(startWorkspace, []);
+  const terms = useStore(workspace).sessions;
+  const asking = waitingCount(terms);
+  const working = terms.filter((t) => t.state === "working").length;
+  if (asking || working)
+    extra.workspace = {
+      n: asking,
+      hot: true,
+      busy: working ? `${working === 1 ? "A session is" : `${working} sessions are`} working` : undefined,
     };
   // Tools at work: a check or meeting notes going (a spinner), checks that ended unseen (a badge).
   useEffect(startDocChecks, []);

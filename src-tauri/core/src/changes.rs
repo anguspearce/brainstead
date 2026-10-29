@@ -33,6 +33,20 @@ const FRESH: std::time::Duration = std::time::Duration::from_secs(3600);
 pub const KEEP_DAYS: i64 = 90;
 pub const KEEP_MB: u64 = 500;
 
+/// A property's new value: one line, or a list (a project's `folders`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum PropertyValue {
+    One(String),
+    List(Vec<String>),
+}
+
+impl From<&str> for PropertyValue {
+    fn from(v: &str) -> Self {
+        PropertyValue::One(v.into())
+    }
+}
+
 /// What an agent asked for, run on the page as it is when it's applied.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
@@ -66,8 +80,8 @@ pub enum Instruction {
     Lines { at: usize, old: Vec<String>, new: Vec<String> },
     /// A paragraph added at the end of the page (an Inbox item filed as reference).
     Append { text: String },
-    /// Properties set, or taken out with None (a project's status, area or outcome).
-    Properties { set: Vec<(String, Option<String>)> },
+    /// Properties set, or taken out with None (a project's status, area, outcome or folders).
+    Properties { set: Vec<(String, Option<PropertyValue>)> },
     /// The note renamed in its folder, its links rewritten.
     Rename { to: String },
     /// The note moved to Brainstead's Trash.
@@ -140,7 +154,12 @@ impl Instruction {
             Instruction::Properties { set } => {
                 let mut text = have()?.to_string();
                 for (k, v) in set {
-                    text = crate::write::with_property(&text, k, v.as_deref()).map_err(|e| e.to_string())?;
+                    text = match v {
+                        Some(PropertyValue::List(l)) => crate::write::with_list_property(&text, k, l),
+                        Some(PropertyValue::One(v)) => crate::write::with_property(&text, k, Some(v)),
+                        None => crate::write::with_property(&text, k, None),
+                    }
+                    .map_err(|e| e.to_string())?;
                 }
                 Ok(text)
             }
@@ -975,6 +994,8 @@ mod tests {
         assert!(a.text(page, Some(text)).unwrap().ends_with("- [ ] Call Sam\n\n- Venue holds 80\n"));
         let p = Instruction::Properties { set: vec![("status".into(), Some("done".into())), ("area".into(), None)] };
         assert!(p.text(page, Some(text)).unwrap().starts_with("---\nstatus: done\n---"));
+        let f: Instruction = serde_json::from_str(r#"{"op":"properties","set":[["folders",["~/repos/orbit-app"]]]}"#).unwrap();
+        assert!(f.text(page, Some(text)).unwrap().contains("folders:\n  - ~/repos/orbit-app\n"));
     }
 
     #[test]

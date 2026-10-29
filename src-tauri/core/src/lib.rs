@@ -54,6 +54,7 @@ pub mod vault;
 pub mod watch;
 pub mod webcapture;
 pub mod workflows;
+pub mod workspace;
 pub mod write;
 
 pub use index::{Index, IndexStats};

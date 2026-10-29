@@ -8,11 +8,9 @@ It follows Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf
 
 ## Sources
 
-On Windows, ⌘ is Ctrl, so Sources' ⌘0 is Ctrl+0.
-
 <a href="images/index.md#the-wiki-and-sources"><picture><source media="(prefers-color-scheme: dark)" srcset="images/sources-dark.png"><img alt="Sources: captured emails and documents with their status, and the ingest runs" src="images/sources-light.png"></picture></a>
 
-Sources (⌘0) are the files in `sources/`: emails, Teams chats and transcripts captured from the browser, PDFs, Word, PowerPoint and Excel files, images, and notes. They are the record, so Brainstead doesn't edit them, except to correct misheard names (a change you can revert).
+Sources are the files in `sources/`: emails, Teams chats and transcripts captured from the browser, PDFs, Word, PowerPoint and Excel files, images, and notes. They are the record, so Brainstead doesn't edit them, except to correct misheard names (a change you can revert).
 
 - Drag files onto Sources, or click **Import**, to copy them in.
 - The **Outlook** and **Teams** Chrome extensions capture a thread, chat or meeting transcript into `sources/` with one click. Set them up in Settings › Capture extensions. Each capture also waits in the Inbox.
@@ -80,7 +78,7 @@ Changes lists every change assistants and runs made to the vault, newest first, 
 
 Every entity and concept page has one layout: opening text, **Current state**, topical sections, a **Timeline** of dated entries (`### YYYY-MM-DD — title`, or a month, quarter or half) newest first, each with a `Source:` line, and **See also**. Summaries are left as they are.
 
-The Wiki (⌘9) lists the pages by type and tag with their health: **Held**, **Stale**, **Check** or **Healthy**. On a page:
+The Wiki (⌘0, Ctrl+0 on Windows) lists the pages by type and tag with their health: **Held**, **Stale**, **Check** or **Healthy**. On a page:
 
 - A link to a source shows as a small number that opens the source at the passage cited; the **Sources** card lists them.
 - The **Facts** card lists the page's checked facts: the latest value of each, what it replaced, and its source. Older pages may have none until they're next ingested.

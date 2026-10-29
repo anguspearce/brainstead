@@ -38,7 +38,8 @@ Change only what the user asked for. While the vault is read-only (app_status sa
 In a session nobody is watching (a loop, a scheduled agent), pass unattended: true on every call: a change that fails a check is then held for the user, and for the rest of the session nothing held can be accepted and weekly_start_over and moving_over are refused. \
 changes accepts a held change only while the user is there, and only one held because a check failed. \
 Quote sources word for word in edit_page's quotes: a quote that isn't in its source is flagged. \
-Tools marked as needing the app open Brainstead when it isn't running.";
+Tools marked as needing the app open Brainstead when it isn't running. \
+The vault changes only through these tools, never by writing its files. In a terminal, project_for_folder says which project the folder is for: record findings, tasks and decisions there.";
 
 /// Where the server works.
 #[derive(Debug)]
@@ -63,6 +64,9 @@ pub struct Ctx {
     pub unattended: std::sync::atomic::AtomicBool,
     /// What `initialize` agreed, handed on to a new build of the server (`reload`).
     pub init: std::sync::Mutex<Option<Value>>,
+    /// The folder the session runs in (the server's own working folder): the project it's about,
+    /// and where a terminal session's changes came from, in Changes.
+    pub cwd: Option<PathBuf>,
 }
 
 impl Ctx {
@@ -97,6 +101,7 @@ impl Ctx {
             session: format!("session-{}", proposals::new_id()),
             unattended: Default::default(),
             init: Default::default(),
+            cwd: std::env::current_dir().ok(),
         })
     }
 
@@ -190,7 +195,7 @@ pub fn handle(ctx: &Ctx, msg: Value) -> Option<Value> {
             );
             Ok(json!({
                 "protocolVersion": version,
-                "capabilities": {"tools": {"listChanged": true}},
+                "capabilities": {"tools": {"listChanged": true}, "prompts": {"listChanged": false}},
                 "serverInfo": {"name": "brainstead", "version": env!("CARGO_PKG_VERSION")},
                 "instructions": INSTRUCTIONS,
             }))
@@ -216,7 +221,8 @@ pub fn handle(ctx: &Ctx, msg: Value) -> Option<Value> {
                 Err(CallError::Unknown(e)) => Err((-32602, e)),
             }
         }
-        "prompts/list" => Ok(json!({"prompts": []})),
+        "prompts/list" => Ok(json!({"prompts": prompts()})),
+        "prompts/get" => prompt(ctx, &params),
         "resources/list" => Ok(json!({"resources": []})),
         "resources/templates/list" => Ok(json!({"resourceTemplates": []})),
         _ => Err((-32601, format!("Method not found: {method}"))),
@@ -477,12 +483,13 @@ pub fn tools() -> Vec<Value> {
                 "done_looks_like": {"type": "string", "description": "What done looks like, one sentence."}
             }), &["name"])),
         tool("update_project", "Change a project", Change,
-            "Sets a project's status, area or what done looks like (needs the app), as its page on the Projects screen does. Give only what changes; null clears area or done_looks_like. Recorded in Changes, where the user can revert it. To rename a project, as clicking its name on its page does, use rename_note on its note with type Project.",
+            "Sets a project's status, area, what done looks like or folders (needs the app), as its page on the Projects screen does. Give only what changes; null clears area or done_looks_like. Recorded in Changes, where the user can revert it. To rename a project, as clicking its name on its page does, use rename_note on its note with type Project.",
             schema(json!({
                 "project": {"type": "string", "description": "The project's name."},
                 "status": {"type": "string", "enum": ["active", "on-hold", "someday", "completed"], "description": "The Projects screen's tabs; completed is its Mark complete (the Completed tab)."},
                 "area": {"type": ["string", "null"], "description": "The area of responsibility; null clears it."},
-                "done_looks_like": {"type": ["string", "null"], "description": "What done looks like, one sentence; null clears it."}
+                "done_looks_like": {"type": ["string", "null"], "description": "What done looks like, one sentence; null clears it."},
+                "folders": {"type": "array", "items": {"type": "string"}, "description": "The folders on this computer its work happens in, replacing what it has: absolute or ~/… paths (a folder inside one counts too), or bare folder names (orbit-app); [] clears them. The Workspace and project_for_folder link a folder to its project by them."}
             }), &["project"])),
         tool("move_project", "Reorder a project or an area", Change,
             "Puts a project in order among its area's projects, or an area among the areas, on the Projects screen (needs the app), as dragging it there does. Give project or area, and after or before: another project in the same area, or another area. The order is Brainstead's own setting, not written to any note, so it isn't in Changes; move it again to undo. Projects and areas never moved come after, A to Z, and No area stays last; list_projects lists them in this order.",
@@ -498,6 +505,30 @@ pub fn tools() -> Vec<Value> {
                 "area": {"type": "string", "description": "The area as it is now, as list_projects' detail gives it."},
                 "to": {"type": "string", "description": "Its new name."}
             }), &["area", "to"])),
+        // The Workspace.
+        tool("project_for_folder", "Which project a folder is for", Read,
+            "The project a folder on this computer belongs to, as the Workspace links them: the project whose folders (update_project's) name the folder or one it's in, the deepest first, else the one named like the folder (orbit-app for Orbit App); a completed project only when nothing else matches. Gives its note, status, area, what done looks like and folders, its next actions and waiting-fors (each with its id for edit_task) and the notes that link it, latest first. Without folder, this session's own folder. Works with the app closed. Record what a session finds there: edit_page on the project note's Notes section, create_note, create_task with the project.",
+            schema(json!({"folder": {"type": "string", "description": "A folder on this computer: absolute, ~/…, or relative to this session's folder. This session's own folder when left out."}}), &[])),
+        tool("list_workspace", "The Workspace's folders and sessions", Read,
+            "The Workspace screen's lists (needs the app). do folders: the folders it offers (each root's git repos with their branch and whether they have changes, the pinned folders, the recent ones), each with its path, kind, linked project, and whether it's inside the vault (no session can start there); sessions: the terminal sessions in this run of the app, live and exited, and those in an outside terminal, each with its id, folder, program, state (starting, working, waiting for the user, idle, exited), project and the files it touched; past_sessions: a folder's earlier Claude Code sessions, newest first, each with its id to resume and its first message. Act on them with workspace.",
+            schema(json!({
+                "do": {"type": "string", "enum": ["folders", "sessions", "past_sessions"], "description": "Which list; default folders."},
+                "folder": {"type": "string", "description": "For past_sessions: the folder, as folders gives it (absolute, ~/…, or relative to this session's folder)."}
+            }), &[])),
+        tool("workspace", "Act on the Workspace", Destroy,
+            "Does what the Workspace screen does (needs the app); list_workspace lists what's there. add_root and remove_root add or take off a folder whose git repos it lists (path); pin and unpin pin a folder to the top or not (path); start_session starts a Claude Code or Codex session in a folder (folder; program claude or codex, default claude; resume, a past Claude Code session's id from list_workspace past_sessions; prompt, its first message; model and worktree for claude), never in the vault or a folder in it; stop_session ends a session (id, from list_workspace sessions), as its Stop does; send types text into a Claude Code or Codex session running in the Workspace and presses Enter, as Wrap up does (id, text). A shell session isn't guarded, so assistants can't start one or type into one (the user starts it themselves in the Workspace), and nothing can be typed into a session in an outside terminal. A session's assistant changes the vault only through these tools, so its changes are in Changes. Only as the user asked: start_session and send are refused once any call in the session passed unattended: true. None of it is in Changes; stop a session to undo starting it, remove_root or unpin to undo those.",
+            schema(json!({
+                "do": {"type": "string", "enum": ["add_root", "remove_root", "pin", "unpin", "start_session", "stop_session", "send"], "description": "What to do, as the screen's buttons do it."},
+                "path": {"type": "string", "description": "For add_root, remove_root, pin and unpin: the folder (absolute, ~/…, or relative to this session's folder)."},
+                "folder": {"type": "string", "description": "For start_session: the folder to start it in (absolute, ~/…, or relative to this session's folder)."},
+                "program": {"type": "string", "enum": ["claude", "codex"], "description": "For start_session: Claude Code or Codex. Default claude. A shell session can't be started from here: it isn't guarded, so the user starts it in the Workspace."},
+                "resume": {"type": "string", "description": "For start_session: a past Claude Code session's id to resume, from list_workspace past_sessions."},
+                "prompt": {"type": "string", "description": "For start_session: the session's first message."},
+                "model": {"type": "string", "description": "For start_session with claude or codex: the model to run, as that program names it."},
+                "worktree": {"type": "string", "description": "For start_session with claude: a git worktree's name to work in (Claude Code's --worktree)."},
+                "id": {"type": "string", "description": "For stop_session and send: the session's id from list_workspace sessions."},
+                "text": {"type": "string", "description": "For send: what to type, as /mcp__brainstead__wrap_up."}
+            }), &["do"])),
         // Notes and pages.
         tool("edit_page", "Change a page", Change, EDIT_PAGE, edit_schema),
         tool("create_note", "Make a new note", Change,
@@ -965,7 +996,7 @@ fn outputs() -> std::collections::HashMap<&'static str, Value> {
         (
             "list_projects",
             page_schema(
-                json!({"name": s("string"), "path": s("string"), "status": s("string"), "area": sn(), "done_looks_like": sn(), "flag": {"type": ["string", "null"], "enum": ["stuck", "quiet", null], "description": "The Projects screen's flag on an active project: stuck (Stuck, no next action) or quiet (Quiet, nothing has happened for two weeks)."}, "next": s("integer"), "waiting": s("integer"), "someday": s("integer"), "done": s("integer")}),
+                json!({"name": s("string"), "path": s("string"), "status": s("string"), "area": sn(), "done_looks_like": sn(), "flag": {"type": ["string", "null"], "enum": ["stuck", "quiet", null], "description": "The Projects screen's flag on an active project: stuck (Stuck, no next action) or quiet (Quiet, nothing has happened for two weeks)."}, "next": s("integer"), "waiting": s("integer"), "someday": s("integer"), "done": s("integer"), "folders": {"type": "array", "items": s("string"), "description": "The folders on this computer its work happens in, as update_project's folders."}}),
             ),
         ),
         ("list_trash", {
@@ -1186,6 +1217,48 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
         "update_project" => act("project.update", obj),
         "rename_area" => act("project.rename_area", obj),
         "move_project" => act("project.move", obj),
+        "project_for_folder" => Ok(project_for_folder(ctx, parse(obj)?)?),
+        "list_workspace" => {
+            let mut obj = acting_on(obj, "do", name, &["folders", "sessions", "past_sessions"], "folders", WORKSPACE_CHANGES)?;
+            if obj["do"] == "past_sessions" {
+                obj["folder"] = json!(workspace_folder(ctx, &obj, "folder")?);
+            }
+            act("workspace", without(obj, &["path"]))
+        }
+        "workspace" => {
+            let does = obj.get("do").and_then(Value::as_str).unwrap_or("");
+            if unwatched && (does == "start_session" || does == "send") {
+                return Err(CallError::Tool(
+                    "Starting a Workspace session or typing into one is only for when the user is there and asks for it, not in an unattended session.".into(),
+                ));
+            }
+            let mut obj =
+                acting_on(obj, "do", name, &["add_root", "remove_root", "pin", "unpin", "start_session", "stop_session", "send"], "", &[])?;
+            match obj["do"].as_str().unwrap_or("") {
+                "start_session" => {
+                    match obj.get("program").and_then(Value::as_str).unwrap_or("claude") {
+                        "claude" | "codex" => {}
+                        "shell" => return Err(CallError::Tool(SHELL_UNGUARDED.into())),
+                        _ => return Err(CallError::Tool("program is claude or codex.".into())),
+                    }
+                    let folder = workspace_folder(ctx, &obj, "folder")?;
+                    if inside_vault(ctx, Path::new(&folder)) {
+                        return Err(CallError::Tool(IN_VAULT.into()));
+                    }
+                    obj["folder"] = json!(folder);
+                }
+                "stop_session" | "send" => {
+                    if obj.get("id").and_then(Value::as_str).is_none_or(|i| i.trim().is_empty()) {
+                        return Err(CallError::Tool("Give id: the session's, from list_workspace sessions.".into()));
+                    }
+                    if obj["do"] == "send" && obj.get("text").and_then(Value::as_str).is_none_or(str::is_empty) {
+                        return Err(CallError::Tool("Give text: what to type into the session.".into()));
+                    }
+                }
+                _ => obj["path"] = json!(workspace_folder(ctx, &obj, "path")?),
+            }
+            act("workspace", obj)
+        }
         // The read tools and the change tools beside them share the app's action, each held to its
         // own actions, so a read tool never changes anything.
         "list_trash" => act("trash", acting(obj, name, &["list"], "list", &[])?),
@@ -1311,18 +1384,62 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
 /// Holds a tool to its own actions in the app's shared one: `action` must be one of `allowed`
 /// (`default` when it's left out, or required when `default` is empty), and the arguments only
 /// the other tool takes are dropped.
-fn acting(mut obj: Value, tool: &str, allowed: &[&str], default: &str, drop: &[&str]) -> Result<Value, CallError> {
-    let action = obj.get("action").and_then(Value::as_str).map(str::to_string).unwrap_or_else(|| default.to_string());
+fn acting(obj: Value, tool: &str, allowed: &[&str], default: &str, drop: &[&str]) -> Result<Value, CallError> {
+    acting_on(obj, "action", tool, allowed, default, drop)
+}
+
+/// `acting`, with the action in `key` (the Workspace's tools name it `do`).
+fn acting_on(mut obj: Value, key: &str, tool: &str, allowed: &[&str], default: &str, drop: &[&str]) -> Result<Value, CallError> {
+    let action = obj.get(key).and_then(Value::as_str).map(str::to_string).unwrap_or_else(|| default.to_string());
     if !allowed.contains(&action.as_str()) {
         let list = allowed.join(", ");
         return Err(CallError::Tool(if action.is_empty() {
-            format!("Give action: {list}.")
+            format!("Give {key}: {list}.")
         } else {
             format!("{tool} does {list}, not {action}: the tools/list descriptions say which tool does that.")
         }));
     }
-    obj["action"] = json!(action);
+    obj[key] = json!(action);
     Ok(without(obj, drop))
+}
+
+/// The refusal of a shell session to an assistant: a shell has no guard (src/mcpActions.ts says the same).
+const SHELL_UNGUARDED: &str =
+    "A shell session isn't guarded, so assistants can't start one or type into one. Start it yourself in the Workspace.";
+
+/// What only the workspace tool takes, left out of list_workspace's call.
+const WORKSPACE_CHANGES: &[&str] = &["program", "resume", "prompt", "model", "worktree", "id", "text"];
+
+/// The Workspace's refusal of a folder in the vault (the app's term_start says the same).
+const IN_VAULT: &str = "That folder is in your vault. The vault changes only through Brainstead, so use Ask there.";
+
+/// A folder on this computer as a tool was given it (absolute, `~/…`, or relative to this
+/// session's folder), as an absolute path. `key` names the argument; it's required.
+fn workspace_folder(ctx: &Ctx, obj: &Value, key: &str) -> Result<String, CallError> {
+    let given = obj.get(key).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
+    let given = given.ok_or_else(|| CallError::Tool(format!("Give {key}: a folder on this computer.")))?;
+    Ok(local_path(ctx, given)?.to_string_lossy().into_owned())
+}
+
+/// A path on this computer: `~/…` from the home folder, a relative one from this session's folder.
+fn local_path(ctx: &Ctx, given: &str) -> Result<PathBuf, String> {
+    let p = match given.strip_prefix('~') {
+        Some(rest) if rest.is_empty() || rest.starts_with(['/', '\\']) => {
+            dirs::home_dir().ok_or("There's no home folder to find ~/ in.")?.join(rest.trim_start_matches(['/', '\\']))
+        }
+        _ => PathBuf::from(given),
+    };
+    if p.is_absolute() {
+        return Ok(p);
+    }
+    let cwd =
+        ctx.cwd.as_ref().ok_or_else(|| format!("{given} is relative, and this session's folder isn't known: give the whole path."))?;
+    Ok(cwd.join(p))
+}
+
+/// Whether a folder on this computer is the vault or in it.
+fn inside_vault(ctx: &Ctx, folder: &Path) -> bool {
+    paths::real_path(folder).starts_with(paths::real_path(&ctx.vault))
 }
 
 /// The arguments without these.
@@ -2418,16 +2535,207 @@ struct QuoteArg {
     text: String,
 }
 
-/// Where this session's changes come from: the Ask chat that started it, or this terminal session;
-/// scheduled when the call says nobody is watching.
+/// Where this session's changes come from: the Ask chat that started it, or this terminal session,
+/// named by its folder and the folder's project (else the client's name); scheduled when the call
+/// says nobody is watching.
 fn origin(ctx: &Ctx, unattended: bool) -> Origin {
-    Origin {
+    let mut o = Origin {
         kind: "chat".into(),
         chat: ctx.chat.clone(),
-        label: ctx.chat.is_none().then(|| "Terminal session".into()),
         run: Some(ctx.chat.clone().unwrap_or_else(|| ctx.session.clone())),
         trigger: unattended.then(|| "scheduled".into()),
+        ..Default::default()
+    };
+    if ctx.chat.is_some() {
+        return o;
     }
+    // A session in the vault itself says nothing a folder would.
+    let folder = ctx.cwd.as_deref().filter(|c| !inside_vault(ctx, c));
+    let project = folder.and_then(|f| folder_project(ctx, f));
+    o.label = Some(match (folder, &project) {
+        (Some(f), Some(p)) => format!("{} · {}", folder_name(f), p.name),
+        (Some(f), None) => folder_name(f),
+        (None, _) => client_name(ctx).unwrap_or_else(|| "Terminal session".into()),
+    });
+    o.folder = folder.map(|f| f.to_string_lossy().into_owned());
+    o.project = project.map(|p| p.path);
+    o.model = ctx.model.clone();
+    o
+}
+
+/// The client's own name from `initialize` (claude-code, codex-mcp-client…), when it gave one.
+fn client_name(ctx: &Ctx) -> Option<String> {
+    let init = ctx.init.lock().unwrap();
+    init.as_ref()?["clientInfo"]["name"].as_str().map(str::trim).filter(|n| !n.is_empty()).map(String::from)
+}
+
+/// A folder as the Workspace names it: its last part, or `~` for the home folder.
+fn folder_name(f: &Path) -> String {
+    if dirs::home_dir().is_some_and(|h| paths::real_path(&h) == paths::real_path(f)) {
+        return "~".into();
+    }
+    f.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| f.to_string_lossy().into_owned())
+}
+
+/// The project a folder belongs to (`projects::for_folder`), from the index when it's there.
+fn folder_project(ctx: &Ctx, folder: &Path) -> Option<projects::ProjectLink> {
+    let claims = ctx.index().and_then(|ix| ix.folder_claims()).unwrap_or_else(|_| projects::folder_claims(&ctx.vault));
+    projects::pick_project(&claims, folder, dirs::home_dir().as_deref())
+}
+
+#[derive(Deserialize)]
+struct FolderArgs {
+    #[serde(default)]
+    folder: Option<String>,
+}
+
+/// The project a folder is for: its note's properties, its open tasks and the notes linking it.
+fn project_for_folder(ctx: &Ctx, a: FolderArgs) -> Result<Out, String> {
+    let folder = match a.folder.as_deref().map(str::trim).filter(|f| !f.is_empty()) {
+        Some(f) => local_path(ctx, f)?,
+        None => ctx.cwd.clone().ok_or("This session's folder isn't known: give folder.")?,
+    };
+    let shown = folder.to_string_lossy().into_owned();
+    if inside_vault(ctx, &folder) {
+        return Ok(
+            format!("{shown} is in the vault, not a project's folder: the vault's notes are read with search and read_section.").into()
+        );
+    }
+    let Some(link) = folder_project(ctx, &folder) else {
+        return Ok(Out {
+            text: format!("No project is linked to {shown}. list_projects lists them; update_project with folders links this folder to one, once the user says which."),
+            structured: Some(json!({"folder": shown, "project": null})),
+        });
+    };
+    let mut out = format!("{shown} is for the project {} ({}).\n", link.name, link.path);
+    let mut data = json!({"folder": shown, "project": link});
+    let ix = match ctx.index() {
+        Ok(ix) => ix,
+        Err(_) => {
+            out.push_str("Brainstead's index isn't there yet, so its tasks aren't listed: read the note with read_section.\n");
+            return Ok(Out { text: out, structured: Some(data) });
+        }
+    };
+    let row = ix.projects()?.into_iter().find(|p| p.path == link.path);
+    if let Some(p) = &row {
+        out.push_str(&format!("Status: {}", p.status));
+        if let Some(area) = &p.area {
+            out.push_str(&format!(" · Area: {area}"));
+        }
+        out.push('\n');
+        if let Some(o) = &p.outcome {
+            out.push_str(&format!("Done looks like: {o}\n"));
+        }
+        if !p.folders.is_empty() {
+            out.push_str(&format!("Folders: {}\n", p.folders.join(", ")));
+        }
+        data["status"] = json!(p.status);
+        data["area"] = json!(p.area);
+        data["outcome"] = json!(p.outcome);
+        data["folders"] = json!(p.folders);
+    }
+    let open: Vec<_> = ix.all_tasks()?.into_iter().filter(|t| !t.done && t.project.as_deref() == Some(link.path.as_str())).collect();
+    for (list, heading, key) in
+        [(projects::TaskList::Next, "Next actions", "next"), (projects::TaskList::Waiting, "Waiting for", "waiting")]
+    {
+        let tasks: Vec<_> = open.iter().filter(|t| projects::task_list(&t.tags) == list).collect();
+        out.push_str(&format!("\n{heading} ({}):\n", tasks.len()));
+        if tasks.is_empty() {
+            out.push_str("- none\n");
+        }
+        for t in &tasks {
+            let due = t.due.as_deref().map(|d| format!(" (due {d})")).unwrap_or_default();
+            out.push_str(&format!("- {}{due} · id {}:{}\n", t.text, t.path, t.line + 1));
+        }
+        data[key] = tasks
+            .iter()
+            .map(|t| json!({"id": format!("{}:{}", t.path, t.line + 1), "text": t.text, "due": t.due}))
+            .collect::<Vec<_>>()
+            .into();
+    }
+    // The notes linking it, latest first.
+    let mut notes: Vec<(i64, String)> = row
+        .map(|p| p.links)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|n| (std::fs::metadata(ctx.vault.join(&n)).map(|m| brainstead_core::vault::mtime_ms(&m)).unwrap_or(0), n))
+        .collect();
+    notes.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    notes.truncate(10);
+    if !notes.is_empty() {
+        out.push_str("\nNotes linking it, latest first:\n");
+        for (t, n) in &notes {
+            let day = chrono::DateTime::from_timestamp_millis(*t)
+                .map(|d| d.with_timezone(&chrono::Local).format("%Y-%m-%d").to_string())
+                .unwrap_or_default();
+            out.push_str(&format!("- {n} ({day})\n"));
+        }
+    }
+    data["notes"] = json!(notes.iter().map(|(_, n)| n).collect::<Vec<_>>());
+    Ok(Out { text: out, structured: Some(data) })
+}
+
+/// The prompts a client offers as commands (`/mcp__brainstead__wrap_up` in Claude Code): each
+/// asks the assistant to record the session's work in the folder's project, through the tools.
+fn prompts() -> Vec<Value> {
+    let arg = |name: &str, description: &str| json!([{"name": name, "description": description, "required": false}]);
+    vec![
+        json!({"name": "findings", "title": "Record findings",
+            "description": "Record what this session found in the folder's project in Brainstead: its note's Notes, or a Finding note linking it.",
+            "arguments": arg("focus", "What to record, if not everything worth keeping.")}),
+        json!({"name": "tracker", "title": "Project tracker",
+            "description": "Show the folder's project's next actions and waiting-fors in Brainstead, and bring them up to date.",
+            "arguments": []}),
+        json!({"name": "wrap_up", "title": "Wrap up",
+            "description": "At the end of a piece of work: tick the tasks done, add new ones, record findings and decisions in the folder's project in Brainstead, then say what was recorded.",
+            "arguments": arg("notes", "Anything to make sure is recorded.")}),
+    ]
+}
+
+/// prompts/get: one prompt's message, naming the project this session's folder is for.
+fn prompt(ctx: &Ctx, params: &Value) -> Result<Value, (i64, String)> {
+    let name = params.get("name").and_then(Value::as_str).unwrap_or("");
+    let arg = |k: &str| params["arguments"][k].as_str().map(str::trim).filter(|s| !s.is_empty()).map(String::from);
+    let project = ctx.cwd.as_deref().filter(|c| !inside_vault(ctx, c)).and_then(|c| folder_project(ctx, c));
+    let (about, note) = match &project {
+        Some(p) => (
+            format!("This folder is for the project {} (its note is {}). project_for_folder gives its status, next actions and waiting-fors.", p.name, p.path),
+            p.path.clone(),
+        ),
+        None => (
+            "This folder isn't linked to a project. Ask the user which project it's for (list_projects lists them) and link it with update_project folders; if it's for none, capture what to keep in the Inbox instead.".to_string(),
+            "the project note".to_string(),
+        ),
+    };
+    let rule = "Make every change through Brainstead's tools, never by writing the vault's files, so each one is in Changes, where the user can revert it. Record only what this session did or the user said.";
+    let findings = format!(
+        "Record a short finding in {note}'s Notes section with edit_page (section Notes, content: what's there, read first with read_section, plus the new lines), or a longer one as a note of its own with create_note, type Finding, linking [[{}]].",
+        filename::stem(&note)
+    );
+    let (description, text) = match name {
+        "findings" => (
+            "Record findings",
+            format!(
+                "{about}\n\nRecord what this session found{}: decisions made, facts learned, problems and their causes, open questions, one line each with why it matters. {findings}\n\n{rule} Then say what you recorded and where.",
+                arg("focus").map(|f| format!(" about {f}")).unwrap_or_default()
+            ),
+        ),
+        "tracker" => (
+            "Project tracker",
+            format!(
+                "{about}\n\nShow the project's next actions and waiting-fors (project_for_folder), then bring them up to date from this session's work: tick what's done with edit_task done true, add what's now needed with create_task and the project (view waiting for a waiting-for), and change what's moved with edit_task. Show the list again after.\n\n{rule}"
+            ),
+        ),
+        "wrap_up" => (
+            "Wrap up",
+            format!(
+                "{about}\n\nThis piece of work is ending. Record it in Brainstead:\n1. Tick the project's tasks this session finished (edit_task done true).\n2. Add the next actions and waiting-fors it leaves (create_task with the project).\n3. {findings}\n4. Record each decision made, with why, the same way, starting its line Decision:.\n{}\n{rule} Then say, in a short list, what you recorded.",
+                arg("notes").map(|n| format!("Make sure this is recorded too: {n}\n")).unwrap_or_default()
+            ),
+        ),
+        _ => return Err((-32602, format!("Unknown prompt: {name}. prompts/list lists them."))),
+    };
+    Ok(json!({"description": description, "messages": [{"role": "user", "content": {"type": "text", "text": text}}]}))
 }
 
 fn edit_page(ctx: &Ctx, a: ProposeArgs) -> Result<String, String> {

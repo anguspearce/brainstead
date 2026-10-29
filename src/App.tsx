@@ -11,6 +11,7 @@ import { CompareScreen } from "./skills/Compare";
 import { ReplyScreen } from "./skills/Reply";
 import { TriageScreen } from "./skills/Triage";
 import { AskScreen } from "./Ask";
+import { WorkspaceScreen } from "./Workspace";
 import { DocScreen } from "./Doc";
 import { InboxScreen } from "./Inbox";
 import { ProjectsScreen } from "./Projects";
@@ -67,6 +68,7 @@ const SCREENS: Partial<Record<Screen, () => React.ReactElement>> = {
   tasks: TasksScreen,
   trash: TrashScreen,
   ask: AskScreen,
+  workspace: WorkspaceScreen,
   inbox: InboxScreen,
   projects: ProjectsScreen,
   weekly: WeeklyScreen,

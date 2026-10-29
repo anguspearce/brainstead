@@ -83,6 +83,8 @@ On Windows the command points at the installed exe instead, for example `claude 
 
 Searching and reading the vault, facts, the summaries, the health report, the Page shape check and help work with Brainstead closed. Everything else needs the app, and opens it. On a Mac an update doesn't disconnect a session: its tools move to the new version by themselves, between calls. On Windows the update stops them, so reconnect them in the assistant (in Claude Code, `/mcp`). An assistant can also bring the window to the front on a screen, a Settings pane, a note, a search or an image.
 
+To run an assistant in a repo of your own, guarded so it can't change the vault except through these tools, use the [Workspace](workspace.md): it starts Claude Code, Codex or a shell in any folder, and its **Copy command** and **Open in your terminal** give the same guarded launch for your own terminal, so a session there is guarded too. A session started with the plain `claude mcp add` setup above has the tools but not the guard.
+
 Some things stay with you:
 
 - what you're typing and haven't saved;

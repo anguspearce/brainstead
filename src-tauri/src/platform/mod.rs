@@ -37,6 +37,9 @@ use other as imp;
 mod tray;
 pub use tray::{place_tray_window, tray_icon, tray_window_resized};
 
+mod shell;
+pub use shell::{alive, command_line, in_folder, kill_group, login_shell, open_terminal, pty_foreground, shell_argv, PtyReader};
+
 /// Where Brainstead keeps settings.json and index.db: `~/Library/Application Support/Brainstead/`
 /// on macOS, `%APPDATA%\Brainstead` on Windows. `BRAINSTEAD_DATA` overrides it (screenshots,
 /// tests). The rule is in core, which the standalone MCP server shares.

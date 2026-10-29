@@ -227,12 +227,17 @@ pub struct TurnState {
 }
 
 pub fn mcp_server(chat_id: &str, model: &str) -> Option<ask::Mcp> {
+    mcp_command(&["--chat", chat_id, "--model", model])
+}
+
+/// This program with `--mcp`, told the data folder, then `extra`: how any CLI starts Brainstead's
+/// MCP server (an Ask chat's, a Workspace session's).
+pub fn mcp_command(extra: &[&str]) -> Option<ask::Mcp> {
     let exe = std::env::current_exe().ok()?;
     let data = platform::data_dir();
-    Some(ask::Mcp {
-        command: exe.to_string_lossy().into_owned(),
-        args: ["--mcp", "--data", &data.to_string_lossy(), "--chat", chat_id, "--model", model].map(str::to_string).to_vec(),
-    })
+    let mut args: Vec<String> = ["--mcp", "--data", &data.to_string_lossy()].map(str::to_string).to_vec();
+    args.extend(extra.iter().map(|a| a.to_string()));
+    Some(ask::Mcp { command: exe.to_string_lossy().into_owned(), args })
 }
 
 /// Runs one turn and waits for it, calling `on` with each event (the window gets them too). With

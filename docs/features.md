@@ -10,6 +10,7 @@ The user guide to Brainstead, a Mac and Windows app for tasks, notes and an [LLM
 | [Notes](notes.md) | View, Edit and Source, saving and drafts, queries and callouts, templates, search and ⌘K, the Trash |
 | [The wiki and sources](wiki.md) | Sources and the browser extensions, ingest, Changes, wiki pages, Knowledge health, contradictions, meeting notes and the other tools |
 | [Ask and assistants](ask.md) | Chats with Claude Code, Codex, Copilot and Antigravity, what an assistant can do, Brainstead's tools in a terminal |
+| [The Workspace](workspace.md) | Your own Claude Code, Codex and shell sessions in your repos, linked to their projects and guarded so the vault changes only through Brainstead |
 | [Day to day](day-to-day.md) | The menu bar (system tray on Windows), the daily and weekly summaries and the daily check, help, Settings, and what happens in the background |
 
 ## Requirements
@@ -62,7 +63,7 @@ Counts that need you, such as overdue tasks, the Inbox and changes held for you,
 | ⇧⌘P | Read the open note aloud, then play or pause |
 | ⌘. | Focus mode for the open note, wiki page or source; Esc leaves it |
 | ⌥⌘1 ⌥⌘2 ⌥⌘3 (Ctrl+Shift+1 … 3 on Windows) | View, Edit or Source for the open note |
-| ⌘1 … ⌘9, ⌘0 (Ctrl+1 … 0 on Windows) | Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki, Sources |
+| ⌘1 … ⌘9, ⌘0 (Ctrl+1 … 0 on Windows) | Today, Inbox, Tasks, Projects, Weekly review, Ask, Workspace, Search, Notes, Wiki |
 | ⌘[ ⌘] | Back, forward |
 | ⌘Z | Undo the last change |
 | ⌘, | Settings |

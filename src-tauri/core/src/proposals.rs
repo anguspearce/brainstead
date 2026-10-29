@@ -74,6 +74,15 @@ pub struct Origin {
     /// (None) the user started it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trigger: Option<String>,
+    /// A terminal session's folder on the computer (its working folder), when it's known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+    /// The project that folder belongs to, by its note's path (`projects::for_folder`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    /// The model the session said it runs, when it said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 /// A passage a change rests on.

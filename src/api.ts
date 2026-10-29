@@ -129,6 +129,13 @@ export interface Settings {
   hlColour?: "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "grey";
   /** A note's side pane (Linked from) folded away, for the full width. */
   docSideFolded?: boolean;
+  /** The Workspace (src/workspaceState.ts): folders whose git repos are listed (absolute), folders
+   *  pinned to the top, folders sessions started in (newest first, at most 20, kept by Rust), and
+   *  a shell to use instead of the login shell. */
+  workspaceRoots?: string[];
+  workspacePinned?: string[];
+  workspaceRecent?: string[];
+  workspaceShell?: string;
 }
 
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
@@ -470,6 +477,8 @@ export interface ProjectRow {
   lastTouched: number;
   /** Notes that link the project. */
   links: string[];
+  /** The folders on the computer its work happens in, as written (`~/repos/orbit-app`, or a bare name). */
+  folders?: string[];
 }
 
 /** Something to clarify: a Scratchpad block or a To Do `#### Other` task. */
@@ -890,6 +899,11 @@ export interface ChangeOrigin {
   run?: string;
   /** "scheduled" for a scheduled run, or a terminal session that said it's unattended. */
   trigger?: string;
+  /** A terminal session's folder on the computer, the project it belongs to (the project note's
+   *  path) and the model, when the session said them. */
+  folder?: string;
+  project?: string;
+  model?: string;
 }
 
 /** What an agent asked for (core/src/changes.rs's Instruction). */
@@ -905,8 +919,8 @@ export type Instruction =
   | { op: "lines"; at: number; old: string[]; new: string[] }
   /** A paragraph added at the end of the page. */
   | { op: "append"; text: string }
-  /** Properties set, or taken out with null. */
-  | { op: "properties"; set: [string, string | null][] }
+  /** Properties set, or taken out with null; a list (a project's `folders`) is written as a YAML list. */
+  | { op: "properties"; set: [string, string | string[] | null][] }
   | { op: "rename"; to: string }
   | { op: "trash" }
   /** A Trash entry put back, at the change's page. */
@@ -1139,8 +1153,8 @@ export const api = {
   /** A task's line with one edit made, without writing it. */
   changeTaskLine: (line: string, edit: TaskLineEdit) => invoke<string>("change_task_line", { line, edit }),
   /** A new project note's path and text, without writing it. */
-  changeProjectNote: (name: string, status: string, area: string | null, outcome: string | null) =>
-    invoke<{ path: string; content: string }>("change_project_note", { name, status, area, outcome }),
+  changeProjectNote: (name: string, status: string, area: string | null, outcome: string | null, folders: string[] = []) =>
+    invoke<{ path: string; content: string }>("change_project_note", { name, status, area, outcome, folders }),
   changeReject: (id: string) => invoke<void>("change_reject", { id }),
   /** Every held change in a run (or every one when group is null), oldest first; only those in ids
    *  when given (a search on Changes). */
@@ -1362,6 +1376,8 @@ export const api = {
   taskAdd: (text: string) => invoke<Edited>("task_add", { text }),
   projectSet: (path: string, key: "status" | "area" | "outcome", value: string | null) =>
     invoke<string | null>("project_set", { path, key, value }),
+  /** A project's `folders` (the Workspace's folders its work happens in), the whole list; empty takes the property out. */
+  projectSetFolders: (path: string, folders: string[]) => invoke<string | null>("project_set_folders", { path, folders }),
   /** Renames an area on each of its projects (`areaProjects`), undone together. */
   projectsSetArea: (paths: string[], from: string, to: string) => invoke<string>("projects_set_area", { paths, from, to }),
   /** `block` is the item's block, checked before it's removed. */

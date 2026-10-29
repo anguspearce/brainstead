@@ -820,22 +820,37 @@ pub fn yaml_scalar(v: &str) -> String {
 /// The text with one frontmatter property changed, added (before the closing `---`) or removed
 /// (with None), and every other byte as it was. Frontmatter is started when there's none.
 pub fn with_property(src: &str, key: &str, value: Option<&str>) -> Result<String> {
-    if key.is_empty() || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') {
-        return Err(WriteError::Invalid(format!("Not a property name: {key}")));
-    }
     if value.is_some_and(|v| v.contains(['\n', '\r'])) {
         return Err(WriteError::Invalid("A property here is one line.".into()));
     }
+    with_entry(src, key, value.map(|v| vec![format!("{key}: {}", yaml_scalar(v.trim()))]))
+}
+
+/// Sets a list property (a project's `folders`) as a YAML block list, or takes it out when the
+/// list is empty; otherwise as `with_property`.
+pub fn with_list_property(src: &str, key: &str, values: &[String]) -> Result<String> {
+    let values: Vec<&str> = values.iter().map(|v| v.trim()).filter(|v| !v.is_empty()).collect();
+    if values.iter().any(|v| v.contains(['\n', '\r'])) {
+        return Err(WriteError::Invalid("Each item of a list property is one line.".into()));
+    }
+    let entry = (!values.is_empty())
+        .then(|| std::iter::once(format!("{key}:")).chain(values.iter().map(|v| format!("  - {}", yaml_scalar(v)))).collect());
+    with_entry(src, key, entry)
+}
+
+fn with_entry(src: &str, key: &str, entry: Option<Vec<String>>) -> Result<String> {
+    if key.is_empty() || !key.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') {
+        return Err(WriteError::Invalid(format!("Not a property name: {key}")));
+    }
     let bom = if src.starts_with('\u{feff}') { "\u{feff}" } else { "" };
     let (mut lines, eol, trailing) = split_lines(&src[bom.len()..]);
-    let entry = value.map(|v| format!("{key}: {}", yaml_scalar(v.trim())));
     let opened = lines.first().is_some_and(|l| l.trim_end() == "---");
     let close = if opened { (1..lines.len()).find(|&i| matches!(lines[i].trim_end(), "---" | "...")) } else { None };
     match (opened, close) {
         (true, None) => return Err(WriteError::Invalid("This note's properties aren't closed with ---, so they weren't changed.".into())),
         (false, _) => {
             let Some(e) = entry else { return Ok(src.to_string()) };
-            lines.splice(0..0, ["---".to_string(), e, "---".to_string()]);
+            lines.splice(0..0, std::iter::once("---".to_string()).chain(e).chain(["---".to_string()]));
         }
         (true, Some(c)) => {
             let at = (1..c).find(|&i| lines[i].strip_prefix(key).is_some_and(|r| r.starts_with(':')));
@@ -843,9 +858,9 @@ pub fn with_property(src: &str, key: &str, value: Option<&str>) -> Result<String
                 (Some(i), e) => {
                     // A value that goes on below (a list, a block) goes with it.
                     let end = (i + 1..c).find(|&j| !lines[j].starts_with([' ', '\t', '-'])).unwrap_or(c);
-                    lines.splice(i..end, e);
+                    lines.splice(i..end, e.into_iter().flatten());
                 }
-                (None, Some(e)) => lines.insert(c, e),
+                (None, Some(e)) => drop(lines.splice(c..c, e)),
                 (None, None) => return Ok(src.to_string()),
             }
         }
@@ -855,11 +870,20 @@ pub fn with_property(src: &str, key: &str, value: Option<&str>) -> Result<String
 
 /// Changes one frontmatter property of a note, as `with_property`.
 pub fn set_property(path: &Path, key: &str, value: Option<&str>) -> Result<FileChange> {
+    set_with(path, |src| with_property(src, key, value))
+}
+
+/// Sets a list property of a note, as `with_list_property`.
+pub fn set_list_property(path: &Path, key: &str, values: &[String]) -> Result<FileChange> {
+    set_with(path, |src| with_list_property(src, key, values))
+}
+
+fn set_with(path: &Path, change: impl FnOnce(&str) -> Result<String>) -> Result<FileChange> {
     let l = lock(path);
     let _g = l.lock().unwrap();
     check_conflict_copies(path)?;
     let src = read_note(path)?;
-    let text = with_property(&src, key, value)?;
+    let text = change(&src)?;
     if text != src {
         write_atomic(path, text.as_bytes(), false)?;
     }
@@ -1479,6 +1503,19 @@ mod tests {
         ] {
             assert_eq!(yaml_scalar(v), q, "{v}");
         }
+    }
+
+    #[test]
+    fn sets_a_list_property() {
+        let src = "---\nstatus: active\nfolders: orbit-app\narea: Work\n---\nbody\n";
+        let two = ["~/repos/orbit-app".to_string(), "hub: platform".to_string()];
+        assert_eq!(
+            with_list_property(src, "folders", &two).unwrap(),
+            "---\nstatus: active\nfolders:\n  - ~/repos/orbit-app\n  - \"hub: platform\"\narea: Work\n---\nbody\n"
+        );
+        let listed = with_list_property(src, "folders", &two).unwrap();
+        assert_eq!(with_list_property(&listed, "folders", &[]).unwrap(), "---\nstatus: active\narea: Work\n---\nbody\n");
+        assert_eq!(with_list_property("body\n", "folders", &two[..1]).unwrap(), "---\nfolders:\n  - ~/repos/orbit-app\n---\nbody\n");
     }
 
     #[test]

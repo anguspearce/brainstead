@@ -483,6 +483,8 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
             {field("outcome", "Outcome", p.outcome)}
             <span className="faint">Area</span>
             {field("area", "Area", p.area)}
+            <span className="faint">Folders</span>
+            <ProjectFolders p={p} />
           </div>
         </div>
         <section>
@@ -651,6 +653,91 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
 const doneText = (d: TaskRow) => d.text.replace(/\s*[✅❌].*$/u, "");
 
 /** The wiki pages the project note links to. */
+/** The folders on the computer a project's work happens in (`folders:` in its note): the
+ *  Workspace links a session started in one to the project. Each is a path (`~/repos/orbit-app`)
+ *  or a bare folder name; the whole list is written at once, undoable. */
+function ProjectFolders({ p }: { p: ProjectRow }) {
+  const list = p.folders ?? [];
+  const [adding, setAdding] = useState(false);
+  const save = (next: string[], done: string) =>
+    api
+      .projectSetFolders(p.path, next)
+      .then(() => toast(done, undefined, "ok"))
+      .catch(reportEditError);
+  const add = (f: string) => {
+    const v = f.trim();
+    setAdding(false);
+    if (!v || list.includes(v)) return;
+    void save([...list, v], `Added ${v} to ${p.name}'s folders`);
+  };
+  const pick = async () => {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const picked = await open({ directory: true, multiple: false, title: `A folder ${p.name}'s work happens in` });
+    if (typeof picked !== "string") return;
+    const { homeDir } = await import("@tauri-apps/api/path");
+    const home = (await homeDir().catch(() => "")).replace(/[\\/]+$/, "");
+    // Under the home folder it's written ~/…, so the note works on another computer too.
+    add(home && picked.startsWith(`${home}/`) ? `~${picked.slice(home.length)}` : picked);
+  };
+  return (
+    <div className="row pfolders">
+      {list.map((f) => (
+        <span key={f} className="chip">
+          <span className="mono">{f}</span>
+          <button
+            type="button"
+            className="ibtn xs"
+            aria-label={`Remove ${f}`}
+            title={`Take ${f} out of this project's folders; nothing on disk changes`}
+            onClick={() =>
+              void save(
+                list.filter((x) => x !== f),
+                `Took ${f} out of ${p.name}'s folders`,
+              )
+            }
+          >
+            <Icon name="x" size={10} />
+          </button>
+        </span>
+      ))}
+      {adding ? (
+        <input
+          className="pin"
+          autoFocus
+          aria-label="Folder"
+          placeholder="~/repos/orbit-app, or a folder's name"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") add(e.currentTarget.value);
+            else if (e.key === "Escape") {
+              e.stopPropagation();
+              setAdding(false);
+            }
+          }}
+          onBlur={() => setAdding(false)}
+        />
+      ) : (
+        <button
+          type="button"
+          className="pval"
+          title="Type a folder's path or name; sessions in the Workspace started there belong to this project"
+          onClick={() => setAdding(true)}
+        >
+          {list.length ? <Icon name="plus" size={12} /> : <span className="faint">Add a folder…</span>}
+        </button>
+      )}
+      <button
+        type="button"
+        className="ibtn xs"
+        aria-label="Choose a folder"
+        title="Choose a folder on this computer that this project's work happens in"
+        onClick={() => void pick().catch(reportEditError)}
+      >
+        <Icon name="folder" size={12} />
+      </button>
+    </div>
+  );
+}
+
 function ProjectWiki({ path }: { path: string }) {
   const [pages, setPages] = useState<string[]>([]);
   const v = useVaultVersion();

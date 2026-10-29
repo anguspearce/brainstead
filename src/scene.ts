@@ -17,6 +17,7 @@ import { helpOpen, HelpView } from "./help/HelpDrawer";
 import { readingScene } from "./speech/player";
 import type { ClarifySuggestion, Reply, Theme, WeekPrepStatus } from "./api";
 import { ask, blankChat } from "./askState";
+import { workspaceScene } from "./workspaceState";
 import { nav, Screen, SettingsPane } from "./nav";
 import { noteDialog } from "./notes/dialogs";
 import { applyTheme, settings, Store } from "./store";
@@ -61,6 +62,8 @@ export interface Scene {
   guideOffer?: boolean;
   /** Screens' remembered choices (`useViewState` keys), e.g. the selected task. */
   view?: Record<string, unknown>;
+  /** For "workspace": sample folders under ~/repos and two sessions, one waiting for you. */
+  workspace?: boolean;
   /** For "ask": show a sample chat. */
   chat?: boolean | "tutorial";
   /** For "reply": a sample draft for the thread, as Draft would make it (the website tutorial's). */
@@ -258,6 +261,7 @@ export function applyScene(sc: Scene) {
   if (sc.image) imageView.set({ url: convertFileSrc(vaultFile(settings.get().vaultPath ?? "", sc.image)), alt: sc.image });
   if (sc.chat) ask.set({ chats: [sc.chat === "tutorial" ? tutorialChat() : sampleChat()], active: "scene" });
   if (sc.replyDraft) sceneReply.set(sampleReply);
+  if (sc.workspace) workspaceScene();
   if (sc.help) helpOpen.set(sc.help);
   if (sc.guideOffer) guideOffer.set(true);
   if (sc.reading) readingScene.set(sc.reading);

@@ -499,6 +499,7 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
         label: Some(label.into()),
         run: Some(r.group.clone().unwrap_or_else(|| r.id.clone())),
         trigger: r.trigger.clone(),
+        ..Default::default()
     };
 
     // 1. The text.
@@ -931,6 +932,7 @@ fn meeting_steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -
             label: Some("Meeting note".into()),
             run: Some(r.id.clone()),
             trigger: r.trigger.clone(),
+            ..Default::default()
         };
         let mut s = crate::changes::Submit::new(
             &filename,

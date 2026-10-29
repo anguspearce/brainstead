@@ -352,6 +352,28 @@ pub async fn project_set(app: AppHandle, path: String, key: String, value: Optio
     .await
 }
 
+/// Sets the folders a project's work happens in (`folders:`, the Workspace's link to it); an
+/// empty list takes the property out.
+#[tauri::command]
+pub async fn project_set_folders(app: AppHandle, path: String, folders: Vec<String>) -> Res<String> {
+    writing(move || {
+        writable(&app.state::<AppState>())?;
+        let svc = app.state::<VaultService>();
+        let abs = project_of(&svc, &path)?;
+        let ch = write::set_list_property(&abs, "folders", &folders)?;
+        let name = projects::project_name(&path);
+        let label = if folders.iter().any(|f| !f.trim().is_empty()) {
+            format!("Set the folders of “{name}”")
+        } else {
+            format!("Cleared the folders of “{name}”")
+        };
+        let undo = push_files(&app, &root(&svc)?, label, std::slice::from_ref(&ch));
+        written(&app, &[abs]);
+        Ok(undo)
+    })
+    .await
+}
+
 /// Renames an area: sets `area` on each project note in `paths` (the area's projects, as the
 /// screen lists them), all undone together. Returns the toast's undo label.
 #[tauri::command]

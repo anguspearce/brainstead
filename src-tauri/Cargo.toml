@@ -38,6 +38,8 @@ tauri-plugin-notification = "2"
 tauri-plugin-updater = "2"
 dirs = "6"
 base64 = "0.22"
+# The Workspace's terminal sessions (terminal.rs).
+portable-pty = "0.9"
 regex = "1"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 # Teams and Outlook sync's calls (sync/), at the updater's own version.

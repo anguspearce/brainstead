@@ -6,7 +6,7 @@ order: 12
 page: Preview a source
 summary: The raw material the wiki is built from, and where you ingest it into the wiki.
 ---
-Sources are the files in your vault's `sources/` folder: captured emails and chats, transcripts, documents, images and notes. They are the record, so Brainstead doesn't edit them, except that an ingest (the AI reading a source into the wiki) corrects misheard names, listed in [Changes](app:review) with Revert. Go to Sources with `⌘0`.
+Sources are the files in your vault's `sources/` folder: captured emails and chats, transcripts, documents, images and notes. They are the record, so Brainstead doesn't edit them, except that an ingest (the AI reading a source into the wiki) corrects misheard names, listed in [Changes](app:review) with Revert.
 
 ## Add a source
 - Drag files from Finder (or Explorer) onto the Sources screen, or click **Import** and pick them. Each is copied into `sources/`, renamed if the name is taken. Folders, files already in the vault and files over 200 MB are refused.

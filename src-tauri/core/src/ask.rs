@@ -85,7 +85,7 @@ impl Cli {
 /// The MCP server's name, as each CLI is told it.
 pub const MCP_NAME: &str = "brainstead";
 /// Its tools, for the CLIs that list each one (Copilot).
-pub const MCP_TOOLS: [&str; 86] = [
+pub const MCP_TOOLS: [&str; 89] = [
     "search",
     "read_section",
     "backlinks",
@@ -108,6 +108,9 @@ pub const MCP_TOOLS: [&str; 86] = [
     "update_project",
     "move_project",
     "rename_area",
+    "project_for_folder",
+    "list_workspace",
+    "workspace",
     "edit_page",
     "create_note",
     "add_image",

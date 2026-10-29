@@ -282,6 +282,7 @@ fn run(app: &AppHandle, l: &mut Last, trigger: Option<&str>, group: &str) -> Res
             label: Some("Contradiction".into()),
             run: Some(group.into()),
             trigger: trigger.map(String::from),
+            ..Default::default()
         };
         let mut s = crate::changes::Submit::new(&p.page, proposals::Kind::Edit, &title, &v.fix, origin, from_texts(Some(before), &after));
         s.quotes = quotes;

@@ -147,6 +147,23 @@ import { ANSWERED, replyTask } from "./skills/Reply";
 import { actionLabel, actionsIn, filterLog, rankLog } from "./activityModel";
 import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from "./taskGroups";
 import { captureDefault, isMac, keyLabel, terminalApp, vaultFile } from "./platform";
+import { Folder, PastSession, Program, SessionInfo, workspaceApi } from "./workspaceApi";
+import {
+  addRoot,
+  canType,
+  expandHome,
+  groupFolders,
+  loadPast,
+  pinFolder,
+  PROGRAM_LABEL,
+  refreshFolders,
+  removeRoot,
+  sendText,
+  startSession,
+  stateLabel,
+  stopSession,
+  workspace as workspaceStore,
+} from "./workspaceState";
 
 const TODO_LIST = "Me. To Do List.md";
 const SCRATCHPAD = "Me. Scratchpad.md";
@@ -1012,12 +1029,12 @@ const flagLine = (p: ProjectRow) => {
 /** A project's line: its name, status, next actions and flag; with detail its area, what done looks like and every count. */
 const projectOut = (p: ProjectRow, detail = true) =>
   detail
-    ? `- ${p.name} · ${statusOut(p.status)}${p.area ? ` · ${p.area}` : ""} · ${p.next} next, ${p.waiting} waiting, ${p.someday} someday, ${p.done} done${flagLine(p)}${p.outcome ? ` · done looks like: ${p.outcome}` : ""}  (${p.path})`
+    ? `- ${p.name} · ${statusOut(p.status)}${p.area ? ` · ${p.area}` : ""} · ${p.next} next, ${p.waiting} waiting, ${p.someday} someday, ${p.done} done${flagLine(p)}${p.outcome ? ` · done looks like: ${p.outcome}` : ""}${p.folders?.length ? ` · folders: ${p.folders.join(", ")}` : ""}  (${p.path})`
     : `- ${p.name} · ${statusOut(p.status)} · ${p.next} next${flagLine(p)}  (${p.path})`;
 
 async function updateProject(a: Args, r: McpRequest): Promise<string> {
   const path = await projectPath(str(a, "project") ?? "");
-  const set: [string, string | null][] = [];
+  const set: [string, string | string[] | null][] = [];
   const said: string[] = [];
   // The tool's names, the screen's, and the property each writes in the note.
   const fields = [
@@ -1039,11 +1056,31 @@ async function updateProject(a: Args, r: McpRequest): Promise<string> {
     set.push([prop, v || null]);
     said.push(v ? `${words} ${v}` : `cleared ${words}`);
   }
-  if (!said.length) throw new Error("Give status (active, on-hold, someday, completed), area or done_looks_like.");
+  // The folders on the computer its work happens in (the Workspace's link), the whole list, as the screen edits it.
+  if (has(a, "folders")) {
+    const list = foldersIn(a.folders);
+    set.push(["folders", list.length ? list : null]);
+    said.push(list.length ? `folders ${list.join(", ")}` : "cleared folders");
+  }
+  if (!said.length) throw new Error("Give status (active, on-hold, someday, completed), area, done_looks_like or folders.");
   const name = projectName(path);
   const o = await submitAll([sub(a, r, path, "edit", `Set ${said.join(", ")} for ${name}`, { op: "properties", set })]);
   told(o.applied ? `${said.join(", ")} for ${name}` : `held a change to ${name} for you in Changes`);
   return o.applied ? `Set ${said.join(", ")} for ${name}. ${o.message}` : o.message;
+}
+
+/** A project's folders as a tool gives them: a list (or one string) of paths (`~/repos/orbit-app`)
+ *  or bare folder names, each one line, blanks and repeats dropped. */
+export function foldersIn(v: unknown): string[] {
+  const list = v === null || v === undefined ? [] : Array.isArray(v) ? v : [v];
+  const out: string[] = [];
+  for (const x of list) {
+    if (typeof x !== "string") throw new Error("folders is a list of folder paths or names.");
+    const f = x.trim();
+    if (f.includes("\n")) throw new Error("A folder is one line.");
+    if (f && !out.includes(f)) out.push(f);
+  }
+  return out;
 }
 
 /** rename_area: the area's pencil on the Projects screen, over the same projects (`areaProjects`). */
@@ -1118,10 +1155,194 @@ async function moveProject(a: Args): Promise<string> {
 async function createProject(a: Args, r: McpRequest): Promise<string> {
   const name = str(a, "name");
   if (!name) throw new Error("Give the project's name.");
-  const note = await api.changeProjectNote(name, statusIn(a) ?? "active", str(a, "area") ?? null, str(a, "done_looks_like") ?? null);
+  const note = await api.changeProjectNote(
+    name,
+    statusIn(a) ?? "active",
+    str(a, "area") ?? null,
+    str(a, "done_looks_like") ?? null,
+    has(a, "folders") ? foldersIn(a.folders) : [],
+  );
   const o = await submitAll([sub(a, r, note.path, "new", `New project ${projectName(note.path)}`, { op: "page", content: note.content })]);
   told(o.applied ? `made the project ${name}` : `held the project ${name} for you in Changes`);
   return o.message;
+}
+
+// ---- workspace
+
+/** A folder's line, as the Workspace's left column shows it: name, kind, branch, changes, project. */
+const folderOut = (f: Folder) =>
+  `- ${f.name} · ${f.kind}${f.branch ? ` · ${f.branch}${f.dirty ? " (uncommitted changes)" : ""}` : ""}${f.project ? ` · project ${f.project.name}` : ""}${f.pinned ? " · pinned" : ""}${f.insideVault ? " · in the vault: sessions can't start here" : ""}  (${f.path})`;
+
+const sessionOut = (s: SessionInfo) =>
+  `- ${s.id} · ${PROGRAM_LABEL[s.program]} in ${s.name} · ${stateLabel(s)}${s.title ? ` · “${s.title}”` : ""}${s.project ? ` · project ${s.project.name}` : ""}${s.external ? " · in a terminal outside Brainstead" : ""}${s.filesTouched.length ? ` · ${s.filesTouched.length} ${s.filesTouched.length === 1 ? "file" : "files"} changed` : ""}  (${s.folder})`;
+
+const pastOut = (p: PastSession) =>
+  `- ${p.id} · last active ${new Date(p.lastActive).toISOString().slice(0, 16).replace("T", " ")} · “${p.firstMessage.replace(/\s+/g, " ").slice(0, 80)}”`;
+
+/** The home folder, for `~/…` in a path an assistant gives. */
+async function home(): Promise<string | null> {
+  try {
+    const { homeDir } = await import("@tauri-apps/api/path");
+    return await homeDir();
+  } catch {
+    return null;
+  }
+}
+
+/** An assistant's refusal of a shell session: a shell has no guard (the MCP server says the same). */
+export const SHELL_UNGUARDED =
+  "A shell session isn't guarded, so assistants can't start one or type into one. Start it yourself in the Workspace.";
+
+/** The program an assistant's session runs: Claude Code or Codex, whose vault access is guarded. */
+function programIn(a: Args): Program {
+  const p = str(a, "program") ?? "claude";
+  if (p === "shell") throw new Error(SHELL_UNGUARDED);
+  if (p !== "claude" && p !== "codex") throw new Error("program is claude or codex.");
+  return p;
+}
+
+/** A session open in the Workspace, by id. */
+async function sessionById(a: Args): Promise<SessionInfo> {
+  const id = str(a, "id");
+  if (!id) throw new Error("Give the session's id: list_workspace with do sessions lists them.");
+  const all = await workspaceApi.sessions().catch(() => workspaceStore.get().sessions);
+  const s = all.find((x) => x.id === id);
+  if (!s) throw new Error(`There's no session ${id}. The sessions are: ${all.map((x) => `${x.id} (${x.name})`).join(", ") || "none"}.`);
+  return s;
+}
+
+/** workspace and list_workspace: the Workspace screen's folders and sessions, through its own
+ *  functions (src/workspaceState.ts), so a tool does what the screen's buttons do. */
+export async function workspaceTool(a: Args): Promise<string | Listing> {
+  const what = str(a, "do");
+  const unattended = a.unattended === true;
+  const path = async (k1: string, k2: string) => {
+    const p = str(a, k1) ?? str(a, k2);
+    if (!p) throw new Error(`Give the folder's ${k1}.`);
+    return expandHome(p, await home());
+  };
+  switch (what) {
+    case "folders": {
+      const all = await refreshFolders();
+      // In the screen's order: each root and its repos, then pinned, then recent.
+      const g = groupFolders(all);
+      const seen = new Set<string>();
+      const rows = [...g.roots.flatMap((r) => [r.root, ...r.repos]), ...g.pinned, ...g.recent, ...all].filter((f) =>
+        seen.has(f.path) ? false : (seen.add(f.path), true),
+      );
+      return listed(a, rows, {
+        text: (f) => `${f.name} ${f.path} ${f.project?.name ?? ""}`,
+        noun: ["folder", "folders"],
+        line: folderOut,
+        item: (f) => ({
+          path: f.path,
+          name: f.name,
+          kind: f.kind,
+          root: f.root ?? null,
+          branch: f.branch ?? null,
+          dirty: !!f.dirty,
+          pinned: f.pinned,
+          project: f.project ?? null,
+          insideVault: f.insideVault,
+        }),
+        empty: "No folders yet: add_root adds one whose git repos are listed, such as ~/repos.",
+      });
+    }
+    case "sessions": {
+      const all = await workspaceApi.sessions().catch(() => workspaceStore.get().sessions);
+      return listed(a, all, {
+        text: (s) => `${s.name} ${s.title ?? ""} ${s.project?.name ?? ""}`,
+        noun: ["session", "sessions"],
+        line: sessionOut,
+        item: (s) => ({
+          id: s.id,
+          folder: s.folder,
+          name: s.name,
+          program: s.program,
+          title: s.title ?? null,
+          state: s.state,
+          exitCode: s.exitCode ?? null,
+          claudeSessionId: s.claudeSessionId ?? null,
+          project: s.project ?? null,
+          filesTouched: s.filesTouched,
+          unseen: s.unseen,
+          external: s.external,
+        }),
+        empty: "No sessions are running in the Workspace.",
+      });
+    }
+    case "past_sessions": {
+      const folder = await path("folder", "path");
+      const all = await loadPast(folder);
+      return listed(a, all, {
+        text: (p) => p.firstMessage,
+        noun: ["past Claude Code session", "past Claude Code sessions"],
+        line: pastOut,
+        item: (p) => ({ id: p.id, folder: p.folder, started: p.started, lastActive: p.lastActive, firstMessage: p.firstMessage }),
+        empty: `No Claude Code sessions have run in ${folder}.`,
+      });
+    }
+    case "add_root": {
+      const p = await path("path", "folder");
+      await addRoot(p);
+      noted(`added ${p} to the Workspace`);
+      return `Added ${p}: the Workspace lists its git repos.`;
+    }
+    case "remove_root": {
+      const p = await path("path", "folder");
+      await removeRoot(p);
+      noted(`took ${p} out of the Workspace`);
+      return `Took ${p} out of the Workspace. Nothing on disk changed.`;
+    }
+    case "pin":
+    case "unpin": {
+      const p = await path("path", "folder");
+      await pinFolder(p, what === "pin");
+      noted(what === "pin" ? `pinned ${p} in the Workspace` : `unpinned ${p} in the Workspace`);
+      return what === "pin" ? `Pinned ${p} to the top of the Workspace.` : `Unpinned ${p}.`;
+    }
+    case "start_session": {
+      if (unattended)
+        throw new Error(
+          "A session nobody is watching can't start a Workspace session: the user starts one, or asks you to while they're there.",
+        );
+      const folder = await path("folder", "path");
+      const program = programIn(a);
+      const s = await startSession({
+        folder,
+        program,
+        resume: str(a, "resume"),
+        prompt: str(a, "prompt"),
+        ...(program === "claude" && str(a, "model") ? { model: str(a, "model") } : {}),
+        ...(program === "claude" && str(a, "worktree") ? { worktree: str(a, "worktree") } : {}),
+      });
+      noted(`started ${PROGRAM_LABEL[program]} in ${s.name}`);
+      return `Started ${PROGRAM_LABEL[program]} in ${s.folder} as session ${s.id}${s.project ? `, for the project ${s.project.name}` : ""}. It's a tab on the Workspace screen; send types into it.`;
+    }
+    case "stop_session": {
+      const s = await sessionById(a);
+      if (s.external) throw new Error(`${s.id} runs in a terminal outside Brainstead, so it's stopped there.`);
+      if (s.state === "exited") return `${s.id} has ended already.`;
+      await stopSession(s.id);
+      noted(`stopped the session in ${s.name}`);
+      return `Stopped session ${s.id} in ${s.name}.`;
+    }
+    case "send": {
+      if (unattended) throw new Error("A session nobody is watching can't type into a Workspace session.");
+      const s = await sessionById(a);
+      const text = typeof a.text === "string" ? a.text : "";
+      if (!text.trim()) throw new Error("Give the text to type.");
+      if (s.program === "shell") throw new Error(SHELL_UNGUARDED);
+      if (!canType(s))
+        throw new Error(
+          s.external ? `${s.id} runs in a terminal outside Brainstead, so nothing can be typed into it from here.` : `${s.id} has ended.`,
+        );
+      await sendText(s.id, text);
+      return `Typed into session ${s.id} in ${s.name} and pressed Enter.`;
+    }
+    default:
+      throw new Error("do is folders, sessions, past_sessions, add_root, remove_root, pin, unpin, start_session, stop_session or send.");
+  }
 }
 
 // ---- notes
@@ -2710,6 +2931,7 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
         status: statusOut(p.status),
         area: p.area,
         done_looks_like: p.outcome,
+        folders: p.folders ?? [],
         flag: flagOut(p),
         next: p.next,
         waiting: p.waiting,
@@ -2722,6 +2944,7 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   "project.update": updateProject,
   "project.rename_area": renameArea,
   "project.move": moveProject,
+  workspace: workspaceTool,
   "note.from_template": (a, r) => noteFromTemplate(a, r.chat ?? null),
   "change.submit": submitChange,
   changes: changesTool,

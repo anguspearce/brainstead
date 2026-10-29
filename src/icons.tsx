@@ -114,6 +114,8 @@ const PATHS: Record<string, string> = {
   history: "M3 12a9 9 0 1 0 2.6-6.4L3 8M3 3v5h5M12 7v5l3 2",
   // Save a chat to the vault: a tray with an arrow into it.
   save: "M12 3v12M7 10l5 5 5-5M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4",
+  // The Workspace: a terminal window with a prompt.
+  terminal: "M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM6.5 9l3 3-3 3M12 15h5",
 };
 
 /** The same icon as markup, for DOM built outside React (the editor's widgets). */

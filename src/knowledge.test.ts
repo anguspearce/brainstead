@@ -97,6 +97,17 @@ describe("changes", () => {
     expect(originLabel(row({}))).toBe("Ask");
     expect(originLabel(row({ origin: { kind: "lint" } }))).toBe("Knowledge health");
     expect(originLabel(row({ origin: { kind: "chat", label: "Terminal session" } }))).toBe("Terminal session");
+    // A Workspace session: its folder and project, and its model when the row has none.
+    expect(
+      originLabel(
+        row({
+          origin: { kind: "chat", label: "Terminal session", folder: "/Users/maya/repos/orbit-app", project: "Project. Orbit App.md" },
+        }),
+      ),
+    ).toBe("orbit-app · Orbit App");
+    expect(originLabel(row({ model: null, origin: { kind: "chat", folder: "C:\\repos\\hub-platform\\", model: "claude:opus" } }))).toBe(
+      "hub-platform · opus",
+    );
     expect(originLabel(row({ origin: { kind: "review", label: "daily-summary 2026-10-02" } }))).toBe("Daily summary 2026-10-02");
     expect(originLabel(row({ origin: { kind: "review", label: "weekly-summary 2026-W40" } }))).toBe("Weekly summary 2026-W40");
     expect(runLabel(row({ origin: { kind: "contradiction", run: "contradictions-1" } }))).toBe("Contradiction check");

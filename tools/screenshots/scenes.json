@@ -307,6 +307,11 @@
     "docs": true
   },
   {
+    "name": "workspace",
+    "screen": "workspace",
+    "workspace": true
+  },
+  {
     "name": "settings-assistants",
     "screen": "settings",
     "pane": "assistants",

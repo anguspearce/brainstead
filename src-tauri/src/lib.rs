@@ -26,11 +26,13 @@ mod settings;
 mod skills;
 mod speech;
 mod sync;
+mod terminal;
 mod tray;
 mod updates;
 mod vault;
 mod weekly;
 mod weekprep;
+mod workspace;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -86,9 +88,11 @@ fn settings_write(app: AppHandle, st: State<AppState>, settings: Settings) -> Re
     if scene().is_some() {
         return Ok(next);
     }
+    let mut next = next;
     // Saved first: a save that fails leaves the settings in use as they were, matching the file.
     let prev = {
         let mut cur = lock(&st.settings);
+        workspace::keep_lists(&cur, &mut next);
         settings::save(&st.settings_path, &next)?;
         std::mem::replace(&mut *cur, next.clone())
     };
@@ -132,6 +136,10 @@ fn settings_write(app: AppHandle, st: State<AppState>, settings: Settings) -> Re
     }
     if prev.vault_path != next.vault_path || prev.excluded != next.excluded {
         app.state::<VaultService>().start(&app, next.vault_path.clone(), next.excluded.clone(), false);
+    }
+    // Workspace sessions are guarded from the vault in use.
+    if prev.vault_path != next.vault_path {
+        workspace::write_settings_for(next.vault_path.as_deref().map(std::path::Path::new));
     }
     Ok(next)
 }
@@ -537,12 +545,15 @@ fn app_restart(app: AppHandle) {
 pub(crate) fn before_quit(app: &AppHandle) {
     let _ = app.save_window_state(STATE_FLAGS);
     app.state::<std::sync::Arc<ask::Running>>().kill_all();
+    app.state::<std::sync::Arc<terminal::Terminals>>().kill_all();
 }
 
 /// What would be cut short by restarting into an update now, or None.
 fn busy(app: &AppHandle) -> Option<String> {
     let why = if app.state::<std::sync::Arc<ask::Running>>().any() {
         "An assistant is answering."
+    } else if app.state::<std::sync::Arc<terminal::Terminals>>().live() > 0 {
+        "A Workspace session is running."
     } else if ingest::going() {
         "An ingest run is going."
     } else if daily_check::going() {
@@ -590,6 +601,10 @@ pub fn mcp_main() -> Option<i32> {
         return Some(code);
     }
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // Claude Code's hook for a Workspace session (workspace.rs).
+    if args.first().map(String::as_str) == Some("--hook") {
+        return Some(workspace::hook_main());
+    }
     if args.first().map(String::as_str) != Some("--mcp") {
         return None;
     }
@@ -808,6 +823,7 @@ pub fn run() {
         .plugin(capture::plugin())
         .manage(std::sync::Arc::new(ask::Running::default()))
         .manage(std::sync::Arc::new(ask::Turns::default()))
+        .manage(std::sync::Arc::new(terminal::Terminals::default()))
         .manage(skills::CheckRuns::default())
         .manage(reviews::Reviews::load())
         .manage(weekprep::WeekPrep::load())
@@ -823,6 +839,21 @@ pub fn run() {
         .manage(bridge::Waiting::default())
         .manage(tray::TrayState::default())
         .invoke_handler(tauri::generate_handler![
+            workspace::workspace_folders,
+            workspace::workspace_add_root,
+            workspace::workspace_remove_root,
+            workspace::workspace_pin,
+            workspace::workspace_past_sessions,
+            terminal::term_start,
+            terminal::term_write,
+            terminal::term_resize,
+            terminal::term_stop,
+            terminal::term_close,
+            terminal::term_sessions,
+            terminal::term_buffer,
+            terminal::term_seen,
+            terminal::term_external_command,
+            terminal::term_open_external,
             graph,
             updates::update_offered,
             updates::update_install,
@@ -1004,6 +1035,7 @@ pub fn run() {
             gtd::project_add_task,
             gtd::task_add,
             gtd::project_set,
+            gtd::project_set_folders,
             gtd::projects_set_area,
             gtd::inbox_remove_thought,
             gtd::inbox_move_task,
@@ -1166,6 +1198,10 @@ pub fn run() {
             // Fix name's remembered corrections moved from the vault's scripts/ to here (2026-10-03).
             if let (Some(v), None) = (&s.vault_path, scene()) {
                 migrate_corrections(v);
+            }
+            if scene().is_none() {
+                workspace::write_settings_for(s.vault_path.as_deref().map(std::path::Path::new));
+                terminal::start_events(app.handle());
             }
             app.state::<VaultService>().start(app.handle(), s.vault_path, s.excluded, false);
             changes::start(app.handle());

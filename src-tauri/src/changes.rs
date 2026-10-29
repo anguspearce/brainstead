@@ -1009,19 +1009,26 @@ pub struct ProjectNote {
 }
 
 #[tauri::command]
-pub fn change_project_note(name: String, status: String, area: Option<String>, outcome: Option<String>) -> Res<ProjectNote> {
+pub fn change_project_note(
+    name: String,
+    status: String,
+    area: Option<String>,
+    outcome: Option<String>,
+    folders: Option<Vec<String>>,
+) -> Res<ProjectNote> {
     use brainstead_core::projects;
     let n = name.split_whitespace().collect::<Vec<_>>().join(" ");
     if n.is_empty() || n.starts_with('.') || n.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|', '[', ']', '#', '^']) {
         return Err(invalid(format!("“{name}” can't be a project name: leave out / \\ : * ? \" < > | [ ] # ^")));
     }
     let status = projects::parse_status(&status).ok_or_else(|| invalid(format!("Not a project status: {status}")))?;
-    if area.iter().chain(outcome.iter()).any(|v| v.contains(['\n', '\r'])) {
-        return Err(invalid("Area and outcome are one line each."));
+    let folders = folders.unwrap_or_default();
+    if area.iter().chain(outcome.iter()).chain(folders.iter()).any(|v| v.contains(['\n', '\r'])) {
+        return Err(invalid("Area, outcome and each folder are one line each."));
     }
     Ok(ProjectNote {
         path: format!("{}{n}.md", projects::PREFIX),
-        content: projects::project_note(status, area.as_deref(), outcome.as_deref()),
+        content: projects::project_note_in(status, area.as_deref(), outcome.as_deref(), &folders),
     })
 }
 

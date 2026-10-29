@@ -13,6 +13,7 @@ const SCREENS: Screen[] = [
   "projects",
   "review",
   "ask",
+  "workspace",
   "notes",
   "wiki",
   "sources",

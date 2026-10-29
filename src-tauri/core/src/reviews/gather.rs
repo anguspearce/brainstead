@@ -174,12 +174,12 @@ impl ProjectArea {
 /// The project a session's folder is named after (`~/Projects/orbit-app` for `Orbit App`),
 /// comparing letters and digits only.
 pub fn project_of<'a>(cwd: &str, projects: &'a [ProjectArea]) -> Option<&'a ProjectArea> {
-    let key = |s: &str| s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect::<String>();
-    let dir = key(cwd.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().unwrap_or(""));
+    use crate::projects::{folder_basename, name_key};
+    let dir = name_key(folder_basename(cwd));
     if dir.is_empty() {
         return None;
     }
-    projects.iter().find(|p| key(&p.name) == dir)
+    projects.iter().find(|p| name_key(&p.name) == dir)
 }
 
 impl ReviewInputs {

@@ -46,8 +46,30 @@ export const held = (rows: ChangeRow[]) => rows.filter((c) => c.status === "held
 export function originLabel(c: ChangeRow): string {
   if (c.origin.kind === "lint") return c.origin.label === "Missing page" || !c.origin.label ? "Knowledge health" : c.origin.label;
   if (c.origin.kind === "review") return c.origin.label ? reviewLabel(c.origin.label) : "Scheduled run";
+  const where = folderLabel(c);
+  if (where && (!c.origin.label || c.origin.label === "Terminal session")) return where;
   if (c.origin.label) return c.origin.label;
   return c.origin.chat ? "Ask" : "An assistant";
+}
+
+/** A terminal session's folder and project, "orbit-app · Orbit App", with its model when the row
+ *  has none of its own (Changes shows the row's model after the label); null without a folder. */
+function folderLabel(c: ChangeRow): string | null {
+  const { folder, project, model } = c.origin;
+  if (!folder) return null;
+  const base =
+    folder
+      .replace(/[\\/]+$/, "")
+      .split(/[\\/]/)
+      .pop() || folder;
+  const name = project
+    ? project
+        .split("/")
+        .pop()!
+        .replace(/\.md$/, "")
+        .replace(/^Project\. /, "")
+    : null;
+  return [base, name, !c.model && model ? model.replace(/^[a-z]+:/, "") : null].filter(Boolean).join(" · ");
 }
 
 /** What searching Changes looks in: its title, page (and where it moved to), origin and model. The

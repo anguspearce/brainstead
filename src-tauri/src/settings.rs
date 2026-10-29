@@ -41,6 +41,16 @@ pub struct Settings {
     pub sync_initial_days: u32,
     /// Bring email attachments into `sources/` with their thread (`sync::attachments`). On by default.
     pub sync_mail_attachments: bool,
+    /// Folders whose git repos the Workspace lists (`~/repos`), stored absolute.
+    pub workspace_roots: Vec<String>,
+    /// Folders pinned to the top of the Workspace's list.
+    pub workspace_pinned: Vec<String>,
+    /// Folders Workspace sessions started in, newest first, at most 20. Kept by this side
+    /// (terminal.rs), never by the window.
+    pub workspace_recent: Vec<String>,
+    /// The shell Workspace sessions run through, in place of the user's login shell.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace_shell: Option<String>,
     /// Anything the window keeps that this side doesn't need to know about (sidebar state and the like).
     #[serde(flatten)]
     pub ui: serde_json::Map<String, serde_json::Value>,
@@ -63,6 +73,10 @@ impl Default for Settings {
             sync_ignore_senders: Vec::new(),
             sync_initial_days: 7,
             sync_mail_attachments: true,
+            workspace_roots: Vec::new(),
+            workspace_pinned: Vec::new(),
+            workspace_recent: Vec::new(),
+            workspace_shell: None,
             ui: Default::default(),
         }
     }
@@ -96,6 +110,7 @@ impl Settings {
             self.theme = "system".into();
         }
         self.vault_path = self.vault_path.map(|p| p.trim().to_string()).filter(|p| !p.is_empty());
+        self.workspace_shell = self.workspace_shell.map(|p| p.trim().to_string()).filter(|p| !p.is_empty());
         self.summaries.validate()?;
         self.weekly_review.validate()?;
         Ok(self)

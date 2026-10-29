@@ -15,6 +15,9 @@ fn fixture() -> Fixture {
     let tmp = tempfile::tempdir().unwrap();
     let vault = tmp.path().join("vault");
     let from = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/vault");
+    // Every copy changed at the same moment, so that no source reads as changed after the pages
+    // citing it because the copy crossed a millisecond (while other tests copy too).
+    let copied = std::time::SystemTime::now();
     for e in walkdir::WalkDir::new(&from) {
         let e = e.unwrap();
         let dest = vault.join(e.path().strip_prefix(&from).unwrap());
@@ -22,6 +25,7 @@ fn fixture() -> Fixture {
             std::fs::create_dir_all(&dest).unwrap();
         } else {
             std::fs::copy(e.path(), &dest).unwrap();
+            std::fs::File::options().write(true).open(&dest).unwrap().set_modified(copied).unwrap();
         }
     }
     let data = tmp.path().join("data");
@@ -1056,4 +1060,152 @@ fn add_image_sends_the_bytes_to_the_app() {
     std::fs::create_dir_all(inside.parent().unwrap()).unwrap();
     std::fs::write(&inside, png).unwrap();
     assert!(refused(&f.ctx, "add_image", json!({"path": inside})).contains("![[images/in-vault.png]]"));
+}
+
+/// The fixture, run as a terminal session (no Ask chat) in a folder outside the vault.
+fn in_a_terminal(folder: &str) -> (Fixture, PathBuf) {
+    let f = fixture();
+    let dir = f._tmp.path().join("repos").join(folder);
+    std::fs::create_dir_all(&dir).unwrap();
+    let ctx = Ctx { chat: None, model: Some("claude:opus".into()), cwd: Some(dir.clone()), ..f.ctx };
+    (Fixture { _tmp: f._tmp, ctx }, dir)
+}
+
+#[test]
+fn a_folder_finds_its_project() {
+    let (f, dir) = in_a_terminal("orbit-app-launch");
+    // This session's own folder, by the project's name.
+    let t = ok(&f.ctx, "project_for_folder", json!({}));
+    assert!(t.contains("is for the project Orbit App launch (Project. Orbit App launch.md)"), "{t}");
+    assert!(t.contains("Status: active · Area: Work") && t.contains("Done looks like: Orbit App is live"), "{t}");
+    assert!(t.contains("Next actions (4):") && t.contains("Waiting for (1):"), "{t}");
+    assert!(t.contains("· id Project. Orbit App launch.md:"), "{t}");
+    assert!(t.contains("Notes linking it, latest first:\n- Idea. Launch prep.md ("), "{t}");
+    let r = rpc(&f.ctx, 1, "tools/call", json!({"name": "project_for_folder", "arguments": {}}));
+    let s = &r["result"]["structuredContent"];
+    assert_eq!(s["project"], json!({"path": "Project. Orbit App launch.md", "name": "Orbit App launch"}));
+    assert_eq!((s["next"].as_array().unwrap().len(), s["waiting"].as_array().unwrap().len()), (4, 1));
+    // Another folder, relative to this one; one with no project; the vault.
+    std::fs::create_dir_all(dir.join("../garden")).unwrap();
+    assert!(ok(&f.ctx, "project_for_folder", json!({"folder": "../garden"})).contains("the project Garden"));
+    let none = ok(&f.ctx, "project_for_folder", json!({"folder": "../elsewhere"}));
+    assert!(none.contains("No project is linked") && none.contains("update_project with folders"), "{none}");
+    let vault = f.ctx.vault.join("wiki").to_string_lossy().into_owned();
+    assert!(ok(&f.ctx, "project_for_folder", json!({"folder": vault})).contains("is in the vault"));
+    // A project's folders: list wins over a name, and works with no index.
+    let note = f.ctx.vault.join("Project. Garden.md");
+    let text = std::fs::read_to_string(&note).unwrap();
+    std::fs::write(&note, text.replacen("---\n", &format!("---\nfolders:\n  - {}\n", dir.display()), 1)).unwrap();
+    std::fs::remove_file(f.ctx.data.join("index.db")).unwrap();
+    let t = ok(&f.ctx, "project_for_folder", json!({"folder": dir.join("src").to_string_lossy()}));
+    assert!(t.contains("the project Garden") && t.contains("index isn't there yet"), "{t}");
+}
+
+#[test]
+fn a_terminal_sessions_changes_name_its_folder_and_project() {
+    let (f, dir) = in_a_terminal("orbit-app-launch");
+    let o = origin(&f.ctx, false);
+    assert_eq!(o.label.as_deref(), Some("orbit-app-launch · Orbit App launch"));
+    assert_eq!(o.folder.as_deref(), Some(dir.to_string_lossy().as_ref()));
+    assert_eq!((o.project.as_deref(), o.model.as_deref()), (Some("Project. Orbit App launch.md"), Some("claude:opus")));
+    // The session's own group, as before.
+    assert_eq!(o.run.as_deref(), Some(f.ctx.session.as_str()));
+    let app = fake_app(f.ctx.data.clone(), |_| bridge::Reply { ok: true, result: json!("Done."), error: None });
+    ok(&f.ctx, "capture", json!({"kind": "thought", "text": "Ask Lena about the venue"}));
+    let req = app.join().unwrap();
+    assert_eq!(req.args["origin"]["label"], "orbit-app-launch · Orbit App launch");
+    assert_eq!(req.args["origin"]["project"], "Project. Orbit App launch.md");
+    // A folder with no project: its name alone.
+    let ctx = Ctx { cwd: Some(dir.with_file_name("scratch")), ..f.ctx };
+    let o = origin(&ctx, true);
+    assert_eq!((o.label.as_deref(), o.project, o.trigger.as_deref()), (Some("scratch"), None, Some("scheduled")));
+    // No folder known (or the vault's): the client's name, else plain.
+    let ctx = Ctx { cwd: None, ..ctx };
+    assert_eq!(origin(&ctx, false).label.as_deref(), Some("Terminal session"));
+    rpc(&ctx, 1, "initialize", json!({"protocolVersion": "2025-06-18", "clientInfo": {"name": "codex-mcp-client"}}));
+    let o = origin(&ctx, false);
+    assert_eq!((o.label.as_deref(), o.folder), (Some("codex-mcp-client"), None));
+    let ctx = Ctx { cwd: Some(ctx.vault.clone()), ..ctx };
+    assert_eq!(origin(&ctx, false).label.as_deref(), Some("codex-mcp-client"));
+    // An Ask chat's changes are as they were: no label, folder or project.
+    let f = fixture();
+    let o = origin(&f.ctx, false);
+    assert_eq!((o.chat.as_deref(), o.label, o.folder, o.project, o.model), (Some("chat-1"), None, None, None, None));
+    // Stored before these fields, a change still reads.
+    let old: Origin = serde_json::from_value(json!({"kind": "chat", "label": "Terminal session", "run": "session-1"})).unwrap();
+    assert_eq!((old.folder, old.project), (None, None));
+    assert!(serde_json::to_value(origin(&f.ctx, false)).unwrap().get("folder").is_none());
+}
+
+#[test]
+fn the_workspace_goes_to_the_app() {
+    let (f, dir) = in_a_terminal("orbit-app-launch");
+    let sent = |tool_name: &str, args: Value| {
+        let app = fake_app(f.ctx.data.clone(), |_| bridge::Reply { ok: true, result: json!("Done."), error: None });
+        ok(&f.ctx, tool_name, args);
+        app.join().unwrap()
+    };
+    let r = sent("list_workspace", json!({}));
+    assert_eq!((r.action.as_str(), r.args["do"].as_str()), ("workspace", Some("folders")));
+    let r = sent("list_workspace", json!({"do": "past_sessions", "folder": ".", "text": "x"}));
+    assert_eq!(r.args["folder"], dir.join(".").to_string_lossy().as_ref());
+    assert!(r.args.get("text").is_none());
+    assert!(refused(&f.ctx, "list_workspace", json!({"do": "start_session"})).contains("which tool does that"));
+    assert!(refused(&f.ctx, "list_workspace", json!({"do": "past_sessions"})).contains("Give folder"));
+    // Folders are sent whole: ~/ from home, relative from this session's folder.
+    let r = sent("workspace", json!({"do": "add_root", "path": "~/repos"}));
+    assert_eq!(r.args["path"], dirs::home_dir().unwrap().join("repos").to_string_lossy().as_ref());
+    let r =
+        sent("workspace", json!({"do": "start_session", "folder": dir.to_string_lossy(), "program": "claude", "prompt": "Fix the build"}));
+    assert_eq!(
+        (r.args["do"].as_str(), r.args["program"].as_str(), r.args["prompt"].as_str()),
+        (Some("start_session"), Some("claude"), Some("Fix the build"))
+    );
+    let r = sent("workspace", json!({"do": "send", "id": "t1", "text": "/mcp__brainstead__wrap_up"}));
+    assert_eq!((r.args["id"].as_str(), r.args["text"].as_str()), (Some("t1"), Some("/mcp__brainstead__wrap_up")));
+    // Never in the vault; send needs its session and text.
+    let vault = f.ctx.vault.join("wiki").to_string_lossy().into_owned();
+    assert!(refused(&f.ctx, "workspace", json!({"do": "start_session", "folder": vault})).contains("That folder is in your vault"));
+    assert!(refused(&f.ctx, "workspace", json!({"do": "send", "id": "t1"})).contains("Give text"));
+    assert!(refused(&f.ctx, "workspace", json!({"do": "stop_session"})).contains("Give id"));
+    assert!(refused(&f.ctx, "workspace", json!({})).contains("Give do"));
+    // A shell isn't guarded: no assistant starts one (the app refuses typing into one, and codex is allowed).
+    let shell = json!({"do": "start_session", "folder": dir.to_string_lossy(), "program": "shell"});
+    assert!(refused(&f.ctx, "workspace", shell).contains("A shell session isn't guarded"));
+    assert!(refused(&f.ctx, "workspace", json!({"do": "start_session", "folder": ".", "program": "bash"})).contains("claude or codex"));
+    let r = sent("workspace", json!({"do": "start_session", "folder": dir.to_string_lossy(), "program": "codex"}));
+    assert_eq!(r.args["program"], "codex");
+    // Unattended: starting and typing are refused for the rest of the session; stopping isn't.
+    assert!(refused(&f.ctx, "workspace", json!({"do": "send", "id": "t1", "text": "y", "unattended": true})).contains("unattended"));
+    assert!(refused(&f.ctx, "workspace", json!({"do": "start_session", "folder": "."})).contains("unattended"));
+    assert_eq!(sent("workspace", json!({"do": "stop_session", "id": "t1"})).args["do"], "stop_session");
+}
+
+#[test]
+fn the_prompts_record_the_work_in_the_folders_project() {
+    let (f, _) = in_a_terminal("orbit-app-launch");
+    let init = rpc(&f.ctx, 1, "initialize", json!({"protocolVersion": "2025-06-18"}));
+    assert!(init["result"]["capabilities"]["prompts"].is_object());
+    let list = rpc(&f.ctx, 2, "prompts/list", json!({}));
+    let names: Vec<&str> = list["result"]["prompts"].as_array().unwrap().iter().map(|p| p["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["findings", "tracker", "wrap_up"]);
+    for p in list["result"]["prompts"].as_array().unwrap() {
+        assert!(p["description"].is_string() && p["arguments"].is_array(), "{p}");
+    }
+    let get = |name: &str, args: Value| rpc(&f.ctx, 3, "prompts/get", json!({"name": name, "arguments": args}));
+    let r = get("wrap_up", json!({"notes": "the flaky test's cause"}));
+    let text = r["result"]["messages"][0]["content"]["text"].as_str().unwrap();
+    assert_eq!(r["result"]["messages"][0]["role"], "user");
+    assert!(text.contains("the project Orbit App launch (its note is Project. Orbit App launch.md)"), "{text}");
+    assert!(text.contains("edit_task done true") && text.contains("create_task") && text.contains("Decision:"), "{text}");
+    assert!(text.contains("the flaky test's cause") && text.contains("never by writing the vault's files"), "{text}");
+    let r = get("findings", json!({}));
+    let text = r["result"]["messages"][0]["content"]["text"].as_str().unwrap();
+    assert!(text.contains("type Finding, linking [[Project. Orbit App launch]]") && text.contains("section Notes"), "{text}");
+    assert!(get("tracker", json!({}))["result"]["messages"][0]["content"]["text"].as_str().unwrap().contains("project_for_folder"));
+    // A folder with no project asks which; an unknown prompt is a protocol error.
+    let ctx = Ctx { cwd: None, ..f.ctx };
+    let r = rpc(&ctx, 4, "prompts/get", json!({"name": "wrap_up"}));
+    assert!(r["result"]["messages"][0]["content"]["text"].as_str().unwrap().contains("isn't linked to a project"));
+    assert_eq!(rpc(&ctx, 5, "prompts/get", json!({"name": "nope"}))["error"]["code"], -32602);
 }

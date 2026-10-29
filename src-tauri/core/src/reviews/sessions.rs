@@ -304,9 +304,82 @@ pub(crate) fn sessions_in(
     found
 }
 
+/// A Claude Code session that ran in one folder, for the Workspace's Resume
+/// (src/workspaceApi.ts `PastSession`). Times are ms since the epoch.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderSession {
+    /// Its id, the log's file name: what `claude --resume` takes.
+    pub id: String,
+    pub folder: String,
+    pub started: i64,
+    pub last_active: i64,
+    pub first_message: String,
+    pub program: &'static str,
+}
+
+/// Claude Code's name for a folder under its projects folder: each character other than a letter
+/// or digit as `-`.
+fn project_dir_name(folder: &str) -> String {
+    folder.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect()
+}
+
+/// The sessions whose working directory is `folder` and that have something the user typed,
+/// most recently active first, at most `limit`. Only the folder's own project folder is read
+/// (Claude Code cuts a long name short, so a long one matches by its start).
+pub fn sessions_for_folder(projects: &Path, folder: &str, limit: usize) -> Vec<FolderSession> {
+    let folder = folder.trim_end_matches(['/', '\\']);
+    let want = project_dir_name(folder);
+    let fits = |name: &str| name == want || (want.len() > 200 && name.starts_with(&want[..200]));
+    let files: Vec<PathBuf> = session_files(projects)
+        .into_iter()
+        .filter(|p| p.parent().and_then(Path::file_name).is_some_and(|n| fits(&n.to_string_lossy())))
+        .collect();
+    let utc = Zone::Fixed(chrono::FixedOffset::east_opt(0).expect("a valid offset"));
+    let ms = |t: NaiveDateTime| t.and_utc().timestamp_millis();
+    let mut out: Vec<FolderSession> = files
+        .par_iter()
+        .filter_map(|p| {
+            let r = read_session(p, utc);
+            let (first, _) = r.user_msgs.first()?;
+            (r.cwd.trim_end_matches(['/', '\\']) == folder).then(|| FolderSession {
+                id: p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default(),
+                folder: folder.to_string(),
+                started: ms(r.stamps.iter().min().copied().unwrap_or(*first)),
+                last_active: ms(r.stamps.iter().max().copied().unwrap_or(*first)),
+                first_message: r.user_msgs[0].1.chars().take(200).collect(),
+                program: "claude",
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| b.last_active.cmp(&a.last_active).then(a.id.cmp(&b.id)));
+    out.dedup_by(|a, b| a.id == b.id);
+    out.truncate(limit);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_folders_sessions_newest_first() {
+        let tmp = tempfile::tempdir().unwrap();
+        let projects = fixture::projects(tmp.path());
+        let got = sessions_for_folder(&projects, "/home/me/Projects/alpha/", 50);
+        assert_eq!(got.len(), 1, "{got:?}");
+        let s = &got[0];
+        assert_eq!(
+            (s.id.as_str(), s.folder.as_str(), s.program),
+            ("a1111111-0000-4000-8000-000000000001", "/home/me/Projects/alpha", "claude")
+        );
+        assert_eq!(s.first_message, "Start the alpha importer");
+        let at = |x: &str| chrono::DateTime::parse_from_rfc3339(x).unwrap().timestamp_millis();
+        assert_eq!(s.started, at("2026-09-29T20:00:00Z"));
+        assert!(s.last_active > s.started);
+        assert!(sessions_for_folder(&projects, "/home/me/Projects/nowhere", 50).is_empty());
+        assert!(sessions_for_folder(&projects, "/home/me/Projects/alpha", 0).is_empty());
+    }
 
     fn session(cwd: &str, first: &str, at: &str, kind: &str) -> Session {
         let t = NaiveDateTime::parse_from_str(at, "%Y-%m-%dT%H:%M").unwrap();

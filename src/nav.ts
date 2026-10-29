@@ -15,6 +15,7 @@ export type Screen =
   | "projects"
   | "review"
   | "ask"
+  | "workspace"
   | "notes"
   | "wiki"
   | "sources"

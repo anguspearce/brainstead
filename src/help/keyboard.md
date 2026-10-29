@@ -11,12 +11,12 @@ Keys are shown for this computer: Windows uses Ctrl, Alt and Shift where the Mac
 
 ## Anywhere
 - `⌘K` — Search or jump anywhere
-- `⌘⇧F` — Search page (also `⌘7`)
+- `⌘⇧F` — Search page (also `⌘8`)
 - `⌃⌥Space` — Quick capture, from any app
 - `⌘N` — New note; `⌘↩` creates it
 - `⌘Z` — Undo the last change
 - `⌘[` `⌘]` — Back, forward
-- `⌘1 … ⌘9` `⌘0` — Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki, Sources
+- `⌘1 … ⌘9` `⌘0` — Today, Inbox, Tasks, Projects, Weekly review, Ask, Workspace, Search, Notes, Wiki
 - `⌘,` — Settings
 - `?` — Help for this screen
 - `Esc` — Clear the screen's search box
