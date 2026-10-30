@@ -630,17 +630,18 @@ pub fn tools() -> Vec<Value> {
                 "chat": {"type": "string", "description": "The chat's file or title, from list_chats. The chat open in Ask when left out."}
             }), &[])),
         tool("list_chats", "Ask's chats", Read,
-            "Brainstead's Ask chats (needs the app): list gives them, newest first, with each one's file, whether it's saved in the vault and whether it's pinned; read gives one's messages. Rename, pin or trash one with chats; save one to the vault with save_chat.",
+            "Brainstead's Ask chats (needs the app): list gives them, newest first, with each one's file, whether it's saved in the vault and whether it's pinned; read gives one's messages and its effort. Rename, pin, set the effort of or trash one with chats; save one to the vault with save_chat.",
             schema(json!({
                 "action": {"type": "string", "enum": ["list", "read"], "description": "Default list."},
                 "chat": {"type": "string", "description": "For read: the chat's file or title, from list."}
             }), &[])),
         tool("chats", "Rename, pin or trash a chat", Destroy,
-            "Changes one of Brainstead's Ask chats (needs the app): rename renames it (its tab and, when saved, its note); pin and unpin are History's Pin and Unpin (a pinned chat is kept whatever happens; closed chats that aren't saved or pinned are deleted once 20 newer ones are in History); trash moves it to the Trash, as History's Move to the Trash does. list_chats lists them. Only when the user asks.",
+            "Changes one of Brainstead's Ask chats (needs the app): rename renames it (its tab and, when saved, its note); pin and unpin are History's Pin and Unpin (a pinned chat is kept whatever happens; closed chats that aren't saved or pinned are deleted once 20 newer ones are in History); effort sets the effort the chat runs at from its next message, as the menu beside its model in Ask does, without changing the effort new chats start with (settings' effort.<cli>); trash moves it to the Trash, as History's Move to the Trash does. list_chats lists them. Only when the user asks.",
             schema(json!({
-                "action": {"type": "string", "enum": ["rename", "pin", "unpin", "trash"]},
+                "action": {"type": "string", "enum": ["rename", "pin", "unpin", "effort", "trash"]},
                 "chat": {"type": "string", "description": "The chat's file or title, from list_chats."},
-                "title": {"type": "string", "description": "For rename: the new title."}
+                "title": {"type": "string", "description": "For rename: the new title."},
+                "effort": {"type": "string", "description": "For effort: one of the chat's assistant's levels, by id or name (low, medium, high, xhigh or Extra high, max; Codex has no max), or empty for Default effort, the assistant's own."}
             }), &["action", "chat"])),
         tool("list_transcripts", "Transcripts to write up", Read,
             "Teams meeting transcripts in Sources still without a meeting note (needs the app), or with show all every transcript, the done ones saying why (ingested, or linked from a note), as the screen's Show › All does. Each row has the transcript's path and what Brainstead guesses it is: its type, its name or who it was with, and its date, flagged when the date is only the day it was captured; as the screen marks them, the note it would make when that exists already, what to check with the user, and whether a note is being drafted or was drafted from it. Write one up with start_run meeting_note, giving the right date when it's flagged, and another name or date when its note exists.",
@@ -782,7 +783,7 @@ pub fn tools() -> Vec<Value> {
             "Brainstead's settings that settings can change, as the Settings screen shows them (needs the app): each one's key, pane, label and value, and for a choice its choices; a note's Text size, set from a note's top bar, is among them, and so is the Interface size (the whole window, 80 to 150%). The vault, Read-only and the folders left out aren't listed: they're the user's to change, in the app.",
             schema(json!({}), &[])),
         tool("settings", "Change a setting", Change,
-            "Changes one of Brainstead's settings by its key from list_settings, as the Settings screen does (needs the app). The value is checked against the setting's kind: true or false, a time HH:MM, a day (mon…sun), a number from its choices, one of the choices list_settings gives by id or name (a model, a voice, a spelling language such as British English, a document theme or colour), a note's Text size (12 to 24), the Interface size (80 to 150, a percentage of the whole window, in steps of 10), the quick capture shortcut (Control, Alt, Shift or Super, then a key: Control+Alt+Space; it says whether the system registered it), or text; null puts a setting with a default choice back to it (As new chats, As macOS, System voice, As the app). Change only what the user asked for; ⌘Z doesn't undo it.",
+            "Changes one of Brainstead's settings by its key from list_settings, as the Settings screen does (needs the app). The value is checked against the setting's kind: true or false, a time HH:MM, a day (mon…sun), a number from its choices, one of the choices list_settings gives by id or name (a model, a voice, a spelling language such as British English, a document theme or colour), a note's Text size (12 to 24), the Interface size (80 to 150, a percentage of the whole window, in steps of 10), the quick capture shortcut (Control, Alt, Shift or Super, then a key: Control+Alt+Space; it says whether the system registered it), or text; null puts a setting with a default choice back to it (As new chats, As macOS, System voice, As the app, Default effort). Change only what the user asked for; ⌘Z doesn't undo it.",
             schema(json!({
                 "key": {"type": "string", "description": "The setting's key from list_settings."},
                 "value": {"type": ["boolean", "number", "string", "null"], "description": "The new value, of the kind list_settings shows: true or false, a number, a time HH:MM, a day, one of its choices, or text; null for its default choice."}
@@ -853,7 +854,7 @@ pub fn tools() -> Vec<Value> {
             "The vault, whether it's read-only (then nothing can be changed until the user switches it off in Settings › Vault), the index as Settings › Vault shows it (its counts, or why it failed), Full Disk Access, Brainstead's version, its app data folder and its website, whether Brainstead runs the daily and weekly summaries, whether the previous app's skills are still in the vault (moving_over retires them), and what ⌘Z would undo (needs the app). Then features: which of Quick Look, spelling, grammar, Read aloud, Export PDF, rich copy, Full Disk Access, Open at login and the text in images this system has; the window has no button or setting for the rest, so don't offer them.",
             schema(json!({}), &[])),
         tool("list_assistants", "AI assistants found", Read,
-            "Settings › AI assistants' Found on this computer, as the pane lists it (needs the app): Claude Code, Codex, Antigravity and Copilot, each with its version, how many models it offers and where it is, or that it isn't installed (with where to read how to install it) or lists no models (then the user runs it in Terminal and signs in). look_again looks for them again, as the pane's Look again does, after one is installed or signed in. Then the pane's other groups: Brainstead's tools' command for each assistant found, to use them from Terminal, and Skills Brainstead does now (the vault's skills whose screen Brainstead has).",
+            "Settings › AI assistants' Found on this computer, as the pane lists it (needs the app): Claude Code, Codex, Antigravity and Copilot, each with its version, how many models it offers, where it is and its effort (an effort.<cli> setting: settings sets it), or that it isn't installed (with where to read how to install it) or lists no models (then the user runs it in Terminal and signs in). look_again looks for them again, as the pane's Look again does, after one is installed or signed in. Then the pane's other groups: Brainstead's tools' command for each assistant found, to use them from Terminal, and Skills Brainstead does now (the vault's skills whose screen Brainstead has).",
             schema(json!({"look_again": {"type": "boolean", "description": "true looks for the assistants again first, as Look again does."}}), &[])),
         tool("rebuild_index", "Rebuild the index", Run,
             "Reads every file in the vault again and rebuilds Brainstead's index from scratch, as Settings › Vault's Rebuild index does (needs the app); the files aren't changed. It returns once started; app_status says how the index stands. For when search, tasks or links seem out of date with the files; only when the user asks.",
@@ -1245,7 +1246,7 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
         "save_chat" => act("chat.save", obj),
         "weekly_step" => act("weekly.step", obj),
         "list_chats" => act("chats", acting(obj, name, &["list", "read"], "list", &["title"])?),
-        "chats" => act("chats", acting(obj, name, &["rename", "pin", "unpin", "trash"], "", &[])?),
+        "chats" => act("chats", acting(obj, name, &["rename", "pin", "unpin", "effort", "trash"], "", &[])?),
         "health_issue" => act("health.issue", obj),
         "list_contradictions" => act("contradictions", acting(obj, name, &["list"], "list", &["id", "as"])?),
         "contradictions" => act("contradictions", acting(obj, name, &["mark", "save"], "", &[])?),

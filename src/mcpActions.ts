@@ -25,6 +25,7 @@ import {
   ChangeOutcome,
   ChangeRow,
   ChangeSubmit,
+  CliName,
   CurrentStateRun,
   Instruction,
   FindSuggestion,
@@ -99,7 +100,10 @@ import {
   ask,
   CLI_LABEL,
   clis,
+  cliOf,
   DEFAULT_MODEL,
+  effortLabel,
+  effortSaved,
   findClis,
   isSaved,
   keepChat,
@@ -2363,7 +2367,7 @@ async function assistantsFound(a: Args): Promise<string> {
     `Found on this computer (Settings › AI assistants)${a.look_again === true ? ", looked for again just now" : ""}: ${n ? `${n} assistant${n === 1 ? "" : "s"}` : "no assistants"}.`,
     ...found.map(
       (c) =>
-        `- ${CLI_LABEL[c.cli]}${c.version ? ` · ${c.version}` : ""}: ${foundDetail(c)}${c.path ? "" : ` How to install: ${INSTALL[c.cli]}`}`,
+        `- ${CLI_LABEL[c.cli]}${c.version ? ` · ${c.version}` : ""}: ${c.path ? `${foundDetail(c).replace(/\.$/, "")}. ${effortSaid(c.cli)}.` : `${foundDetail(c)} How to install: ${INSTALL[c.cli]}`}`,
     ),
     "",
     cmds.length
@@ -2378,6 +2382,18 @@ async function assistantsFound(a: Args): Promise<string> {
         ]
       : []),
   ].join("\n");
+}
+
+/** An assistant's effort, as its row in Found on this computer shows it. */
+function effortSaid(cli: CliName): string {
+  const level = settings.get().effort?.[cli];
+  return level ? `${effortLabel(level)} effort` : "Default effort (the assistant's own for each model)";
+}
+
+/** The effort levels an assistant can be set to, as its menu in Found on this computer lists them. */
+async function effortChoices(cli: CliName): Promise<[string, string][]> {
+  await findClis(!clis.get()?.length);
+  return (clis.get()?.find((c) => c.cli === cli)?.efforts ?? []).map((l) => [l, effortLabel(l)]);
 }
 
 /** A source's Provenance card, as Sources shows it: ingested or not and by which run, its size and
@@ -3102,10 +3118,12 @@ async function chatsTool(a: Args): Promise<string | Listing> {
     const turns = full.transcript.filter((t) => t.role === "user" || t.role === "assistant");
     return {
       text: [
-        `${c.title} (${turns.length} messages):`,
+        `${c.title} (${turns.length} messages, ${c.effort ? `${effortLabel(c.effort)} effort` : "Default effort"}):`,
         ...turns.map((t) => `\n${t.role === "user" ? "User" : "Assistant"}: ${t.text}`),
       ].join("\n"),
-      structured: { chat: { file: c.filename, title: c.title, messages: turns.map((t) => ({ role: t.role, text: t.text })) } },
+      structured: {
+        chat: { file: c.filename, title: c.title, effort: c.effort ?? null, messages: turns.map((t) => ({ role: t.role, text: t.text })) },
+      },
     };
   }
   if (action === "rename") {
@@ -3124,12 +3142,28 @@ async function chatsTool(a: Args): Promise<string | Listing> {
       ? `Pinned “${c.title}”: it's kept whatever happens.`
       : `Unpinned “${c.title}”${saved(c) ? "" : "; as it isn't saved, it's deleted once it's closed and 20 newer chats are in History"}.`;
   }
+  if (action === "effort") {
+    // As the menu beside the chat's model in Ask: its assistant's levels, by id or name.
+    const want = String(a.effort ?? "")
+      .trim()
+      .toLowerCase();
+    const cli = cliOf(c.model ?? DEFAULT_MODEL);
+    await findClis(!clis.get()?.length);
+    const levels = clis.get()?.find((x) => x.cli === cli)?.efforts ?? [];
+    const level = want ? levels.find((l) => l === want || effortLabel(l).toLowerCase() === want) : null;
+    if (level === undefined)
+      throw new Error(`effort for ${CLI_LABEL[cli]} is one of: ${levels.join(", ") || "none here"}, or empty for Default effort.`);
+    await effortSaved(c, level);
+    const said = level ? `${effortLabel(level)} effort` : "Default effort (the assistant's own for each model)";
+    noted(`set the chat “${c.title}” to ${said}`);
+    return `“${c.title}” runs at ${said} from its next message. New chats still start with the effort set in Settings › AI assistants.`;
+  }
   if (action === "trash") {
     await trashSaved(c);
     noted(`moved the chat “${c.title}” to the Trash`);
     return `Moved “${c.title}” to the Trash.`;
   }
-  throw new Error("action is list, read, rename, pin, unpin or trash.");
+  throw new Error("action is list, read, rename, pin, unpin, effort or trash.");
 }
 
 // ---- Tasks' saved lists
@@ -3259,6 +3293,15 @@ const settingRows = (): SettingRow[] => [
     modelChoices,
     job === "weekprep" ? "As the summaries, else as new chats" : "As new chats",
   ]),
+  ...(Object.keys(CLI_LABEL) as CliName[]).map((cli): SettingRow => [
+    `effort.${cli}`,
+    "AI assistants",
+    `Found on this computer › ${CLI_LABEL[cli]}'s effort`,
+    "choice",
+    null,
+    () => effortChoices(cli),
+    "Default effort, the assistant's own for each model",
+  ]),
   ["askSuggest", "AI assistants", "Suggest a next message", "bool", true],
   ["meetingIngest", "AI assistants", "Ingest a meeting note once it's made", "bool", true],
   ["meetingTrash", "AI assistants", "Then move the transcript to the Trash", "bool", true],
@@ -3312,6 +3355,7 @@ async function settingsTool(a: Args): Promise<string> {
     summaries: { ...DEFAULT_SCHEDULE, ...s.summaries },
     weeklyReview: { ...DEFAULT_WEEKLY_REVIEW, ...s.weeklyReview },
     jobModels: { ...s.jobModels },
+    effort: { ...s.effort },
   };
   // Open at login is macOS's login item, not a setting in the file; null where macOS can't say
   // (a copy run from a folder), and then it isn't offered, as the screen hides it.

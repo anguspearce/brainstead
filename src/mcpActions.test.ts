@@ -28,6 +28,7 @@ import { nav } from "./nav";
 import { imageView } from "./ImageViewer";
 import { followUp } from "./Ingest";
 import { isMac, keyLabel, platform, setPlatform, terminalApp } from "./platform";
+import { clis, findClis } from "./askState";
 
 const row = (over: Partial<TaskRow>): TaskRow => ({
   path: "Me. To Do List.md",
@@ -833,7 +834,7 @@ describe("MCP actions", () => {
       });
       expect(await run("chats")).toMatch(/Orbit App plan · 2026-10-05 09:00 · not saved/);
       expect(await run("chats", { action: "read", chat: "orbit app plan" })).toBe(
-        "Orbit App plan (2 messages):\n\nUser: Hi\n\nAssistant: Hello",
+        "Orbit App plan (2 messages, Default effort):\n\nUser: Hi\n\nAssistant: Hello",
       );
       await run("chats", { action: "rename", chat: "local:a.json", title: "Launch" });
       expect(calls.find(([c]) => c === "chat_rename")![1]).toEqual({ filename: "local:a.json", title: "Launch" });
@@ -1540,6 +1541,32 @@ describe("MCP actions", () => {
       expect(await run("chats", { action: "pin", chat: "Orbit App plan" })).toMatch(/pinned already/);
       expect(await run("chats", { action: "unpin", chat: "Orbit App plan" })).toBe("Unpinned “Orbit App plan”.");
       expect(calls.filter(([x]) => x === "chat_save").at(-1)![1]!.chat).toMatchObject({ state: "archived" });
+    });
+
+    it("sets a chat's own effort, as the menu beside its model does, leaving Settings' alone", async () => {
+      const c = {
+        filename: "Chat. Orbit App plan.md",
+        id: "a",
+        title: "Orbit App plan",
+        model: "claude:sonnet",
+        updatedAt: "2026-10-05T09:00:00",
+      };
+      answers.chats_list = () => [c];
+      answers.chat_read = () => ({ ...c, transcript: [] });
+      answers.ask_clis = () => [
+        { cli: "claude", path: "/usr/local/bin/claude", version: "2", models: [], efforts: ["low", "medium", "high", "xhigh", "max"] },
+      ];
+      await findClis(true);
+      // The assistants found are kept between calls: later tests look for their own.
+      onTestFinished(() => clis.set(null));
+      expect(await run("chats", { action: "effort", chat: "Orbit App plan", effort: "Extra high" })).toMatch(
+        /^“Orbit App plan” runs at Extra high effort from its next message\./,
+      );
+      expect(calls.find(([x]) => x === "chat_save")![1]!.chat).toMatchObject({ effort: "xhigh" });
+      expect(settings.get().effort).toBeUndefined();
+      await expect(run("chats", { action: "effort", chat: "Orbit App plan", effort: "ultra" })).rejects.toThrow(/one of: low, medium/);
+      await run("chats", { action: "effort", chat: "Orbit App plan", effort: "" });
+      expect(calls.filter(([x]) => x === "chat_save").at(-1)![1]!.chat).toMatchObject({ effort: null });
     });
 
     it("rebuilds the index, unless it's being built already", async () => {
@@ -2289,6 +2316,33 @@ describe("MCP actions", () => {
       expect(out).toContain("- Claude Code · 2.1.0: 1 model · /usr/local/bin/claude");
       expect(out).toContain(`- ChatGPT (Codex): No models listed: open ${terminalApp}, run codex and sign in.`);
       expect(out).toContain("- GitHub Copilot: Not installed. How to install: https://docs.github.com/");
+    });
+
+    it("reads and sets each assistant's effort as Found on this computer does", async () => {
+      answers.settings_write = (a) => a!.settings;
+      answers.login_item = () => null;
+      answers.ask_clis = () => [
+        { cli: "claude", path: "/usr/local/bin/claude", version: "2.1.0", models: [], efforts: ["low", "medium", "high", "xhigh", "max"] },
+        { cli: "codex", path: "/usr/local/bin/codex", version: null, models: [], efforts: ["low", "medium", "high", "xhigh"] },
+      ];
+      await findClis(true);
+      const all = (await run("settings")) as string;
+      expect(all).toContain(
+        "effort.claude · Settings › AI assistants › Found on this computer › Claude Code's effort: null (Default effort, the assistant's own for each model) (one of: low (Low), medium (Medium), high (High), xhigh (Extra high), max (Max)",
+      );
+      expect(await run("settings", { action: "set", key: "effort.claude", value: "Extra high" })).toMatch(/is now "xhigh"/);
+      expect(settings.get().effort).toEqual({ claude: "xhigh" });
+      // Codex takes no max.
+      await expect(run("settings", { action: "set", key: "effort.codex", value: "max" })).rejects.toThrow(
+        /one of: low, medium, high, xhigh/,
+      );
+      const out = (await run("assistants.found")) as string;
+      expect(out).toContain("- Claude Code · 2.1.0: No models listed");
+      expect(out).toContain("Extra high effort.");
+      expect(out).toContain("- ChatGPT (Codex): No models listed");
+      expect(out).toContain("Default effort (the assistant's own for each model).");
+      await run("settings", { action: "set", key: "effort.claude", value: null });
+      expect(settings.get().effort).toEqual({});
     });
 
     it("names the read-aloud highlight as Settings does", async () => {

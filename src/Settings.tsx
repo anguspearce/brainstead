@@ -23,7 +23,7 @@ import { errText } from "./notes/actions";
 import { Switchover } from "./Switchover";
 import { TopBar } from "./TopBar";
 import { Jobs } from "./Jobs";
-import { CLI_LABEL, clis, DEFAULT_MODEL, findClis, MODEL_JOBS, modelLabel } from "./askState";
+import { CLI_LABEL, clis, DEFAULT_MODEL, effortLabel, findClis, MODEL_JOBS, modelLabel } from "./askState";
 import { ModelMenu } from "./Ask";
 import { ago, fmtCount, Popover, Seg, Switch } from "./ui";
 import { sayTest, speechSettingsChanged, voices } from "./speech/player";
@@ -1079,6 +1079,25 @@ function Assistants() {
                 </div>
                 <div className="faint">{foundDetail(c)}</div>
               </div>
+              {c.path && (
+                <select
+                  className="sel"
+                  aria-label={`${CLI_LABEL[c.cli]}'s effort`}
+                  title={`How hard ${CLI_LABEL[c.cli]} thinks before answering: its jobs, and new chats to start with`}
+                  value={s.effort?.[c.cli] ?? ""}
+                  onChange={(e) => {
+                    const { [c.cli]: _, ...rest } = s.effort ?? {};
+                    settings.update({ effort: e.target.value ? { ...rest, [c.cli]: e.target.value } : rest });
+                  }}
+                >
+                  <option value="">Default effort</option>
+                  {c.efforts.map((l) => (
+                    <option key={l} value={l}>
+                      {effortLabel(l)} effort
+                    </option>
+                  ))}
+                </select>
+              )}
               {!c.path && (
                 <button
                   type="button"
@@ -1093,7 +1112,9 @@ function Assistants() {
           ))}
         </div>
         <p className="faint">
-          Ask runs the assistant you choose on this computer with your own account, and it never writes a file itself.
+          Ask runs the assistant you choose on this computer with your own account, and it never writes a file itself. Its effort is what
+          its jobs run at and what new chats start with (a chat can change its own beside its model in Ask); Default effort leaves it to the
+          assistant, which picks one for each model.
         </p>
       </section>
       <McpGroup />
