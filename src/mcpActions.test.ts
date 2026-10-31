@@ -28,6 +28,7 @@ import { nav } from "./nav";
 import { imageView } from "./ImageViewer";
 import { followUp } from "./Ingest";
 import { isMac, keyLabel, platform, setPlatform, terminalApp } from "./platform";
+import { findClis } from "./askState";
 
 const row = (over: Partial<TaskRow>): TaskRow => ({
   path: "Me. To Do List.md",
@@ -2289,6 +2290,33 @@ describe("MCP actions", () => {
       expect(out).toContain("- Claude Code · 2.1.0: 1 model · /usr/local/bin/claude");
       expect(out).toContain(`- ChatGPT (Codex): No models listed: open ${terminalApp}, run codex and sign in.`);
       expect(out).toContain("- GitHub Copilot: Not installed. How to install: https://docs.github.com/");
+    });
+
+    it("reads and sets each assistant's effort as Found on this computer does", async () => {
+      answers.settings_write = (a) => a!.settings;
+      answers.login_item = () => null;
+      answers.ask_clis = () => [
+        { cli: "claude", path: "/usr/local/bin/claude", version: "2.1.0", models: [], efforts: ["low", "medium", "high", "xhigh", "max"] },
+        { cli: "codex", path: "/usr/local/bin/codex", version: null, models: [], efforts: ["low", "medium", "high", "xhigh"] },
+      ];
+      await findClis(true);
+      const all = (await run("settings")) as string;
+      expect(all).toContain(
+        "effort.claude · Settings › AI assistants › Found on this computer › Claude Code's effort: null (Default effort, the assistant's own for each model) (one of: low (Low), medium (Medium), high (High), xhigh (Extra high), max (Max)",
+      );
+      expect(await run("settings", { action: "set", key: "effort.claude", value: "Extra high" })).toMatch(/is now "xhigh"/);
+      expect(settings.get().effort).toEqual({ claude: "xhigh" });
+      // Codex takes no max.
+      await expect(run("settings", { action: "set", key: "effort.codex", value: "max" })).rejects.toThrow(
+        /one of: low, medium, high, xhigh/,
+      );
+      const out = (await run("assistants.found")) as string;
+      expect(out).toContain("- Claude Code · 2.1.0: No models listed");
+      expect(out).toContain("Extra high effort.");
+      expect(out).toContain("- ChatGPT (Codex): No models listed");
+      expect(out).toContain("Default effort (the assistant's own for each model).");
+      await run("settings", { action: "set", key: "effort.claude", value: null });
+      expect(settings.get().effort).toEqual({});
     });
 
     it("names the read-aloud highlight as Settings does", async () => {
