@@ -192,6 +192,16 @@ impl Cli {
     pub fn sees_images(self) -> bool {
         matches!(self, Cli::Claude | Cli::Codex)
     }
+    /// The effort levels Settings › AI assistants offers for it, lowest first, as its CLI names
+    /// them: Claude Code's and Antigravity's `--effort`, Codex's `model_reasoning_effort`,
+    /// Copilot's `--reasoning-effort`. Which a model takes is up to the CLI: Claude Code runs a
+    /// level a model lacks at the highest it has below it, the others may refuse it.
+    pub fn efforts(self) -> &'static [&'static str] {
+        match self {
+            Cli::Codex => &["low", "medium", "high", "xhigh"],
+            Cli::Claude | Cli::Antigravity | Cli::Copilot => &["low", "medium", "high", "xhigh", "max"],
+        }
+    }
 }
 
 /// Claude Code's memory (`~/.claude/projects/<folder>/memory/`), the one place a chat may write.
@@ -281,6 +291,9 @@ pub struct Request<'a> {
     /// Images to show the model (an ingested image, as `platform::image_for_model` made it), for
     /// the CLIs that see them (`Cli::sees_images`); the others ignore them.
     pub images: &'a [std::path::PathBuf],
+    /// The effort level set for this CLI in Settings › AI assistants. None, or a level not in
+    /// `Cli::efforts`, passes none, so the CLI uses its own default for the model.
+    pub effort: Option<&'a str>,
 }
 
 fn strip<'a>(model: &'a str, prefix: &str) -> &'a str {
@@ -342,6 +355,7 @@ pub fn args(cli: Cli, r: &Request) -> Result<Launch, String> {
     let mut a: Vec<String> = Vec::new();
     let mut stdin = None;
     let images: Vec<String> = r.images.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+    let effort = r.effort.filter(|e| cli.efforts().contains(e));
     match cli {
         Cli::Claude => {
             // An image is read with Read from its own folder, added to the ones Claude Code may read.
@@ -352,6 +366,9 @@ pub fn args(cli: Cli, r: &Request) -> Result<Launch, String> {
             };
             // `-p` without a prompt reads it from standard input.
             a.extend([s("-p"), s("--model"), s(strip(r.model, CLAUDE_PREFIX))]);
+            if let Some(e) = effort {
+                a.extend([s("--effort"), s(e)]);
+            }
             stdin = Some(prompt);
             let mut dirs: Vec<String> = r.images.iter().filter_map(|p| p.parent()).map(|d| d.to_string_lossy().into_owned()).collect();
             dirs.dedup();
@@ -394,6 +411,10 @@ pub fn args(cli: Cli, r: &Request) -> Result<Launch, String> {
             // -c values are TOML; a JSON string is a valid TOML basic string.
             let dev = serde_json::to_string(&instructions).map_err(|e| e.to_string())?;
             a.extend([s("-c"), s("sandbox_mode=\"read-only\""), s("-c"), format!("developer_instructions={dev}")]);
+            // `--ignore-user-config` leaves out the user's own config.toml, so its effort too.
+            if let Some(e) = effort {
+                a.extend([s("-c"), format!("model_reasoning_effort=\"{e}\"")]);
+            }
             if let Some(m) = r.mcp {
                 // TOML values; JSON strings and arrays of strings are valid TOML.
                 let cmd = serde_json::to_string(&m.command).map_err(|e| e.to_string())?;
@@ -415,6 +436,9 @@ pub fn args(cli: Cli, r: &Request) -> Result<Launch, String> {
         Cli::Antigravity => {
             a.extend(["-p", r.prompt, "--agent", AGY_AGENT, "--model", strip(r.model, AGY_PREFIX)].map(s));
             a.extend(["--add-dir", r.vault, "--sandbox", "--disable-slash-commands", "--output-format", "stream-json"].map(s));
+            if let Some(e) = effort {
+                a.extend([s("--effort"), s(e)]);
+            }
             if let Some(id) = r.session {
                 a.extend(["--conversation", id].map(s));
             }
@@ -428,6 +452,9 @@ pub fn args(cli: Cli, r: &Request) -> Result<Launch, String> {
             };
             a.extend([s("-p"), prompt]);
             a.extend(["--model", strip(r.model, COPILOT_PREFIX), "--output-format", "json", "--stream", "on"].map(s));
+            if let Some(e) = effort {
+                a.extend([s("--reasoning-effort"), s(e)]);
+            }
             a.extend(["--no-custom-instructions", "--disable-builtin-mcps", "--no-auto-update", "--disallow-temp-dir"].map(s));
             // Never an empty list: `--available-tools=` would allow every tool.
             let mut tools = s("view,grep,glob");
@@ -803,7 +830,7 @@ mod tests {
     }
 
     fn req<'a>(model: &'a str, session: Option<&'a str>) -> Request<'a> {
-        Request { prompt: "What's due?", model, session, system: "SYS", vault: "/v", mcp: None, images: &[] }
+        Request { prompt: "What's due?", model, session, system: "SYS", vault: "/v", mcp: None, images: &[], effort: None }
     }
 
     fn feed(cli: Cli, lines: &[&str]) -> (Vec<Event>, Parser) {
@@ -1027,6 +1054,29 @@ mod tests {
         let b = args(Cli::Copilot, &req("copilot:auto", Some("s9"))).unwrap().args;
         assert_eq!(b[1], "What's due?");
         assert_eq!(b.last().unwrap(), "--resume=s9");
+    }
+
+    #[test]
+    fn effort_only_when_set() {
+        for (model, flag) in [
+            ("claude:sonnet", ["--effort", "high"]),
+            ("gpt-5", ["-c", "model_reasoning_effort=\"high\""]),
+            ("agy:gemini-3", ["--effort", "high"]),
+            ("copilot:auto", ["--reasoning-effort", "high"]),
+        ] {
+            let cli = Cli::route(model);
+            let set = args(cli, &Request { effort: Some("high"), ..req(model, None) }).unwrap().args;
+            assert!(set.windows(2).any(|w| w == flag), "{set:?}");
+            // Unset, or a level the CLI doesn't name, passes none: the CLI's own default.
+            for effort in [None, Some("ultra"), Some("")] {
+                let a = args(cli, &Request { effort, ..req(model, None) }).unwrap().args.join(" ");
+                assert!(!a.contains("effort"), "{a}");
+            }
+        }
+        assert!(!Cli::Codex.efforts().contains(&"max"));
+        // Codex's still reads its prompt last.
+        let c = args(Cli::Codex, &Request { effort: Some("low"), ..req("gpt-5", None) }).unwrap().args;
+        assert_eq!(c[c.len() - 2..], ["--", "-"]);
     }
 
     #[test]

@@ -138,7 +138,16 @@ fn ask_model_with(model: &str, prompt: &str, cwd: &Path, mcp: Option<&Mcp>, help
     let vault = cwd.to_string_lossy().into_owned();
     let launch = ask::args(
         cli,
-        &Request { prompt, model, session: None, system: &system, vault: &vault, mcp: mcp.filter(|_| cli.takes_mcp()), images: &[] },
+        &Request {
+            prompt,
+            model,
+            session: None,
+            system: &system,
+            vault: &vault,
+            mcp: mcp.filter(|_| cli.takes_mcp()),
+            images: &[],
+            effort: None,
+        },
     )?;
     // Antigravity runs as Ask runs it: in a folder of its own holding its read-only agent and the
     // help, with the vault added.
