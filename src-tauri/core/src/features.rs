@@ -12,6 +12,8 @@
 pub struct PlatformFeatures {
     /// "macos", "windows" or "linux".
     pub platform: &'static str,
+    /// A file shown as its app shows it without opening it: Quick Look on a Mac, the file's preview
+    /// handler (Explorer's preview pane) in the window on Windows.
     pub quick_look: bool,
     pub spelling: bool,
     pub grammar: bool,
@@ -24,8 +26,9 @@ pub struct PlatformFeatures {
     pub image_text: bool,
 }
 
-/// This system's features: all of them on macOS; rich copy, Open at login and Read aloud (through
-/// the web view's speech, src/speech/webSpeech.ts) on Windows; none of these on Linux yet.
+/// This system's features: all of them on macOS; all but Full Disk Access on Windows (Read aloud
+/// through the web view's speech, src/speech/webSpeech.ts; the preview through the shell's preview
+/// handlers); none of these on Linux yet.
 pub fn platform_features() -> PlatformFeatures {
     let none = PlatformFeatures {
         platform: "linux",
@@ -55,6 +58,7 @@ pub fn platform_features() -> PlatformFeatures {
     } else if cfg!(windows) {
         PlatformFeatures {
             platform: "windows",
+            quick_look: true,
             rich_copy: true,
             open_at_login: true,
             read_aloud: true,
@@ -118,7 +122,7 @@ mod tests {
                 "linux"
             }
         );
-        assert_eq!(f.quick_look, mac);
+        assert_eq!(f.quick_look, mac || cfg!(windows));
         assert_eq!(f.rich_copy, mac || cfg!(windows));
         assert_eq!(f.read_aloud, mac || cfg!(windows));
         assert_eq!(f.export_pdf, mac || cfg!(windows));
@@ -127,7 +131,7 @@ mod tests {
         if mac {
             assert_eq!(text, "System: macOS, with every feature.");
         } else if cfg!(windows) {
-            assert!(text.starts_with("System: Windows. Not on this system, so not in the window: Quick Look, Full Disk Access"), "{text}");
+            assert!(text.starts_with("System: Windows. Not on this system, so not in the window: Full Disk Access"), "{text}");
             assert!(
                 !text.contains("rich copy")
                     && !text.contains("Open at login")
