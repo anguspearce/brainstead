@@ -406,7 +406,8 @@ class Main(unittest.TestCase):
         self.foreign = tauri_dev + dev_tree(root, 30, 61) + make_check(root, 40, 301)
         self.mine = dev_tree(root, 10, 3)
 
-    def run_main(self, procs, *argv, stdin=""):
+    def run_main(self, procs, *argv, stdin="", fail=""):
+        """main() with `argv`; `fail` names a function of dev_stop's that raises instead."""
         stopped = []
 
         def stop(matches):
@@ -417,6 +418,9 @@ class Main(unittest.TestCase):
         with contextlib.ExitStack() as stack:
             stack.enter_context(unittest.mock.patch.object(dev_stop, "read_procs", lambda timeout: procs))
             stack.enter_context(unittest.mock.patch.object(dev_stop, "stop", stop))
+            if fail:
+                stack.enter_context(unittest.mock.patch.object(dev_stop, fail, side_effect=KeyError("pid")))
+                stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
             stack.enter_context(unittest.mock.patch("os.getpid", return_value=9))
             stack.enter_context(unittest.mock.patch.dict(os.environ, {"CLAUDE_PID": ""}))
             stack.enter_context(unittest.mock.patch("sys.stdin", io.StringIO(stdin)))
@@ -442,6 +446,14 @@ class Main(unittest.TestCase):
         # --anyone is the explicit way to stop every dev process of the checkout.
         code, stopped, _ = self.run_main(procs, "--anyone", "--kill")
         self.assertLessEqual(set(range(30, 40)) | {42, 43, 60, 61}, stopped)
+
+    def test_the_session_end_hook_never_fails(self):
+        procs = SESSION + [Proc(9, 2, "python.exe", "python tools/dev_stop.py", name="python.exe")] + self.mine
+        for where in ("read_procs", "find", "stop"):
+            self.assertEqual(self.run_main(procs, "--session-end", fail=where)[0], 0, where)
+            # Run by hand, the same error is not hidden.
+            with self.assertRaises(KeyError):
+                self.run_main(procs, "--kill", fail=where)
 
 
 class Folders(unittest.TestCase):
