@@ -2772,7 +2772,11 @@ details.callout[open] .callout-chev {
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--pane-side);
   gap: 40px;
-  padding: 28px 24px 60px 40px;
+
+  /* The bands and the rail fill 1460px at most (the bands' 1100, the gap and the rail's usual 320);
+     a wider main area pads the right, so the rail stays beside the bands and flush with the grid's
+     right edge, where its divider is placed. 1500px is that and the 40px left padding. */
+  padding: 28px max(24px, 100% - 1500px) 60px 40px;
   align-items: start;
 }
 .tmain {
