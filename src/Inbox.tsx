@@ -49,6 +49,8 @@ import {
   trashCapture,
 } from "./inboxActions";
 import { keyLabel } from "./platform";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 export { unclarified } from "./gtd";
 
@@ -197,6 +199,7 @@ const DONE_ALL: Record<string, string> = {
 const startText = (i: InboxItem) => (i.kind === "capture" ? `Follow up on [[${i.text}]]` : itemText(i));
 
 export function InboxScreen() {
+  const panes = usePanes({ "inbox.left": PANES["inbox.left"] });
   // Drawn again when settings change: Make a meeting note's label follows the Meeting notes switches.
   useStore(settings);
   const raw = useInbox();
@@ -382,7 +385,7 @@ export function InboxScreen() {
   // Keys: the choices, J / K between items, ↩ the suggestion; with several ticked, their choices.
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (!cur || form || filing || making || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!cur || form || filing || making || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       // Its meeting note under way: J / K still move, nothing acts on it.
       if (busy(cur) && !many && !["j", "k", "ArrowDown", "ArrowUp"].includes(e.key)) return;
       if ((e.target as HTMLElement)?.closest?.("input, textarea, [contenteditable]")) return;
@@ -468,7 +471,8 @@ export function InboxScreen() {
           </button>
         </span>
       </TopBar>
-      <div className="body inbox">
+      <div className="body inbox" {...panes.root}>
+        {panes.resizers}
         <div className="ilist tb" role="table" aria-label="Inbox">
           {raw === null && <p className="faint pad">Loading…</p>}
           {raw && !items.length && (

@@ -38,3 +38,6 @@ Click a chip to hide or show that kind; the centre page always stays.
 
 ## Use the side pane
 With a centre page, the pane names it, says how many links it has and lists the pages linked to or from it. Click one to centre on it, or **Open** to open the centre page. On the whole wiki, the pane shows the number of pages and links, and the most linked pages.
+
+## Resize the panes
+Drag the line between the graph and its pane to make the pane wider or narrower; a double-click on it puts it back ([pane widths](help:settings-general)).

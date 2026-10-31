@@ -878,5 +878,103 @@
       400,
       250
     ]
+  },
+  {
+    "name": "resize-today",
+    "screen": "today",
+    "paneWidths": {
+      "sidebar": 300,
+      "today.side": 260
+    }
+  },
+  {
+    "name": "resize-no-saved-widths",
+    "screen": "tasks",
+    "view": {
+      "tasks:sel": "Project. Orbit App launch.md:9"
+    }
+  },
+  {
+    "name": "resize-tasks",
+    "screen": "tasks",
+    "view": {
+      "tasks:sel": "Project. Orbit App launch.md:9"
+    },
+    "paneWidths": {
+      "sidebar": 300,
+      "tasks.left": 340,
+      "tasks.side": 280
+    }
+  },
+  {
+    "name": "resize-notes",
+    "screen": "notes",
+    "paneWidths": {
+      "sidebar": 300,
+      "notes.type": 72,
+      "notes.mtime": 90
+    }
+  },
+  {
+    "name": "resize-sources",
+    "screen": "sources",
+    "paneWidths": {
+      "sidebar": 300,
+      "sources.side": 280
+    }
+  },
+  {
+    "name": "resize-columns-sources",
+    "screen": "sources",
+    "paneWidths": {
+      "sources.kind": 80,
+      "sources.ingested": 110,
+      "sources.mtime": 120
+    }
+  },
+  {
+    "name": "resize-columns-locked",
+    "screen": "sources",
+    "paneWidths": {
+      "sources.kind": 80,
+      "sources.ingested": 110,
+      "sources.mtime": 120
+    },
+    "resizeLocks": {
+      "columns": true
+    }
+  },
+  {
+    "name": "resize-columns-activity",
+    "screen": "activity",
+    "paneWidths": {
+      "activity.time": 110,
+      "activity.action": 160
+    }
+  },
+  {
+    "name": "resize-columns-wiki",
+    "screen": "wiki",
+    "paneWidths": {
+      "wiki.type": 96,
+      "wiki.tags": 260
+    }
+  },
+  {
+    "name": "resize-locks-settings",
+    "screen": "settings",
+    "pane": "general",
+    "resizeLocks": {
+      "columns": true
+    }
+  },
+  {
+    "name": "resize-trash-wide-sidebar",
+    "screen": "trash",
+    "paneWidths": {
+      "sidebar": 400
+    },
+    "window": [1040, 760],
+    "width": 1040
   }
 ]

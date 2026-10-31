@@ -18,6 +18,8 @@ import { ago, Dialog, fmtBytes, LayerTag, SearchBox, Seg } from "../ui";
 import { errText } from "./actions";
 import { folderOf } from "./filename";
 import { useFeatures } from "../features";
+import { usePanes } from "../PaneResizer";
+import { PANES } from "../panes";
 import { isMac } from "../platform";
 import { isLookKey, quickLook } from "../Preview";
 
@@ -54,6 +56,17 @@ export function deletedWhen(iso: string, now = new Date()): string {
 type Confirm = { what: "delete"; ids: string[] } | { what: "empty" } | { what: "restore-as"; entry: TrashEntry };
 
 export function TrashScreen() {
+  // The columns with a divider, each at its left edge (Name takes the rest); the checkbox
+  // (28px), the buttons (190px), the row's padding (32px) and its six gaps never move.
+  const panes = usePanes(
+    {
+      "trash.type": PANES["trash.type"],
+      "trash.folder": PANES["trash.folder"],
+      "trash.deleted": PANES["trash.deleted"],
+      "trash.size": PANES["trash.size"],
+    },
+    { mode: "column", fixed: 28 + 190 + 32 + 6 * 12 },
+  );
   const v = useVaultVersion();
   const [rows, setRows] = useState<TrashEntry[] | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
@@ -92,7 +105,8 @@ export function TrashScreen() {
   useEffect(() => {
     if (!canLook) return;
     const k = (e: KeyboardEvent) => {
-      if (picked.length !== 1 || !isLookKey(e, "trash")) return;
+      if (picked.length !== 1 || e.defaultPrevented || (e.target as HTMLElement)?.closest?.("[role=separator]") || !isLookKey(e, "trash"))
+        return;
       e.preventDefault();
       void look(picked[0]);
     };
@@ -211,7 +225,7 @@ export function TrashScreen() {
             <p className="muted">The Trash is empty.</p>
           </div>
         ) : (
-          <div className="trlist" role="table" aria-label="Trash">
+          <div className="trlist" role="table" aria-label="Trash" {...panes.root}>
             <div className="trrow tb-head" role="row">
               <button
                 type="button"
@@ -224,11 +238,23 @@ export function TrashScreen() {
               >
                 {allOn && <Icon name="check" size={11} />}
               </button>
-              <span>Name</span>
-              <span>Type</span>
-              <span>Was in</span>
-              <span>Deleted</span>
-              <span className="r">Size</span>
+              <span role="columnheader">Name</span>
+              <span role="columnheader" aria-label={PANES["trash.type"].heading}>
+                {PANES["trash.type"].heading}
+                {panes.resizer("trash.type")}
+              </span>
+              <span role="columnheader" aria-label={PANES["trash.folder"].heading}>
+                {PANES["trash.folder"].heading}
+                {panes.resizer("trash.folder")}
+              </span>
+              <span role="columnheader" aria-label={PANES["trash.deleted"].heading}>
+                {PANES["trash.deleted"].heading}
+                {panes.resizer("trash.deleted")}
+              </span>
+              <span role="columnheader" aria-label={PANES["trash.size"].heading} className="r">
+                {PANES["trash.size"].heading}
+                {panes.resizer("trash.size")}
+              </span>
               <span />
             </div>
             {shown.length === 0 && <p className="muted trnone">Nothing in the Trash matches “{q.trim()}”.</p>}
@@ -249,7 +275,9 @@ export function TrashScreen() {
                     {on && <Icon name="check" size={11} />}
                   </button>
                   <div className="ell">
-                    <div className="ell trname">{r.basename.replace(/\.md$/i, "")}</div>
+                    <div className="ell trname" title={r.basename.replace(/\.md$/i, "")}>
+                      {r.basename.replace(/\.md$/i, "")}
+                    </div>
                     {stuck && (
                       <div className="trwarn">
                         <Icon name="info" size={12} />
@@ -260,11 +288,15 @@ export function TrashScreen() {
                   <span>
                     <LayerTag layer={r.layer} />
                   </span>
-                  <span className="mono faint ell">{folderOf(r.originalRel) || "/"}</span>
-                  <span className="faint" title={ago(new Date(r.deletedAt).getTime())}>
+                  <span className="mono faint ell" title={folderOf(r.originalRel) || "/"}>
+                    {folderOf(r.originalRel) || "/"}
+                  </span>
+                  <span className="faint ell" title={`${deletedWhen(r.deletedAt)}: ${ago(new Date(r.deletedAt).getTime())}`}>
                     {deletedWhen(r.deletedAt)}
                   </span>
-                  <span className="faint r">{fmtBytes(r.sizeBytes)}</span>
+                  <span className="faint r ell" title={fmtBytes(r.sizeBytes)}>
+                    {fmtBytes(r.sizeBytes)}
+                  </span>
                   <span className="tracts">
                     {/* Where there's no preview (Linux), the same call opens the file in its own app. */}
                     {canLook ? (

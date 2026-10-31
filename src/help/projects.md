@@ -49,3 +49,6 @@ Or start one from ⌘K, or from an [Inbox](app:inbox) item with `P`.
 
 ## Link tasks to a project
 Add the project's link to a task's line, as in `- [ ] Draft the launch post [[Project. Orbit App launch]]`, or use Project in its ⋯ menu or the task pane on [Tasks](app:tasks). Rows show the project as a chip; click it to open the project.
+
+## Resize the panes
+Drag the line between the project list and the open project to resize them, and the line beside a project's side column; a double-click puts either back ([pane widths](help:settings-general)).

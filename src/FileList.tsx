@@ -14,6 +14,8 @@ import { FileMenu, useFileMenu } from "./FileMenu";
 import { Icon } from "./icons";
 import { openDoc, useViewState } from "./nav";
 import { settings, useStore } from "./store";
+import { usePanes } from "./PaneResizer";
+import { ListTable, PaneSpec, paneSpecs } from "./panes";
 import { fmtCount, SearchBox, Seg, TableBand, useDebounced } from "./ui";
 
 /** Rows in bands, one per value of `of` (A–Z, rows with none last): Notes by type. */
@@ -89,6 +91,7 @@ export function FileList<T extends FileSummary>({
   columns,
   layers,
   noun,
+  table,
   defaultSort,
   filters,
   empty,
@@ -99,6 +102,8 @@ export function FileList<T extends FileSummary>({
   columns: Column<T>[];
   layers: Layer[];
   noun: [string, string];
+  /** Its columns' widths are kept as `<table>.<column>` (src/panes.ts). */
+  table: ListTable;
   defaultSort: [string, 1 | -1];
   filters?: ReactNode;
   empty?: ReactNode;
@@ -117,7 +122,26 @@ export function FileList<T extends FileSummary>({
   const [active, setActive] = useState(0);
   const { hits, error: searchError, retry } = useListSearch(q, layers);
   const menu = useFileMenu();
-  const table = useRef<HTMLDivElement>(null);
+  const tableEl = useRef<HTMLDivElement>(null);
+  // A column with a fixed width ("0 0 96px") and a pane `<table>.<column>` (src/panes.ts, whose
+  // listWidth gives the table its width) is resizable; the flexible one (Title) takes the rest. Every
+  // such column is after Title, so it's resized from its header's left edge: the edge that moves as
+  // it's dragged. Each cell's flex basis reads the column's custom property off the table, so a drag
+  // moves every row without a re-render.
+  // A column with no heading holds buttons (Sources' Ingest), not text: it keeps its width.
+  const basis = (c: Column<T>) => /^0 0 (\d+)px$/.exec(c.width ?? "")?.[1];
+  const specOf = (c: Column<T>): PaneSpec | undefined => (c.label && basis(c) ? paneSpecs()[`${table}.${c.key}`] : undefined);
+  const fixedWidth = (c: Column<T>) => (specOf(c) ? basis(c) : undefined);
+  const specs = Object.fromEntries(columns.flatMap((c) => (specOf(c) ? [[`${table}.${c.key}`, specOf(c)!]] : [])));
+  // The padding, the gaps and the columns that keep their width are out of every column's room.
+  const kept = columns.reduce((n, c) => n + (!fixedWidth(c) && basis(c) ? Number(basis(c)) : 0), 0);
+  const panes = usePanes(specs, { mode: "column", fixed: 36 + 12 * (columns.length - 1) + kept });
+  // A flexible column keeps 120px at least, so a narrow pane scrolls the row sideways rather than
+  // squeezing the title to nothing.
+  const flexOf = (c: Column<T>) => {
+    const w = fixedWidth(c);
+    return w ? { flex: `0 0 var(${specOf(c)!.cssVar}, ${w}px)` } : { flex: c.width ?? "1", minWidth: 120 };
+  };
   const searching = q.trim().length >= 2;
   // While searching: best matches first, or the latest first (the switch by the box, kept per list).
   const canLatest = columns.some((c) => c.key === "mtime");
@@ -181,7 +205,7 @@ export function FileList<T extends FileSummary>({
     return () => io.disconnect();
   }, [more, limit]);
   useEffect(() => {
-    table.current?.querySelector(`[data-row="${idx}"]`)?.scrollIntoView({ block: "nearest" });
+    tableEl.current?.querySelector(`[data-row="${idx}"]`)?.scrollIntoView({ block: "nearest" });
   }, [idx]);
 
   const key = (e: React.KeyboardEvent) => {
@@ -213,11 +237,21 @@ export function FileList<T extends FileSummary>({
         onClick={() => openDoc(r.path, searching ? { q: q.trim() } : {})}
         onContextMenu={(e) => menu.openAt(e, r)}
       >
-        {columns.map((c) => (
-          <div key={c.key} role="gridcell" className={`fcell ${c.align ?? ""}`} style={{ flex: c.width ?? "1" }}>
-            {c.render ? c.render(r, hit) : (c.value(r) ?? "—")}
-          </div>
-        ))}
+        {columns.map((c) => {
+          const v = c.render ? undefined : c.value(r);
+          // A plain value is on one line, cut with an ellipsis and whole in its tooltip when the column is narrow.
+          return (
+            <div
+              key={c.key}
+              role="gridcell"
+              className={`fcell ${c.align ?? ""} ${c.render ? "" : "ell"}`}
+              style={flexOf(c)}
+              title={typeof v === "string" && v ? v : undefined}
+            >
+              {c.render ? c.render(r, hit) : (v ?? "—")}
+            </div>
+          );
+        })}
       </div>
     );
   };
@@ -256,25 +290,42 @@ export function FileList<T extends FileSummary>({
             : `${fmtCount(shown.length)} of ${fmtCount(total)} ${noun[1]}`}
         </span>
       </div>
-      <div className={`ftable ${groups ? "grouped" : ""}`} ref={table} role="grid" aria-rowcount={shown.length}>
+      <div
+        className={`ftable ${groups ? "grouped" : ""}`}
+        ref={(el) => {
+          tableEl.current = el;
+          panes.root.ref(el);
+        }}
+        style={panes.root.style}
+        role="grid"
+        aria-rowcount={shown.length}
+      >
         <div className="frow fhead tb-head" role="row">
           {columns.map((c) => (
-            <button
+            // The header cell holds the sort button and the column's divider, so the divider is the
+            // column header's and not a stray child of the row; it's named by its heading alone.
+            <div
               key={c.key}
-              type="button"
               role="columnheader"
-              className={`fcell ${c.align ?? ""}`}
-              style={{ flex: c.width ?? "1" }}
+              aria-label={c.label || undefined}
               aria-sort={sort[0] === c.key ? (sort[1] === 1 ? "ascending" : "descending") : "none"}
-              title={`Sort by ${c.label.toLowerCase()}${sort[0] === c.key ? "; click again to reverse" : ""}`}
-              onClick={() => {
-                setRanked(false);
-                setSort(sort[0] === c.key ? [c.key, sort[1] === 1 ? -1 : 1] : [c.key, 1]);
-              }}
+              className="fhcell"
+              style={flexOf(c)}
             >
-              {c.label}
-              {sort[0] === c.key && <Icon name={sort[1] === 1 ? "chevup" : "chevdown"} size={11} />}
-            </button>
+              <button
+                type="button"
+                className={`fcell ${c.align ?? ""}`}
+                title={`Sort by ${c.label.toLowerCase()}${sort[0] === c.key ? "; click again to reverse" : ""}`}
+                onClick={() => {
+                  setRanked(false);
+                  setSort(sort[0] === c.key ? [c.key, sort[1] === 1 ? -1 : 1] : [c.key, 1]);
+                }}
+              >
+                {c.label}
+                {sort[0] === c.key && <Icon name={sort[1] === 1 ? "chevup" : "chevdown"} size={11} />}
+              </button>
+              {fixedWidth(c) && panes.resizer(`${table}.${c.key}`)}
+            </div>
           ))}
         </div>
         {rows === null && <div className="fempty faint">Loading…</div>}

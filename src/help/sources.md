@@ -66,3 +66,6 @@ When you ingest an image, Claude Code and Codex see the picture as well as its t
 Beside the preview, the provenance card, **Cited by N pages**, says when the source was last ingested and by which model, and lists the wiki pages that cite it and the passages they cite; **Details** adds the file's hash and passages indexed. **Re-ingest** and **Reveal** (in Finder, or Explorer on Windows) are at the foot, with **Move to the Trash** at the right. An assistant can read the same card.
 
 A source's top bar has **Ask**, which starts a chat about it. A captured thread has **Draft a reply**, and other documents have **Doc check**. On the Sources list, **Meeting notes** opens [Meeting notes](app:meeting).
+
+## Resize the panes
+Drag the line between the list and the ingest runs to resize them, and a column heading's left edge to resize that column; **Title** takes the rest, and a double-click puts either back ([pane widths](help:settings-general)).

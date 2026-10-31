@@ -26,6 +26,8 @@ import { TopBar } from "./TopBar";
 import { ago, Dialog, LayerTag } from "./ui";
 import { PrepHeader, PrepRows, prepStep, WEEKLY_STATE_CHANGED, when } from "./weeklyPrep";
 import { keyLabel } from "./platform";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 /** The ISO week a local date is in: "2026-W40". */
 export function isoWeek(day: string): string {
@@ -140,6 +142,7 @@ export const scheduleLabel = (day: Weekday | undefined, time: string | undefined
   `${DAY_NAME[day ?? "fri"]}s at ${/^\d\d:\d\d$/.test(time ?? "") ? time : "16:00"}`;
 
 export function WeeklyScreen() {
+  const panes = usePanes({ "weekly.left": PANES["weekly.left"], "weekly.side": PANES["weekly.side"] });
   const today = localToday();
   const [st, setSt] = useState<WeeklyState | null>(null);
   // The review is shown once it's started or carried on; till then, its start page. Each visit
@@ -263,7 +266,8 @@ export function WeeklyScreen() {
           Pause
         </button>
       </TopBar>
-      <div className="body weekly">
+      <div className="body weekly" {...panes.root}>
+        {panes.resizers}
         <nav className="wsteps" aria-label="Steps">
           {STEPS.map((s, i) => (
             <div key={s.id}>

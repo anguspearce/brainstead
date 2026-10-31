@@ -26,3 +26,6 @@ Once a fix is applied, that clash stops being flagged; revert the fix and it is 
 **Save report as note** saves the findings as `Contradictions - <date>.md`, with each clash's claims, verdict and fix.
 
 When you ask, an assistant can read the findings in the same order, with each fix and whether it's made or waiting in Changes. It can also mark a clash resolved or ignored, and save the report once the check has finished. Its saved report is listed in [Changes](app:review).
+
+## Resize the panes
+Drag the line between the list and the claims to resize them; a double-click on it puts it back ([pane widths](help:settings-general)).

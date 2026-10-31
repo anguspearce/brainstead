@@ -160,4 +160,19 @@ describe("rename", () => {
       ["y.md", 1],
     ]);
   });
+
+  it("narrows its columns' defaults to the room, so a narrow table keeps its buttons", async () => {
+    // A 1040px window with the sidebar at 400px leaves the table about 600px: the checkbox, the
+    // buttons, the padding and the gaps take 322, and the columns' defaults another 492.
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(600);
+    api.trashList.mockResolvedValue(entries);
+    render(<TrashScreen />);
+    await screen.findByText("Dup");
+    const table = screen.getByRole("table", { name: "Trash" });
+    const col = (v: string) => parseFloat(table.style.getPropertyValue(v));
+    const cols = ["--col-type", "--col-folder", "--col-deleted", "--col-size"].map(col);
+    expect(cols).toEqual([60, 80, 70, 50]);
+    expect(322 + cols.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(600);
+    vi.restoreAllMocks();
+  });
 });

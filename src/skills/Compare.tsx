@@ -21,6 +21,8 @@ import { ASSISTANT_FRONTMATTER } from "../md/scripts";
 import { docChecks, docChecksUnseen, mergeRun, seenDocChecks, startDocChecks } from "../docChecks";
 import { CheckProgress } from "./DocCheck";
 import { CompareTabs } from "./CompareTabs";
+import { usePanes } from "../PaneResizer";
+import { PANES } from "../panes";
 
 export type CompareMode = "differences" | "changes";
 
@@ -64,6 +66,7 @@ export function compareMarkdown(a: string, b: string, mode: CompareMode, r: Chec
 }
 
 export function CompareScreen() {
+  const panes = usePanes({ "compare.left": PANES["compare.left"] });
   const here = useStore(place).place;
   const [files, setFiles] = useState<FileSummary[]>([]);
   const [aPick, setA] = useViewState<string | null>("compare.a", null);
@@ -297,7 +300,8 @@ export function CompareScreen() {
           </div>
         )}
         {r && !r.unrelated && (
-          <div className="dcres">
+          <div className="dcres" {...panes.root}>
+            {panes.resizers}
             <section className="card dcverdict">
               <span className="eyebrow">Verdict</span>
               <div className="dcv">{r.verdict}</div>

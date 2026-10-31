@@ -27,3 +27,6 @@ Each finding is **Differs**, **Only in A**, **Only in B** or **Agrees** (or **Ch
 Every finished comparison is kept on this computer (not in your vault). Choosing the same two documents and the same choice again shows it at once; while neither has changed it still stands, and if either has, it says so and **Compare again** gets findings that match them.
 
 An assistant can compare two documents too (`compare_docs`), and is given a kept comparison while it still stands. Two documents that aren't about the same thing aren't saved as a note, as the page offers no **Save as note** for them.
+
+## Resize the panes
+Drag the line between the verdict and the findings to resize them; a double-click on it puts it back ([pane widths](help:settings-general)).

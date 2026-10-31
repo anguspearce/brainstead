@@ -29,3 +29,6 @@ An assistant's restores are listed in [Changes](app:review) with **Revert**; one
 
 ## Delete for good
 Tick files and click **Delete forever**, or click **Empty the Trash** in the top bar to delete everything (it shows the space freed). Both ask first. No app can restore the files after this; it can't be undone.
+
+## Resize the columns
+Drag the left edge of **Type**, **Was in**, **Deleted** or **Size** in the header to resize that column; **Name** takes the rest; a cut-off name or folder shows whole when you rest on it. A double-click on the edge puts the column back ([pane widths](help:settings-general)).
