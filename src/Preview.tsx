@@ -178,7 +178,8 @@ function PreviewPanel({ req, onClose }: { req: PreviewRequest; onClose: () => vo
   const [covered, setCovered] = useState(false);
   const [state, setState] = useState<"opening" | "shown" | "failed">("opening");
   const [err, setErr] = useState("");
-  // Escape and a click on the scrim close it; a click in the preview itself never reaches the page.
+  // Escape and a click on the scrim close it. A click in the preview itself never reaches the page,
+  // and gives the keys to the document, in the handler's own process, until the page is clicked.
   // The window's own minimise and close (.winctl, page markup outside the panel) aren't a click
   // outside it: the preview hides and comes back with the window.
   useDismiss(box, onClose, !covered, ".winctl");
@@ -227,8 +228,6 @@ function PreviewPanel({ req, onClose }: { req: PreviewRequest; onClose: () => vo
     };
     const sized = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(move);
     if (body.current) sized?.observe(body.current);
-    // Esc or Space once the focus is in the preview itself, which the page's keys never see.
-    const dismissed = api.onPreviewDismiss((n) => n === id && live && onClose()).catch(() => () => {});
     // A dialog or a message of the page's own coming and going over the panel.
     const shown = new MutationObserver(move);
     shown.observe(document.body, { childList: true, subtree: true });
@@ -248,7 +247,6 @@ function PreviewPanel({ req, onClose }: { req: PreviewRequest; onClose: () => vo
       themed.disconnect();
       scheme?.removeEventListener("change", move);
       void scaled.then((off) => off());
-      void dismissed.then((off) => off());
       void api.previewClose(id).catch(() => {});
     };
   }, [req, onClose]);
