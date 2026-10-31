@@ -35,7 +35,6 @@ import {
   jobOwnEffort,
   MODEL_JOBS,
   modelLabel,
-  setAskModel,
   setJobModel,
 } from "./askState";
 import { ModelMenu } from "./Ask";
@@ -968,7 +967,7 @@ function Assistants() {
               found={found}
               value={model}
               onPick={(m) => {
-                setAskModel(m);
+                settings.update({ askModel: m });
                 setAt(null);
               }}
             />
