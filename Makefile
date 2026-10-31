@@ -21,7 +21,7 @@ export APPLE_SIGNING_IDENTITY := $(if $(SIGN_ID),$(SIGN_ID),-)
 
 .PHONY: check test lint fmt app install-app dmg release dev icons sign-check screenshots evals help
 
-## cargo test and Clippy, the TypeScript type-check and ESLint, Vitest, and the formatting and repo checks: side by side (tools/check.py), cargo in its own target folder so make dev doesn't hold it up.
+## cargo test and Clippy, the TypeScript type-check and ESLint, Vitest, the tools' Python tests (tools/*_test.py), and the formatting and repo checks: side by side (tools/check.py), cargo in its own target folder so make dev doesn't hold it up.
 check:
 	@python3 tools/check.py
 
