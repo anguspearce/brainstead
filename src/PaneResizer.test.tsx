@@ -251,11 +251,16 @@ describe("a divider's keys and locks", () => {
   it("leaves resize mode when its divider goes mid-drag", () => {
     render(<Log />);
     fireEvent.pointerDown(divider("When"), { button: 0, clientX: 500, pointerId: 1 });
+    fireEvent.pointerMove(divider("When"), { clientX: 560, pointerId: 1 });
     expect(document.body.classList.contains("presizing")).toBe(true);
-    // An assistant locks the columns while the pointer is still down.
+    expect(screen.getByTestId("log").style.getPropertyValue("--col-when")).toBe(`${PANES["activity.when"].def + 60}px`);
+    // An assistant locks the columns while the pointer is still down: the width dragged, never
+    // kept, goes with the divider.
     act(() => settings.update({ resizeLocks: { columns: true } }));
     expect(screen.queryAllByRole("separator")).toEqual([]);
     expect(document.body.classList.contains("presizing")).toBe(false);
+    expect(screen.getByTestId("log").style.getPropertyValue("--col-when")).toBe("");
+    expect(settings.get().paneWidths).toBeUndefined();
   });
 
   it("draws no dividers for a locked type, and still shows the widths kept", () => {

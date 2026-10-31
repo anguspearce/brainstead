@@ -277,14 +277,22 @@ export function PaneResizer<K extends string>({ spec, paneKey, live, layout, roo
     inset: spec.side === "left" ? m.insetLeft : m.insetRight,
   };
   const { room } = p;
-  const drag = useRef<{ x: number; w: number; live: number; moved: boolean } | null>(null);
+  // `was`: the root's own value for the pane's property when the drag began ("" for none).
+  const drag = useRef<{ x: number; w: number; live: number; moved: boolean; was: string } | null>(null);
   const [dragging, setDragging] = useState(false);
   // A divider that goes mid-drag (a lock turned on, a breakpoint that drops its pane) never sees
-  // its pointerup: the app leaves resize mode as it goes, not only on a release.
+  // its pointerup: the app leaves resize mode as it goes, not only on a release, and the width the
+  // drag drew but never kept goes back to the one the root had.
   useEffect(() => {
     if (!dragging) return;
-    return () => document.body.classList.remove("presizing");
-  }, [dragging]);
+    return () => {
+      document.body.classList.remove("presizing");
+      const d = drag.current;
+      if (!d || !root) return;
+      if (d.was) root.style.setProperty(spec.cssVar, d.was);
+      else root.style.removeProperty(spec.cssVar);
+    };
+  }, [dragging, root, spec.cssVar]);
   // A screen whose root scrolls (Today, Knowledge health) would scroll its dividers away with its
   // first screenful: each is placed at the scroll position, one view tall, as the root scrolls.
   const self = useRef<HTMLDivElement>(null);
@@ -313,7 +321,7 @@ export function PaneResizer<K extends string>({ spec, paneKey, live, layout, roo
   const down = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { x: e.clientX, w: p.now, live: p.now, moved: false };
+    drag.current = { x: e.clientX, w: p.now, live: p.now, moved: false, was: root?.style.getPropertyValue(spec.cssVar) ?? "" };
     setDragging(true);
     document.body.classList.add("presizing");
   };
