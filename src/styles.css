@@ -6186,6 +6186,14 @@ code.noscript {
 .askbar .sp {
   flex: 1;
 }
+
+/* An effort menu with its label: Ask's message box, Settings › AI assistants */
+.effortpick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
 .ibtn.send {
   background: var(--accent);
   color: var(--on-accent);

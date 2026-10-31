@@ -45,6 +45,15 @@ export function cliOf(model: string): CliName {
 
 export const DEFAULT_MODEL = "claude:sonnet";
 
+/** The levels an Effort menu offers for an assistant: none while it isn't installed, as the screens
+ *  show no menu then. */
+export const installedEfforts = (cli: CliName): string[] => clis.get()?.find((c) => c.cli === cli && c.path)?.efforts ?? [];
+
+/** An effort level's name, as Settings › AI assistants shows it ("xhigh" is "Extra high"). */
+export function effortLabel(level: string): string {
+  return level === "xhigh" ? "Extra high" : level.charAt(0).toUpperCase() + level.slice(1);
+}
+
 /** The background jobs that can each have a model (Settings › AI assistants › Models by job): id, label, icon. */
 export const MODEL_JOBS: [job: string, label: string, icon: string][] = [
   ["summaries", "Daily and weekly summaries", "calendar"],
