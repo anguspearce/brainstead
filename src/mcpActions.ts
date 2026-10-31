@@ -114,6 +114,7 @@ import { loadVoices, speechSettingsChanged, voiceLabel, voices } from "./speech/
 import { applyReadSize, applyTheme, READ_SIZE, settings } from "./store";
 import { clampInterfaceSize, INTERFACE_SIZE, setInterfaceSize } from "./interfaceSize";
 import { imageView } from "./ImageViewer";
+import { lookIn, LookIn } from "./Preview";
 import { TOPICS } from "./help";
 import { HelpView, openHelp } from "./help/HelpDrawer";
 import { IMAGE_EXT } from "./md/wikilinks";
@@ -2002,6 +2003,13 @@ async function fixName(a: Args): Promise<string> {
 
 // ---- the rest
 
+/** What Space does with a file, as list_trash says it. */
+const LOOK_TEXT: Record<LookIn, string> = {
+  "quick look": "Quick Look shows it",
+  window: "Preview shows it in the window",
+  app: "opens in its app",
+};
+
 async function trash(a: Args, r: McpRequest): Promise<string | Listing> {
   const action = str(a, "action") ?? "list";
   if (action === "list") {
@@ -2010,13 +2018,22 @@ async function trash(a: Args, r: McpRequest): Promise<string | Listing> {
     // As the Trash screen says it (fmtBytes counts in 1024s).
     const size = fmtBytes(bytes);
     const { shown, head, page } = pagedRows(a, all, (t) => t.originalRel, ["item", "items"]);
+    // What the row's eye button and Space do with it, as the screen decides (Preview.tsx).
+    const looks = await Promise.all(shown.map((t) => lookIn(t.basename)));
     const text = all.length
       ? [
           `The Trash (${size}), newest first: ${head}:`,
-          ...shown.map((t) => `- ${t.originalRel} · deleted ${t.deletedAt.slice(0, 10)}  (id ${t.id})`),
+          ...shown.map((t, i) => `- ${t.originalRel} · deleted ${t.deletedAt.slice(0, 10)} · ${LOOK_TEXT[looks[i]]}  (id ${t.id})`),
         ].join("\n")
       : "The Trash is empty.";
-    const items = shown.map((t) => ({ id: t.id, path: t.originalRel, layer: t.layer, deleted: t.deletedAt, bytes: t.sizeBytes }));
+    const items = shown.map((t, i) => ({
+      id: t.id,
+      path: t.originalRel,
+      layer: t.layer,
+      deleted: t.deletedAt,
+      bytes: t.sizeBytes,
+      look: looks[i],
+    }));
     return { text, structured: { ...page, bytes, size, items } };
   }
   if (action === "restore") {
