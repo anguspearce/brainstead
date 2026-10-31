@@ -89,7 +89,19 @@ import { localToday } from "./md/taskQuery";
 import { composeFilename } from "./notes/filename";
 import { Ask, Env, freeName, runTemplate, StopRun } from "./notes/templater";
 import { runHooks, vaultEnv } from "./notes/TemplateRun";
-import { deferredPast, rankBetween, retitled, todayRows, toggleTaskEdit, undoAction, viewRows, VIEWS } from "./taskModel";
+import {
+  deferredPast,
+  inParkedProject,
+  parkedLeftOut,
+  rankBetween,
+  retitled,
+  todayRows,
+  toggleTaskEdit,
+  undoAction,
+  viewRows,
+  VIEWS,
+  withHiddenRows,
+} from "./taskModel";
 import { taskLabel } from "./md/TaskBlock";
 import { cancelled, completion, inQuote, LineChange, reopened, started, tagToggled, waitingToggled, withPriority } from "./tasksq/edits";
 import { parseTask, statusOf, type PriorityName } from "./tasksq/fields";
@@ -332,7 +344,8 @@ export function taskLineOut(t: TaskRow, detail = false): string {
   if (p) bits.push(`priority ${p}`);
   // Its #tags, the lists' among them; contexts are the @ chips above.
   for (const g of otherTags(t)) bits.push(`#${g}`);
-  if (t.project) bits.push(`project ${projectName(t.project)}`);
+  // An on-hold or someday project says so, as its tasks are in Next actions only when included.
+  if (t.project) bits.push(`project ${projectName(t.project)}${inParkedProject(t) ? ` (${t.projectStatus})` : ""}`);
   if (detail) {
     if (t.heading) bits.push(`under “${t.heading}”`);
     if (t.created) bits.push(`created ${t.created}`);
@@ -344,7 +357,18 @@ export function taskLineOut(t: TaskRow, detail = false): string {
 /** A view's id as the assistants know it: the Deferred list is `deferred`. */
 const viewName = (id: string) => (id === "scheduled" ? "deferred" : id);
 
+/** list_tasks' include_on_hold_someday, else the Tasks screen's "Include on-hold and someday
+ *  projects" (the `includeOnHoldSomeday` setting). */
+const onHoldSomeday = (a: Args) => {
+  const v = a.include_on_hold_someday;
+  if (v == null) return settings.get().includeOnHoldSomeday === true;
+  if (typeof v !== "boolean") throw new Error(`include_on_hold_someday is true or false, not ${JSON.stringify(v)}.`);
+  return v;
+};
+
 async function listTasks(a: Args): Promise<Listing> {
+  // Checked for every view, though only next reads it.
+  const parkedIn = onHoldSomeday(a);
   const all = await api.tasksAll();
   const today = localToday();
   // The Deferred list's id is `scheduled` (saved lists keep it); `deferred` is its name.
@@ -358,6 +382,7 @@ async function listTasks(a: Args): Promise<Listing> {
   const asked = str(a, "view") ?? "next";
   const view = asked === "deferred" ? "scheduled" : asked;
   let rows: TaskRow[];
+  let left: TaskRow[] = [];
   // Today's bands, as the Today screen draws them: each task under its band's label.
   const band = new Map<TaskRow, string>();
   if (view === "today") {
@@ -384,16 +409,24 @@ async function listTasks(a: Args): Promise<Listing> {
   } else {
     const v = VIEWS.find((x) => x.id === view);
     if (!v) throw new Error(`No view “${view}”. Views: today, all, ${VIEWS.map((x) => viewName(x.id)).join(", ")}.`);
-    rows = viewRows(all, v, today, view === "next" ? await api.inboxList() : null);
+    const inbox = view === "next" ? await api.inboxList() : null;
+    rows = viewRows(all, v, today, inbox, parkedIn);
+    // What Next actions leaves out for being in an on-hold or someday project, to say so.
+    if (view === "next") left = parkedLeftOut(all, today, inbox, parkedIn);
   }
   const project = str(a, "project")?.toLowerCase();
-  if (project) rows = rows.filter((t) => t.project && projectName(t.project).toLowerCase() === project.replace(/^project\. /, ""));
   const context = str(a, "context");
-  if (context) rows = rows.filter((t) => (t.contexts ?? []).includes(contextName(context)));
   // The effort filter's choices, in minutes, as the screen and its saved lists have them.
   const effort = a.effort == null || a.effort === "" ? "" : String(a.effort);
   if (effort && !EFFORT_LIMITS.some(([v]) => v === effort)) throw new Error("effort is 15, 30 or 60 (minutes), or left out.");
-  if (effort) rows = rows.filter((t) => withinEffort(t, effort));
+  const keep = (t: TaskRow) =>
+    (!project || (!!t.project && projectName(t.project).toLowerCase() === project.replace(/^project\. /, ""))) &&
+    (!context || (t.contexts ?? []).includes(contextName(context))) &&
+    (!effort || withinEffort(t, effort));
+  rows = rows.filter(keep);
+  // Counted as the rows are matched: only those query would have shown.
+  const query = str(a, "query")?.trim();
+  left = left.filter((t) => keep(t) && (!query || matchesSearch(t, query)));
   const group = (str(a, "group") ?? "none") as GroupBy;
   if (!["none", "project", "context", "due"].includes(group)) throw new Error("group is none, project, context or due.");
   // Grouped as the screen groups them: each group's rows together, under its heading.
@@ -421,13 +454,19 @@ async function listTasks(a: Args): Promise<Listing> {
           : { ...taskItem(t), group: under.get(t) ?? null },
     empty: `No tasks in ${shown}${project || context || effort ? " with those filters" : ""}.`,
   });
-  if (group === "none" && !banded) return out;
+  // What Next actions left out for being in an on-hold or someday project, said after the rows.
+  const tail = left.length
+    ? `\n(${fmtCount(left.length)} ${left.length === 1 ? "task" : "tasks"} of on-hold or someday projects left out, as the Tasks screen leaves them out; include_on_hold_someday: true shows them.)`
+    : "";
+  // The same count as data, for next.
+  const structured = view === "next" ? { ...out.structured, left_out: left.length } : out.structured;
+  if (group === "none" && !banded) return { text: out.text + tail, structured };
   // A heading line where each group or band starts on the page.
   const [head, ...lines] = out.text.split("\n");
   const items = out.structured.items as { group?: string | null; band?: string | null }[];
   const label = (i: number) => (banded ? items[i].band : items[i].group);
   const text = [head, ...lines.flatMap((l, i) => (i === 0 || label(i) !== label(i - 1) ? [`${label(i)}:`, l] : [l]))];
-  return { ...out, text: text.join("\n") };
+  return { text: text.join("\n") + tail, structured };
 }
 
 /** A task as list_tasks' data gives it. */
@@ -442,6 +481,8 @@ const taskItem = (t: TaskRow) => ({
   done: t.done,
   doneOn: t.doneOn,
   project: t.project ? projectName(t.project) : null,
+  // Its project's status, as list_projects gives it: on-hold and someday ones are in next only when included.
+  projectStatus: t.project && t.projectStatus ? statusOut(t.projectStatus) : null,
   contexts: t.contexts ?? [],
   tags: otherTags(t),
   priority: priorityOf(t),
@@ -579,6 +620,8 @@ const RANK_SPACING = 1024;
  *  the list both tasks are in (or, with project, the project page's Next actions), between its real neighbours there, or the whole list renumbered when
  *  some rows have no rank or there's no room. Every line it changes is one change, made together. */
 async function moveTask(a: Args, r: McpRequest): Promise<string> {
+  // Checked on every path, though only the Tasks screen's lists (not project) read it.
+  const keep = onHoldSomeday(a);
   const all = await api.tasksAll();
   const t = findTask(all, str(a, "task") ?? "", str(a, "text"));
   const ref = (k: string) => (str(a, k) ? findTask(all, str(a, k)!) : null);
@@ -590,7 +633,8 @@ async function moveTask(a: Args, r: McpRequest): Promise<string> {
   const both = (rows: TaskRow[]) => rows.includes(t) && (!after || rows.includes(after)) && (!before || rows.includes(before));
   // With project, the project page's Next actions (gtd.ts projectTasks, in its dragged order);
   // else the Tasks screen's manual list they're both in, as the screen drags within one list.
-  let list: { v: { label: string }; rows: TaskRow[] } | undefined;
+  // every: the whole list, with the rows Next actions hides, for a renumber (withHiddenRows).
+  let list: { v: { label: string }; rows: TaskRow[]; every: TaskRow[] } | undefined;
   const project = str(a, "project");
   if (project) {
     const path = await projectPath(project);
@@ -599,12 +643,22 @@ async function moveTask(a: Args, r: McpRequest): Promise<string> {
       throw new Error(
         `Those tasks aren't both in ${projectName(path)}'s Next actions (open tasks not waiting for or someday / maybe): list_tasks with project shows them.`,
       );
-    list = { v: { label: `${projectName(path)}'s Next actions` }, rows };
+    list = { v: { label: `${projectName(path)}'s Next actions` }, rows, every: rows };
   } else {
     const today = localToday();
     const inbox = await api.inboxList();
-    const lists = VIEWS.filter((v) => v.manual).map((v) => ({ v, rows: viewRows(all, v, today, v.id === "next" ? inbox : null) }));
-    list = lists.find((l) => both(l.rows));
+    // Next actions as list_tasks gives it with the same include_on_hold_someday, so its ids work here.
+    const lists = (keep: boolean) =>
+      VIEWS.filter((v) => v.manual).map((v) => ({
+        v,
+        rows: viewRows(all, v, today, v.id === "next" ? inbox : null, keep),
+        every: viewRows(all, v, today, v.id === "next" ? inbox : null, true),
+      }));
+    list = lists(keep).find((l) => both(l.rows));
+    if (!list && !keep && lists(true).some((l) => both(l.rows)))
+      throw new Error(
+        "Those tasks are in Next actions only with on-hold and someday projects' tasks included, which they aren't now: give include_on_hold_someday: true, as list_tasks takes it.",
+      );
   }
   if (!list)
     throw new Error(
@@ -617,16 +671,19 @@ async function moveTask(a: Args, r: McpRequest): Promise<string> {
   const title = `Move “${taskWords(t.text)}”${where}`;
   const line = (x: TaskRow, ln: string) => ({ at: x.line, old: [x.lineText], new: [ln] });
   let edits: [TaskRow, { at: number; old: string[]; new: string[] }][] = [];
-  const gap = rankBetween(order, t);
+  // The rows the list hides are neighbours too: a rank between the shown ones could tie with one.
+  const full = withHiddenRows(order, list.every, t);
+  const gap = rankBetween(full, t);
   if (gap) {
     const ln = await api.changeTaskLine(t.lineText, { op: "rank", prev: gap.prev, next: gap.next }).catch(() => null);
     if (ln) edits = [[t, line(t, ln)]];
   }
-  // No room, or rows with no rank: the list renumbered in its new order, as the screen does.
+  // No room, or rows with no rank: the list renumbered in its new order, as the screen does, the
+  // rows it hides kept among their old neighbours.
   let renumbered = false;
   if (!edits.length) {
     renumbered = true;
-    for (const [i, x] of order.entries()) {
+    for (const [i, x] of full.entries()) {
       const ln = await api.changeTaskLine(x.lineText, { op: "rank", prev: i * RANK_SPACING, next: null });
       if (ln !== x.lineText) edits.push([x, line(x, ln)]);
     }
@@ -3358,6 +3415,8 @@ const settingRows = (): SettingRow[] => [
     "As the app",
   ],
   ["templateScripts", "Notes", "User scripts folder", "text", "Templates/scripts"],
+  // Not in Settings: the Tasks screen's Next actions has it.
+  ["includeOnHoldSomeday", "", "Tasks › Next actions › Include on-hold and someday projects", "bool", false],
   ["askModel", "AI assistants", "New chats use", "model", DEFAULT_MODEL, modelChoices],
   ...MODEL_JOBS.map(([job, label]): SettingRow => [
     `jobModels.${job}`,

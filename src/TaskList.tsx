@@ -617,6 +617,7 @@ export function TaskList({
   keys,
   onOpen,
   hideProject,
+  every,
 }: {
   rows: TaskRow[];
   manual: boolean;
@@ -641,6 +642,9 @@ export function TaskList({
   onOpen?: (t: TaskRow) => void;
   /** Inside a project: its chip on every row says nothing. */
   hideProject?: boolean;
+  /** With manual: the whole list, rows the screen hides included, so a renumber keeps their places
+   *  (taskModel's withHiddenRows). */
+  every?: TaskRow[];
 }) {
   const [menu, setMenu] = useState<{ t: TaskRow; at: DOMRect } | null>(null);
   // The keyboard's row where nothing else keeps a selection (Today); the Tasks screen's is `selected`.
@@ -693,7 +697,7 @@ export function TaskList({
       window.removeEventListener("pointerup", up);
       setDragging(null);
       // A move that couldn't be written goes back to the order on disk.
-      if (moved && cur.indexOf(t) !== rows.indexOf(t)) void moveTask(cur, t).then((ok) => ok || setOrder(null));
+      if (moved && cur.indexOf(t) !== rows.indexOf(t)) void moveTask(cur, t, every).then((ok) => ok || setOrder(null));
       else setOrder(null);
     };
     window.addEventListener("pointermove", move);

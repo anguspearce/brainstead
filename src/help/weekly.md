@@ -27,11 +27,11 @@ A new review covers the week just ended on a Monday or Tuesday, otherwise this w
 The steps are listed on the left by phase; click any to jump to it, which marks the step you were on done. **Next** marks the current step done and goes on, and **Back** returns. The top bar shows the step, about how long is left and a progress bar.
 
 - **Get clear**: Collect loose ends (a capture box), Empty the inbox (its count and Open the Inbox), Process this week's notes (notes whose name carries a date this week, such as `Idea. Pricing - 2026-10-01`, other than meetings; older notes you only edited aren't listed).
-- **Get current**: Next actions (tick or change them in place), Look back: this week's meetings (meeting, 1-1 and interview notes dated this week), Look ahead: check your calendar, Projects, Waiting for.
+- **Get current**: Next actions (tick or change them in place; as in [Tasks](app:tasks), the tasks of on-hold and someday projects are left out unless **Include on-hold and someday projects** is ticked there), Look back: this week's meetings (meeting, 1-1 and interview notes dated this week), Look ahead: check your calendar, Projects, Waiting for.
 - **Get creative**: Someday / maybe, Links to pages not written yet, New ideas (a capture box).
 
 ## Suggestions prepared from your week
-With an AI assistant set up, Brainstead reads the week ahead of the review and prepares suggestions for the steps. Starting the review prepares them only if the week has none yet. Without an assistant the steps work as normal.
+With an AI assistant set up, Brainstead reads the week ahead of the review and prepares suggestions for the steps. Starting the review prepares them only if the week has none yet. Without an assistant the steps work as normal. The suggestions leave out on-hold and someday projects' tasks unless they're included (as the step does), except those due or deferred in the next two weeks; the preparation reads the week its own way, so its list of next actions needn't match the step's.
 
 A line under the step's title says when they were prepared, with **Prepare again** for a fresh set. A bar shows while they're being prepared; if it fails you see why, with **Retry**. If the model stops part way, what came before is kept; if nothing can be read, the run's chat in Ask shows what it wrote.
 
@@ -44,7 +44,7 @@ In [Ask](app:ask) you can ask for help, such as "go through this week's suggesti
 ## Act on what you find
 Each step lists the real items with their usual actions:
 
-- **Projects** shows active projects with no next action or nothing for two weeks. Type a next action to add it, or click **Someday** or **Done** to change the status.
+- **Projects** shows active projects with no next action or nothing for two weeks. Type a next action to add it, or click **Someday** or **Done** to change the status. A project moved to Someday takes its tasks out of Next actions.
 - **Waiting for** lists those tasks. **Draft nudges in Ask** asks [Ask](app:ask) to draft a follow-up for each, to copy into Outlook or Teams. Nothing is sent.
 - **Someday / maybe** lists those tasks, and someday projects with **Start now**.
 - **Links to pages not written yet** lists links to missing pages, with a way to [Knowledge health](app:health) to create or link them.

@@ -70,7 +70,8 @@ export interface Scene {
   paneWidths?: Record<string, number>;
   /** Resize locks on, by type (src/panes.ts), e.g. `{ "columns": true }`. */
   resizeLocks?: Settings["resizeLocks"];
-  /** Settings shown as if set (not saved), e.g. a job's effort under Models by job. */
+  /** Settings shown as if set (not saved), e.g. a job's effort under Models by job or `includeOnHoldSomeday` for
+   *  Tasks' Next actions. */
   settings?: Partial<Settings>;
   /** For "ask": show a sample chat. */
   chat?: boolean | "tutorial";

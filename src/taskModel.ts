@@ -22,6 +22,11 @@ export type ViewId = "next" | "followups" | "waiting" | "scheduled" | "someday" 
 
 const has = (t: TaskRow, tag: string) => t.tags.some((g) => g === tag || g.startsWith(`${tag}/`));
 const parked = (t: TaskRow) => has(t, "followup") || has(t, "waiting-for") || has(t, "someday-maybe");
+/** In an on-hold or someday project (its status as the Projects screen reads it, from Rust), so not
+ *  a next action unless the `includeOnHoldSomeday` setting keeps it in. The weekly review's
+ *  preparation has the same rule (brainstead_core `projects::parks_tasks`); both are checked
+ *  against tests/fixtures/parked-projects.json. */
+export const inParkedProject = (t: TaskRow) => t.projectStatus === "on-hold" || t.projectStatus === "someday";
 
 /** Monday-start week, as the previous app counts "done this week". */
 export function weekOf(today: string, offset = 0): [string, string] {
@@ -39,8 +44,9 @@ export interface View {
   icon: string;
   /** Rows can be dragged into a new order (written as ^rank-N). */
   manual: boolean;
-  /** `inbox`: the Inbox tasks still to clarify (`inboxTaskKeys`), which Next actions leaves out. */
-  filter: (t: TaskRow, today: string, inbox: Set<string>) => boolean;
+  /** `inbox`: the Inbox tasks still to clarify (`inboxTaskKeys`), which Next actions leaves out;
+   *  `onHoldSomeday`: keep tasks of on-hold and someday projects in Next actions. */
+  filter: (t: TaskRow, today: string, inbox: Set<string>, onHoldSomeday: boolean) => boolean;
   sort?: (a: TaskRow, b: TaskRow) => number;
   /** The tag a task added from this list gets, so it shows here; none sends it to the Inbox. */
   adds?: string;
@@ -56,8 +62,14 @@ export const VIEWS: View[] = [
     label: "Next actions",
     icon: "tasks",
     manual: true,
-    // A deferred task stays off until its day, and an Inbox task until it's clarified.
-    filter: (t, today, inbox) => !t.done && !parked(t) && !(t.scheduled && t.scheduled > today) && !inbox.has(`${t.path}:${t.line}`),
+    // A deferred task stays off until its day, an Inbox task until it's clarified, and an on-hold or
+    // someday project's tasks unless asked for.
+    filter: (t, today, inbox, onHoldSomeday) =>
+      !t.done &&
+      !parked(t) &&
+      !(t.scheduled && t.scheduled > today) &&
+      !inbox.has(`${t.path}:${t.line}`) &&
+      (onHoldSomeday || !inParkedProject(t)),
   },
   { id: "followups", label: "Follow-ups", icon: "ask", manual: true, filter: (t) => !t.done && has(t, "followup"), adds: "#followup" },
   {
@@ -102,11 +114,31 @@ export const VIEWS: View[] = [
   },
 ];
 
-/** A view's rows. Pass the Inbox (`useInbox`) for Next actions, so unclarified tasks stay out. */
-export function viewRows(all: TaskRow[], v: View, today: string, inbox?: InboxItem[] | null): TaskRow[] {
+/** A view's rows. Pass the Inbox (`useInbox`) for Next actions, so unclarified tasks stay out, and
+ *  the `includeOnHoldSomeday` setting, so on-hold and someday projects' tasks stay out unless it's on. */
+export function viewRows(all: TaskRow[], v: View, today: string, inbox?: InboxItem[] | null, onHoldSomeday = false): TaskRow[] {
   const held = inboxTaskKeys(inbox);
-  const r = all.filter((t) => v.filter(t, today, held));
+  const r = all.filter((t) => v.filter(t, today, held, onHoldSomeday));
   return v.sort ? r.sort(v.sort) : r;
+}
+
+/** Says `n` tasks of on-hold or someday projects are left out of Next actions (the Tasks screen's
+ *  and Weekly's empty list). */
+export const leftOutNote = (n: number) =>
+  `${n.toLocaleString("en-GB")} ${n === 1 ? "task" : "tasks"} of on-hold or someday projects ${n === 1 ? "is" : "are"} left out; Include on-hold and someday projects in Tasks shows them.`;
+
+/** What Next actions leaves out for being in an on-hold or someday project: none while
+ *  `onHoldSomeday` keeps them in. The Tasks screen's "hidden" count and list_tasks' left-out line
+ *  both narrow it with their own filters. */
+export function parkedLeftOut(all: TaskRow[], today: string, inbox: InboxItem[] | null | undefined, onHoldSomeday: boolean): TaskRow[] {
+  if (onHoldSomeday) return [];
+  return viewRows(
+    all,
+    VIEWS.find((v) => v.id === "next")!,
+    today,
+    inbox,
+    true,
+  ).filter(inParkedProject);
 }
 
 /** Deferred to a day after `today`: left off Today, its counts and its Waiting band (D-20261006-02). */
@@ -283,15 +315,35 @@ export function rankBetween(order: TaskRow[], moved: TaskRow): { prev: number | 
   return { prev, next };
 }
 
+/** `order` (a list's rows after a drop) with the rows the list hides put back where they were in
+ *  `every` (the whole list in its order on disk: Next actions with on-hold and someday projects'
+ *  tasks, and without the screen's search and filters), each after the shown row it followed;
+ *  `moved` has left its old place, so it anchors nothing. A renumber of this order gives hidden
+ *  rows a place among their old neighbours, rather than leaving their old ranks among the new ones
+ *  (src/mcpActions.ts's move_task renumbers the same way). */
+export function withHiddenRows(order: TaskRow[], every: TaskRow[], moved: TaskRow): TaskRow[] {
+  const shown = new Set(order);
+  const after = new Map<TaskRow | null, TaskRow[]>();
+  let prev: TaskRow | null = null;
+  for (const t of every) {
+    if (t === moved) continue;
+    if (shown.has(t)) prev = t;
+    else after.set(prev, [...(after.get(prev) ?? []), t]);
+  }
+  return [...(after.get(null) ?? []), ...order.flatMap((t) => [t, ...(after.get(t) ?? [])])];
+}
+
 /** Puts `moved` between the rows that are now above and below it in `order` (the list after the
  *  drop): its nearest ranked neighbours, or the whole list renumbered when there's no room or some
- *  rows have no rank yet (the previous app's TaskQueryBlock). False (and said) when that couldn't
- *  be written. */
-export async function moveTask(order: TaskRow[], moved: TaskRow): Promise<boolean> {
-  const gap = rankBetween(order, moved);
+ *  rows have no rank yet (the previous app's TaskQueryBlock), with `every`'s hidden rows kept in
+ *  their places (`withHiddenRows`) and counted as neighbours, so the new rank ties with none. False (and said) when that couldn't be written. */
+export async function moveTask(order: TaskRow[], moved: TaskRow, every?: TaskRow[]): Promise<boolean> {
+  // The rows the list hides are neighbours too: a rank between the shown ones could tie with one.
+  const full = every ? withHiddenRows(order, every, moved) : order;
+  const gap = rankBetween(full, moved);
   try {
     if (gap && (await api.taskRank(moved, gap.prev, gap.next))) return true;
-    await api.tasksRankAll(order);
+    await api.tasksRankAll(full);
     return true;
   } catch (e) {
     reportEditError(e);

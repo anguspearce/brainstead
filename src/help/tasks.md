@@ -10,14 +10,14 @@ A task is a `- [ ]` line in any note. Tasks lists them all, and each change rewr
 ## Choose a list
 Each list on the left shows its count:
 
-- **Next actions**: open tasks without `#followup`, `#waiting-for` or `#someday-maybe`, and the sidebar's count. Deferred tasks stay off until their day, and tasks still in the [Inbox](app:inbox) until you clarify them.
+- **Next actions**: open tasks without `#followup`, `#waiting-for` or `#someday-maybe`, and the sidebar's count. Deferred tasks stay off until their day, tasks still in the [Inbox](app:inbox) until you clarify them, and tasks of [projects](app:projects) on hold or someday until **Include on-hold and someday projects** is ticked.
 - **Follow-ups**: tasks tagged `#followup`.
 - **Waiting for**: tasks tagged `#waiting-for`.
 - **Deferred**: tasks with a defer date, soonest first.
 - **Someday / maybe**: tasks tagged `#someday-maybe`.
 - **Done this week** and **Done last week**: ticked tasks by done date, weeks starting on Monday.
 
-In Next actions, Follow-ups, Waiting for and Someday / maybe, drag rows by their grip to set your own order (not while grouped). The order is saved at the end of each line as `^rank-1024`, and the list is renumbered when it needs room. An assistant moves a task the same way.
+In Next actions, Follow-ups, Waiting for and Someday / maybe, drag rows by their grip to set your own order (not while grouped). The order is saved at the end of each line as `^rank-1024`, and the list is renumbered when it needs room. Tasks the list hides at the time (a search, a filter, or on-hold and someday projects' tasks) keep their places next to the tasks they followed. An assistant moves a task the same way.
 
 ## Use the keys
 - `↑` and `↓` choose a task, carrying on into the next list.
@@ -56,6 +56,9 @@ To change a task's words in any list, point at it and click the pencil after the
 **Search tasks** narrows every list to tasks with all the words you type, in their text, note, heading, project, tags or context. The counts on the left follow, and `Esc` clears it. Context chips (**All**, `@calls`, `@office`…) show one context; click the chip again, or **All**, to show all. The effort menu shows tasks of 15 minutes, 30 minutes or an hour or less.
 
 **Save this list…** keeps a context, effort and grouping under a name, under Saved on the left. Its x forgets it; the tasks stay. An assistant can use the same search, grouping and filters.
+
+## Include on-hold and someday projects
+In Next actions, **Include on-hold and someday projects**, next to the effort menu, shows the tasks of projects whose status is On hold or Someday as well. It's off at first: in GTD, a project you've put on hold or parked for someday has no next actions. A completed project's open tasks stay in Next actions either way. While it's off, a grey count by the checkbox says how many tasks it hides from the list as it's filtered, and an empty list says so too. The choice is kept on this computer, not in the vault, and the sidebar's count and the weekly review's Next actions follow it. An assistant's `list_tasks` and `move_task` follow it too, and can ask for either.
 
 ## Find tasks in your notes
 At the top of **Next actions**, **Find tasks and projects** has an assistant read your last 90 days of notes (not the wiki, sources, templates or project notes) for things you'd do, or are waiting on, that aren't tasks yet. It runs only when you start it, here, in [Projects](app:projects) or from `⌘K`, with progress and **Stop** on its row.

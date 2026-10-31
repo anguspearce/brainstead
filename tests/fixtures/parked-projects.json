@@ -1,0 +1,17 @@
+{
+  "about": "Which projects' tasks Next actions leaves out unless includeOnHoldSomeday is on (D-20261031-01): a status as written in a project note, the status it reads as (null: the task has no project), and whether its tasks are parked. brainstead_core's projects::status_of and parks_tasks (the weekly review's preparation) and src/taskModel.ts's inParkedProject (the Tasks screen, the sidebar count, Weekly and the MCP tools) are each checked against this table.",
+  "statuses": [
+    { "written": "active", "status": "active", "parked": false },
+    { "written": "on hold", "status": "on-hold", "parked": true },
+    { "written": "On-Hold", "status": "on-hold", "parked": true },
+    { "written": "hold", "status": "on-hold", "parked": true },
+    { "written": "paused", "status": "on-hold", "parked": true },
+    { "written": "Someday", "status": "someday", "parked": true },
+    { "written": "someday-maybe", "status": "someday", "parked": true },
+    { "written": "maybe", "status": "someday", "parked": true },
+    { "written": "done", "status": "done", "parked": false },
+    { "written": "completed", "status": "done", "parked": false },
+    { "written": "blocked", "status": "active", "parked": false },
+    { "written": null, "status": null, "parked": false }
+  ]
+}
