@@ -874,7 +874,7 @@ function Composer({ c, found }: { c: Chat; found: CliInfo[] | null }) {
                 className="effortpick"
                 title={
                   running
-                    ? "This run goes at the effort set for its job in Settings › AI assistants › Models by job; its chat can take another once it ends."
+                    ? "This run goes at its job's effort: the job's own under Models by job in Settings › AI assistants, else its assistant's, lowered to a level the model takes. Its chat can take another once it ends."
                     : `How hard ${CLI_LABEL[cliOf(model)]} thinks for this chat, from the next message on. New chats start with the effort set in Settings › AI assistants.`
                 }
               >
