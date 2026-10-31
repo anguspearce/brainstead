@@ -29,9 +29,10 @@
 //! Office), COM's wait on the main thread keeps dispatching the window's messages.
 //!
 //! The host never takes the activation, so the main window keeps its focus, and the handler is
-//! released when the page closes the panel. It is not hidden when the window loses the focus: the
-//! focus goes when the user clicks into the preview or while Office starts to draw it, which
-//! would hide it with no way back but a click on the window. Which handler a type has is read from
+//! released when the page closes the panel or the app quits (`shutdown`). It is not hidden when
+//! the window loses the focus: the focus goes when the user clicks into the preview or while
+//! Office starts to draw it, which would hide it with no way back but a click on the window.
+//! Which handler a type has is read from
 //! the registry as Explorer reads it (`handler_for`), which is what `available` answers, so the
 //! page opens its panel only for a file that can be previewed and opens the rest in their own app.
 
@@ -71,7 +72,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetWindowThreadProcessId, IsChild, IsIconic, IsWindowVisible, PostMessageW, RegisterClassExW, SetWindowLongPtrW, SetWindowPos,
     SetWindowsHookExW, ShowWindow, UnhookWindowsHookEx, CREATESTRUCTW, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW,
     GUITHREADINFO, GWLP_USERDATA, GW_OWNER, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, OBJID_WINDOW, SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_NOSIZE,
-    SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, WH_KEYBOARD_LL, WINEVENT_OUTOFCONTEXT, WM_APP, WM_CREATE, WM_ERASEBKGND, WM_KEYDOWN,
+    SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, WH_KEYBOARD_LL, WINEVENT_OUTOFCONTEXT, WM_APP, WM_CREATE, WM_DESTROY, WM_ERASEBKGND, WM_KEYDOWN,
     WM_NCDESTROY, WM_PAINT, WNDCLASSEXW, WS_CLIPCHILDREN, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_POPUP,
 };
 
@@ -355,6 +356,18 @@ struct Book {
     abandoned: bool,
 }
 
+/// What letting go of the host for good does with its handler (`Book::teardown`).
+#[derive(Debug, PartialEq)]
+enum Teardown {
+    /// No handler, or one abandoned already, which is never called again.
+    Nothing,
+    /// A call into the handler is in flight, and this runs inside COM's wait for it: a second call
+    /// would hang both, so the call is cancelled and the handler abandoned.
+    Leave,
+    /// Unloaded and released, each with a deadline.
+    Unload,
+}
+
 /// What the host does with a message, by the bookkeeping alone.
 #[derive(Debug, PartialEq)]
 enum Step {
@@ -418,6 +431,20 @@ impl Book {
         self.showing && self.id == f.id && self.at.as_ref().is_some_and(|a| a.bg != f.bg || a.fg != f.fg)
     }
 
+    /// What letting go of the host for good (the app quitting, the host destroyed) does with its
+    /// handler, if it has one (`handler`).
+    fn teardown(&self, handler: bool) -> Teardown {
+        if self.abandoned {
+            Teardown::Nothing
+        } else if self.busy {
+            Teardown::Leave
+        } else if handler {
+            Teardown::Unload
+        } else {
+            Teardown::Nothing
+        }
+    }
+
     /// The page moved the panel (between calls): whether there's a preview to move.
     fn moved(&mut self, f: &Frame) -> bool {
         let here = self.showing && f.id == self.id;
@@ -447,12 +474,54 @@ struct State {
 
 type Shared = Rc<RefCell<State>>;
 
+thread_local! {
+    /// Set on the thread that made the host (the main thread), the only one that may touch it.
+    static ON_HOST_THREAD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The app is quitting: the handler showing is unloaded and released, each call with `QUIT` as
+/// its deadline, so its server lets go of the file now rather than when COM notices this process
+/// has gone. A handler with a call in flight has that call cancelled and is left (`Teardown`).
+/// Tauri hides its windows and ends the process without destroying them, so the host's own
+/// teardown (`WM_DESTROY`) doesn't run on a quit. Only on the host's thread (the app's exit event
+/// runs on the main thread); elsewhere it does nothing, and the process's end lets go instead.
+pub fn shutdown() {
+    let Some(host) = current().map(|h| HWND(h as _)) else { return };
+    if !ON_HOST_THREAD.with(|on| on.get()) {
+        return;
+    }
+    unsafe {
+        if let Some(st) = state(host) {
+            let_go(host, &st, QUIT);
+        }
+    }
+}
+
+/// Lets go of the host's handler for good (`Teardown` says how): nothing calls into it after.
+unsafe fn let_go(hwnd: HWND, st: &Shared, limit: Duration) {
+    let step = st.try_borrow().map_or(Teardown::Leave, |s| s.book.teardown(s.handler.is_some()));
+    match step {
+        Teardown::Nothing => {}
+        Teardown::Leave => {
+            // On this thread, inside COM's wait for the call: cancelling it ends the wait, so the
+            // loop the app quits from is reached at once.
+            let _ = CoCancelCall(0, 0);
+            abandon(hwnd, st);
+        }
+        Teardown::Unload => unload(hwnd, st, limit),
+    }
+    if let Ok(mut s) = st.try_borrow_mut() {
+        s.book.abandoned = true;
+    }
+}
+
 /// Makes the host window, on the main thread, whose message loop then runs it for the life of the
 /// app. The handler lives on this thread too and is only ever touched from the window's messages.
 unsafe fn make(parent: isize) -> Result<isize, String> {
     // The main thread's apartment is single-threaded already (the web view's): this only joins it.
     CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().map_err(|e| e.to_string())?;
     let hwnd = create(HWND(parent as _))?;
+    ON_HOST_THREAD.with(|on| on.set(true));
     // This process's windows' moves and visibility, out of context: delivered on this thread.
     SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_LOCATIONCHANGE, None, Some(follow), std::process::id(), 0, WINEVENT_OUTOFCONTEXT);
     Ok(hwnd.0 as isize)
@@ -589,6 +658,8 @@ unsafe fn place(hwnd: HWND, f: &Frame, show: bool) {
 const SLOW: Duration = Duration::from_secs(30);
 /// The same for a call that only hands the handler a window, a size or colours.
 const QUICK: Duration = Duration::from_secs(10);
+/// The same for letting go of the handler as the app quits: nobody waits for the answer.
+const QUIT: Duration = Duration::from_secs(2);
 
 /// `d`, or in a debug build what `BRAINSTEAD_PREVIEW_DEADLINE_MS` says, so a missed deadline can
 /// be tried against a real handler.
@@ -636,6 +707,10 @@ fn late_text(what: &str) -> String {
 unsafe fn call<T>(hwnd: HWND, st: &Shared, limit: Duration, f: impl FnOnce() -> T) -> Result<T, Late> {
     let n = {
         let mut s = st.borrow_mut();
+        // An abandoned handler is never called again.
+        if s.book.abandoned {
+            return Err(Late);
+        }
         s.book.busy = true;
         s.calls += 1;
         s.calls
@@ -698,15 +773,15 @@ unsafe fn abandon(hwnd: HWND, st: &Shared) {
 }
 
 /// Lets go of the handler showing, if any: unloaded (it drops the document), then released (a
-/// surrogate exits on its own once nothing holds its handler), each with a deadline.
-unsafe fn unload(hwnd: HWND, st: &Shared) {
+/// surrogate exits on its own once nothing holds its handler), each with `limit` as its deadline.
+unsafe fn unload(hwnd: HWND, st: &Shared, limit: Duration) {
     let h = st.borrow_mut().handler.take();
     let Some(h) = h else { return };
-    if call(hwnd, st, QUICK, || h.Unload()).is_err() {
+    if call(hwnd, st, limit, || h.Unload()).is_err() {
         std::mem::forget(h);
         return abandon(hwnd, st);
     }
-    if call(hwnd, st, QUICK, move || drop(h)).is_err() {
+    if call(hwnd, st, limit, move || drop(h)).is_err() {
         abandon(hwnd, st);
     }
 }
@@ -831,7 +906,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                     }
                 }
                 if step == Step::Go {
-                    unload(hwnd, &st);
+                    unload(hwnd, &st, QUICK);
                 }
             }
             LRESULT(0)
@@ -857,23 +932,25 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             }
             LRESULT(0)
         }
+        WM_DESTROY => {
+            // Before the handler's window, a child of this one, goes with it: unloaded first, as
+            // Explorer does, with the deadline every call has, or left if a call is in flight.
+            keys(false);
+            if let Some(st) = state(hwnd) {
+                let_go(hwnd, &st, QUICK);
+            }
+            LRESULT(0)
+        }
         WM_NCDESTROY => {
             keys(false);
             let p = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const RefCell<State>;
             if !p.is_null() {
                 SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-                // The window's own reference; a message still being handled keeps its own.
+                // The window's own reference; a message still being handled keeps its own. A
+                // handler still held is one `let_go` left, whose release could hang too.
                 let st = Rc::from_raw(p);
-                let (h, abandoned) = match st.try_borrow_mut() {
-                    Ok(mut s) => (s.handler.take(), s.book.abandoned),
-                    Err(_) => (None, true),
-                };
-                match h {
-                    Some(h) if abandoned => std::mem::forget(h),
-                    Some(h) => {
-                        let _ = h.Unload();
-                    }
-                    None => {}
+                if let Some(h) = st.try_borrow_mut().ok().and_then(|mut s| s.handler.take()) {
+                    std::mem::forget(h);
                 }
             }
             if HOST.compare_exchange(hwnd.0 as isize, 0, Ordering::AcqRel, Ordering::Acquire).is_ok() {
@@ -933,7 +1010,7 @@ unsafe fn open_next(hwnd: HWND, st: &Shared) {
         return;
     }
     let Some(req) = crate::lock(&PENDING).take() else { return };
-    unload(hwnd, st);
+    unload(hwnd, st, QUICK);
     if st.borrow().book.abandoned {
         let what = st.borrow().what.clone();
         let _ = req.reply.send(Err(late_text(&what)));
@@ -974,7 +1051,7 @@ unsafe fn open_next(hwnd: HWND, st: &Shared) {
     }
     let keep = st.borrow_mut().book.opened(matches!(r, Ok(true)), closed(req.frame.id));
     if !keep {
-        unload(hwnd, st);
+        unload(hwnd, st, QUICK);
         let _ = ShowWindow(hwnd, SW_HIDE);
         keys(false);
     }
@@ -1234,6 +1311,21 @@ mod tests {
         }
         assert!(gone.has(99) && !gone.has(0), "only the last few are kept");
         assert_eq!(gone.0.len(), Closed::KEPT);
+    }
+
+    #[test]
+    fn letting_go_never_calls_a_busy_or_abandoned_handler() {
+        let mut b = Book::default();
+        assert_eq!(b.teardown(false), Teardown::Nothing, "nothing up");
+        assert_eq!(b.open(&frame(1, 10), false), Step::Go);
+        b.busy = true;
+        assert_eq!(b.teardown(false), Teardown::Leave, "quitting while the handler starts: the call is cancelled, nothing called");
+        assert_eq!(b.teardown(true), Teardown::Leave, "quitting while it draws: the same");
+        b.busy = false;
+        assert!(b.opened(true, false));
+        assert_eq!(b.teardown(true), Teardown::Unload, "up and idle: unloaded and released, each with a deadline");
+        b.abandoned = true;
+        assert_eq!(b.teardown(true), Teardown::Nothing, "a handler that missed a deadline is never called again");
     }
 
     #[test]

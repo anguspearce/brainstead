@@ -169,6 +169,13 @@ pub fn preview_close(id: u64) {
     let _ = id;
 }
 
+/// The app is quitting (Windows only): the preview's handler lets go of its file, each call with a
+/// short deadline. On the main thread.
+pub fn preview_shutdown() {
+    #[cfg(windows)]
+    preview_win::shutdown();
+}
+
 /// Shows the window once its webview is painted in `rgb`, so no white frame flashes first (a
 /// sibling app's approach). On macOS the webview's own under-page colour is set and its background
 /// switched off before showing; if the webview never answers, the window is shown anyway. `focus`

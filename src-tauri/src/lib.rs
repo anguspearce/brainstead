@@ -570,6 +570,7 @@ fn app_restart(app: AppHandle) {
 pub(crate) fn before_quit(app: &AppHandle) {
     let _ = app.save_window_state(STATE_FLAGS);
     app.state::<std::sync::Arc<ask::Running>>().kill_all();
+    platform::preview_shutdown();
 }
 
 /// What would be cut short by restarting into an update now, or None.
