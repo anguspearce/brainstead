@@ -2,7 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => ({ hits: [], total: 0, ms: 0 })), convertFileSrc: (p: string) => p }));
@@ -57,7 +57,7 @@ describe("a column sort during a search", () => {
     const v = list();
     fireEvent.change(screen.getByPlaceholderText("Filter"), { target: { value: "an" } });
     await act(() => new Promise((r) => setTimeout(r, 400)));
-    fireEvent.click(screen.getByRole("columnheader", { name: /Title/ }));
+    fireEvent.click(within(screen.getByRole("columnheader", { name: /Title/ })).getByRole("button"));
     v.unmount();
     act(() => nav.go("tasks"));
     act(() => nav.go("notes"));
@@ -72,7 +72,7 @@ describe("a list's sort", () => {
     restorePlaces({ stack: [{ screen: "notes" }], i: 0 });
     const v = list();
     expect(order()).toEqual(["Cherry", "Banana", "Apple"]);
-    fireEvent.click(screen.getByRole("columnheader", { name: /Title/ }));
+    fireEvent.click(within(screen.getByRole("columnheader", { name: /Title/ })).getByRole("button"));
     expect(order()).toEqual(["Apple", "Banana", "Cherry"]);
     const box = screen.getByPlaceholderText("Filter");
     fireEvent.change(box, { target: { value: "an" } });
@@ -112,6 +112,8 @@ describe("a list's columns", () => {
     expect(others).toEqual([]);
     expect(tags.getAttribute("aria-label")).toBe("Resize the Tags column");
     expect(tags.dataset.edge).toBe("start");
+    // The divider is its column header's, which is named by its heading alone.
+    expect(tags.closest("[role=columnheader]")).toBe(screen.getByRole("columnheader", { name: "Tags" }));
     fireEvent.keyDown(tags, { key: "ArrowLeft" });
     expect(settings.get().paneWidths).toEqual({ "wiki.tags": 208 });
     vi.restoreAllMocks();

@@ -204,6 +204,27 @@ describe("a divider's keys and locks", () => {
     expect(stored()["activity.action"]).toBe(PANES["activity.action"].def - 8);
   });
 
+  it("goes to the column's least on Home and its most on End", () => {
+    render(<Log />);
+    fireEvent.keyDown(divider("When"), { key: "Home" });
+    expect(stored()["activity.when"]).toBe(PANES["activity.when"].min);
+    fireEvent.keyDown(divider("When"), { key: "End" });
+    expect(stored()["activity.when"]).toBe(PANES["activity.when"].max);
+  });
+
+  it("are reached by Tab left to right", () => {
+    // Tasks lists its side pane's divider first; the lists' is drawn left of it, so comes first.
+    function Backwards() {
+      const panes = usePanes({ "tasks.side": PANES["tasks.side"], "tasks.left": PANES["tasks.left"] });
+      return <div {...panes.root}>{panes.resizers}</div>;
+    }
+    render(<Backwards />);
+    expect(screen.getAllByRole("separator").map((s) => s.getAttribute("aria-label"))).toEqual([
+      "Resize the task lists",
+      "Resize the task's pane",
+    ]);
+  });
+
   it("puts the column back on Enter or a double-click, and keeps Enter from the screen's own keys", () => {
     const screenKeys = vi.fn();
     window.addEventListener("keydown", screenKeys);

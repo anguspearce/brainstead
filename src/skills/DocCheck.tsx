@@ -250,34 +250,34 @@ export function DocCheckScreen() {
             )}
           </div>
           {reg && reg.entries.length > 0 && (
-            <div className="card dcreg" {...regCols.root}>
-              <div className="dcr th">
-                <span>Document</span>
-                <span>
+            <div className="card dcreg" role="table" aria-label="The register" {...regCols.root}>
+              <div className="dcr th" role="row">
+                <span role="columnheader">Document</span>
+                <span role="columnheader" aria-label={PANES["register.version"].heading}>
                   {PANES["register.version"].heading}
                   {regCols.resizer("register.version")}
                 </span>
-                <span>
+                <span role="columnheader" aria-label={PANES["register.status"].heading}>
                   {PANES["register.status"].heading}
                   {regCols.resizer("register.status")}
                 </span>
-                <span>
+                <span role="columnheader" aria-label={PANES["register.file"].heading}>
                   {PANES["register.file"].heading}
                   {regCols.resizer("register.file")}
                 </span>
               </div>
               {reg.entries.map((e) => (
-                <div key={e.line} className={`dcr ${e.status}`}>
-                  <span className="ell" title={e.title}>
+                <div key={e.line} className={`dcr ${e.status}`} role="row">
+                  <span className="ell" role="cell" title={e.title}>
                     {e.title}
                   </span>
-                  <span className="mono ell" title={e.version}>
+                  <span className="mono ell" role="cell" title={e.version}>
                     {e.version}
                   </span>
-                  <span className="ell" title={STATUS[e.status][0]}>
+                  <span className="ell" role="cell" title={STATUS[e.status][0]}>
                     <span className={`chip ${STATUS[e.status][1]}`}>{STATUS[e.status][0]}</span>
                   </span>
-                  <span className={`ell ${e.exists ? "muted" : "red"}`} title={e.resolvedPath}>
+                  <span className={`ell ${e.exists ? "muted" : "red"}`} role="cell" title={e.resolvedPath}>
                     {e.path.split("/").pop()}
                     {!e.exists && " · not there"}
                   </span>

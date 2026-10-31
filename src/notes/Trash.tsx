@@ -234,20 +234,20 @@ export function TrashScreen() {
               >
                 {allOn && <Icon name="check" size={11} />}
               </button>
-              <span>Name</span>
-              <span>
+              <span role="columnheader">Name</span>
+              <span role="columnheader" aria-label={PANES["trash.type"].heading}>
                 {PANES["trash.type"].heading}
                 {panes.resizer("trash.type")}
               </span>
-              <span>
+              <span role="columnheader" aria-label={PANES["trash.folder"].heading}>
                 {PANES["trash.folder"].heading}
                 {panes.resizer("trash.folder")}
               </span>
-              <span>
+              <span role="columnheader" aria-label={PANES["trash.deleted"].heading}>
                 {PANES["trash.deleted"].heading}
                 {panes.resizer("trash.deleted")}
               </span>
-              <span className="r">
+              <span role="columnheader" aria-label={PANES["trash.size"].heading} className="r">
                 {PANES["trash.size"].heading}
                 {panes.resizer("trash.size")}
               </span>
