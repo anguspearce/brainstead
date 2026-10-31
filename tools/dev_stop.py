@@ -30,8 +30,8 @@ process not recognised), nothing in the checkout is the session's: nothing there
 
 `--all` adds the worktrees under `.claude/worktrees/` whose folder is gone or whose session has ended, whoever started
 their processes. A worktree is live while its folder exists and either a Claude transcript in `~/.claude/projects/`
-changed in the last 12 hours or one of its processes still descends from a running Claude; `--all` leaves live worktrees
-alone unless `--include-live` is given. The main checkout is never swept: only its own session, or `--anyone` run there,
+changed in the last 12 hours or one of its processes still descends from a running Claude Code process; `--all` leaves
+live worktrees alone unless `--include-live` is given. The main checkout is never swept: only its own session, or `--anyone` run there,
 stops what runs in it.
 
 The `SessionEnd` hook in `.claude/settings.json` runs `tools/dev_stop.sh --session-end`: the ending session's dev
@@ -159,9 +159,10 @@ def exe_of(p: Proc, windows: bool) -> str:
 
 
 def protected(p: Proc, roots: list[str], windows: bool) -> bool:
-    """Claude, MCP servers and any Brainstead not built in a worktree: never matched, and walks stop there."""
+    """Claude (the desktop app or Claude Code), MCP servers and any Brainstead not built in a worktree: never matched,
+    and walks stop there."""
     b = base(p)
-    if b == "claude" or (b == "brainstead" and "--mcp" in p.cmd):
+    if b == "claude" or is_claude_code(p, windows) or (b == "brainstead" and "--mcp" in p.cmd):
         return True
     if b == "brainstead":
         exe = exe_of(p, windows)
@@ -312,7 +313,7 @@ def find(procs: list[Proc], scope: Scope) -> tuple[list[Match], dict[str, int]]:
     def claude_above(p: Proc) -> bool:
         seen = set()
         while (p := parent(p)) is not None and p.pid not in seen:
-            if base(p) == "claude":
+            if is_claude_code(p, w):
                 return True
             seen.add(p.pid)
         return False

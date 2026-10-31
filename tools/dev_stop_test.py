@@ -236,6 +236,17 @@ class AllWorktrees(unittest.TestCase):
         self.assertEqual(matches, [])
         self.assertEqual(left, {"calm-maya-4d5e6f": 10})
 
+    def test_live_by_a_claude_code_session_run_by_node(self):
+        node = [
+            Proc(2, 1, NODE, f'"{NODE}" "C:\\Users\\maya\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code\\cli.js"'),
+            SESSION[2],
+        ]
+        matches, left = find(node + dev_tree(OTHER, 10, 3), everything())
+        self.assertEqual(matches, [])
+        self.assertEqual(left, {"calm-maya-4d5e6f": 10})
+        # Never matched itself, even with the dev tree below it.
+        self.assertFalse(pids(find(node + dev_tree(OTHER, 10, 3), everything(include_live=True))[0]) & {2, 3})
+
     def test_include_live(self):
         matches, left = find(SESSION + dev_tree(OTHER, 10, 3), everything(include_live=True))
         self.assertEqual(pids(matches), set(range(10, 20)))
