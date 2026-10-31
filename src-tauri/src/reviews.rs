@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use brainstead_core::ask::Event;
+use brainstead_core::ask::Job;
 use brainstead_core::chats::{Chat, Item, Summary};
 use brainstead_core::proposals::{Kind, Origin};
 use brainstead_core::reviews::{self, schedule, ReviewKind, Target, Upsert, Window};
@@ -346,6 +347,8 @@ struct Started {
     chat_id: String,
     title: String,
     model: String,
+    /// The effort the run goes at (`ask::job_effort`), for its tab's Effort menu.
+    effort: Option<String>,
     prompt: String,
 }
 
@@ -419,7 +422,11 @@ const RETRY_AFTER_SECS: u64 = 15 * 60;
 fn run(app: &AppHandle, id: &str, kind: ReviewKind, w: Window, model: &str, retrying: bool, scheduled: bool) -> bool {
     let title = format!("{} · {}", run_name(kind), label(&w));
     let ask_line = format!("{} for {}, from the notes, tasks and Claude Code sessions Brainstead gathered.", run_name(kind), label(&w));
-    let _ = app.emit("review-started", Started { chat_id: id.into(), title: title.clone(), model: model.into(), prompt: ask_line.clone() });
+    // The run's chat keeps the job's effort, so a follow-up in it runs as the job did.
+    let effort = ask::job_effort(app, Job::Summaries, model);
+    let started =
+        Started { chat_id: id.into(), title: title.clone(), model: model.into(), effort: effort.clone(), prompt: ask_line.clone() };
+    let _ = app.emit("review-started", started);
 
     let mut looked: Vec<String> = Vec::new();
     let queued = app.state::<AppState>().settings.lock().unwrap().ui.get("holdSummaries").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -488,6 +495,7 @@ fn run(app: &AppHandle, id: &str, kind: ReviewKind, w: Window, model: &str, retr
             id: id.into(),
             title,
             model: Some(model.into()),
+            effort,
             created_at: ts.clone(),
             updated_at: ts,
             state: "archived".into(),
@@ -550,7 +558,7 @@ fn compose(app: &AppHandle, id: &str, kind: ReviewKind, w: &Window, model: &str,
             }
         }
     };
-    let out = ask::run(app, id, &prompt, model, None, &system, None, &mut on);
+    let out = ask::run(app, Job::Summaries, id, &prompt, model, None, &system, None, &mut on);
     if let Some(e) = out.error {
         return Err(e);
     }

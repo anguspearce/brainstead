@@ -8,7 +8,7 @@
 // (askTabs) so they come back after a restart, and writes a chat after every turn: to the app
 // data folder until Save puts it in the vault.
 
-import { api, AskDone, AskEvent, ChatItem, ChatSummary, CliInfo, CliName, SavedChat } from "./api";
+import { api, AskDone, AskEvent, ChatItem, ChatSummary, CliInfo, CliName, SavedChat, Settings } from "./api";
 import { nav, place } from "./nav";
 import { settings, Store } from "./store";
 
@@ -44,10 +44,6 @@ export function cliOf(model: string): CliName {
 }
 
 export const DEFAULT_MODEL = "claude:sonnet";
-
-/** The levels an Effort menu offers for an assistant: none while it isn't installed, as the screens
- *  show no menu then (Found on this computer, Ask). */
-export const installedEfforts = (cli: CliName): string[] => clis.get()?.find((c) => c.cli === cli && c.path)?.efforts ?? [];
 
 /** An effort level's name, as Settings › AI assistants shows it ("xhigh" is "Extra high"). */
 export function effortLabel(level: string): string {
@@ -90,10 +86,77 @@ export function fallbackTitle(question: string): string {
 
 const uid = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
-/** The effort a new chat on `model` starts with: the one set for its assistant in Settings › AI
- *  assistants, or null for the assistant's own default. */
+/** The effort a run goes at: the job's own (Settings › AI assistants › Models by job,
+ *  `jobEffort`), else the assistant's (`effort`), each only when it is one of the assistant's
+ *  `levels` (unchecked while the assistants aren't found yet); null for the assistant's own default.
+ *  The same rule as brainstead_core::ask::resolve_effort, kept beside it by the same test cases. */
+export function resolveEffort(
+  levels: string[] | null,
+  job: string | null | undefined,
+  assistant: string | null | undefined,
+): string | null {
+  return [job, assistant].find((e): e is string => !!e && (!levels || levels.includes(e))) ?? null;
+}
+
+/** The levels an assistant offers, once the assistants are found (CliInfo `efforts`). */
+const levelsOf = (cli: CliName): string[] | null => clis.get()?.find((c) => c.cli === cli)?.efforts ?? null;
+
+/** The levels an Effort menu offers for an assistant: none while it isn't installed, as the screens
+ *  show no menu then (Found on this computer, Models by job, Ask). */
+export const installedEfforts = (cli: CliName): string[] => clis.get()?.find((c) => c.cli === cli && c.path)?.efforts ?? [];
+
+/** The effort a new chat on `model` starts with: the assistant's (no job's, so a job's level never
+ *  becomes a chat's), or null for the assistant's own default. */
 export function effortFor(model: string): string | null {
-  return settings.get().effort?.[cliOf(model)] ?? null;
+  const cli = cliOf(model);
+  return resolveEffort(levelsOf(cli), null, settings.get().effort?.[cli]);
+}
+
+/** The model `job` runs on: its own, else (the weekly review's preparation) the summaries', else new
+ *  chats'; an empty one is unset. brainstead_core::ask::job_model is the same rule; both tests read
+ *  tests/fixtures/job-settings.json. */
+export function jobModelOf(job: string, s: Settings = settings.get()): string {
+  const own = s.jobModels?.[job] || (job === "weekprep" ? s.jobModels?.summaries : undefined);
+  return own || s.askModel || DEFAULT_MODEL;
+}
+
+/** The job's own effort (`jobEffort.<job>`) while its model's assistant offers it (unchecked while
+ *  the assistants aren't found yet), else null: what Models by job and list_settings show.
+ *  brainstead_core::ask::job_own_effort is the same rule. */
+export function jobOwnEffort(job: string, s: Settings = settings.get()): string | null {
+  const level = s.jobEffort?.[job];
+  const levels = levelsOf(cliOf(jobModelOf(job, s)));
+  return level && (!levels || levels.includes(level)) ? level : null;
+}
+
+/** The jobs whose own effort their model's assistant doesn't offer (it changed under them), once
+ *  the assistants are found. brainstead_core::ask::drop_stale_job_efforts drops the same on every
+ *  save; the window drops them at once. */
+export function staleJobEfforts(s: Settings = settings.get()): string[] {
+  return Object.keys(s.jobEffort ?? {}).filter((job) => {
+    const levels = levelsOf(cliOf(jobModelOf(job, s)));
+    return !!levels && !levels.includes(s.jobEffort![job]);
+  });
+}
+
+/** Applies a change to the models (new chats' or a job's), dropping each job's own effort its new
+ *  model's assistant doesn't offer: the job goes back to Assistant's setting. */
+function setModels(patch: Pick<Settings, "askModel"> | Pick<Settings, "jobModels">) {
+  settings.update(patch);
+  const stale = staleJobEfforts();
+  if (stale.length)
+    settings.update({ jobEffort: Object.fromEntries(Object.entries(settings.get().jobEffort ?? {}).filter(([j]) => !stale.includes(j))) });
+}
+
+/** Sets `job`'s model (null: back to its default), as Models by job does. */
+export function setJobModel(job: string, model: string | null) {
+  const { [job]: _, ...models } = settings.get().jobModels ?? {};
+  setModels({ jobModels: model ? { ...models, [job]: model } : models });
+}
+
+/** Sets the model new chats use, as Settings › AI assistants › New chats use and Ask's model menu do. */
+export function setAskModel(model: string) {
+  setModels({ askModel: model });
 }
 
 export function blankChat(model: string): Chat {
@@ -243,7 +306,7 @@ export function setModel(id: string, model: string) {
   // Another assistant has its own levels, so the chat starts again from the one set for it.
   const same = (c: Chat) => cliOf(c.model ?? DEFAULT_MODEL) === cliOf(model);
   update(id, (c) => (c.transcript.length ? c : { ...c, model, effort: same(c) ? c.effort : effortFor(model) }));
-  settings.update({ askModel: model });
+  setAskModel(model);
 }
 
 /** Keeps the empty tabs on the effort set for their assistant: when Settings › AI assistants
@@ -255,15 +318,22 @@ export function followEffortSettings(): () => void {
     const before = was;
     was = settings.get().effort;
     if (was === before) return;
-    const stale = (c: Chat) => fresh(c) && (c.effort ?? null) === (before?.[cliOf(c.model ?? DEFAULT_MODEL)] ?? null);
+    const stale = (c: Chat) => {
+      const cli = cliOf(c.model ?? DEFAULT_MODEL);
+      return fresh(c) && (c.effort ?? null) === resolveEffort(levelsOf(cli), null, before?.[cli]);
+    };
     if (ask.get().chats.some(stale))
       setChats((cs) => cs.map((c) => (stale(c) ? { ...c, effort: effortFor(c.model ?? DEFAULT_MODEL) } : c)));
   });
 }
 
 /** This chat's effort from its next message on (null: the assistant's own default). Settings › AI
- *  assistants, which new chats start from, isn't changed. */
+ *  assistants, which new chats start from, isn't changed. A scheduled run goes at its job's effort
+ *  until it ends, when its chat (saved by Rust, with that effort) can take another. */
 export async function setEffort(id: string, effort: string | null) {
+  const c = ask.get().chats.find((x) => x.id === id);
+  if (c?.review && c.busy)
+    throw new Error(`“${c.title}” is still running at its job's effort; set the chat's effort once it has finished.`);
   update(id, (c) => ({ ...c, effort }));
   if (ask.get().chats.find((c) => c.id === id)?.transcript.length) await save(id);
 }
@@ -473,10 +543,11 @@ export async function startAsk() {
     for (const c of ask.get().chats) if (c.busy && !c.review) void recover(c.id);
   }, 5000);
   followEffortSettings();
-  // A scheduled review opens as a tab while it runs, without taking you to Ask.
+  // A scheduled review opens as a tab while it runs, without taking you to Ask, at its job's effort.
   await api.onReviewStarted((r) => {
     const c: Chat = {
       ...blankChat(r.model),
+      effort: r.effort ?? null,
       id: r.chatId,
       title: r.title,
       review: true,

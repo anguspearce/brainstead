@@ -108,10 +108,14 @@ import {
   installedEfforts,
   isSaved,
   keepChat,
+  jobModelOf,
+  jobOwnEffort,
   MODEL_JOBS,
   modelLabel,
   pinSaved,
   renameSaved,
+  setAskModel,
+  setJobModel,
   trashSaved,
 } from "./askState";
 import { DOC_ACCENTS, DOC_STYLES, docDefaults, lookOf, withOwnLook } from "./docLook";
@@ -3294,6 +3298,15 @@ const settingRows = (): SettingRow[] => [
     modelChoices,
     job === "weekprep" ? "As the summaries, else as new chats" : "As new chats",
   ]),
+  ...MODEL_JOBS.map(([job, label]): SettingRow => [
+    `jobEffort.${job}`,
+    "AI assistants",
+    `Models by job › ${label}'s effort`,
+    "choice",
+    null,
+    () => effortChoices(cliOf(jobModelOf(job))),
+    "Assistant's setting, the effort set for the job's assistant",
+  ]),
   ...(Object.keys(CLI_LABEL) as CliName[]).map((cli): SettingRow => [
     `effort.${cli}`,
     "AI assistants",
@@ -3356,6 +3369,7 @@ async function settingsTool(a: Args): Promise<string> {
     summaries: { ...DEFAULT_SCHEDULE, ...s.summaries },
     weeklyReview: { ...DEFAULT_WEEKLY_REVIEW, ...s.weeklyReview },
     jobModels: { ...s.jobModels },
+    jobEffort: { ...s.jobEffort },
     effort: { ...s.effort },
   };
   // Open at login is macOS's login item, not a setting in the file; null where macOS can't say
@@ -3365,6 +3379,8 @@ async function settingsTool(a: Args): Promise<string> {
   const valueOf = (key: string, def: unknown) => {
     if (key === "openAtLogin") return login;
     const [head, sub] = key.split(".");
+    // As Models by job shows it: a level the job's assistant doesn't offer is Assistant's setting.
+    if (head === "jobEffort") return jobOwnEffort(sub, s);
     const v = sub ? nested[head][sub] : (s as unknown as Record<string, unknown>)[key];
     return v ?? def;
   };
@@ -3460,6 +3476,12 @@ async function settingsTool(a: Args): Promise<string> {
   const [head, sub] = key!.split(".");
   if (key === "openAtLogin") {
     await api.loginItemSet(v as boolean);
+  } else if (head === "jobModels") {
+    // As Models by job does: a job's own effort goes when its new assistant doesn't offer it.
+    setJobModel(sub, (v as string | undefined) ?? null);
+  } else if (key === "askModel") {
+    // As New chats use does: likewise for every job that runs on new chats' model.
+    setAskModel(v as string);
   } else if (sub) {
     const next = { ...nested[head], [sub]: v };
     if (v === undefined) delete next[sub];
