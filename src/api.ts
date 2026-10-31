@@ -1318,8 +1318,6 @@ export const api = {
   previewMove: (frame: PreviewFrame) => invoke<void>("preview_move", { frame }),
   /** The panel `id` closed; sent even before its open has reached the window, which then never shows it. */
   previewClose: (id: number) => invoke<void>("preview_close", { id }),
-  /** Esc or Space pressed with the focus inside the preview (the handler's own window), for panel `id`. */
-  onPreviewDismiss: (f: (id: number) => void): Promise<UnlistenFn> => listen<number>("preview-dismiss", (e) => f(e.payload)),
   trashList: () => invoke<TrashEntry[]>("trash_list"),
   /** Puts it back where it was, or at `as` (vault-relative); refuses with `exists`. */
   trashRestore: (id: string, as: string | null) => invoke<string>("trash_restore", { id, as }),

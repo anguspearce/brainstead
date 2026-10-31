@@ -30,14 +30,15 @@
 //! resizing, but Tauri's event loop, and so the page's commands, wait for the call (`Book::busy`):
 //! hence a deadline on every call.
 //!
-//! The host never takes the activation, so the main window keeps its focus, and the handler is
-//! released when the page closes the panel or the app quits (`shutdown`). It is not hidden when
-//! the window loses the focus: the focus goes when the user clicks into the preview or while
-//! Office starts to draw it, which would hide it with no way back but a click on the window.
-//! Which handler a type has is read from
-//! the registry as Explorer reads it (`handler_for`), which is what `available` answers, so the
-//! page opens its panel only for a file that can be previewed and opens the rest in their own app.
-//! A file downloaded from the web opens in its app too, as Explorer won't preview it (`refused`).
+//! The host never takes the activation, so the main window and the page keep the focus, and with
+//! it the keys that close the panel (`give_back_keys` says when a click hands them to the
+//! document). The handler is released when the page closes the panel or the app quits
+//! (`shutdown`). The host is not hidden when the window loses the focus: the focus goes when the
+//! user clicks into the preview or while Office starts to draw it, which would hide it with no way
+//! back but a click on the window. Which handler a type has is read from the registry as Explorer
+//! reads it (`handler_for`), which is what `available` answers, so the page opens its panel only
+//! for a file that can be previewed and opens the rest in their own app. A file downloaded from
+//! the web opens in its app too, as Explorer won't preview it (`refused`).
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -48,7 +49,7 @@ use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 use windows::core::{w, Interface, PCWSTR};
 use windows::Win32::Foundation::POINT;
 use windows::Win32::Foundation::{COLORREF, CO_E_APPNOTFOUND, HINSTANCE, HWND, LPARAM, LRESULT, RECT, REGDB_E_CLASSNOTREG, WPARAM};
@@ -63,20 +64,16 @@ use windows::Win32::System::Com::{
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Accessibility::{SetWinEventHook, HWINEVENTHOOK};
-use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, VIRTUAL_KEY, VK_CONTROL, VK_ESCAPE, VK_LWIN, VK_MENU, VK_RWIN, VK_SPACE,
-};
 use windows::Win32::UI::Shell::PropertiesSystem::{IInitializeWithFile, IInitializeWithStream};
 use windows::Win32::UI::Shell::{
     IInitializeWithItem, IPreviewHandler, IPreviewHandlerVisuals, IShellItem, SHCreateItemFromParsingName, SHCreateStreamOnFileEx,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, CreateWindowExW, DefWindowProcW, GetClientRect, GetGUIThreadInfo, GetWindow, GetWindowLongPtrW,
-    GetWindowThreadProcessId, IsChild, IsIconic, IsWindowVisible, PostMessageW, RegisterClassExW, SendNotifyMessageW, SetWindowLongPtrW,
-    SetWindowPos, SetWindowsHookExW, ShowWindow, UnhookWindowsHookEx, CREATESTRUCTW, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE,
-    EVENT_OBJECT_SHOW, GUITHREADINFO, GWLP_USERDATA, GW_OWNER, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, OBJID_WINDOW, SWP_HIDEWINDOW,
-    SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, WH_KEYBOARD_LL, WINEVENT_OUTOFCONTEXT, WM_APP, WM_CREATE, WM_DESTROY,
-    WM_ERASEBKGND, WM_KEYDOWN, WM_NCDESTROY, WM_PAINT, WNDCLASSEXW, WS_CLIPCHILDREN, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_POPUP,
+    CreateWindowExW, DefWindowProcW, GetClientRect, GetGUIThreadInfo, GetWindow, GetWindowLongPtrW, GetWindowThreadProcessId, IsChild,
+    IsIconic, IsWindowVisible, PostMessageW, RegisterClassExW, SendNotifyMessageW, SetWindowLongPtrW, SetWindowPos, ShowWindow,
+    CREATESTRUCTW, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW, GUITHREADINFO, GWLP_USERDATA, GW_OWNER, OBJID_WINDOW,
+    SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, WINEVENT_OUTOFCONTEXT, WM_APP, WM_CREATE,
+    WM_DESTROY, WM_ERASEBKGND, WM_NCDESTROY, WM_PAINT, WNDCLASSEXW, WS_CLIPCHILDREN, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_POPUP,
 };
 
 /// The shell extension handler category for preview handlers: `shellex\{this}` under a type's key
@@ -245,14 +242,9 @@ const MSG_MOVE: u32 = WM_APP + 2;
 const MSG_CLOSE: u32 = WM_APP + 3;
 /// From a call's watchdog: the call (its number in wParam) missed its deadline.
 const MSG_LATE: u32 = WM_APP + 4;
-/// From the keyboard hook: Esc or Space with the focus in the preview.
-const MSG_DISMISS: u32 = WM_APP + 5;
 
-/// The app, for telling the page its panel should close (`MSG_DISMISS`) and giving the window the
-/// focus back.
+/// The app, for giving the page the keys back (`give_back_keys`).
 static APP: OnceLock<tauri::AppHandle> = OnceLock::new();
-/// The keyboard hook while a preview is up (0 otherwise).
-static KEYS: AtomicIsize = AtomicIsize::new(0);
 
 struct OpenRequest {
     path: std::path::PathBuf,
@@ -865,7 +857,6 @@ unsafe fn call<T>(hwnd: HWND, st: &Shared, limit: Duration, f: impl FnOnce() -> 
 /// hidden and let go, so the next open makes a new one; and the open waiting on it, and any open
 /// queued behind it, hear why at once.
 unsafe fn abandon(hwnd: HWND, st: &Shared) {
-    keys(false);
     let (h, reply, what) = {
         let mut s = st.borrow_mut();
         s.book.abandoned = true;
@@ -1018,15 +1009,12 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                 let step = st.borrow_mut().book.close(closed(id));
                 // Hidden at once; the handler goes now, or when a call in flight ends.
                 if step != Step::Skip {
+                    // The focus was in the preview (a click into it): back to the page, which
+                    // would otherwise have no key.
                     let refocus = focus_in(hwnd);
                     let _ = ShowWindow(hwnd, SW_HIDE);
-                    keys(false);
-                    // The focus was in the preview (a click into it, or Office taking it as it
-                    // started): back to the page, which would otherwise have no key.
                     if refocus {
-                        if let Some(w) = APP.get().and_then(|a| a.get_webview_window("main")) {
-                            let _ = w.set_focus();
-                        }
+                        give_back_keys();
                     }
                 }
                 if step == Step::Go {
@@ -1046,27 +1034,15 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             }
             LRESULT(0)
         }
-        MSG_DISMISS => {
-            // Tell the page, which closes its panel (and so this preview) as for its own Esc.
-            if let Some(st) = state(hwnd) {
-                let id = st.borrow().book.id;
-                if let Some(a) = APP.get() {
-                    let _ = a.emit_to("main", "preview-dismiss", id);
-                }
-            }
-            LRESULT(0)
-        }
         WM_DESTROY => {
             // Before the handler's window, a child of this one, goes with it: unloaded first, as
             // Explorer does, with the deadline every call has, or left if a call is in flight.
-            keys(false);
             if let Some(st) = state(hwnd) {
                 let_go(hwnd, &st, QUICK);
             }
             LRESULT(0)
         }
         WM_NCDESTROY => {
-            keys(false);
             let p = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const RefCell<State>;
             if !p.is_null() {
                 SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
@@ -1087,38 +1063,15 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     }
 }
 
-/// Esc and Space close the preview however the focus got into it. The page's own keys go to the
-/// web view, but once the user clicks into the document, or Office takes the focus as it starts
-/// drawing, keys go to the handler's window in its own process. A low-level keyboard hook, on this
-/// thread while a preview is up, sees them first: with the focus in the host or a window inside
-/// it, plain Esc or Space is kept from the handler and the page is told to close its panel.
-unsafe fn keys(on: bool) {
-    let hook = KEYS.load(Ordering::Acquire);
-    if on && hook == 0 {
-        if let Ok(h) = SetWindowsHookExW(WH_KEYBOARD_LL, Some(key), None, 0) {
-            KEYS.store(h.0 as isize, Ordering::Release);
-        }
-    } else if !on && hook != 0 {
-        KEYS.store(0, Ordering::Release);
-        let _ = UnhookWindowsHookEx(HHOOK(hook as _));
+/// The keys go back to the page: Esc and Space, which close the panel there, reach it again. The
+/// host never takes the focus, but a click into the document gives it to the handler's window, in
+/// its own process, as in Explorer's preview pane; keys then go to the document (Space scrolls)
+/// until the user clicks the page, as Brainstead sees no key of another process. Office can also
+/// take the focus as it starts drawing, which an open hands back (`open_next`).
+fn give_back_keys() {
+    if let Some(w) = APP.get().and_then(|a| a.get_webview_window("main")) {
+        let _ = w.set_focus();
     }
-}
-
-unsafe extern "system" fn key(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if code == HC_ACTION as i32 && wparam.0 as u32 == WM_KEYDOWN {
-        let k = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
-        let held = |vk: VIRTUAL_KEY| GetAsyncKeyState(vk.0 as i32) < 0;
-        let plain = ![VK_CONTROL, VK_MENU, VK_LWIN, VK_RWIN].into_iter().any(held);
-        if plain && (k.vkCode == VK_ESCAPE.0 as u32 || k.vkCode == VK_SPACE.0 as u32) {
-            if let Some(host) = current().map(|h| HWND(h as _)) {
-                if IsWindowVisible(host).as_bool() && focus_in(host) {
-                    let _ = PostMessageW(Some(host), MSG_DISMISS, WPARAM(0), LPARAM(0));
-                    return LRESULT(1);
-                }
-            }
-        }
-    }
-    CallNextHookEx(None, code, wparam, lparam)
 }
 
 /// Whether the keyboard focus is in the host or a window inside it (the handler's, in its own
@@ -1141,7 +1094,7 @@ unsafe fn open_next(hwnd: HWND, st: &Shared) {
         return;
     }
     match st.borrow_mut().book.open(&req.frame, closed(req.frame.id)) {
-        Step::Go => keys(true),
+        Step::Go => {}
         Step::Skip => {
             let _ = req.reply.send(Err(CLOSED_TEXT.to_string()));
             return;
@@ -1174,10 +1127,15 @@ unsafe fn open_next(hwnd: HWND, st: &Shared) {
         return;
     }
     let keep = st.borrow_mut().book.opened(matches!(r, Ok(true)), closed(req.frame.id));
+    // Office can take the focus as it starts drawing: the page keeps the keys, so Esc and Space
+    // still close the panel.
+    let refocus = focus_in(hwnd);
     if !keep {
         unload(hwnd, st, QUICK);
         let _ = ShowWindow(hwnd, SW_HIDE);
-        keys(false);
+    }
+    if refocus {
+        give_back_keys();
     }
     let r = match r {
         // Closed while it opened: the page has moved on, and says nothing more.
