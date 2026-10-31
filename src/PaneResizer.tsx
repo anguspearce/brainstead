@@ -14,7 +14,19 @@
 // its left edge), so the divider moves with the pointer whichever side of the flexible column it is.
 // A type locked in Settings (src/panes.ts, resizeLocks) draws no resizers; its widths still apply.
 
-import { CSSProperties, KeyboardEvent, PointerEvent, ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  CSSProperties,
+  KeyboardEvent,
+  PointerEvent,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   clampPaneWidth,
   fitPanes,
@@ -104,13 +116,46 @@ export interface Panes<K extends string> {
   /** The grid root's props (a .body element, a table), spread on it: its ref and the panes' custom properties
    *  (position: relative too, for the resizers). Spread, not a ref prop: the lint would take the whole result for a ref. */
   root: { ref: (el: HTMLElement | null) => void; style: CSSProperties };
-  /** Each pane's width where usePanes sets it: the stored one, or the stylesheet's made narrower to
-   *  fit; undefined where the stylesheet's own shows. */
-  widths: Record<K, number | undefined>;
   /** One pane's resizer, to place by hand: in a table, inside the column's own header cell. */
   resizer: (key: K) => ReactNode;
   /** Every pane's resizer, for the root. */
   resizers: ReactNode;
+}
+
+/** What a screen's panes show for one measure of its root: each pane's width and room, the panes a
+ *  breakpoint dropped, and the custom properties to set on the root. */
+interface Layout<K extends string> {
+  shown: Record<K, number>;
+  rooms: Record<K, number>;
+  gone: Set<K>;
+  style: CSSProperties;
+}
+
+const drawKey = <K extends string>(l: Layout<K>) => JSON.stringify([l.style, [...l.gone]]);
+
+/** A root's latest measure, kept outside React state: each divider follows it on its own, and the
+ *  screen re-renders only when what it draws (the root's properties, the panes shown) changes. */
+class Live<K extends string> {
+  m = unmeasured;
+  private subs = new Set<() => void>();
+  constructor(private layout: (m: Measured) => Layout<K>) {}
+  subscribe = (f: () => void) => {
+    this.subs.add(f);
+    return () => void this.subs.delete(f);
+  };
+  get = () => this.m;
+  /** The screen's layout as its last render has it (the widths stored then). */
+  drawWith(layout: (m: Measured) => Layout<K>) {
+    this.layout = layout;
+  }
+  /** Takes a new measure, tells the dividers, and says whether the screen draws something else. */
+  take(next: Measured): boolean {
+    if (JSON.stringify(next) === JSON.stringify(this.m)) return false;
+    const before = drawKey(this.layout(this.m));
+    this.m = next;
+    this.subs.forEach((f) => f());
+    return drawKey(this.layout(next)) !== before;
+  }
 }
 
 /** A screen's panes: `specs` by key (from PANES). */
@@ -118,22 +163,12 @@ export function usePanes<K extends string>(specs: Record<K, PaneSpec>, opts: Pan
   const { paneWidths: widthsStored, resizeLocks } = useStore(settings);
   // The root as state, not a ref: the resizers take it as a prop, in render.
   const [root, setRoot] = useState<HTMLElement | null>(null);
-  const [m, setM] = useState<Measured>(unmeasured);
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
   const keys = Object.keys(specs) as K[];
-  const keyList = keys.join("\0");
   const varList = keys.map((k) => specs[k].cssVar).join(" ");
-  useLayoutEffect(() => {
-    if (!root) return;
-    const sync = () => setM(measure(root, varList.split(" ")));
-    sync();
-    if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(sync);
-    ro.observe(root);
-    return () => ro.disconnect();
-  }, [root, varList]);
   const mode = opts.mode ?? "pane";
   const fixed = opts.fixed ?? 0;
-  const { widths, shown, rooms, gone, style } = useMemo(() => {
+  const layout = (m: Measured): Layout<K> => {
     const widths = {} as Record<K, number | undefined>;
     const shown = {} as Record<K, number>;
     const rooms = {} as Record<K, number>;
@@ -176,45 +211,69 @@ export function usePanes<K extends string>(specs: Record<K, PaneSpec>, opts: Pan
     keys.forEach((k) => {
       if (widths[k] !== undefined) style[specs[k].cssVar] = `${widths[k]}px`;
     });
-    return { widths, shown, rooms, gone, style: style as CSSProperties };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [widthsStored, m, fixed, mode, keyList]);
+    return { shown, rooms, gone, style: style as CSSProperties };
+  };
+  const [live] = useState(() => new Live<K>(layout));
+  useLayoutEffect(() => {
+    live.drawWith(layout);
+  });
+  // A size change reaches the dividers at once; the screen re-renders only when what it draws
+  // changes (a default narrowed to fit, a pane dropped), not on every frame of a window resize or a
+  // sidebar drag, nor when the root only grows taller.
+  const sync = useCallback(
+    (el: HTMLElement) => {
+      if (live.take(measure(el, varList.split(" ")))) redraw();
+    },
+    [live, varList],
+  );
+  useLayoutEffect(() => {
+    if (!root) return;
+    sync(root);
+    if (typeof ResizeObserver === "undefined") return;
+    let width = root.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (root.clientWidth === width) return;
+      width = root.clientWidth;
+      sync(root);
+    });
+    ro.observe(root);
+    return () => ro.disconnect();
+  }, [root, sync]);
+  const { gone, style } = layout(live.m);
   // The grid's tracks change with the widths set here: measured again after each, so a pane's
   // divider shows exactly while its column does.
   const styleKey = JSON.stringify(style);
   useLayoutEffect(() => {
-    if (root && mode === "pane") setM(measure(root, varList.split(" ")));
+    if (root && mode === "pane") sync(root);
   }, [styleKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const resizer = (key: K) =>
     gone.has(key) || resizeLocked(specs[key].type, resizeLocks) ? null : (
-      <PaneResizer
-        key={key}
-        paneKey={key}
-        spec={specs[key]}
-        now={shown[key]}
-        room={rooms[key]}
-        root={root}
-        mode={mode}
-        inset={specs[key].side === "left" ? m.insetLeft : m.insetRight}
-      />
+      <PaneResizer key={key} paneKey={key} spec={specs[key]} live={live} layout={layout} root={root} mode={mode} />
     );
-  return { root: { ref: setRoot, style }, widths, resizer, resizers: <>{keys.map((k) => resizer(k))}</> };
+  return { root: { ref: setRoot, style }, resizer, resizers: <>{keys.map((k) => resizer(k))}</> };
 }
 
-interface ResizerProps {
-  paneKey: string;
+interface ResizerProps<K extends string> {
+  paneKey: K;
   spec: PaneSpec;
-  /** The width the pane shows: the stored one or the stylesheet's (at its breakpoint), fitted. */
-  now: number;
-  room: number;
+  /** The root's latest measure, followed as the root resizes, and the screen's layout of it. */
+  live: Live<K>;
+  layout: (m: Measured) => Layout<K>;
   root: HTMLElement | null;
   mode: "pane" | "column";
-  /** The root's padding and half gap on the pane's side: the divider's distance past the pane. */
-  inset: number;
 }
 
-export function PaneResizer(p: ResizerProps) {
-  const { spec, paneKey, room, root, mode } = p;
+export function PaneResizer<K extends string>({ spec, paneKey, live, layout, root, mode }: ResizerProps<K>) {
+  const m = useSyncExternalStore(live.subscribe, live.get);
+  const l = layout(m);
+  const p = {
+    // The width the pane shows: the stored one or the stylesheet's (at its breakpoint), fitted.
+    now: l.shown[paneKey],
+    room: l.rooms[paneKey],
+    // The root's padding and half gap on the pane's side: the divider's distance past the pane.
+    inset: spec.side === "left" ? m.insetLeft : m.insetRight,
+  };
+  const { room } = p;
   const drag = useRef<{ x: number; w: number; live: number; moved: boolean } | null>(null);
   const [dragging, setDragging] = useState(false);
   // A divider that goes mid-drag (a lock turned on, a breakpoint that drops its pane) never sees

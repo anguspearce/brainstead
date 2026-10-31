@@ -117,6 +117,50 @@ describe("a scrolling screen's divider", () => {
   });
 });
 
+describe("a size change", () => {
+  it("moves the dividers' room without re-rendering the screen, unless what the screen draws changes", () => {
+    let width = 1000;
+    let resized = () => {};
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => width);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(cb: () => void) {
+          resized = cb;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    let renders = 0;
+    function Host() {
+      renders++;
+      const panes = usePanes({ "tasks.left": PANES["tasks.left"], "tasks.side": PANES["tasks.side"] });
+      return (
+        <div {...panes.root} style={{ ...panes.root.style, display: "grid", columnGap: "20px", gridTemplateColumns: "260px 400px 340px" }}>
+          {panes.resizers}
+        </div>
+      );
+    }
+    render(<Host />);
+    const side = screen.getByRole("separator", { name: "Resize the task's pane" });
+    const before = renders;
+    // A window resize, a frame at a time: the room follows, the screen isn't drawn again.
+    for (const w of [1010, 1020, 1030]) {
+      width = w;
+      act(() => resized());
+    }
+    expect(renders).toBe(before);
+    expect(side.getAttribute("aria-valuemax")).toBe(String(1030 - 260 - 40 - MIN_FLEX));
+    // Too narrow for the defaults: the lists are narrowed on the root, so the screen draws again.
+    width = 700;
+    act(() => resized());
+    expect(renders).toBeGreaterThan(before);
+    expect(screen.getAllByRole("separator")[0].getAttribute("aria-valuenow")).not.toBe("260");
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("a breakpoint", () => {
   it("that drops one pane's column hides that pane's divider alone, and one that stacks the grid hides both", () => {
     // The Weekly review at 868px: the steps beside the step, the side column gone.
