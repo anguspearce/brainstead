@@ -2,10 +2,10 @@
 # Copyright © 2026 Wayne Davies. Free software under the GNU General Public License, version 3 or later.
 # See LICENSE for the full text.
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""`make check`: the Rust tests and Clippy, the TypeScript type-check, ESLint, Vitest, and the
-formatting and repo checks, the groups side by side (they don't depend on each other). Each
-group's output is printed whole when it finishes, with how long it took; the first failure in a
-group stops that group, and any failure fails the check.
+"""`make check`: the Rust tests and Clippy, the TypeScript type-check, ESLint, Vitest, the tools'
+Python tests (`tools/*_test.py`), and the formatting and repo checks, the groups side by side (they
+don't depend on each other). Each group's output is printed whole when it finishes, with how long it
+took; the first failure in a group stops that group, and any failure fails the check.
 
     python3 tools/check.py           # every group
     python3 tools/check.py rust tsc  # only these
@@ -47,6 +47,9 @@ GROUPS = {
     ],
     "vitest": [
         (ROOT, "npx vitest run", {}),
+    ],
+    "python": [
+        (ROOT, f'{PY} -m unittest discover -s tools -p "*_test.py"', {}),
     ],
     "format": [
         (ROOT, "npx prettier --check --cache .", {}),
