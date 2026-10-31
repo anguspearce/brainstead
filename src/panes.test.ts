@@ -78,10 +78,9 @@ describe("pane widths", () => {
     expect(fitPanes(all, 0)).toEqual([60, 80, 70, 50]);
   });
 
-  it("leave the flexible pane its least width once the other fixed panes and the gaps are taken", () => {
-    // Tasks at a 1000px body: the side pane's 340 and the lists' 260 leave 400, of which 240 is the list's.
-    expect(paneRoom(1000, [340], 0)).toBe(1000 - 340 - MIN_FLEX);
-    expect(paneRoom(1000, [340, 100], 24)).toBe(1000 - 440 - 24 - MIN_FLEX);
+  it("leave the flexible pane its least width once the gaps and the columns that never move are taken", () => {
+    expect(paneRoom(1000)).toBe(1000 - MIN_FLEX);
+    expect(paneRoom(1000, 24)).toBe(1000 - 24 - MIN_FLEX);
   });
 
   it("show the stored width within the room, and nothing (the stylesheet's) when none is stored", () => {

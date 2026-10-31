@@ -43,19 +43,24 @@ interface Measured {
   /** The stylesheet's width for each pane, by its custom property, at the breakpoint it's at;
    *  NaN where the stylesheet has none (a table's column, whose default is its spec's). */
   defaults: Record<string, number>;
+  /** Each pane's width as the grid has it now, by its custom property (the one set on the root, else
+   *  the stylesheet's): its track's width, where the grid still has its column (paneShown). */
+  current: Record<string, number>;
 }
 
-const unmeasured: Measured = { width: Infinity, insetLeft: 0, insetRight: 0, gap: 0, tracks: null, defaults: {} };
+const unmeasured: Measured = { width: Infinity, insetLeft: 0, insetRight: 0, gap: 0, tracks: null, defaults: {}, current: {} };
 
 function measure(el: HTMLElement, vars: string[]): Measured {
   // Each pane's own width in the stylesheet, read with the width usePanes put on the root taken off
   // for the moment (synchronously, so nothing is drawn without it).
   const defaults: Record<string, number> = {};
+  const current: Record<string, number> = {};
   for (const v of vars) {
     const inline = el.style.getPropertyValue(v);
     if (inline) el.style.removeProperty(v);
     defaults[v] = parseFloat(getComputedStyle(el).getPropertyValue(v));
     if (inline) el.style.setProperty(v, inline);
+    current[v] = inline ? parseFloat(inline) : defaults[v];
   }
   const cs = getComputedStyle(el);
   const px = (v: string) => parseFloat(v) || 0;
@@ -74,6 +79,7 @@ function measure(el: HTMLElement, vars: string[]): Measured {
     gap,
     tracks,
     defaults,
+    current,
   };
 }
 
@@ -127,42 +133,60 @@ export function usePanes<K extends string>(specs: Record<K, PaneSpec>, opts: Pan
   }, [root, varList]);
   const mode = opts.mode ?? "pane";
   const fixed = opts.fixed ?? 0;
-  // A grid has a gap beside each fixed pane; a table's are in `fixed`.
-  const gaps = mode === "pane" ? m.gap * keys.length : 0;
-  const { widths, shown, rooms, style } = useMemo(() => {
+  const { widths, shown, rooms, gone, style } = useMemo(() => {
     const widths = {} as Record<K, number | undefined>;
     const shown = {} as Record<K, number>;
     const rooms = {} as Record<K, number>;
     const style: Record<string, string> = { position: "relative" };
-    // Every pane's width, stored or the stylesheet's, fitted to the room together: a default too
-    // wide for a narrow screen (a wide sidebar beside it, say) is narrowed as a stored one is.
-    const wants = keys.map((k) => {
+    // A pane a breakpoint dropped from the grid (the Weekly review's side column at 868px) has no
+    // divider and takes no room from the panes still shown.
+    const gone = new Set(
+      keys.filter((k) => {
+        if (mode !== "pane") return false;
+        const now = m.current[specs[k].cssVar];
+        return !paneShown(m.tracks, keys.length, specs[k].side, Number.isFinite(now) ? now : specs[k].def);
+      }),
+    );
+    const here = keys.filter((k) => !gone.has(k));
+    const want = (k: K) => {
       const stored = storedPaneWidth(widthsStored, k);
       const def = m.defaults[specs[k].cssVar];
       return { spec: specs[k], want: stored ?? (Number.isFinite(def) ? def : specs[k].def), stored: stored !== undefined };
-    });
-    const room = paneRoom(m.width, [], fixed + gaps);
+    };
+    // Every shown pane's width, stored or the stylesheet's, fitted to the room together: a default
+    // too wide for a narrow screen (a wide sidebar beside it, say) is narrowed as a stored one is. A
+    // grid has a gap beside each fixed pane it shows; a table's are in `fixed`.
+    const room = paneRoom(m.width, fixed + (mode === "pane" ? m.gap * here.length : 0));
+    const wants = here.map(want);
     const fit = fitPanes(wants, room);
     const total = fit.reduce((a, b) => a + b, 0);
-    keys.forEach((k, i) => {
+    here.forEach((k, i) => {
       shown[k] = fit[i];
       rooms[k] = room - (total - fit[i]);
       // Set on the root where it's stored, or narrower than the stylesheet's; else the stylesheet's shows.
       widths[k] = wants[i].stored || fit[i] < wants[i].want ? fit[i] : undefined;
+    });
+    // A dropped pane keeps its stored width, within its range, for when its column comes back.
+    gone.forEach((k) => {
+      const w = want(k);
+      shown[k] = clampPaneWidth(w.spec, w.want);
+      rooms[k] = Infinity;
+      widths[k] = w.stored ? shown[k] : undefined;
+    });
+    keys.forEach((k) => {
       if (widths[k] !== undefined) style[specs[k].cssVar] = `${widths[k]}px`;
     });
-    return { widths, shown, rooms, style: style as CSSProperties };
+    return { widths, shown, rooms, gone, style: style as CSSProperties };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [widthsStored, m, fixed, gaps, keyList]);
+  }, [widthsStored, m, fixed, mode, keyList]);
   // The grid's tracks change with the widths set here: measured again after each, so a pane's
   // divider shows exactly while its column does.
   const styleKey = JSON.stringify(style);
   useLayoutEffect(() => {
     if (root && mode === "pane") setM(measure(root, varList.split(" ")));
   }, [styleKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const gone = (key: K) => mode === "pane" && !paneShown(m.tracks, keys.length, specs[key].side, shown[key]);
   const resizer = (key: K) =>
-    gone(key) || resizeLocked(specs[key].type, resizeLocks) ? null : (
+    gone.has(key) || resizeLocked(specs[key].type, resizeLocks) ? null : (
       <PaneResizer
         key={key}
         paneKey={key}
