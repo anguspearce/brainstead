@@ -17,10 +17,13 @@ import { TopBar } from "./TopBar";
 import { fmtCount, LayerTag, SearchBox, Seg, TableBand, useDebounced } from "./ui";
 import { settings, useStore } from "./store";
 import { actionLabel, actionsIn, buildGrid, cellTip, filterLog, fmtDate, iso, linkTarget, marks, rankLog } from "./activityModel";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 const PAGE = 200;
 
 export function ActivityScreen() {
+  const panes = usePanes({ "activity.side": PANES["activity.side"] });
   const version = useVaultVersion();
   const glance = useGlance();
   // The last load shows at once on reopening, while the log is read again.
@@ -143,7 +146,8 @@ export function ActivityScreen() {
             : { about: "what changed in the vault lately", prompt: "About what changed in the vault lately: " }
         }
       />
-      <div className="body activity">
+      <div className="body activity" {...panes.root}>
+        {panes.resizers}
         <div className="actmain">
           {error && <p className="faint">{error}</p>}
           {data && <Heatmap days={data.days} day={day} onDay={pickDay} />}
@@ -385,7 +389,9 @@ const dayLabel = (d: string) => {
 };
 
 /** The log: the header stays put and the rows scroll under it, under a band per day when `perDay`
- *  is given (each day's count). `children` goes after the rows. */
+ *  is given (each day's count). `children` goes after the rows. Its When (Time, by the day) and
+ *  Action columns are resized from their headings, When at its right edge and Action at its left;
+ *  Item takes the rest. */
 function LogTable({
   count,
   entries,
@@ -409,6 +415,9 @@ function LogTable({
   children?: React.ReactNode;
 }) {
   const rows = useRef<HTMLDivElement>(null);
+  const when = perDay ? "activity.time" : "activity.when";
+  // The row's padding (32px) and two gaps (28px) never move.
+  const cols = usePanes({ [when]: PANES[when], "activity.action": PANES["activity.action"] }, { mode: "column", fixed: 32 + 28 });
   useEffect(() => {
     if (active >= 0) rows.current?.querySelector(`[data-row="${active}"]`)?.scrollIntoView({ block: "nearest" });
   }, [active]);
@@ -440,13 +449,18 @@ function LogTable({
       else days.push({ date: e.date, at: i, entries: [e] });
     });
   return (
-    <div className={`actlog ${perDay ? "banded" : ""}`} role="table" aria-label="The vault's log">
+    <div className={`actlog ${perDay ? "banded" : ""}`} role="table" aria-label="The vault's log" {...cols.root}>
       <div className="ar tb-head" role="row">
-        <span role="columnheader">{perDay ? "Time" : "When"}</span>
+        {/* Named by aria-label, so a header's name is its heading alone, not its divider's label too. */}
+        <span role="columnheader" aria-label={perDay ? "Time" : "When"}>
+          {perDay ? "Time" : "When"}
+          {cols.resizer(when)}
+        </span>
         <span role="columnheader">Item</span>
-        <span role="columnheader" className="itemh">
+        <span role="columnheader" aria-label="Action" className="itemh">
           Action
           <span className="count">{count}</span>
+          {cols.resizer("activity.action")}
         </span>
       </div>
       <div className="actrows" role="rowgroup" ref={rows}>
@@ -560,7 +574,7 @@ const LogRow = memo(function LogRow({
           </span>
         )}
       </span>
-      <span>
+      <span className="ell" title={actionLabel(e.action)}>
         <span className="chip">{actionLabel(e.action)}</span>
       </span>
     </div>

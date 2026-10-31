@@ -12,6 +12,7 @@ import { FileList } from "./FileList";
 import { nav, restorePlaces } from "./nav";
 import type { FileSummary } from "./api";
 import { settings } from "./store";
+import { listWidth } from "./panes";
 
 afterEach(cleanup);
 beforeEach(() => settings.update({ viewMemory: {}, searchOrder: {} }));
@@ -29,6 +30,7 @@ const list = () =>
       ]}
       layers={["note"]}
       noun={["note", "notes"]}
+      table="notes"
       defaultSort={["mtime", -1]}
       placeholder="Filter"
     />,
@@ -83,5 +85,35 @@ describe("a list's sort", () => {
     act(() => nav.go("notes"));
     list();
     expect(order()).toEqual(["Apple", "Banana", "Cherry"]);
+  });
+});
+
+describe("a list's columns", () => {
+  it("are kept by the table's name, not its noun, and a column after Title widens as its left edge goes left", () => {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1200);
+    settings.update({ paneWidths: undefined, resizeLocks: undefined });
+    render(
+      <FileList
+        rows={rows}
+        columns={[
+          { key: "title", label: "Title", width: "3", value: (r: FileSummary) => r.title },
+          { key: "tags", label: "Tags", width: listWidth("wiki.tags"), value: () => "" },
+          { key: "act", label: "", width: "0 0 150px", value: () => "" },
+        ]}
+        layers={["wiki"]}
+        noun={["wiki page", "wiki pages"]}
+        table="wiki"
+        defaultSort={["title", 1]}
+        placeholder="Filter"
+      />,
+    );
+    // Title takes the rest and the button column keeps its width: Tags alone has a divider.
+    const [tags, ...others] = screen.getAllByRole("separator");
+    expect(others).toEqual([]);
+    expect(tags.getAttribute("aria-label")).toBe("Resize the Tags column");
+    expect(tags.dataset.edge).toBe("start");
+    fireEvent.keyDown(tags, { key: "ArrowLeft" });
+    expect(settings.get().paneWidths).toEqual({ "wiki.tags": 208 });
+    vi.restoreAllMocks();
   });
 });
