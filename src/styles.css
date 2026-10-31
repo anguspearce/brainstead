@@ -763,8 +763,8 @@ html[data-platform="windows"] .top {
 
 /* Pane dividers (src/PaneResizer.tsx, src/panes.ts): a 6px hit area over the 1px line between two
    panes, placed by the pane's own custom property so it follows a drag; nothing at rest, a 2px
-   accent line while hovered, focused or dragged. In a table's header (.column) it sits at the
-   cell's right edge, in the gap. */
+   accent line while hovered, focused or dragged. In a table's header (.column) it sits
+   in the gap on the heading's edge away from the flexible column (data-edge). */
 .presize {
   position: absolute;
   top: 0;
