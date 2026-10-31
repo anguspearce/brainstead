@@ -1594,7 +1594,7 @@ describe("MCP actions", () => {
       await findClis(true);
       onTestFinished(() => clis.set(null));
       expect(await run("settings")).toContain(
-        "effort.antigravity · Settings › AI assistants › Found on this computer › Antigravity (Google)'s effort: null (Default effort, the assistant's own for each model) (one of: none here;",
+        "effort.antigravity · Settings › AI assistants › Found on this computer › Antigravity (Google) › Effort: null (Default effort, the assistant's own for each model) (one of: none here;",
       );
       await expect(run("settings", { action: "set", key: "effort.antigravity", value: "high" })).rejects.toThrow(/one of: none here/);
       settings.update({ jobModels: { find: "agy:gemini-3" } });
@@ -2387,7 +2387,7 @@ describe("MCP actions", () => {
       await findClis(true);
       const all = (await run("settings")) as string;
       expect(all).toContain(
-        "effort.claude · Settings › AI assistants › Found on this computer › Claude Code's effort: null (Default effort, the assistant's own for each model) (one of: low (Low), medium (Medium), high (High), xhigh (Extra high), max (Max)",
+        "effort.claude · Settings › AI assistants › Found on this computer › Claude Code › Effort: null (Default effort, the assistant's own for each model) (one of: low (Low), medium (Medium), high (High), xhigh (Extra high), max (Max)",
       );
       expect(await run("settings", { action: "set", key: "effort.claude", value: "Extra high" })).toMatch(/is now "xhigh"/);
       expect(settings.get().effort).toEqual({ claude: "xhigh" });
@@ -2427,9 +2427,11 @@ describe("MCP actions", () => {
       settings.update({ effort: { claude: "low" } });
       const all = (await run("settings")) as string;
       expect(all).toContain(
-        "jobEffort.weekprep · Settings › AI assistants › Models by job › Weekly review preparation's effort: null (Assistant's setting, the effort set for the job's assistant) (one of: low (Low), medium (Medium), high (High), xhigh (Extra high), max (Max)",
+        "jobEffort.weekprep · Settings › AI assistants › Models by job › Weekly review preparation › Effort: null (Assistant's setting, the effort set for the job's assistant) (one of: low (Low), medium (Medium), high (High), xhigh (Extra high), max (Max)",
       );
-      expect(await run("settings", { action: "set", key: "jobEffort.weekprep", value: "Max" })).toMatch(/effort is now "max"/);
+      expect(await run("settings", { action: "set", key: "jobEffort.weekprep", value: "Max" })).toMatch(
+        /Weekly review preparation › Effort is now "max"/,
+      );
       expect(settings.get().jobEffort).toEqual({ weekprep: "max" });
       expect(settings.get().effort).toEqual({ claude: "low" });
       // A model whose assistant has no max takes the job's effort away, as the screen does, and says so.
@@ -2451,11 +2453,11 @@ describe("MCP actions", () => {
       expect(await run("settings", { action: "set", key: "askModel", value: "gpt-5" })).not.toMatch(/Assistant's setting/);
       expect(settings.get().jobEffort).toEqual({ find: "max", weekprep: "max" });
       expect(await run("settings")).toContain(
-        "jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects's effort: null (Assistant's setting",
+        "jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects › Effort: null (Assistant's setting",
       );
       await run("settings", { action: "set", key: "askModel", value: "claude:opus" });
       expect(await run("settings")).toContain(
-        'jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects\'s effort: "max"',
+        'jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects › Effort: "max"',
       );
       settings.update({ askModel: undefined, jobModels: undefined, jobEffort: undefined, effort: undefined });
     });

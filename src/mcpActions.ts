@@ -3315,7 +3315,7 @@ const settingRows = (): SettingRow[] => [
   ...MODEL_JOBS.map(([job, label]): SettingRow => [
     `jobEffort.${job}`,
     "AI assistants",
-    `Models by job › ${label}'s effort`,
+    `Models by job › ${label} › Effort`,
     "choice",
     null,
     () => effortChoices(cliOf(jobModelOf(job))),
@@ -3324,7 +3324,7 @@ const settingRows = (): SettingRow[] => [
   ...(Object.keys(CLI_LABEL) as CliName[]).map((cli): SettingRow => [
     `effort.${cli}`,
     "AI assistants",
-    `Found on this computer › ${CLI_LABEL[cli]}'s effort`,
+    `Found on this computer › ${CLI_LABEL[cli]} › Effort`,
     "choice",
     null,
     () => effortChoices(cli),
