@@ -35,3 +35,6 @@ The verdict comes first, with a summary, the counts and which version was used. 
 **Copy findings** copies them as markdown. **Save as note** saves them as `Doc check. <name> - <date>.md`.
 
 An assistant can check a document the same way and read the register. When you ask, it can save its findings as a note and start the register; both are listed in [Changes](app:review), with Revert.
+
+## Resize the panes
+Drag the line between the verdict and the findings to resize them; a double-click on it puts it back ([pane widths](help:settings-general)). The register's **Version**, **Status** and **File** columns resize by their headings' left edges, and **Document** takes the rest.

@@ -57,3 +57,6 @@ As a task, a capture starts as `Follow up on [[the capture]]`.
 An assistant can ask for the same suggestions and accept one by clarifying the item. Like the form, it makes a next action only with a project or a context, and only in an active project.
 
 When this week's [Weekly review](app:weekly) is prepared, its Inbox suggestions show here too, until you click **Suggest** again.
+
+## Resize the panes
+Drag the line between the list and the open item to make the list wider or narrower; a double-click on it puts it back ([pane widths](help:settings-general)).
