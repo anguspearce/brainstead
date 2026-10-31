@@ -9,6 +9,7 @@
 
 use std::path::{Path, PathBuf};
 
+use brainstead_core::ask::Job;
 use brainstead_core::canonical::{self, Entry, Register};
 use brainstead_core::lists::BOOKMARKS;
 use chrono::Local;
@@ -31,7 +32,7 @@ fn root(app: &AppHandle) -> Result<PathBuf, String> {
 fn answer(app: &AppHandle, tag: &str, prompt: &str) -> Result<String, String> {
     let system = brainstead_core::ask::system_prompt(&ask::today(), false);
     let id = format!("{tag}-{}", Local::now().format("%H%M%S%3f"));
-    let out = ask::run(app, &id, prompt, &model(app), None, &system, None, &mut |_| {});
+    let out = ask::run(app, Job::Skills, &id, prompt, &model(app), None, &system, None, &mut |_| {});
     match out.error {
         Some(e) => Err(e),
         None => Ok(out.text),
@@ -664,7 +665,7 @@ fn proposals_now() -> String {
 /// A model's answer under a known id, so the run can be stopped (ask::Running::cancel).
 fn answer_as(app: &AppHandle, id: &str, prompt: &str) -> Result<String, String> {
     let system = brainstead_core::ask::system_prompt(&ask::today(), false);
-    let out = ask::run(app, id, prompt, &model(app), None, &system, None, &mut |_| {});
+    let out = ask::run(app, Job::Skills, id, prompt, &model(app), None, &system, None, &mut |_| {});
     match out.error {
         Some(e) => Err(e),
         None => Ok(out.text),

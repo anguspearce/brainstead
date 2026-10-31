@@ -50,6 +50,15 @@ impl Cli {
             Cli::Copilot => "copilot",
         }
     }
+    /// Its key in the settings (`effort.<key>`) and to the window, as serde names it.
+    pub fn key(self) -> &'static str {
+        match self {
+            Cli::Claude => "claude",
+            Cli::Codex => "codex",
+            Cli::Antigravity => "antigravity",
+            Cli::Copilot => "copilot",
+        }
+    }
     /// The name people know it by, for messages.
     pub fn label(self) -> &'static str {
         match self {
@@ -203,6 +212,128 @@ impl Cli {
             Cli::Claude | Cli::Antigravity | Cli::Copilot => &["low", "medium", "high", "xhigh", "max"],
         }
     }
+}
+
+/// The effort a run on `cli` goes at: the job's own (Settings › AI assistants › Models by job,
+/// `jobEffort.<job>`), else the assistant's (`effort.<cli>`), each only when the CLI offers it;
+/// None leaves it to the CLI's own default for the model. A new Ask chat starts from it with no
+/// job's, so a job's level never becomes a chat's. src/askState.ts `resolveEffort` is the same
+/// rule, kept beside this one by the same cases in both tests.
+pub fn resolve_effort<'a>(cli: Cli, job: Option<&'a str>, assistant: Option<&'a str>) -> Option<&'a str> {
+    [job, assistant].into_iter().flatten().find(|e| cli.efforts().contains(e))
+}
+
+/// A background job, by its key in Settings › AI assistants › Models by job (`jobModels.<key>`,
+/// `jobEffort.<key>`); src/askState.ts `MODEL_JOBS` lists the same keys, held together by
+/// tests/fixtures/job-settings.json.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Job {
+    /// The daily and weekly summaries.
+    Summaries,
+    /// The weekly review's preparation.
+    Weekprep,
+    Find,
+    /// Ingests, the daily check's too.
+    Ingest,
+    /// Meeting notes from transcripts.
+    Meeting,
+    /// Clarify's suggestions in the Inbox.
+    Clarify,
+    /// Contradiction checks, the daily check's and Write Current state.
+    Contradictions,
+    /// Triage, Draft reply and Doc check.
+    Skills,
+    /// Ask's next-message suggestions.
+    Suggest,
+}
+
+impl Job {
+    pub const ALL: [Job; 9] =
+        [Job::Summaries, Job::Weekprep, Job::Find, Job::Ingest, Job::Meeting, Job::Clarify, Job::Contradictions, Job::Skills, Job::Suggest];
+    pub fn key(self) -> &'static str {
+        match self {
+            Job::Summaries => "summaries",
+            Job::Weekprep => "weekprep",
+            Job::Find => "find",
+            Job::Ingest => "ingest",
+            Job::Meeting => "meeting",
+            Job::Clarify => "clarify",
+            Job::Contradictions => "contradictions",
+            Job::Skills => "skills",
+            Job::Suggest => "suggest",
+        }
+    }
+}
+
+type Ui = serde_json::Map<String, serde_json::Value>;
+
+/// A setting's text, an empty one counting as unset.
+fn text(v: Option<&serde_json::Value>) -> Option<&str> {
+    v.and_then(serde_json::Value::as_str).filter(|v| !v.is_empty())
+}
+
+/// The model `job` (a `Job` key) runs on, from the window's settings: its own (`jobModels.<job>`),
+/// else, for the weekly review's preparation, the summaries', else new chats' (`askModel`), else
+/// Claude's Sonnet. src/askState.ts `jobModelOf` is the same rule; both tests read
+/// tests/fixtures/job-settings.json.
+pub fn job_model(ui: &Ui, job: &str) -> String {
+    let own = |j: &str| text(ui.get("jobModels").and_then(|m| m.get(j)));
+    own(job)
+        .or_else(|| if job == "weekprep" { own("summaries") } else { None })
+        .or_else(|| text(ui.get("askModel")))
+        .unwrap_or("claude:sonnet")
+        .to_string()
+}
+
+/// The job's own effort (`jobEffort.<job>`) while its model's assistant offers it, else None, as
+/// Models by job and list_settings show it (src/askState.ts `jobOwnEffort`).
+pub fn job_own_effort<'a>(ui: &'a Ui, job: &str) -> Option<&'a str> {
+    let cli = Cli::route(&job_model(ui, job));
+    text(ui.get("jobEffort").and_then(|m| m.get(job))).filter(|e| cli.efforts().contains(e))
+}
+
+/// The effort `job` runs at on `model` (`resolve_effort`): its own, else its assistant's
+/// (`effort.<cli>`), each only when the assistant offers it. The weekly review's preparation never
+/// takes the summaries' effort, even on their model.
+pub fn job_effort<'a>(ui: &'a Ui, job: &str, model: &str) -> Option<&'a str> {
+    let cli = Cli::route(model);
+    let own = text(ui.get("jobEffort").and_then(|m| m.get(job)));
+    resolve_effort(cli, own, text(ui.get("effort").and_then(|m| m.get(cli.key()))))
+}
+
+/// Drops each job's own effort that its model's assistant doesn't offer, so a level hidden while the
+/// job runs on another assistant (new chats' model or the summaries' changed under it) doesn't come
+/// back when the model does. Run on every settings save; src/askState.ts `staleJobEfforts` is the
+/// window's copy.
+pub fn drop_stale_job_efforts(ui: &mut Ui) {
+    let stale: Vec<String> = match ui.get("jobEffort").and_then(serde_json::Value::as_object) {
+        Some(m) => m.keys().filter(|j| job_own_effort(ui, j).is_none()).cloned().collect(),
+        None => return,
+    };
+    if let Some(m) = ui.get_mut("jobEffort").and_then(serde_json::Value::as_object_mut) {
+        for j in stale {
+            m.remove(&j);
+        }
+    }
+}
+
+/// `level` as a model whose own levels are `model_levels` takes it (None: its CLI doesn't list a
+/// model's levels, so the CLI decides): the level itself, else the highest of the CLI's levels
+/// below it that the model has, else none, the model's own default.
+pub fn fit_effort<'a>(cli: Cli, level: &'a str, model_levels: Option<&[String]>) -> Option<&'a str> {
+    let Some(has) = model_levels else { return Some(level) };
+    if has.iter().any(|l| l == level) {
+        return Some(level);
+    }
+    let all = cli.efforts();
+    let at = all.iter().position(|l| *l == level)?;
+    all[..at].iter().rev().find(|l| has.iter().any(|h| h == *l)).copied()
+}
+
+/// A run that failed before answering with an error naming the effort: the CLI or model refused
+/// the level (or, on an older CLI, the option), so a background job runs again without it.
+pub fn effort_refused(o: &Outcome) -> bool {
+    o.text.trim().is_empty() && o.error.as_deref().is_some_and(|e| e.to_ascii_lowercase().contains("effort"))
 }
 
 /// Claude Code's memory (`~/.claude/projects/<folder>/memory/`), the one place a chat may write.
@@ -1055,6 +1186,60 @@ mod tests {
         let b = args(Cli::Copilot, &req("copilot:auto", Some("s9"))).unwrap().args;
         assert_eq!(b[1], "What's due?");
         assert_eq!(b.last().unwrap(), "--resume=s9");
+    }
+
+    #[test]
+    fn effort_resolves_job_then_assistant() {
+        // The same cases as askState.test.ts "resolves a run's effort".
+        assert_eq!(resolve_effort(Cli::Claude, Some("high"), Some("low")), Some("high"));
+        assert_eq!(resolve_effort(Cli::Claude, None, Some("low")), Some("low"));
+        assert_eq!(resolve_effort(Cli::Claude, None, None), None);
+        // A level the CLI doesn't offer falls through: Codex takes no max.
+        assert_eq!(resolve_effort(Cli::Codex, Some("max"), Some("medium")), Some("medium"));
+        assert_eq!(resolve_effort(Cli::Codex, Some("max"), None), None);
+    }
+
+    #[test]
+    fn job_model_and_effort_follow_the_shared_cases() {
+        // src/askState.test.ts reads the same file.
+        let f: serde_json::Value = serde_json::from_str(include_str!("../../../tests/fixtures/job-settings.json")).unwrap();
+        let keys: Vec<&str> = Job::ALL.iter().map(|j| j.key()).collect();
+        assert_eq!(serde_json::json!(keys), f["jobs"]);
+        for cli in [Cli::Claude, Cli::Codex, Cli::Antigravity, Cli::Copilot] {
+            assert_eq!(serde_json::to_value(cli).unwrap(), cli.key());
+            assert_eq!(serde_json::json!(cli.efforts()), f["levels"][cli.key()], "{cli:?}");
+        }
+        for c in f["cases"].as_array().unwrap() {
+            let (name, ui, job) = (&c["name"], c["settings"].as_object().unwrap(), c["job"].as_str().unwrap());
+            let model = job_model(ui, job);
+            assert_eq!(model, c["model"], "{name}");
+            assert_eq!(serde_json::json!(job_own_effort(ui, job)), c["own"], "{name}");
+            assert_eq!(serde_json::json!(job_effort(ui, job, &model)), c["effort"], "{name}");
+        }
+        for c in f["prune"].as_array().unwrap() {
+            let mut ui = c["settings"].as_object().unwrap().clone();
+            drop_stale_job_efforts(&mut ui);
+            assert_eq!(ui.get("jobEffort").cloned().unwrap_or_default(), c["kept"], "{}", c["name"]);
+        }
+    }
+
+    #[test]
+    fn a_level_the_model_lacks_falls_back() {
+        let has = |l: &[&str]| l.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        // A CLI that doesn't list a model's levels decides itself.
+        assert_eq!(fit_effort(Cli::Claude, "max", None), Some("max"));
+        assert_eq!(fit_effort(Cli::Codex, "xhigh", Some(&has(&["low", "medium", "high", "xhigh"]))), Some("xhigh"));
+        // The highest below that the model has, else its default.
+        assert_eq!(fit_effort(Cli::Codex, "xhigh", Some(&has(&["minimal", "low", "medium", "high"]))), Some("high"));
+        assert_eq!(fit_effort(Cli::Codex, "medium", Some(&has(&["high"]))), None);
+        assert_eq!(fit_effort(Cli::Codex, "low", Some(&[])), None);
+        // A refusal names the effort and comes before any answer.
+        let o = |text: &str, e: &str| Outcome { text: text.into(), error: Some(e.into()), ..Default::default() };
+        assert!(effort_refused(&o("", "error: unknown option '--effort'")));
+        assert!(effort_refused(&o(" ", "Unsupported value: 'xhigh' for reasoning.effort with this model")));
+        assert!(!effort_refused(&o("Half an answer", "--effort high: rate limited")));
+        assert!(!effort_refused(&o("", "Not signed in.")));
+        assert!(!effort_refused(&Outcome::default()));
     }
 
     #[test]

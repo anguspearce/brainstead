@@ -24,7 +24,21 @@ import { errText } from "./notes/actions";
 import { Switchover } from "./Switchover";
 import { TopBar } from "./TopBar";
 import { Jobs } from "./Jobs";
-import { CLI_LABEL, clis, DEFAULT_MODEL, effortLabel, findClis, MODEL_JOBS, modelLabel } from "./askState";
+import {
+  CLI_LABEL,
+  cliOf,
+  clis,
+  DEFAULT_MODEL,
+  effortLabel,
+  findClis,
+  installedEfforts,
+  jobModelOf,
+  jobOwnEffort,
+  MODEL_JOBS,
+  modelLabel,
+  setAskModel,
+  setJobModel,
+} from "./askState";
 import { ModelMenu } from "./Ask";
 import { ago, fmtCount, Popover, Seg, Switch } from "./ui";
 import { sayTest, speechSettingsChanged, voices } from "./speech/player";
@@ -170,7 +184,7 @@ function CaptureShortcut() {
   );
 }
 
-/** A model for each background job, or the default (Settings › AI assistants). */
+/** A model and an effort for each background job, or the defaults (Settings › AI assistants). */
 function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: string }) {
   const s = useStore(settings);
   const [at, setAt] = useState<{ job: string; rect: DOMRect } | null>(null);
@@ -178,6 +192,10 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
   // The weekly review's preparation falls back to the summaries' model (src-tauri/src/weekprep.rs).
   const fallbackFor = (job: string) => (job === "weekprep" && models.summaries ? models.summaries : fallback);
   const fallbackName = (job: string) => (job === "weekprep" && models.summaries ? "As the summaries" : "As new chats");
+  const levelsFor = (job: string) => {
+    const levels = found ? installedEfforts(cliOf(jobModelOf(job, s))) : [];
+    return levels.length ? levels : null;
+  };
   return (
     <section className="sgroup">
       <h2 className="h3">Models by job</h2>
@@ -203,6 +221,7 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
               )}
               <Icon name="chevdown" size={12} />
             </button>
+            <JobEffort job={job} label={label} levels={levelsFor(job)} />
           </div>
         ))}
       </div>
@@ -214,8 +233,7 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
                 type="button"
                 title={`Use the same model as ${fallbackName(at.job).replace(/^As /, "")} for this job`}
                 onClick={() => {
-                  const { [at.job]: _, ...rest } = models;
-                  settings.update({ jobModels: rest });
+                  setJobModel(at.job, null);
                   setAt(null);
                 }}
               >
@@ -229,13 +247,43 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
             found={found}
             value={models[at.job] ?? fallbackFor(at.job)}
             onPick={(m) => {
-              settings.update({ jobModels: { ...models, [at.job]: m } });
+              setJobModel(at.job, m);
               setAt(null);
             }}
           />
         </Popover>
       )}
     </section>
+  );
+}
+
+/** A job's own effort (`jobEffort.<job>`), the same menu as an assistant's under Found on this
+ *  computer; Assistant's setting leaves it to `effort.<cli>`, which new chats start from. Not shown
+ *  while the job's assistant isn't found. */
+function JobEffort({ job, label, levels }: { job: string; label: string; levels: string[] | null }) {
+  const s = useStore(settings);
+  if (!levels) return null;
+  const efforts = s.jobEffort ?? {};
+  return (
+    <label className="effortpick" title={`How hard the assistant thinks for ${label.toLowerCase()}, without changing new chats'`}>
+      <span className="faint">Effort</span>
+      <select
+        className="sel"
+        aria-label={`Effort for ${label.toLowerCase()}`}
+        value={jobOwnEffort(job, s) ?? ""}
+        onChange={(e) => {
+          const { [job]: _, ...rest } = efforts;
+          settings.update({ jobEffort: e.target.value ? { ...rest, [job]: e.target.value } : rest });
+        }}
+      >
+        <option value="">Assistant&apos;s setting</option>
+        {levels.map((l) => (
+          <option key={l} value={l}>
+            {effortLabel(l)}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -948,7 +996,7 @@ function Assistants() {
               found={found}
               value={model}
               onPick={(m) => {
-                settings.update({ askModel: m });
+                setAskModel(m);
                 setAt(null);
               }}
             />
@@ -1110,7 +1158,7 @@ function Assistants() {
               {c.path && (
                 <label
                   className="effortpick"
-                  title={`How hard ${CLI_LABEL[c.cli]} thinks before answering: its jobs, and new chats to start with`}
+                  title={`How hard ${CLI_LABEL[c.cli]} thinks before answering: new chats to start with, and its jobs that have no effort of their own`}
                 >
                   <span className="faint">Effort</span>
                   <select
@@ -1146,8 +1194,8 @@ function Assistants() {
         </div>
         <p className="faint">
           Ask runs the assistant you choose on this computer with your own account, and it never writes a file itself. Its effort is what
-          its jobs run at and what new chats start with (a chat can change its own beside its model in Ask); Default leaves it to the
-          assistant, which picks one for each model.
+          new chats start with (a chat can change its own beside its model in Ask) and what its jobs run at unless Models by job gives a job
+          its own; Default leaves it to the assistant, which picks one for each model.
         </p>
       </section>
       <McpGroup />

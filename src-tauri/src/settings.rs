@@ -72,10 +72,13 @@ impl Default for Settings {
 const SYSTEM_DIRS: [&str; 6] = ["wiki", "sources", "Templates", "images", ".trash", ".obsidian"];
 
 impl Settings {
-    /// Cleans what the window sent: trimmed, unique, valid folder names; a known theme.
+    /// Cleans what the window sent: trimmed, unique, valid folder names; a known theme; no job's
+    /// effort its model's assistant lacks.
     pub fn normalised(mut self) -> Result<Settings, String> {
         // The Keychain switch, gone 2026-10-03 (nothing was ever kept there).
         self.ui.remove("hasSecrets");
+        // A job's level hidden since the model it inherits changed doesn't come back with the model.
+        brainstead_core::ask::drop_stale_job_efforts(&mut self.ui);
         let mut ex: Vec<String> = Vec::new();
         for n in self.excluded.iter().map(|s| s.trim()) {
             if n.is_empty() {

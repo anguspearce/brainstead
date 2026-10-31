@@ -96,10 +96,7 @@ fn models(cli: Cli, bin: &platform::Program) -> Vec<Model> {
             .map(|(a, n)| m(format!("{}{a}", ask::CLAUDE_PREFIX), n))
             .collect(),
         Cli::Codex => {
-            // The list Codex caches for the signed-in account; empty until Codex has run once.
-            let home = dirs::home_dir().unwrap_or_default();
-            let Ok(s) = std::fs::read_to_string(home.join(".codex/models_cache.json")) else { return Vec::new() };
-            let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else { return Vec::new() };
+            let Some(v) = codex_models() else { return Vec::new() };
             let mut ms: Vec<(i64, Model)> = v["models"]
                 .as_array()
                 .into_iter()
@@ -124,6 +121,24 @@ fn models(cli: Cli, bin: &platform::Program) -> Vec<Model> {
         }
         Cli::Copilot => vec![m(format!("{}auto", ask::COPILOT_PREFIX), "Copilot (Auto)")],
     }
+}
+
+/// The list Codex caches for the signed-in account; None until Codex has run once.
+fn codex_models() -> Option<serde_json::Value> {
+    let home = dirs::home_dir().unwrap_or_default();
+    serde_json::from_str(&std::fs::read_to_string(home.join(".codex/models_cache.json")).ok()?).ok()
+}
+
+/// The effort levels `model` takes, where its CLI lists them per model: Codex's cache does
+/// (`supported_reasoning_levels`). None for the others, and for a model the cache doesn't have.
+fn model_efforts(model: &str) -> Option<Vec<String>> {
+    if Cli::route(model) != Cli::Codex {
+        return None;
+    }
+    let v = codex_models()?;
+    let m = v["models"].as_array()?.iter().find(|x| x["slug"] == model)?;
+    let levels = m["supported_reasoning_levels"].as_array()?;
+    Some(levels.iter().filter_map(|l| l["effort"].as_str().or(l.as_str()).map(str::to_string)).collect())
 }
 
 /// Which CLIs are installed, their versions and models. Slow (it runs each one), so off the main thread.
@@ -163,29 +178,33 @@ pub struct DoneMsg {
     pub outcome: Outcome,
 }
 
-/// The effort level set for `cli` in Settings › AI assistants (`effort.<cli>`), which jobs run at
-/// (an Ask chat runs at its own, which starts as this one); None leaves it to the CLI's own default
-/// for the model.
-fn cli_effort(app: &AppHandle, cli: Cli) -> Option<String> {
-    let key = serde_json::to_value(cli).ok()?;
-    let st = app.state::<crate::AppState>();
-    let s = st.settings.lock().unwrap();
-    s.ui.get("effort")?.get(key.as_str()?)?.as_str().map(str::to_string)
+/// The effort `job` runs at on `model` (`ask::job_effort`): its own from Settings › AI assistants ›
+/// Models by job (`jobEffort.<job>`), else the assistant's (`effort.<cli>`), else none. A level the
+/// model doesn't list (Codex's models cache says which it takes) runs at the highest below it that
+/// it has (`ask::fit_effort`), so an assistant-wide level can't fail every scheduled job on that
+/// model. An Ask chat runs at its own instead, which starts as the assistant's.
+pub fn job_effort(app: &AppHandle, job: ask::Job, model: &str) -> Option<String> {
+    efforts(app, job, model).1
 }
 
-/// The model a job uses: its own from Settings › AI assistants (`jobModels`), else the default
-/// for new chats (`askModel`), else Claude's Sonnet. Jobs: reviews, ingest, meeting, clarify,
-/// contradictions, skills, suggest (weekprep defaults to the reviews' model: src-tauri/src/weekprep.rs).
+/// The effort set for `job` on `model`, and the one it runs at (`job_effort`).
+fn efforts(app: &AppHandle, job: ask::Job, model: &str) -> (Option<String>, Option<String>) {
+    let set = {
+        let st = app.state::<crate::AppState>();
+        let s = st.settings.lock().unwrap();
+        ask::job_effort(&s.ui, job.key(), model).map(str::to_string)
+    };
+    let fit = set.as_deref().and_then(|e| ask::fit_effort(Cli::route(model), e, model_efforts(model).as_deref())).map(str::to_string);
+    (set, fit)
+}
+
+/// The model a job uses (`ask::job_model`): its own from Settings › AI assistants (`jobModels`),
+/// else, for the weekly review's preparation, the summaries', else the default for new chats
+/// (`askModel`), else Claude's Sonnet.
 pub fn job_model(app: &AppHandle, job: &str) -> String {
     let st = app.state::<crate::AppState>();
     let s = st.settings.lock().unwrap();
-    s.ui.get("jobModels")
-        .and_then(|m| m.get(job))
-        .and_then(|v| v.as_str())
-        .filter(|v| !v.is_empty())
-        .or_else(|| s.ui.get("askModel").and_then(|v| v.as_str()))
-        .unwrap_or("claude:sonnet")
-        .to_string()
+    ask::job_model(&s.ui, job)
 }
 
 pub fn today() -> String {
@@ -248,11 +267,12 @@ pub fn mcp_server(chat_id: &str, model: &str) -> Option<ask::Mcp> {
     })
 }
 
-/// Runs one turn and waits for it, calling `on` with each event (the window gets them too). With
-/// `mcp`, a CLI that takes MCP servers gets Brainstead's.
+/// Runs one turn of `job` and waits for it, calling `on` with each event (the window gets them
+/// too). With `mcp`, a CLI that takes MCP servers gets Brainstead's.
 #[allow(clippy::too_many_arguments)]
 pub fn run(
     app: &AppHandle,
+    job: ask::Job,
     chat_id: &str,
     prompt: &str,
     model: &str,
@@ -261,13 +281,14 @@ pub fn run(
     mcp: Option<&ask::Mcp>,
     on: &mut dyn FnMut(&Event),
 ) -> Outcome {
-    run_with_images(app, chat_id, prompt, model, session, system, mcp, &[], on)
+    run_with_images(app, job, chat_id, prompt, model, session, system, mcp, &[], on)
 }
 
 /// `run`, showing the model these images when its CLI sees images (`Cli::sees_images`).
 #[allow(clippy::too_many_arguments)]
 pub fn run_with_images(
     app: &AppHandle,
+    job: ask::Job,
     chat_id: &str,
     prompt: &str,
     model: &str,
@@ -277,11 +298,32 @@ pub fn run_with_images(
     images: &[PathBuf],
     on: &mut dyn FnMut(&Event),
 ) -> Outcome {
-    let effort = cli_effort(app, Cli::route(model));
-    run_at(app, chat_id, prompt, model, session, system, mcp, images, effort.as_deref(), on)
+    let (set, effort) = efforts(app, job, model);
+    if set != effort {
+        crate::applog!(
+            "ask: {} on {model}: the model doesn't take {} effort, so it runs at {}",
+            job.key(),
+            set.as_deref().unwrap_or_default(),
+            effort.as_deref().unwrap_or("its default")
+        );
+    }
+    let out = run_at(app, chat_id, prompt, model, session, system, mcp, images, effort.as_deref(), &mut *on);
+    // A level the CLI or model refused (one the models cache doesn't cover, or an older CLI without
+    // the option): once more at the model's own default, rather than the job failing every time.
+    match effort {
+        Some(e) if ask::effort_refused(&out) => {
+            crate::applog!(
+                "ask: {} on {model} refused {e} effort, so it ran again without one: {}",
+                job.key(),
+                out.error.unwrap_or_default()
+            );
+            run_at(app, chat_id, prompt, model, session, system, mcp, images, None, on)
+        }
+        _ => out,
+    }
 }
 
-/// `run_with_images` at `effort` rather than the one set for the CLI: an Ask chat runs at its own
+/// `run_with_images` at `effort` rather than the job's: an Ask chat runs at its own
 /// (None: the CLI's own default).
 #[allow(clippy::too_many_arguments)]
 fn run_at(
@@ -508,7 +550,7 @@ pub async fn ask_next(app: AppHandle, title: String, turns: Vec<(String, String)
     tauri::async_runtime::spawn_blocking(move || {
         let model = job_model(&app, "suggest");
         let id = format!("next-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos()));
-        let out = run(&app, &id, &ask::next_prompt(&title, &turns), &model, None, ask::NEXT_SYSTEM, None, &mut |_| {});
+        let out = run(&app, ask::Job::Suggest, &id, &ask::next_prompt(&title, &turns), &model, None, ask::NEXT_SYSTEM, None, &mut |_| {});
         if out.error.is_some() {
             return None;
         }

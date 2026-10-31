@@ -10,6 +10,7 @@
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+use brainstead_core::ask::Job;
 use brainstead_core::find::{self, Suggestion};
 use brainstead_core::proposals::{Kind, Origin};
 use brainstead_core::{changes::Instruction, write};
@@ -197,7 +198,7 @@ fn scan(app: &AppHandle, id: &str, model: &str, inputs: &find::Inputs, root: &st
         if *crate::lock(&f.stopped) {
             return Err("Stopped.".into());
         }
-        let out = ask::run(app, id, &find::prompt(&batch, inputs, &ask::today()), model, None, &system, None, &mut |_| {});
+        let out = ask::run(app, Job::Find, id, &find::prompt(&batch, inputs, &ask::today()), model, None, &system, None, &mut |_| {});
         if let Some(e) = out.error {
             return Err(e);
         }

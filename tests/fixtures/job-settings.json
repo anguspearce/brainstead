@@ -1,0 +1,110 @@
+{
+  "about": "A job's model and effort from the settings, as brainstead_core::ask (job_model, job_own_effort, job_effort, drop_stale_job_efforts) and src/askState.ts (jobModelOf, jobOwnEffort, resolveEffort, staleJobEfforts) work them out. Both tests read these cases. model: the model the job runs on; own: the job's own effort as Models by job and list_settings show it (null when its assistant doesn't offer it); effort: the effort its run goes at; kept: jobEffort once the stale levels are dropped.",
+  "jobs": ["summaries", "weekprep", "find", "ingest", "meeting", "clarify", "contradictions", "skills", "suggest"],
+  "levels": {
+    "claude": ["low", "medium", "high", "xhigh", "max"],
+    "codex": ["low", "medium", "high", "xhigh"],
+    "antigravity": ["low", "medium", "high", "xhigh", "max"],
+    "copilot": ["low", "medium", "high", "xhigh", "max"]
+  },
+  "cases": [
+    {
+      "name": "nothing set: new chats' default model, no effort",
+      "settings": {},
+      "job": "find",
+      "model": "claude:sonnet",
+      "own": null,
+      "effort": null
+    },
+    {
+      "name": "an empty model is unset",
+      "settings": { "askModel": "", "jobModels": { "find": "" } },
+      "job": "find",
+      "model": "claude:sonnet",
+      "own": null,
+      "effort": null
+    },
+    {
+      "name": "the job's own model and effort",
+      "settings": {
+        "askModel": "gpt-5",
+        "jobModels": { "find": "claude:opus" },
+        "jobEffort": { "find": "max" },
+        "effort": { "claude": "low" }
+      },
+      "job": "find",
+      "model": "claude:opus",
+      "own": "max",
+      "effort": "max"
+    },
+    {
+      "name": "no effort of its own: the assistant's",
+      "settings": { "askModel": "claude:haiku", "effort": { "claude": "low", "codex": "high" } },
+      "job": "ingest",
+      "model": "claude:haiku",
+      "own": null,
+      "effort": "low"
+    },
+    {
+      "name": "weekprep borrows the summaries' model",
+      "settings": { "askModel": "claude:sonnet", "jobModels": { "summaries": "gpt-5" }, "effort": { "codex": "medium" } },
+      "job": "weekprep",
+      "model": "gpt-5",
+      "own": null,
+      "effort": "medium"
+    },
+    {
+      "name": "weekprep's effort is its own or its assistant's, never the summaries'",
+      "settings": { "jobModels": { "summaries": "claude:opus" }, "jobEffort": { "summaries": "high" }, "effort": { "claude": "low" } },
+      "job": "weekprep",
+      "model": "claude:opus",
+      "own": null,
+      "effort": "low"
+    },
+    {
+      "name": "a level the inherited model's assistant lacks is stale",
+      "settings": { "jobModels": { "summaries": "gpt-5" }, "jobEffort": { "weekprep": "max" }, "effort": { "codex": "xhigh" } },
+      "job": "weekprep",
+      "model": "gpt-5",
+      "own": null,
+      "effort": "xhigh"
+    },
+    {
+      "name": "new chats' model changed under a job with a level",
+      "settings": { "askModel": "gpt-5", "jobEffort": { "clarify": "max", "find": "high" } },
+      "job": "clarify",
+      "model": "gpt-5",
+      "own": null,
+      "effort": null
+    },
+    {
+      "name": "a level no assistant names",
+      "settings": { "jobEffort": { "suggest": "ultra" }, "effort": { "claude": "ultra" } },
+      "job": "suggest",
+      "model": "claude:sonnet",
+      "own": null,
+      "effort": null
+    }
+  ],
+  "prune": [
+    {
+      "name": "only the levels their job's assistant lacks go",
+      "settings": {
+        "askModel": "gpt-5",
+        "jobModels": { "find": "claude:opus" },
+        "jobEffort": { "clarify": "max", "ingest": "high", "find": "max" }
+      },
+      "kept": { "ingest": "high", "find": "max" }
+    },
+    {
+      "name": "weekprep follows the summaries' model",
+      "settings": { "jobModels": { "summaries": "gpt-5" }, "jobEffort": { "weekprep": "max", "summaries": "xhigh" } },
+      "kept": { "summaries": "xhigh" }
+    },
+    {
+      "name": "nothing set stays unset",
+      "settings": { "askModel": "gpt-5" },
+      "kept": null
+    }
+  ]
+}

@@ -8,6 +8,7 @@
 
 use std::path::PathBuf;
 
+use brainstead_core::ask::Job;
 use brainstead_core::fixname::{self, Request, Row};
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
@@ -595,7 +596,7 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
         let prompt = core_ingest::prompt(&source, &pages, &brainstead_core::catalogue::render(&root), &today);
         let system = brainstead_core::ask::system_prompt(&crate::ask::today(), false);
         let images: Vec<PathBuf> = picture.iter().cloned().collect();
-        let out = crate::ask::run_with_images(app, &r.id, &prompt, &model, None, &system, None, &images, &mut |_| {});
+        let out = crate::ask::run_with_images(app, Job::Ingest, &r.id, &prompt, &model, None, &system, None, &images, &mut |_| {});
         if let Some(p) = &picture {
             let _ = std::fs::remove_file(p);
         }
@@ -913,7 +914,7 @@ fn meeting_steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -
         let sc = brainstead_core::meeting::scaffold(&template, spec.name.trim());
         let prompt = brainstead_core::meeting::prompt(&filename, &sc, &text, owner(app).as_deref());
         let system = brainstead_core::ask::system_prompt(&crate::ask::today(), false);
-        let out = crate::ask::run(app, &r.id, &prompt, &model, None, &system, None, &mut |_| {});
+        let out = crate::ask::run(app, Job::Meeting, &r.id, &prompt, &model, None, &system, None, &mut |_| {});
         if let Some(e) = out.error {
             return Err(e);
         }

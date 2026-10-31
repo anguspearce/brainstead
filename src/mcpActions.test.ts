@@ -1575,6 +1575,35 @@ describe("MCP actions", () => {
       expect(calls.filter(([x]) => x === "chat_save")).toHaveLength(saves);
     });
 
+    it("offers no effort for an assistant that isn't installed, as the screens show no menu", async () => {
+      answers.settings_write = (a) => a!.settings;
+      answers.login_item = () => null;
+      const c = {
+        filename: "Chat. Orbit App plan.md",
+        id: "a",
+        title: "Orbit App plan",
+        model: "agy:gemini-3",
+        updatedAt: "2026-10-05T09:00:00",
+      };
+      answers.chats_list = () => [c];
+      answers.chat_read = () => ({ ...c, transcript: [] });
+      answers.ask_clis = () => [
+        { cli: "claude", path: "/usr/local/bin/claude", version: "2", models: [], efforts: ["low", "medium", "high", "xhigh", "max"] },
+        { cli: "antigravity", path: null, version: null, models: [], efforts: ["low", "medium", "high", "xhigh", "max"] },
+      ];
+      await findClis(true);
+      onTestFinished(() => clis.set(null));
+      expect(await run("settings")).toContain(
+        "effort.antigravity · Settings › AI assistants › Found on this computer › Antigravity (Google)'s effort: null (Default effort, the assistant's own for each model) (one of: none here;",
+      );
+      await expect(run("settings", { action: "set", key: "effort.antigravity", value: "high" })).rejects.toThrow(/one of: none here/);
+      settings.update({ jobModels: { find: "agy:gemini-3" } });
+      await expect(run("settings", { action: "set", key: "jobEffort.find", value: "max" })).rejects.toThrow(/one of: none here/);
+      await expect(run("chats", { action: "effort", chat: "Orbit App plan", effort: "high" })).rejects.toThrow(/one of: none here/);
+      expect(settings.get().effort).toBeUndefined();
+      settings.update({ jobModels: undefined });
+    });
+
     it("rebuilds the index, unless it's being built already", async () => {
       answers.vault_status = () => ({ state: "ready" });
       expect(await run("index.rebuild")).toMatch(/^Rebuilding the index/);
@@ -2373,6 +2402,59 @@ describe("MCP actions", () => {
       expect(out).toContain("Default effort (the assistant's own for each model).");
       await run("settings", { action: "set", key: "effort.claude", value: null });
       expect(settings.get().effort).toEqual({});
+    });
+
+    it("reads and sets a job's own effort as Models by job does, leaving the assistant's alone", async () => {
+      answers.settings_write = (a) => a!.settings;
+      answers.login_item = () => null;
+      answers.ask_clis = () => [
+        {
+          cli: "claude",
+          path: "/usr/local/bin/claude",
+          version: "2.1.0",
+          models: [{ id: "claude:opus", name: "Opus" }],
+          efforts: ["low", "medium", "high", "xhigh", "max"],
+        },
+        {
+          cli: "codex",
+          path: "/usr/local/bin/codex",
+          version: null,
+          models: [{ id: "gpt-5", name: "gpt-5" }],
+          efforts: ["low", "medium", "high", "xhigh"],
+        },
+      ];
+      await findClis(true);
+      settings.update({ effort: { claude: "low" } });
+      const all = (await run("settings")) as string;
+      expect(all).toContain(
+        "jobEffort.weekprep · Settings › AI assistants › Models by job › Weekly review preparation's effort: null (Assistant's setting, the effort set for the job's assistant) (one of: low (Low), medium (Medium), high (High), xhigh (Extra high), max (Max)",
+      );
+      expect(await run("settings", { action: "set", key: "jobEffort.weekprep", value: "Max" })).toMatch(/effort is now "max"/);
+      expect(settings.get().jobEffort).toEqual({ weekprep: "max" });
+      expect(settings.get().effort).toEqual({ claude: "low" });
+      // A model whose assistant has no max takes the job's effort away, as the screen does.
+      await run("settings", { action: "set", key: "jobModels.weekprep", value: "gpt-5" });
+      expect(settings.get().jobModels).toEqual({ weekprep: "gpt-5" });
+      expect(settings.get().jobEffort).toEqual({});
+      await expect(run("settings", { action: "set", key: "jobEffort.weekprep", value: "max" })).rejects.toThrow(
+        /one of: low, medium, high, xhigh, or null for Assistant's setting/,
+      );
+      await run("settings", { action: "set", key: "jobEffort.weekprep", value: "high" });
+      await run("settings", { action: "set", key: "jobEffort.weekprep", value: null });
+      expect(settings.get().jobEffort).toEqual({});
+      // A model the job inherits changing under it (new chats', or the summaries' for weekprep) does
+      // the same, and list_settings says what the screen shows.
+      settings.update({ askModel: "claude:opus", jobModels: {}, jobEffort: { find: "max", weekprep: "max" } });
+      await run("settings", { action: "set", key: "jobModels.summaries", value: "gpt-5" });
+      expect(settings.get().jobEffort).toEqual({ find: "max" });
+      await run("settings", { action: "set", key: "askModel", value: "gpt-5" });
+      expect(settings.get().jobEffort).toEqual({});
+      // A level left behind (settings from before) reads as Assistant's setting, as on the screen.
+      settings.update({ jobEffort: { find: "max" } });
+      expect(await run("settings")).toContain(
+        "jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects's effort: null (Assistant's setting",
+      );
+      settings.update({ askModel: undefined, jobModels: undefined, jobEffort: undefined, effort: undefined });
     });
 
     it("names the read-aloud highlight as Settings does", async () => {
