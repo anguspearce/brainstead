@@ -13,6 +13,7 @@
 
 use std::path::{Path, PathBuf};
 
+use brainstead_core::ask::Job;
 use brainstead_core::reviews::latest::block_of;
 // Whether an item of a kind (src/inboxActions.ts's suggestKind: thought, task, thread, capture or
 // file; a transcript is never asked about) can become an outcome, as the Inbox offers it.
@@ -129,7 +130,7 @@ Items:\n{list}",
         );
         let system = brainstead_core::ask::system_prompt(&ask::today(), false);
         let id = format!("clarify-{}", Local::now().format("%H%M%S%3f"));
-        let answer = ask::run(&app, &id, &prompt, &model(&app), None, &system, None, &mut |_| {});
+        let answer = ask::run(&app, Job::Clarify, &id, &prompt, &model(&app), None, &system, None, &mut |_| {});
         if let Some(e) = answer.error {
             return Err(e);
         }

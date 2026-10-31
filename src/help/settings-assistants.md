@@ -3,7 +3,7 @@ title: Settings › AI assistants
 kind: screen
 screens: [settings/assistants]
 order: 33
-summary: Which AI assistants Brainstead found, which model chats and jobs use, and the ingest switches.
+summary: Which AI assistants Brainstead found and their effort, which model chats and jobs use, and the ingest switches.
 ---
 Brainstead doesn't have a model of its own. It runs the AI assistants' command-line tools installed on this computer, signed in with your own account, with the vault as their working folder. They read the vault directly and change it only through Brainstead's tools.
 
@@ -28,8 +28,13 @@ With **Also refresh pages whose sources changed** on, the daily check in [Settin
 ## Give a job its own model
 **Models by job** lets each kind of background work use a different model: **Daily and weekly summaries**, **Weekly review preparation** (the summaries' model unless it has its own), **Find tasks and projects**, **Ingest**, **Meeting notes from transcripts**, **Clarify suggestions**, **Contradiction checks**, **Triage, Draft reply and Doc check**, and **Next-message suggestions in Ask**. Click a job's button and pick a model. **As new chats** puts it back to the model above. Weekly review preparation's button reads **As the summaries** when the summaries have a model of their own, and goes back to theirs.
 
+Each job also has an **Effort** menu beside its model, with the same levels as its assistant's. **Assistant's setting**, the default, runs it at the effort set for its assistant under Found on this computer. A level picked here is for that job only: High for Weekly review preparation leaves new chats with that assistant at the assistant's effort. Weekly review preparation's effort doesn't follow the summaries', even while it uses their model: with no level of its own it runs at its assistant's. Giving a job a model whose assistant doesn't offer its level puts the job back to Assistant's setting. When a model it only follows (**New chats use**, or the summaries' for Weekly review preparation) moves to such an assistant, the job runs at Assistant's setting meanwhile, and its own level comes back with the model. Picking a model for one chat in [Ask](app:ask) changes that chat only, never **New chats use**.
+
 ## See which assistants are installed
 **Found on this computer** lists Claude Code, Codex, Antigravity and Copilot, with each one's version, how many models it offers and where it is. If one is missing, **How to install** opens its install instructions in your browser. If one is installed but lists no models, open Terminal, run it and sign in. Click **Look again** after installing or signing in. An assistant can read this list, and look again, too.
+
+## Set how hard an assistant thinks
+Each assistant installed has an **Effort** menu on its row in **Found on this computer**: **Default**, or **Low**, **Medium**, **High**, **Extra high** and **Max** (Codex stops at Extra high). More effort gives more careful answers, more slowly and using more of your plan. A new chat in [Ask](app:ask) starts with it, and background jobs run at it unless Models by job gives a job its own; the **Effort** menu beside the model in a chat changes that chat's effort only. **Default**, the default, passes none, so the assistant uses its own for each model. Not every model takes every level: Claude Code runs a level a model lacks at the highest it has below it. For the others Brainstead falls back, in chats and background jobs alike: a Codex model runs at the highest level below it that it takes, and a run that stops before answering with an error naming the effort runs once more at the model's own default. Brainstead's log (Settings › About) notes each time. An error that doesn't name the effort still stops the run, and the chat shows it; pick a lower level then. An assistant can read or set it too, when you ask.
 
 ## See which vault skills Brainstead now does itself
 If the vault has Claude Code skills that Brainstead now does on its own screens, **Skills Brainstead does now** lists them and the screen each opens. Picking one in Ask's `/` list opens that screen. The vault's copies keep working in Claude Code until you retire them with **Retire them** under Moving over in [Settings › General](app:settings/general), which moves them to the Trash.

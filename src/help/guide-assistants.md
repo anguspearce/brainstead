@@ -11,7 +11,7 @@ Brainstead has no model of its own. It runs the assistants you've installed, sig
 Open [Settings › AI assistants](app:settings/assistants). **Found on this computer** lists Claude Code, Codex, Antigravity and Copilot, with each one's version. If one is missing, **How to install** opens its instructions. Sign in to it in Terminal, then click **Look again**.
 
 ## Choose the models
-In [Settings › AI assistants](app:settings/assistants), **New chats use** sets the model a new chat in [Ask](app:ask) starts with. **Models by job** gives the summaries, ingests, meeting notes and other background work a model of their own.
+In [Settings › AI assistants](app:settings/assistants), **New chats use** sets the model a new chat in [Ask](app:ask) starts with. **Models by job** gives the summaries, ingests, meeting notes and other background work a model and an effort of their own.
 
 ## Add Brainstead's tools to a terminal assistant
 Brainstead's tools are an MCP server, the standard way to add tools to an assistant. In [Settings › AI assistants](app:settings/assistants), **Brainstead's tools** shows the command for each assistant found; click **Copy** and run it once in Terminal. Ask's chats have the tools already. The assistant can then search, read and change the vault as the screens do.

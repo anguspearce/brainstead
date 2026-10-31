@@ -13,10 +13,13 @@ The page has two parts. **Your weekly review** is something you do. **Summaries 
 ## Prepare the weekly review ahead of time
 **Prepare the weekly review** reads the week and saves suggestions for each step. It runs 4 hours before the review time, only while **Brainstead runs the daily and weekly summaries** is on, and only if the week has changed since it was last prepared. Its switch turns the schedule off. Starting the review prepares it too if needed.
 
-The row shows the last and next run, **Open** for the last run's chat, and **Run now** (or **Stop**). Its model is **Weekly review preparation** under Models by job in [Settings › AI assistants](app:settings/assistants). Its runs aren't in Recent runs.
+The row shows the last and next run, **Open** for the last run's chat, and **Run now** (or **Stop**). Its model and effort are **Weekly review preparation** under Models by job in [Settings › AI assistants](app:settings/assistants). Its runs aren't in Recent runs.
 
 ## When jobs run
 Jobs run while Brainstead is running, even with its window closed. A run missed while the app was closed or the computer asleep catches up when Brainstead next runs. Times use this computer's clock, in 24-hour HH:MM.
+
+## Choose a job's model and effort
+Each job's assistant, model and effort are under **Models by job** in [Settings › AI assistants](app:settings/assistants): the summaries, the weekly review's preparation, Find tasks and projects, ingests (the daily check's too), meeting notes, Inbox suggestions (**Clarify suggestions**), and **Contradiction checks**, which also covers the daily check's check and Write Current state. A job's **Effort** is its own, for the runs on its model: when Claude Code is the assistant, the quick passes on Claude's Haiku (a contradiction check finding the claims, and Write Current state) run at Claude Code's effort instead. **Assistant's setting** runs a job at the assistant's, and a level set for a job never becomes the one a new chat starts with. The weekly review's preparation borrows the summaries' model, not their effort.
 
 ## Let Brainstead write the daily and weekly summaries
 Only one app should write them, so Brainstead runs them only when **Brainstead runs the daily and weekly summaries** is on. If another app also runs them, switch them off there. Until it's on, the summary rows are greyed. Then switch on:

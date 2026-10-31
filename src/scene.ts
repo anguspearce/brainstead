@@ -70,6 +70,8 @@ export interface Scene {
   paneWidths?: Record<string, number>;
   /** Resize locks on, by type (src/panes.ts), e.g. `{ "columns": true }`. */
   resizeLocks?: Settings["resizeLocks"];
+  /** Settings shown as if set (not saved), e.g. a job's effort under Models by job. */
+  settings?: Partial<Settings>;
   /** For "ask": show a sample chat. */
   chat?: boolean | "tutorial";
   /** For "reply": a sample draft for the thread, as Draft would make it (the website tutorial's). */
@@ -263,6 +265,7 @@ export function applyScene(sc: Scene) {
   if (sc.sideFolded) settings.update({ docSideFolded: true });
   if (sc.paneWidths) settings.update({ paneWidths: sc.paneWidths });
   if (sc.resizeLocks) settings.update({ resizeLocks: sc.resizeLocks });
+  if (sc.settings) settings.update(sc.settings);
   if (sc.view) settings.update({ viewMemory: { ...settings.get().viewMemory, ...sc.view } });
   if (sc.screen) nav.replace({ screen: sc.screen, pane: sc.pane, path: sc.path, q: sc.q, view: sc.view });
   if (sc.focus) focusMode.set(true);
