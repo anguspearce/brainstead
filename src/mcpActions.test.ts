@@ -1785,7 +1785,7 @@ describe("MCP actions", () => {
       await expect(run("settings", { action: "set", key: "interfaceSize", value: 70 })).rejects.toThrow(/80 to 150/);
       // Pane widths: one pane by key, clamped as its divider clamps it; null puts one or all back.
       expect(await run("settings")).toMatch(
-        /paneWidths · Settings › General › Appearance › Pane widths [^\n]*: \{\} \(panes: sidebar \(180 to 400, usually 232\), tasks\.left/,
+        /paneWidths · Settings › General › Appearance › Pane widths [^\n]*: \{\} \(panes: sidebar \(the sidebar, 180 to 400, usually 232\), tasks\.left \(Tasks › the task lists, /,
       );
       expect(await run("settings", { action: "set", key: "paneWidths.tasks.left", value: 320 })).toBe(
         "Settings › General › Appearance › Pane widths › tasks.left is now 320 px.",
@@ -1809,7 +1809,10 @@ describe("MCP actions", () => {
       );
       expect(settings.get().paneWidths).toEqual({ "tasks.left": 320 });
       // A list table's column, though no table has been drawn here, by the table's own name.
-      expect(await run("settings")).toMatch(/wiki\.tags \(48 to 480, usually 200\)/);
+      expect(await run("settings")).toMatch(/wiki\.tags \(Wiki › the Tags column, 48 to 480, usually 200\)/);
+      // Named in the screens' own words: a column by the heading its table draws.
+      expect(await run("settings")).toContain("trash.folder (Trash › the Was in column, 80 to 480, usually 220)");
+      expect(await run("settings")).toContain("sources.ingested (Sources › the Status column, 48 to 480, usually 88)");
       expect(await run("settings", { action: "set", key: "paneWidths.notes.type", value: 72 })).toBe(
         "Settings › General › Appearance › Pane widths › notes.type is now 72 px.",
       );
@@ -1829,7 +1832,7 @@ describe("MCP actions", () => {
       );
       expect(settings.get().resizeLocks).toEqual({ columns: true });
       expect(await run("settings")).toMatch(/- resizeLocks\.columns · [^\n]*Lock column widths: true/);
-      expect(await run("settings")).toContain("trash.type (60 to 200, usually 90, locked by resizeLocks.columns)");
+      expect(await run("settings")).toContain("trash.type (Trash › the Type column, 60 to 200, usually 90, locked by resizeLocks.columns)");
       await expect(run("settings", { action: "set", key: "paneWidths.trash.type", value: 120 })).rejects.toThrow(
         "Column widths are locked, so trash.type can't be resized: turn off Lock column widths (resizeLocks.columns) in Settings › General › Appearance › Pane widths first.",
       );

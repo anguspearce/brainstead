@@ -452,13 +452,13 @@ function LogTable({
     <div className={`actlog ${perDay ? "banded" : ""}`} role="table" aria-label="The vault's log" {...cols.root}>
       <div className="ar tb-head" role="row">
         {/* Named by aria-label, so a header's name is its heading alone, not its divider's label too. */}
-        <span role="columnheader" aria-label={perDay ? "Time" : "When"}>
-          {perDay ? "Time" : "When"}
+        <span role="columnheader" aria-label={PANES[when].heading}>
+          {PANES[when].heading}
           {cols.resizer(when)}
         </span>
         <span role="columnheader">Item</span>
-        <span role="columnheader" aria-label="Action" className="itemh">
-          Action
+        <span role="columnheader" aria-label={PANES["activity.action"].heading} className="itemh">
+          {PANES["activity.action"].heading}
           <span className="count">{count}</span>
           {cols.resizer("activity.action")}
         </span>

@@ -46,6 +46,8 @@ export interface PaneSpec {
   type: ResizeType;
   /** What the pane holds, for the divider's label ("Resize the task lists"). */
   label: string;
+  /** A table column's heading, as its table draws it ("Was in"); the table takes it from here. */
+  heading?: string;
 }
 
 /** Arrow keys move a divider this far; with Shift, PANE_STEP_BIG. */
@@ -72,20 +74,19 @@ const right = (cssVar: string, label: string, def: number, min: number, max: num
   side: "right",
   type: "panes",
 });
-/** A table's column, on `side` of the table's flexible column's divider. */
-const col = (cssVar: string, label: string, def: number, min: number, max: number, side: PaneSide): PaneSpec => ({
-  ...left(cssVar, label, def, min, max, "columns"),
+/** A table's column headed `heading`, on `side` of the table's flexible column's divider. */
+const col = (cssVar: string, heading: string, def: number, min: number, max: number, side: PaneSide): PaneSpec => ({
+  ...left(cssVar, `the ${heading} column`, def, min, max, "columns"),
   side,
+  heading,
 });
 
 /** The range every list table's column has. */
 const COLUMN = { min: 48, max: 480 };
 /** A list table's column (src/FileList.tsx): after the table's Title, as every one is, so side
- *  "right". Its width in the table's column list is listWidth(key), from here. */
-const listCol = (col: string, label: string, def: number): PaneSpec => ({
-  ...left(`--col-${col}`, `the ${label} column`, def, COLUMN.min, Math.max(COLUMN.max, def), "columns"),
-  side: "right",
-});
+ *  "right". Its heading and width in the table's column list are listColumn(key), from here. */
+const listCol = (key: string, heading: string, def: number): PaneSpec =>
+  col(`--col-${key}`, heading, def, COLUMN.min, Math.max(COLUMN.max, def), "right");
 
 /** The screens' panes, by key. A screen's left list is --pane-left or --pane-list and its right-hand
  *  panel --pane-side, set on the screen's root (the .body element) so the stylesheet's breakpoints
@@ -108,9 +109,9 @@ export const PANES = {
   "meeting.side": right("--pane-side", "the meeting's pane", 360, 260, 640),
   "projects.list": left("--pane-list", "the project list", 400, 260, 720),
   "changes.list": left("--pane-list", "the list of changes", 400, 260, 720),
-  "today.side": right("--pane-side", "Today's right rail", 320, 240, 560),
-  "health.side": right("--pane-side", "the health side column", 380, 260, 640),
-  "activity.side": right("--pane-side", "the Activity side column", 380, 260, 640),
+  "today.side": right("--pane-side", "the right rail", 320, 240, 560),
+  "health.side": right("--pane-side", "the side column", 380, 260, 640),
+  "activity.side": right("--pane-side", "the side column", 380, 260, 640),
   "sources.side": right("--pane-side", "the ingest runs", 360, 260, 640),
   "graph.side": right("--pane-side", "the graph's pane", 300, 220, 560),
   "note.side": right("--pane-side", "the note's Linked from pane", 280, 200, 480),
@@ -118,16 +119,16 @@ export const PANES = {
   "contradictions.left": left("--pane-left", "the list of contradictions", 340, 240, 640),
   "compare.left": left("--pane-left", "the verdict", 300, 220, 560),
   "doccheck.left": left("--pane-left", "the verdict", 300, 220, 560),
-  "trash.type": col("--col-type", "the Type column", 90, 60, 200, "right"),
-  "trash.folder": col("--col-folder", "the Was in column", 220, 80, 480, "right"),
-  "trash.deleted": col("--col-deleted", "the Deleted column", 110, 70, 240, "right"),
-  "trash.size": col("--col-size", "the Size column", 72, 50, 160, "right"),
-  "activity.when": col("--col-when", "the When column", 150, 80, 320, "left"),
-  "activity.time": col("--col-time", "the Time column", 64, 48, 160, "left"),
-  "activity.action": col("--col-action", "the Action column", 120, 72, 320, "right"),
-  "register.version": col("--col-version", "the Version column", 100, 60, 240, "right"),
-  "register.status": col("--col-status", "the Status column", 110, 72, 240, "right"),
-  "register.file": col("--col-file", "the File column", 200, 80, 480, "right"),
+  "trash.type": col("--col-type", "Type", 90, 60, 200, "right"),
+  "trash.folder": col("--col-folder", "Was in", 220, 80, 480, "right"),
+  "trash.deleted": col("--col-deleted", "Deleted", 110, 70, 240, "right"),
+  "trash.size": col("--col-size", "Size", 72, 50, 160, "right"),
+  "activity.when": col("--col-when", "When", 150, 80, 320, "left"),
+  "activity.time": col("--col-time", "Time", 64, 48, 160, "left"),
+  "activity.action": col("--col-action", "Action", 120, 72, 320, "right"),
+  "register.version": col("--col-version", "Version", 100, 60, 240, "right"),
+  "register.status": col("--col-status", "Status", 110, 72, 240, "right"),
+  "register.file": col("--col-file", "File", 200, 80, 480, "right"),
   "notes.type": listCol("type", "Type", 110),
   "notes.date": listCol("date", "Date", 96),
   "notes.mtime": listCol("mtime", "Modified", 110),
@@ -151,13 +152,47 @@ export type PaneKey = keyof typeof PANES;
 /** The tables src/FileList.tsx draws, whose columns are `<table>.<column>` in PANES. */
 export type ListTable = "notes" | "wiki" | "sources" | "templates";
 
-/** A list table's resizable column's flex basis, "0 0 110px", from its default here: the table's
- *  column list takes it from this, so the two can't differ. */
-export const listWidth = (key: PaneKey) => `0 0 ${PANES[key].def}px`;
+/** A list table's resizable column's heading and flex basis ("0 0 110px", from its default here):
+ *  the table's column list takes them from this, so the two can't differ. */
+export const listColumn = (key: PaneKey) => ({ label: PANES[key].heading ?? "", width: `0 0 ${PANES[key].def}px` });
 
 /** Every pane and table column, by key. */
 export function paneSpecs(): Record<string, PaneSpec> {
   return PANES;
+}
+
+/** The screen or table a key's first part is, as the sidebar and the screens' titles name it. */
+const PANE_WHERE: Record<string, string> = {
+  tasks: "Tasks",
+  inbox: "Inbox",
+  wiki: "Wiki",
+  search: "Search",
+  settings: "Settings",
+  weekly: "Weekly review",
+  meeting: "Meeting notes",
+  projects: "Projects",
+  changes: "Changes",
+  today: "Today",
+  health: "Knowledge health",
+  activity: "Activity",
+  sources: "Sources",
+  graph: "Graph",
+  note: "A note",
+  project: "A project",
+  contradictions: "Contradictions",
+  compare: "Compare",
+  doccheck: "Doc check",
+  trash: "Trash",
+  register: "Doc check's register",
+  notes: "Notes",
+  templates: "Templates",
+};
+
+/** A pane in the screens' own words, for the settings tool: "Trash › the Was in column". */
+export function paneName(key: string): string {
+  const where = PANE_WHERE[key.split(".")[0]];
+  const label = paneSpecs()[key]?.label ?? key;
+  return where && key.includes(".") ? `${where} › ${label}` : label;
 }
 
 /** A stored pane width, if any and a finite number. */
