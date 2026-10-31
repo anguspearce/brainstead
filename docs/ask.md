@@ -14,7 +14,7 @@ Ask (⌘6) keeps each chat in a tab (⌘T for a new one). A chat stays in Brains
 
 **History** finds, renames, pins, saves or moves old chats to the Trash. Closed chats that aren't saved or pinned are deleted once 20 newer ones are in History.
 
-Pick the assistant and model before the first message. New chats start with the model set in **Settings › AI assistants**, where each background job can have its own model too. There each assistant found can also have an effort level (Low to Max), used for its chats and jobs alike; **Default**, the default, leaves it to the assistant, which picks one for each model.
+Pick the assistant and model before the first message. New chats start with the model set in **Settings › AI assistants**, where each background job can have its own model too. There each assistant found can also have an effort level (Low to Max): its jobs run at it and a new chat starts with it. **Default**, the default, leaves it to the assistant, which picks one for each model. The **Effort** menu beside the model in a chat changes that chat's effort only, from its next message, even once the model is fixed.
 
 - An empty chat offers example questions and Brainstead's skills to click, or says **No assistant found** and what to install.
 - Keys: ↩ sends, ⇧↩ adds a line, ↑ and ↓ recall earlier messages, Esc (or **Stop**) stops an answer.
@@ -58,7 +58,7 @@ An assistant can list, reject or revert changes when you ask. It accepts a held 
 
 - the Weekly review's **Start over** (what it changed in the vault stays) and Moving over's ticks and **Retire them** (the previous app's skills and scripts go to the Trash). Neither works in a session nobody is watching;
 - going through the Weekly review, marking contradictions resolved or ignored, Knowledge health's **Ignore**, **Ignore all** and **Show again**;
-- Ask's chats (rename, pin, move to the Trash), Tasks' saved lists, a note's own look, and settings (all but the vault, Read-only and the folders left out);
+- Ask's chats (rename, pin, set a chat's effort, move to the Trash), Tasks' saved lists, a note's own look, and settings (all but the vault, Read-only and the folders left out);
 - how long Changes keeps its history, **Rebuild index**, and your tools that start Claude Code sessions;
 - runs, with their progress and **Stop**: an ingest, the daily or weekly summary, the weekly review's preparation, the daily check, Find tasks and projects, a contradictions check, a meeting note from a transcript, **Write Current state**, bookmark triage, a drafted reply (revised when you ask for a change), a doc check and a comparison of two documents. What a run changes is listed in Changes, with Revert.
 

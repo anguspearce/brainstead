@@ -6151,6 +6151,9 @@ code.noscript {
 .askbar .sp {
   flex: 1;
 }
+.askbar select.sel {
+  font-size: 12px;
+}
 
 /* An effort menu with its label: Ask's message box, Settings › AI assistants */
 .effortpick {
