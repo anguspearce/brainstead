@@ -24,6 +24,24 @@ export interface PlatformFeatures {
   imageText: boolean;
 }
 
+/** Where the preview panel's body is, in the window's physical pixels, and its colours as `#rrggbb` (src/Preview.tsx). */
+export interface PreviewFrame {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  bg: string;
+  fg: string;
+  /** The panel's bottom corner radius, in physical pixels: the native window is cut to it. */
+  radius: number;
+  /** Which panel this is (`nextPreviewId`), so a close or move from one that has gone can't touch the next. */
+  id: number;
+  /** The page shows a dialog of its own over the panel: the native window hides meanwhile. */
+  hidden: boolean;
+  /** Where the page shows a message over the body ([x, y, width, height] in physical pixels from its top left): cut out of the native window. */
+  holes: number[][];
+}
+
 export interface Settings {
   vaultPath: string | null;
   excluded: string[];
@@ -1315,10 +1333,18 @@ export const api = {
   renamePreview: (path: string, to: string) => invoke<RenamePlan>("rename_preview", { path, to }),
   renameCommit: (plan: RenamePlan) => invoke<string>("rename_commit", { plan }),
   trashMove: (path: string) => invoke<TrashEntry>("trash_move", { path }),
-  /** Quick Look on a trashed file, where it lies. */
-  trashQuickLook: (id: string) => invoke<void>("trash_quick_look", { id }),
-  /** A vault file in the system's Quick Look panel, as Finder's space bar shows it. */
-  fileQuickLook: (path: string) => invoke<void>("file_quick_look", { path }),
+  /** Quick Look on a trashed file, where it lies; on Windows in the preview panel at `frame`, or its own app with none. */
+  trashQuickLook: (id: string, frame: PreviewFrame | null = null) => invoke<boolean>("trash_quick_look", { id, frame }),
+  /** A vault file in the system's Quick Look panel, as Finder's space bar shows it; on Windows as `trashQuickLook`.
+   *  False when it opened in its own app instead (a handler Windows can't run out of process). */
+  fileQuickLook: (path: string, frame: PreviewFrame | null = null) => invoke<boolean>("file_quick_look", { path, frame }),
+  /** Whether a file named like this can be previewed in the window (src/Preview.tsx) rather than opened in its app. */
+  previewAvailable: (name: string) => invoke<boolean>("preview_available", { name }),
+  previewMove: (frame: PreviewFrame) => invoke<void>("preview_move", { frame }),
+  /** The panel `id` closed; sent even before its open has reached the window, which then never shows it. */
+  previewClose: (id: number) => invoke<void>("preview_close", { id }),
+  /** Esc or Space pressed with the focus inside the preview (the handler's own window), for panel `id`. */
+  onPreviewDismiss: (f: (id: number) => void): Promise<UnlistenFn> => listen<number>("preview-dismiss", (e) => f(e.payload)),
   trashList: () => invoke<TrashEntry[]>("trash_list"),
   /** Puts it back where it was, or at `as` (vault-relative); refuses with `exists`. */
   trashRestore: (id: string, as: string | null) => invoke<string>("trash_restore", { id, as }),

@@ -19,6 +19,7 @@ import { RevertConflict, ReviewScreen } from "./Review";
 import { FollowUp } from "./Ingest";
 import { FixNameHost } from "./FixName";
 import { ImageViewerHost } from "./ImageViewer";
+import { PreviewHost } from "./Preview";
 import { ShortcutsHost } from "./Shortcuts";
 import { QuitDialog } from "./Quit";
 import { GuideOfferHost } from "./help/GuideOffer";
@@ -213,6 +214,7 @@ export default function App({ scene }: { scene: Scene | null }) {
       <FixNameHost />
       <ShortcutsHost />
       <ImageViewerHost />
+      <PreviewHost />
       <HelpDrawer />
       <GuideOfferHost />
       <QueryBuilderHost />
