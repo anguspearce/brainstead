@@ -1108,7 +1108,10 @@ function Assistants() {
                 <div className="faint">{foundDetail(c)}</div>
               </div>
               {c.path && (
-                <label className="effortpick" title={`How hard ${CLI_LABEL[c.cli]} thinks before answering, in chats and jobs`}>
+                <label
+                  className="effortpick"
+                  title={`How hard ${CLI_LABEL[c.cli]} thinks before answering: its jobs, and new chats to start with`}
+                >
                   <span className="faint">Effort</span>
                   <select
                     className="sel"
@@ -1142,8 +1145,9 @@ function Assistants() {
           ))}
         </div>
         <p className="faint">
-          Ask runs the assistant you choose on this computer with your own account, and it never writes a file itself. Its effort applies to
-          every chat and job it runs; Default leaves it to the assistant, which picks one for each model.
+          Ask runs the assistant you choose on this computer with your own account, and it never writes a file itself. Its effort is what
+          its jobs run at and what new chats start with (a chat can change its own beside its model in Ask); Default leaves it to the
+          assistant, which picks one for each model.
         </p>
       </section>
       <McpGroup />
