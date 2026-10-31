@@ -38,3 +38,6 @@ Click **Save search**, name it and click **Save**. It's kept, with its layers, i
 - **Search everything** (`⌘↩`), **Ask** with what you typed, and **Capture … as a task**, which adds it to the To Do list.
 
 `↑` `↓` move, and before you type `←` `→` move across the Go to columns. `↩` runs the selected item and `Esc` closes.
+
+## Resize the panes
+Drag the line between the saved searches and the results to resize them; a double-click on it puts it back ([pane widths](help:settings-general)).

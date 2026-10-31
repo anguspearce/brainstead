@@ -26,6 +26,8 @@ import { TopBar } from "./TopBar";
 import { ago, fmtCount, LayerTag, TableBand } from "./ui";
 import { iconizeEmoji } from "./md/fieldEmoji";
 import { captureDefault, hasSync, keyLabel } from "./platform";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 export function greeting(h: number, name?: string) {
   const g = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
@@ -64,6 +66,7 @@ function useHourly(): Date {
 }
 
 export function TodayScreen() {
+  const panes = usePanes({ "today.side": PANES["today.side"] });
   const s = useStore(settings);
   const all = useAllTasks();
   const now = useHourly();
@@ -108,7 +111,8 @@ export function TodayScreen() {
           Capture
         </button>
       </TopBar>
-      <div className="body today">
+      <div className="body today" {...panes.root}>
+        {panes.resizers}
         <section className="tmain">
           <div className="hello">
             <h1 className="h1">{greeting(now.getHours(), s.ownerName)}.</h1>

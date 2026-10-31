@@ -54,3 +54,6 @@ Each change is an ordinary edit to the page. While it is unsaved, a banner offer
 
 ## Changes from the assistants
 Changes from ingest, Ask and Knowledge health apply at once and are listed in [Changes](app:review), where you can revert them. Some are held there for you instead: a scheduled run's change that fails a check, and any change to a template, to a system note's header, or that adds code that runs.
+
+## Resize the panes
+Drag the line between the tags and the list to resize them, and a column heading's left edge to resize that column (**Tags** included); **Title** takes the rest, and a double-click puts either back ([pane widths](help:settings-general)).

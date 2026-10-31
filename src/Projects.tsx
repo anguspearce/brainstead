@@ -35,6 +35,8 @@ import { toast } from "./Toast";
 import { askLink, askQuote, MoreMenu, TopBar } from "./TopBar";
 import { iconizeEmoji } from "./md/fieldEmoji";
 import { ago, Dialog, fmtCount, LayerTag, Seg } from "./ui";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 /** ⌘K's New project: the Projects screen opens with New project showing. */
 export const newProjectAsked = new Store<boolean>(false);
@@ -46,6 +48,7 @@ export function startNewProject() {
 const TABS: ProjectStatus[] = ["active", "on-hold", "someday", "done"];
 
 export function ProjectsScreen() {
+  const panes = usePanes({ "projects.list": PANES["projects.list"] });
   const projects = useProjects();
   const all = useAllTasks();
   const here = useStore(place).place;
@@ -165,7 +168,8 @@ export function ProjectsScreen() {
           New project
         </button>
       </TopBar>
-      <div className="body projects">
+      <div className="body projects" {...panes.root}>
+        {panes.resizers}
         <div className="plistcol">
           {tab === "active" && <FoundProjects />}
           {projects === null && <p className="faint pad">Loading…</p>}
@@ -386,6 +390,7 @@ function AreaBand({
 }
 
 function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAllTasks> }) {
+  const side = usePanes({ "project.side": PANES["project.side"] });
   const t = useMemo(() => projectTasks(all ?? [], p.path), [all, p.path]);
   const [adding, setAdding] = useState("");
   const [editing, setEditing] = useState<"name" | "outcome" | "area" | null>(null);
@@ -440,7 +445,8 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
     );
 
   return (
-    <div className="pgrid">
+    <div className="pgrid" {...side.root}>
+      {side.resizers}
       <div className="pmain">
         <div className="phead">
           <div className="row">

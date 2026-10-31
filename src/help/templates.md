@@ -58,3 +58,6 @@ Inside the tags: `tR`, `moment`, and `tp.date`, `tp.file`, `tp.frontmatter`, `tp
 
 ## Start from the examples
 A new vault comes with example templates: **Meeting**, **Daily note**, **1-1**, **Project**, **Weekly plan** and **Reading note**, plus a snippet in `Templates/Snippets/` and a script in `Templates/scripts/`. Each one's first line says which features it shows. To add any that are missing, click **Add the example notes** in [Settings › Vault](app:settings/vault).
+
+## Resize the columns
+Drag the left edge of a column heading (**Modified**, **Size**) to resize that column; **Title** takes the rest, and a double-click on the edge puts it back ([pane widths](help:settings-general)).

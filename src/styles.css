@@ -207,9 +207,12 @@ input {
 
 /* shell */
 .shell {
+  /* The sidebar's width, here rather than only as the grid's fallback: its divider is placed by it. */
+  --pane-sidebar: 232px;
+
   height: 100%;
   display: grid;
-  grid-template-columns: 232px minmax(0, 1fr);
+  grid-template-columns: var(--pane-sidebar) minmax(0, 1fr);
 }
 .side {
   background: var(--side);
@@ -540,11 +543,15 @@ html[data-platform="windows"] .top {
   }
 }
 
+/* The screens' breakpoints are on the main area's width (container main), not the window's, so a
+   wider sidebar narrows a screen as a narrower window would. Each is the window width it used to be
+   less the sidebar's usual 232px: 1048px for 1280px, 868px for 1100px. */
 .main {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  container: main / inline-size;
 }
 .top {
   height: var(--top-h);
@@ -752,6 +759,68 @@ html[data-platform="windows"] .top {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+
+/* Pane dividers (src/PaneResizer.tsx, src/panes.ts): a 6px hit area over the 1px line between two
+   panes, placed by the pane's own custom property so it follows a drag; nothing at rest, a 2px
+   accent line while hovered, focused or dragged. In a table's header (.column) it sits
+   in the gap on the heading's edge away from the flexible column (data-edge). */
+.presize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  z-index: 3;
+  cursor: col-resize;
+  touch-action: none;
+}
+.presize::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2px;
+  width: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.presize:hover::after,
+.presize:focus-visible::after,
+.presize.dragging::after {
+  opacity: 1;
+}
+.presize:focus-visible {
+  outline: none;
+}
+.presize.column {
+  top: -4px;
+  bottom: -4px;
+}
+
+/* A column's divider is in the gap on the edge away from the table's flexible column. */
+.presize.column[data-edge="end"] {
+  right: -9px;
+}
+.presize.column[data-edge="start"] {
+  left: -9px;
+}
+.trrow.tb-head > span,
+.fhcell {
+  position: relative;
+}
+.fhcell {
+  display: flex;
+  min-width: 0;
+}
+.fhcell > .fcell {
+  flex: 1;
+  min-width: 0;
+}
+body.presizing,
+body.presizing * {
+  cursor: col-resize !important;
+  user-select: none;
 }
 
 /* controls */
@@ -1665,8 +1734,10 @@ mark.search-hit {
   padding: 24px 40px;
 }
 .docgrid {
+  --pane-side: 280px;
+
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr) var(--pane-side);
   gap: 32px;
   padding: 28px 20px 80px 40px;
 }
@@ -2570,8 +2641,10 @@ details.callout[open] .callout-chev {
   padding: 2px 9px 6px 32px;
 }
 .body.tasks3 {
+  --pane-side: 340px;
+
   display: grid;
-  grid-template-columns: var(--pane-left) minmax(0, 1fr) 340px;
+  grid-template-columns: var(--pane-left) minmax(0, 1fr) var(--pane-side);
   overflow: hidden;
 }
 .tpage {
@@ -2694,10 +2767,16 @@ details.callout[open] .callout-chev {
 /* today: the greeting with its counts in a sentence, the capture box, the bands (Overdue and Due
    today; Coming up this week, Waiting for and Deferred until now), and a right rail. */
 .body.today {
+  --pane-side: 320px;
+
   display: grid;
-  grid-template-columns: minmax(0, 1100px) 320px;
+  grid-template-columns: minmax(0, 1fr) var(--pane-side);
   gap: 40px;
-  padding: 28px 24px 60px 40px;
+
+  /* The bands and the rail fill 1460px at most (the bands' 1100, the gap and the rail's usual 320);
+     a wider main area pads the right, so the rail stays beside the bands and flush with the grid's
+     right edge, where its divider is placed. 1500px is that and the 40px left padding. */
+  padding: 28px max(24px, 100% - 1500px) 60px 40px;
   align-items: start;
 }
 .tmain {
@@ -3514,7 +3593,9 @@ button.rnhead {
 }
 .trrow {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 90px minmax(120px, 220px) 110px 72px 190px;
+  grid-template-columns:
+    28px minmax(0, 1fr) var(--col-type, 90px) var(--col-folder, minmax(120px, 220px)) var(--col-deleted, 110px) var(--col-size, 72px)
+    190px;
   align-items: center;
   gap: 12px;
   min-height: 50px;
@@ -6599,8 +6680,10 @@ select.sel {
   container: pdetail / inline-size;
 }
 .pgrid {
+  --pane-side: 280px;
+
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr) var(--pane-side);
   gap: 28px;
   align-items: start;
 }
@@ -7025,8 +7108,10 @@ select.sel {
 
 /* Weekly review */
 .body.weekly {
+  --pane-side: 340px;
+
   display: grid;
-  grid-template-columns: var(--pane-left) minmax(0, 1fr) 340px;
+  grid-template-columns: var(--pane-left) minmax(0, 1fr) var(--pane-side);
   overflow: hidden;
 }
 .wsteps {
@@ -7533,8 +7618,10 @@ select.sel {
 
 /* Knowledge health (stage 7a) */
 .body.health {
+  --pane-side: 380px;
+
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr) var(--pane-side);
   gap: 20px;
   padding: 20px 28px;
   overflow-y: auto;
@@ -7855,9 +7942,11 @@ select.sel {
 
 /* Sources and ingest runs (stage 7b) */
 .body.sources {
+  --pane-side: 360px;
+
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) var(--pane-side);
   overflow: hidden;
 }
 .runs {
@@ -7973,10 +8062,12 @@ select.sel {
   color: var(--ink3);
 }
 .cgrid {
+  --pane-left: 340px;
+
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-columns: var(--pane-left) minmax(0, 1fr);
 }
 .cgrid .ilist {
   overflow-y: auto;
@@ -8012,8 +8103,10 @@ select.sel {
   margin: 4px 0 12px;
 }
 .body.meeting {
+  --pane-side: 360px;
+
   display: grid;
-  grid-template-columns: var(--pane-left) minmax(0, 1fr) 360px;
+  grid-template-columns: var(--pane-left) minmax(0, 1fr) var(--pane-side);
   overflow: hidden;
 }
 .mrow {
@@ -8335,8 +8428,10 @@ select.sel {
 
 /* Graph */
 .body.graph {
+  --pane-side: 300px;
+
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) var(--pane-side);
   overflow: hidden;
 }
 .gstage {
@@ -8488,9 +8583,11 @@ select.sel {
    scroll; the side column scrolls on its own; the page itself never does. Narrow, the side column
    goes under the log. */
 .body.activity {
+  --pane-side: 380px;
+
   padding: 20px 28px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr) var(--pane-side);
   gap: 20px;
   overflow: hidden;
 }
@@ -8519,7 +8616,7 @@ select.sel {
   overflow-y: auto;
 }
 
-@media (width <= 1100px) {
+@container main (width <= 868px) {
   .body.activity {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) auto;
@@ -8702,7 +8799,7 @@ button.hc {
 }
 .actlog .ar {
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr) 120px;
+  grid-template-columns: var(--col-when, 150px) minmax(0, 1fr) var(--col-action, 120px);
   gap: 14px;
   align-items: center;
   padding: 0 16px;
@@ -8710,10 +8807,15 @@ button.hc {
   font-size: 12.5px;
 }
 .actlog.banded .ar {
-  grid-template-columns: 64px minmax(0, 1fr) 120px;
+  grid-template-columns: var(--col-time, 64px) minmax(0, 1fr) var(--col-action, 120px);
 }
 .actlog .ar.tb-head {
   min-height: 0;
+}
+.actlog .ar.tb-head > span,
+.dcr.th > span {
+  position: relative;
+  min-width: 0;
 }
 
 /* The last header (Action), with the count of entries shown on its right. */
@@ -8736,6 +8838,9 @@ button.hc {
   display: flex;
   gap: 8px;
   align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
 .actlog .item {
   min-width: 0;
@@ -9027,7 +9132,7 @@ button.hc {
 }
 .dcr {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) 100px 110px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) var(--col-version, 100px) var(--col-status, 110px) var(--col-file, 200px);
   gap: 12px;
   align-items: center;
   padding: 8px 14px;
@@ -9073,8 +9178,10 @@ button.hc {
   padding-top: 4px;
 }
 .dcres {
+  --pane-left: 300px;
+
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-columns: var(--pane-left) minmax(0, 1fr);
   gap: 20px;
   align-items: start;
 }
@@ -10195,23 +10302,23 @@ html.tray-view body {
   }
 }
 
-@media (width <= 1280px) {
-  :root {
+@container main (width <= 1048px) {
+  .main > * {
     --pane-left: 220px;
     --pane-list: 340px;
   }
   .body.tasks3 {
-    grid-template-columns: var(--pane-left) minmax(0, 1fr) 300px;
+    --pane-side: 300px;
   }
   .body.weekly {
-    grid-template-columns: var(--pane-left) minmax(0, 1fr) 280px;
+    --pane-side: 280px;
   }
   .body.meeting {
-    grid-template-columns: var(--pane-left) minmax(0, 1fr) 320px;
+    --pane-side: 320px;
   }
   .body.health,
   .body.activity {
-    grid-template-columns: minmax(0, 1fr) 300px;
+    --pane-side: 300px;
   }
   .docgrid {
     grid-template-columns: minmax(0, 1fr);
@@ -10221,7 +10328,7 @@ html.tray-view body {
   }
 }
 
-@media (width <= 1100px) {
+@container main (width <= 868px) {
   .igroups {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -10229,11 +10336,11 @@ html.tray-view body {
   .body.today {
     grid-template-columns: minmax(0, 1fr);
   }
-  :root {
+  .main > * {
     --pane-left: 200px;
   }
   .body.tasks3 {
-    grid-template-columns: var(--pane-left) minmax(0, 1fr) 260px;
+    --pane-side: 260px;
   }
   .body.weekly {
     grid-template-columns: var(--pane-left) minmax(0, 1fr);

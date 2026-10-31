@@ -35,3 +35,6 @@ Click **New note**, or press `⌘N` anywhere. Choose **Blank note** and give it 
 
 ## Spot unsaved drafts
 A note with an unsaved draft shows an amber **Draft** chip by its title.
+
+## Resize the columns
+Drag the left edge of a column heading (**Type**, **Date**, **Modified**, **Size**) to resize that column; **Title** takes the rest. A cut-off value shows whole when you rest on it. A double-click on the edge puts it back ([pane widths](help:settings-general)).

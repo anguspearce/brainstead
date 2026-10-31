@@ -73,3 +73,6 @@ On the right, **Wiki pages by type** and **Wiki pages by tag** are pie charts; c
 
 ## The daily check
 Turn on **Daily check** in [Settings › Jobs & schedule](app:settings/jobs) to have Brainstead, at the time you set (09:00 to start), look for contradictions in pages that changed and update the list of pages in `index.md`. It catches up after sleep. **Also refresh pages whose sources changed**, in [Settings › AI assistants](app:settings/assistants), has it ingest those sources again. Its notification also says how many pages have left the page shape, for **Reshape pages**. **Run now** runs it straight away and becomes **Stop** while it runs.
+
+## Resize the panes
+Drag the line beside the side column to make it wider or narrower; a double-click on it puts it back ([pane widths](help:settings-general)).
