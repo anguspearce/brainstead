@@ -292,12 +292,14 @@ pub fn job_own_effort<'a>(ui: &'a Ui, job: &str) -> Option<&'a str> {
     text(ui.get("jobEffort").and_then(|m| m.get(job))).filter(|e| cli.efforts().contains(e))
 }
 
-/// The effort `job` runs at on `model` (`resolve_effort`): its own, else its assistant's
-/// (`effort.<cli>`), each only when the assistant offers it. The weekly review's preparation never
-/// takes the summaries' effort, even on their model.
+/// The effort `job` runs at on `model` (`resolve_effort`): its own while `model` is the job's
+/// (`job_model`), else its assistant's (`effort.<cli>`), each only when the assistant offers it. A
+/// job's level goes with the model it was picked beside: a quick pass on another model (the
+/// contradiction check's extract and Write Current state, on Claude's Haiku) runs at the
+/// assistant's. The weekly review's preparation never takes the summaries' effort, even on their model.
 pub fn job_effort<'a>(ui: &'a Ui, job: &str, model: &str) -> Option<&'a str> {
     let cli = Cli::route(model);
-    let own = text(ui.get("jobEffort").and_then(|m| m.get(job)));
+    let own = text(ui.get("jobEffort").and_then(|m| m.get(job))).filter(|_| job_model(ui, job) == model);
     resolve_effort(cli, own, text(ui.get("effort").and_then(|m| m.get(cli.key()))))
 }
 
@@ -1170,6 +1172,19 @@ mod tests {
         let b = args(Cli::Copilot, &req("copilot:auto", Some("s9"))).unwrap().args;
         assert_eq!(b[1], "What's due?");
         assert_eq!(b.last().unwrap(), "--resume=s9");
+    }
+
+    #[test]
+    fn a_jobs_own_effort_goes_with_its_model() {
+        let ui = serde_json::json!({
+            "jobModels": {"contradictions": "claude:opus"},
+            "jobEffort": {"contradictions": "max"},
+            "effort": {"claude": "low"}
+        });
+        let ui = ui.as_object().unwrap();
+        assert_eq!(job_effort(ui, "contradictions", "claude:opus"), Some("max"));
+        // The extract pass and Write Current state, on Haiku, run at Claude Code's.
+        assert_eq!(job_effort(ui, "contradictions", "claude:haiku"), Some("low"));
     }
 
     #[test]
