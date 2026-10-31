@@ -131,6 +131,12 @@ export interface Settings {
   hlColour?: "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "grey";
   /** A note's side pane (Linked from) folded away, for the full width. */
   docSideFolded?: boolean;
+  /** Pane and table column widths the user dragged, in px by pane key (src/panes.ts); a pane not
+   *  in it has the stylesheet's width. Per machine, as interfaceSize is. */
+  paneWidths?: Record<string, number>;
+  /** Types of pane locked against resizing (src/panes.ts), by name; a type not here is unlocked, so
+   *  a further type needs only a further key. Per machine, as paneWidths is. */
+  resizeLocks?: { panes?: boolean; columns?: boolean };
 }
 
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";

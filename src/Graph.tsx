@@ -17,6 +17,8 @@ import { askLink, askQuote, TopBar } from "./TopBar";
 import { fmtCount, LayerTag, Popover, SearchBox, Seg } from "./ui";
 import { TypeDot } from "./typeTone";
 import { KIND_COLOUR, KINDS, Kind, kindLabel, kindOf, kindsIn, labelled, neighbours, pick, radius, visible } from "./graphModel";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 type Mode = "around" | "wiki";
 
@@ -28,6 +30,7 @@ const isGhost = (id: string) => id.startsWith("ghost:");
 export const openGraph = (path: string) => nav.go({ screen: "graph", path });
 
 export function GraphScreen() {
+  const panes = usePanes({ "graph.side": PANES["graph.side"] });
   const here = useStore(place).place;
   const version = useVaultVersion();
   const [lastCenter, setLastCenter] = useViewState<string | null>("graph.center", null);
@@ -126,7 +129,8 @@ export function GraphScreen() {
           Fit
         </button>
       </TopBar>
-      <div className="body graph">
+      <div className="body graph" {...panes.root}>
+        {panes.resizers}
         <div className="gstage">
           {shown && shown.nodes.length > 0 ? (
             <GraphCanvas
