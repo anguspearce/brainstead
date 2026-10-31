@@ -86,8 +86,22 @@ Function .onInstFailed
   ${EndIf}
 FunctionEnd
 
+; A copy the installer moved aside may still run (the app, an MCP server or the capture host), and
+; the template's check before it deletes the program registers only the program itself: each copy
+; is checked the same way here and then deleted, so the folder doesn't stay behind with it. $4 and
+; $5 are kept, since the check uses $0 to $3 and $R0 to $R3.
 !macro NSIS_HOOK_PREUNINSTALL
-  Delete "$INSTDIR\${MAINBINARYNAME}.exe.old*"
+  Push $4
+  Push $5
+  FindFirst $4 $5 "$INSTDIR\${MAINBINARYNAME}.exe.old*"
+  ${DoWhile} $5 != ""
+    !insertmacro CheckIfAppIsRunning "$INSTDIR\$5" "${PRODUCTNAME}"
+    Delete "$INSTDIR\$5"
+    FindNext $4 $5
+  ${Loop}
+  FindClose $4
+  Pop $5
+  Pop $4
   ${If} $UpdateMode <> 1
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "Brainstead"
     DeleteRegKey HKCU "Software\Google\Chrome\NativeMessagingHosts\com.wayned.brainstead"
