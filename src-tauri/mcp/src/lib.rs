@@ -391,13 +391,14 @@ pub fn tools() -> Vec<Value> {
         tool("list_tasks", "List tasks", Read,
             "Tasks as Brainstead's lists show them (needs the app). Each line gives the task, its dates and chips (priority and #tags among them), and its id (path:line) to act on it with edit_task, move_task or delete_task. Narrow with view, project, context, effort, query (every word somewhere in the task's words, note, heading, project, #tags or contexts, accents ignored, as the Tasks screen's search matches) or a saved list rather than raising limit; offset gives the next page, as the reply says. group puts them under headings, as the Tasks screen's Group by does.",
             schema(json!({
-                "view": {"type": "string", "enum": ["today", "next", "followups", "waiting", "deferred", "someday", "done-this-week", "done-last-week", "all"], "description": "today: the Today screen's bands, Overdue, Due today, Deferred until now, Coming up this week (due in the next seven days) and Waiting for, each under its label (a task can be in two), leaving out tasks deferred to a later day. next: open tasks that aren't follow-ups, waiting, someday, deferred or still in the Inbox (the default). deferred: the Deferred list, tasks deferred to a later day. all: every open task."},
+                "view": {"type": "string", "enum": ["today", "next", "followups", "waiting", "deferred", "someday", "done-this-week", "done-last-week", "all"], "description": "today: the Today screen's bands, Overdue, Due today, Deferred until now, Coming up this week (due in the next seven days) and Waiting for, each under its label (a task can be in two), leaving out tasks deferred to a later day. next (the default view): open tasks that aren't follow-ups, waiting, someday, deferred or still in the Inbox, and, unless include_on_hold_someday is true, not in an on-hold or someday project. deferred: the Deferred list, tasks deferred to a later day. all: every open task."},
                 "project": {"type": "string", "description": "Only this project's tasks, by its name."},
                 "context": {"type": "string", "description": "Only tasks with this context: calls, office…"},
                 "effort": {"type": "integer", "enum": [15, 30, 60], "description": "Only tasks of this many minutes or less, as the Tasks screen's effort filter (15 min or less, 30 min or less, 1 hour or less); any effort when left out."},
                 "group": {"type": "string", "enum": ["none", "project", "context", "due"], "description": "Group by, as the Tasks screen does: under each project, context or due date (Overdue, Today, This week, Later, No due date). Default none."},
                 "detail": {"type": "boolean", "description": "Also the heading, effort, created and done dates."},
-                "list": {"type": "string", "description": "A saved list's name (list_task_lists): its view, context, effort and grouping, instead of view, context, effort and group."}
+                "list": {"type": "string", "description": "A saved list's name (list_task_lists): its view, context, effort and grouping, instead of view, context, effort and group."},
+                "include_on_hold_someday": {"type": "boolean", "description": "For next: also the tasks of projects whose status is on-hold or someday, as the Tasks screen's Include on-hold and someday projects does. Defaults to that setting (includeOnHoldSomeday in list_settings, off unless turned on), so the list matches the screen."}
             }), &[])),
         tool("edit_task", "Change a task", Change,
             "Changes a task, as the task screens do (needs the app): made straight away and recorded in Changes, where the user can revert it (⌘Z undoes it too). Give only the fields to change; several at once is fine, made as one change. Ticking a recurring task adds its next occurrence, as in the app.",
@@ -420,7 +421,8 @@ pub fn tools() -> Vec<Value> {
                 "task": task, "text": task_text,
                 "after": {"type": "string", "description": "The id of the task it should come after."},
                 "before": {"type": "string", "description": "The id of the task it should come before."},
-                "project": {"type": "string", "description": "A project's name (Orbit App launch) or its note: order the task in that project's Next actions, as on the project's page, rather than in the Tasks screen's lists."}
+                "project": {"type": "string", "description": "A project's name (Orbit App launch) or its note: order the task in that project's Next actions, as on the project's page, rather than in the Tasks screen's lists."},
+                "include_on_hold_someday": {"type": "boolean", "description": "As list_tasks': Next actions with the tasks of on-hold and someday projects in it, so the ids list_tasks gave with include_on_hold_someday: true can be moved. Defaults to the setting (includeOnHoldSomeday), as the Tasks screen's list."}
             }), &["task", "text"])),
         tool("create_task", "Add a task", Change,
             "Adds a task (needs the app): to a project's Next actions when a project is given, else to the To Do list's Other section, which is the Inbox: a task there with no context and none of the lists' tags waits in the Inbox to be clarified (list_inbox), as on the Tasks screen. Write it as one line starting with a verb. view adds it to one of the Tasks screen's lists as New task there does, with that list's tag (Follow-ups #followup, Waiting for #waiting-for, Someday / maybe #someday-maybe). It's recorded in Changes, where the user can revert it. To capture something still to be clarified, use capture; add only what the user asked for.",
@@ -466,7 +468,7 @@ pub fn tools() -> Vec<Value> {
                 "reason": reason
             }), &["kind", "text"])),
         tool("list_projects", "List projects", Read,
-            "Every project, as the Projects screen lists them (needs the app), in its order (by area, as dragged there or with move_project, then A to Z): its name, status and count of next actions, flagged as the screen flags an active one (Stuck: no next action; Quiet: nothing has happened for two weeks), with its note's path. detail adds the area, what done looks like and the waiting, someday and done counts. Statuses are the screen's tabs: active, on-hold, someday, completed. Use the name with list_tasks' project, create_task or update_project.",
+            "Every project, as the Projects screen lists them (needs the app), in its order (by area, as dragged there or with move_project, then A to Z): its name, status and count of next actions, flagged as the screen flags an active one (Stuck: no next action; Quiet: nothing has happened for two weeks), with its note's path. detail adds the area, what done looks like and the waiting, someday and done counts. Statuses are the screen's tabs: active, on-hold, someday, completed; an on-hold or someday project's tasks are left out of Next actions (list_tasks' include_on_hold_someday). Use the name with list_tasks' project, create_task or update_project.",
             schema(json!({"detail": detail}), &[])),
         tool("create_project", "Create a project", Change,
             "Makes a project note, as the Projects screen does (needs the app). It's named and laid out as the vault's other projects are, and recorded in Changes, where the user can revert it. Add its first tasks with create_task and the project's name.",
@@ -480,7 +482,7 @@ pub fn tools() -> Vec<Value> {
             "Sets a project's status, area or what done looks like (needs the app), as its page on the Projects screen does. Give only what changes; null clears area or done_looks_like. Recorded in Changes, where the user can revert it. To rename a project, as clicking its name on its page does, use rename_note on its note with type Project.",
             schema(json!({
                 "project": {"type": "string", "description": "The project's name."},
-                "status": {"type": "string", "enum": ["active", "on-hold", "someday", "completed"], "description": "The Projects screen's tabs; completed is its Mark complete (the Completed tab)."},
+                "status": {"type": "string", "enum": ["active", "on-hold", "someday", "completed"], "description": "The Projects screen's tabs; completed is its Mark complete (the Completed tab). on-hold and someday take the project's tasks out of Next actions (list_tasks' next, the sidebar's count, the weekly review) until it's active again, unless the user includes them; a completed project's open tasks stay."},
                 "area": {"type": ["string", "null"], "description": "The area of responsibility; null clears it."},
                 "done_looks_like": {"type": ["string", "null"], "description": "What done looks like, one sentence; null clears it."}
             }), &["project"])),
@@ -950,12 +952,13 @@ fn outputs() -> std::collections::HashMap<&'static str, Value> {
                 json!({"path": s("string"), "title": s("string"), "layer": s("string"), "date": s("string"), "heading": s("string"), "snippet": s("string")}),
             ),
         ),
-        (
-            "list_tasks",
-            page_schema(
-                json!({"id": s("string"), "text": s("string"), "path": s("string"), "due": sn(), "defer": {"type": ["string", "null"], "description": "Deferred until, as edit_task's defer sets it."}, "start": sn(), "done": s("boolean"), "doneOn": sn(), "project": sn(), "contexts": {"type": "array", "items": s("string")}, "tags": {"type": "array", "items": s("string"), "description": "Its #tags other than contexts, without the #."}, "priority": {"type": ["string", "null"], "enum": ["highest", "high", "medium", "low", "lowest", null], "description": "As edit_task's priority; null for none."}, "status": {"type": "string", "enum": ["open", "in_progress", "done", "cancelled"]}, "created": sn(), "effort": sn(), "heading": sn(), "group": {"type": ["string", "null"], "description": "With group: the heading it's under, as the Tasks screen shows it."}, "band": {"type": ["string", "null"], "description": "With view today and no group: the Today screen's band it's in (Overdue, Due today, Deferred until now, Coming up this week, Waiting for)."}}),
-            ),
-        ),
+        ("list_tasks", {
+            let mut t = page_schema(
+                json!({"id": s("string"), "text": s("string"), "path": s("string"), "due": sn(), "defer": {"type": ["string", "null"], "description": "Deferred until, as edit_task's defer sets it."}, "start": sn(), "done": s("boolean"), "doneOn": sn(), "project": sn(), "projectStatus": {"type": ["string", "null"], "enum": ["active", "on-hold", "someday", "completed", null], "description": "Its project's status, as list_projects gives it; null with no project. next has on-hold and someday ones only when they're included."}, "contexts": {"type": "array", "items": s("string")}, "tags": {"type": "array", "items": s("string"), "description": "Its #tags other than contexts, without the #."}, "priority": {"type": ["string", "null"], "enum": ["highest", "high", "medium", "low", "lowest", null], "description": "As edit_task's priority; null for none."}, "status": {"type": "string", "enum": ["open", "in_progress", "done", "cancelled"]}, "created": sn(), "effort": sn(), "heading": sn(), "group": {"type": ["string", "null"], "description": "With group: the heading it's under, as the Tasks screen shows it."}, "band": {"type": ["string", "null"], "description": "With view today and no group: the Today screen's band it's in (Overdue, Due today, Deferred until now, Coming up this week, Waiting for)."}}),
+            );
+            t["properties"]["left_out"] = json!({"type": "integer", "description": "With view next: how many tasks of on-hold and someday projects it left out that would otherwise match, as the text's last line says; 0 when they're included."});
+            t
+        }),
         (
             "list_inbox",
             page_schema(

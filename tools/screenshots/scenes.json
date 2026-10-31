@@ -38,6 +38,25 @@
     }
   },
   {
+    "name": "tasks-onhold-off",
+    "screen": "tasks",
+    "view": {
+      "tasks:view": "next",
+      "tasks:group": "project"
+    }
+  },
+  {
+    "name": "tasks-onhold-on",
+    "screen": "tasks",
+    "view": {
+      "tasks:view": "next",
+      "tasks:group": "project"
+    },
+    "settings": {
+      "includeOnHoldSomeday": true
+    }
+  },
+  {
     "name": "tasks-grouped",
     "screen": "tasks",
     "view": {
