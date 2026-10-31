@@ -4,10 +4,11 @@
 
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-/** What the system answers to "always show scroll bars?". */
+/** What Windows answers to "always show scroll bars?". */
 let systemAlways = true;
 vi.mock("./api", () => ({ api: { alwaysShowScrollbars: async () => systemAlways } }));
 
+import { setPlatform } from "./platform";
 import { pointerAt, showScrollbarsWhileScrolling } from "./scrollbars";
 
 /** A pane with more to show than fits (jsdom lays nothing out, so the sizes are given). */
@@ -18,8 +19,11 @@ function pane(scrollable: boolean): HTMLElement {
   return el;
 }
 
-describe("scrollbars shown while the pointer is over a pane", () => {
-  beforeAll(() => showScrollbarsWhileScrolling());
+describe("scrollbars shown while the pointer is over a pane (Windows)", () => {
+  beforeAll(() => {
+    setPlatform("windows");
+    showScrollbarsWhileScrolling();
+  });
   afterEach(() => {
     pointerAt([]);
     document.body.replaceChildren();
@@ -72,11 +76,25 @@ describe("scrollbars shown while the pointer is over a pane", () => {
 
   it("shows every scrollbar while the system shows them all the time, read again when the window takes the focus", async () => {
     const root = document.documentElement;
-    // Started with the system's Always show scrollbars on.
+    // Started with Windows' Always show scrollbars on.
     await vi.waitFor(() => expect(root.getAttribute("data-scrollbars")).toBe("always"));
-    // Turned off in the system's settings, then back to the app.
+    // Turned off in Windows' settings, then back to the app.
     systemAlways = false;
     window.dispatchEvent(new Event("focus"));
     await vi.waitFor(() => expect(root.hasAttribute("data-scrollbars")).toBe(false));
+  });
+});
+
+describe("scrollbars off Windows", () => {
+  it("leaves the native ones alone: no listeners, no system read", async () => {
+    vi.resetModules();
+    const { setPlatform: set } = await import("./platform");
+    set("macos");
+    const add = vi.spyOn(document, "addEventListener");
+    const fresh = await import("./scrollbars");
+    fresh.showScrollbarsWhileScrolling();
+    expect(add).not.toHaveBeenCalled();
+    add.mockRestore();
+    set("windows");
   });
 });

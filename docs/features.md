@@ -53,7 +53,7 @@ The sidebar, top to bottom:
 
 Counts that need you, such as overdue tasks, the Inbox and changes held for you, are in bold.
 
-Scrollbars stay out of sight until the pointer is over a list or page, or it scrolls; then a thin line shows where you are, and it widens under the pointer to drag. It goes again a second after scrolling stops. Where the system shows scroll bars all the time (Windows Settings › Accessibility › Visual effects › **Always show scrollbars**, or the Mac's **Show scroll bars: Always**, or Automatic with a mouse), Brainstead shows them all the time too.
+On Windows, scrollbars stay out of sight until the pointer is over a list or page, or it scrolls; then a thin line shows where you are, and it widens under the pointer to drag. It goes again a second after scrolling stops. Where Windows shows scroll bars all the time (Settings › Accessibility › Visual effects › **Always show scrollbars**), Brainstead shows them all the time too. A Mac keeps its native scrollbars.
 
 | Keys | What they do |
 |---|---|
