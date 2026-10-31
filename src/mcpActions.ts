@@ -345,6 +345,8 @@ const onHoldSomeday = (a: Args) => {
 };
 
 async function listTasks(a: Args): Promise<Listing> {
+  // Checked for every view, though only next reads it.
+  const parkedIn = onHoldSomeday(a);
   const all = await api.tasksAll();
   const today = localToday();
   // The Deferred list's id is `scheduled` (saved lists keep it); `deferred` is its name.
@@ -386,9 +388,9 @@ async function listTasks(a: Args): Promise<Listing> {
     const v = VIEWS.find((x) => x.id === view);
     if (!v) throw new Error(`No view “${view}”. Views: today, all, ${VIEWS.map((x) => viewName(x.id)).join(", ")}.`);
     const inbox = view === "next" ? await api.inboxList() : null;
-    rows = viewRows(all, v, today, inbox, onHoldSomeday(a));
+    rows = viewRows(all, v, today, inbox, parkedIn);
     // What Next actions leaves out for being in an on-hold or someday project, to say so.
-    if (view === "next") left = parkedLeftOut(all, today, inbox, onHoldSomeday(a));
+    if (view === "next") left = parkedLeftOut(all, today, inbox, parkedIn);
   }
   const project = str(a, "project")?.toLowerCase();
   const context = str(a, "context");
@@ -596,6 +598,8 @@ const RANK_SPACING = 1024;
  *  the list both tasks are in (or, with project, the project page's Next actions), between its real neighbours there, or the whole list renumbered when
  *  some rows have no rank or there's no room. Every line it changes is one change, made together. */
 async function moveTask(a: Args, r: McpRequest): Promise<string> {
+  // Checked on every path, though only the Tasks screen's lists (not project) read it.
+  const keep = onHoldSomeday(a);
   const all = await api.tasksAll();
   const t = findTask(all, str(a, "task") ?? "", str(a, "text"));
   const ref = (k: string) => (str(a, k) ? findTask(all, str(a, k)!) : null);
@@ -628,7 +632,6 @@ async function moveTask(a: Args, r: McpRequest): Promise<string> {
         rows: viewRows(all, v, today, v.id === "next" ? inbox : null, keep),
         every: viewRows(all, v, today, v.id === "next" ? inbox : null, true),
       }));
-    const keep = onHoldSomeday(a);
     list = lists(keep).find((l) => both(l.rows));
     if (!list && !keep && lists(true).some((l) => both(l.rows)))
       throw new Error(

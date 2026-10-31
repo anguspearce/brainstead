@@ -129,6 +129,12 @@ describe("MCP actions", () => {
     await expect(
       run("task.move", { task: "Me. To Do List.md:5", after: "Me. To Do List.md:6", include_on_hold_someday: 1 }),
     ).rejects.toThrow(/true or false/);
+    // On every path that takes it, whether or not the view or the project branch reads it.
+    for (const view of ["today", "all", "waiting", "deferred"])
+      await expect(run("tasks.list", { view, include_on_hold_someday: "yes" })).rejects.toThrow(/true or false/);
+    await expect(
+      run("task.move", { task: "Me. To Do List.md:5", after: "Me. To Do List.md:6", project: "Garden", include_on_hold_someday: 1 }),
+    ).rejects.toThrow(/true or false/);
     // The setting the screen's checkbox keeps, through settings, is the default.
     expect(await run("settings")).toMatch(/includeOnHoldSomeday · Tasks › Next actions › Include on-hold and someday projects: false/);
     expect(await run("settings", { action: "set", key: "includeOnHoldSomeday", value: true })).toMatch(/is now true/);
