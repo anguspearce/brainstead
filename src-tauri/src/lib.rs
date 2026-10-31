@@ -800,6 +800,11 @@ pub fn run() {
         platform::claim_single_instance(&context.config().identifier);
     }
     let data = platform::data_dir();
+    // A copy beside the installed app gets WebView2's browser process of its own, so stopping it
+    // never takes the installed app's page with it.
+    if !shares_instance_lock() {
+        platform::own_webview_data(&data);
+    }
     let settings_path = data.join("settings.json");
     let (settings, settings_warning) = settings::load_checked(&settings_path);
     applog::init(&data, log_days(&settings));
@@ -1065,6 +1070,8 @@ pub fn run() {
             scene
         ])
         .setup(move |app| {
+            // Tauri builds the windows tauri.conf.json lists before this runs.
+            platform::webview_data_built();
             // `Brainstead --quit` (the Windows install script) with no copy running to hand it to
             // (`tray::second_launch`): there is nothing to quit, so this copy doesn't start either.
             if std::env::args().skip(1).any(|a| a == "--quit") {
