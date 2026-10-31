@@ -312,8 +312,9 @@ pub fn gather(
             "someday"
         } else if !on_hold_someday && t.in_parked_project() {
             // An on-hold or someday project's task isn't a next action, as on the Tasks and Weekly
-            // screens (src/taskModel.ts's next view), unless the user includes them.
-            continue;
+            // screens (src/taskModel.ts's next view), unless the user includes them. Its due and
+            // deferred dates still reach the look-ahead, as the Today screen lists them.
+            "parked"
         } else {
             "next"
         };
@@ -329,7 +330,7 @@ pub fn gather(
             start: t.start.clone(),
             project: t.project.as_deref().and_then(name_of),
             age,
-            ahead: dated_ahead(&t.due) || dated_ahead(&t.scheduled) || dated_ahead(&t.start),
+            ahead: dated_ahead(&t.due) || dated_ahead(&t.scheduled) || (list != "parked" && dated_ahead(&t.start)),
         });
     }
     // Next actions the dated and the oldest first, up to a cap; waiting-fors past a week; someday
@@ -343,6 +344,7 @@ pub fn gather(
         let keep = match t.list.as_str() {
             "next" => next.contains(&(t.path.as_str(), t.line)),
             "waiting" => t.age > WAITING_DAYS,
+            "parked" => false,
             _ => {
                 someday += 1;
                 someday <= MAX_TASKS
@@ -1092,18 +1094,39 @@ mod tests {
         let root = t.path().join("vault");
         let hub = root.join("Project. Hub migration.md");
         let text = std::fs::read_to_string(&hub).unwrap();
-        std::fs::write(&hub, text.replace("## Next actions\n", "## Next actions\n\n- [ ] Draft the cut-over plan\n")).unwrap();
+        // An undated task, one due and one deferred inside the look-ahead, one due after it and one
+        // with only a start date inside it.
+        let tasks = "- [ ] Draft the cut-over plan\n\
+            - [ ] Renew the licence \u{1F4C5} 2026-10-07\n\
+            - [ ] Book the cut-over room \u{23F3} 2026-10-06\n\
+            - [ ] Archive the old hub \u{1F4C5} 2026-12-01\n\
+            - [ ] Read the vendor notes \u{1F6EB} 2026-10-05\n";
+        std::fs::write(&hub, text.replace("## Next actions\n", &format!("## Next actions\n\n{tasks}"))).unwrap();
         let mut ix = Index::open_in_memory().unwrap();
         ix.sync(&Vault::new(root.clone(), vec![])).unwrap();
         let now = at(2026, 10, 2, 12, 0).and_utc().timestamp_millis();
         let gathered = |on: bool| gather(&root, &ix, "2026-W40", day(2026, 10, 2), now, &crate::inbox::items(&root), on).unwrap();
         // Hub migration is on hold: its task isn't an open next action unless the setting is on.
         let off = gathered(false);
-        assert!(!off.tasks.iter().any(|t| t.text.contains("Draft the cut-over plan")));
-        assert!(!prompt(&off, "Friday 2 October 2026").contains("Draft the cut-over plan"));
+        let has = |i: &Inputs, text: &str| i.tasks.iter().any(|t| t.text.contains(text));
+        for gone in ["Draft the cut-over plan", "Archive the old hub", "Read the vendor notes"] {
+            assert!(!has(&off, gone), "{gone}");
+        }
+        // Its due and deferred dates inside the window stay in the look-ahead, but are not open
+        // next actions.
+        let text = prompt(&off, "Friday 2 October 2026");
+        let (open, ahead) = text.split_once("## Dated in the next").unwrap();
+        for dated in ["Renew the licence", "Book the cut-over room"] {
+            let t = off.tasks.iter().find(|t| t.text.contains(dated)).unwrap();
+            assert!(t.ahead && t.list == "parked", "{dated}");
+            assert!(ahead.contains(dated) && !open.contains(dated), "{dated}");
+        }
+        assert!(!text.contains("Draft the cut-over plan"));
         let on = gathered(true);
         let draft = on.tasks.iter().find(|t| t.text.contains("Draft the cut-over plan")).unwrap();
         assert_eq!((draft.list.as_str(), draft.project.as_deref()), ("next", Some("Hub migration")));
+        let licence = on.tasks.iter().find(|t| t.text.contains("Renew the licence")).unwrap();
+        assert_eq!(licence.list, "next");
         // The setting is part of what the preparation was made from.
         assert_ne!(stamp(&off), stamp(&on));
     }
