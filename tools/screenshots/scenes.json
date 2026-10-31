@@ -864,6 +864,13 @@
     }
   },
   {
+    "name": "resize-no-saved-widths",
+    "screen": "tasks",
+    "view": {
+      "tasks:sel": "Project. Orbit App launch.md:9"
+    }
+  },
+  {
     "name": "resize-tasks",
     "screen": "tasks",
     "view": {
