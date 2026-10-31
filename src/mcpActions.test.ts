@@ -1759,8 +1759,16 @@ describe("MCP actions", () => {
       expect(out).toContain(
         "Brainstead 1.0.2 (abc123); its app data folder: /data/Brainstead; its website: https://brainstead.davies.co.za/",
       );
+      expect(out).not.toContain("didn't install");
       answers.vault_status = () => ({ state: "error", error: "The index file is damaged.", stats });
       expect(await run("status")).toContain("Index: Index failed: The index file is damaged.");
+      // An update that didn't install, as the update dialog said at this start.
+      answers.update_failed = () => ({
+        title: "The update didn't install",
+        text: "Brainstead 1.0.3 didn't install, so this is still 1.0.2.",
+      });
+      expect(await run("status")).toContain("The update didn't install: Brainstead 1.0.3 didn't install, so this is still 1.0.2.");
+      delete answers.update_failed;
       answers.contradictions_report = () => ({
         last: {
           finished: "2026-10-06T09:00:00",
