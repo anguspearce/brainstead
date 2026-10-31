@@ -114,8 +114,9 @@ fn taskbar_glyph(light: bool, size: i32) -> &'static [u8] {
 }
 
 /// Calls `changed` on a thread of its own each time the taskbar turns light or dark or changes
-/// scale, for as long as the app runs; only the first call starts the watch. Elsewhere the icon
-/// doesn't follow the taskbar, so this does nothing.
+/// scale, for as long as the app runs; only the first call starts the watch. `changed` runs on that
+/// thread, so it hands drawing to the main thread. Elsewhere the icon doesn't follow the taskbar,
+/// so this does nothing.
 pub fn watch_taskbar_theme(changed: impl Fn() + Send + 'static) {
     #[cfg(windows)]
     {
