@@ -89,7 +89,8 @@ struct Started {
 
 /// What the start after an installer ran says about it: nothing when the update went in, or when
 /// this is neither version (something else installed meanwhile); otherwise why it didn't. The
-/// installer reopens the old version when it stops (`.onInstFailed` in src-tauri/windows/hooks.nsh).
+/// installer puts the old version back and reopens it when it stops (`.onInstFailed` in
+/// src-tauri/windows/hooks.nsh).
 fn after_install(name: &str, started: &Started, running: &str) -> Option<Message> {
     if running != started.from || started.version == started.from {
         return None;
@@ -97,8 +98,8 @@ fn after_install(name: &str, started: &Started, running: &str) -> Option<Message
     Some(Message {
         title: "The update didn't install".into(),
         text: format!(
-            "{name} {} didn't install, so this is still {running}. The installer stopped before it could replace \
-             {name}'s program, usually because something still had it open. Choose Check for Updates… to try again.",
+            "{name} {} didn't install, so this is still {running}. The installer stopped before it finished, \
+             usually because something still had {name}'s program open. Choose Check for Updates… to try again.",
             started.version
         ),
     })

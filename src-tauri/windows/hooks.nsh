@@ -66,17 +66,21 @@ Var MovedAside
   Delete "$INSTDIR\${MAINBINARYNAME}.exe.old*"
 !macroend
 
-; An install that stops (the check couldn't end something, a file couldn't be written) puts the old
-; program back if the hook had moved it and nothing new took its place. For an update from the app
-; (the updater passes /UPDATE) it then opens the old version again, which says in its own update
-; dialog that the update didn't install (src/updates.rs, `Started`). NSIS calls this once the user
-; closes the failed installer's window, or at once under /S. The template declares $UpdateMode and
-; adds the nsis_tauri_utils plugin after this file, so this reads the command line itself and starts
-; the app with Exec (the install is per user, so not elevated).
+; An install that stops (a check couldn't end something, a file couldn't be written) puts back the
+; old program the hook moved aside. A new program File already wrote is deleted first, since the
+; files after it may not all have been written; one that something already runs can't be, and
+; stays. For an update from the app (the updater passes /UPDATE) it then opens the program in place:
+; the old version says in its own update dialog that the update didn't install (src/updates.rs,
+; `after_install`), while a new one left in place says nothing. NSIS calls this once the user closes
+; the failed installer's window, or at once under /S. The template declares $UpdateMode and adds the
+; nsis_tauri_utils plugin after this file, so this reads the command line itself and starts the app
+; with Exec (the install is per user, so not elevated).
 Function .onInstFailed
   ${If} $MovedAside != ""
-  ${AndIfNot} ${FileExists} "$INSTDIR\${HOOK_PROGRAM}.exe"
-    Rename "$MovedAside" "$INSTDIR\${HOOK_PROGRAM}.exe"
+    Delete "$INSTDIR\${HOOK_PROGRAM}.exe"
+    ${IfNot} ${FileExists} "$INSTDIR\${HOOK_PROGRAM}.exe"
+      Rename "$MovedAside" "$INSTDIR\${HOOK_PROGRAM}.exe"
+    ${EndIf}
   ${EndIf}
   ClearErrors
   ${GetOptions} $CMDLINE "/UPDATE" $0

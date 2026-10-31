@@ -288,8 +288,8 @@ function sampleUpdate(kind: "offer" | "downloading" | "message" | "failed"): Upd
       kind: "message",
       title: "The update didn't install",
       text:
-        "Brainstead 1.2.0 didn't install, so this is still 1.1.3. The installer stopped before it could replace " +
-        "Brainstead's program, usually because something still had it open. Choose Check for Updates… to try again.",
+        "Brainstead 1.2.0 didn't install, so this is still 1.1.3. The installer stopped before it finished, " +
+        "usually because something still had Brainstead's program open. Choose Check for Updates… to try again.",
     };
   const offer = {
     name: "Brainstead",
