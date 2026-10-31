@@ -6,7 +6,7 @@ Brainstead keeps working while its window is closed: Quick capture, captures fro
 
 ## The menu bar
 
-On Windows this is a system tray icon, usually under the ^ arrow at the bottom right of the taskbar. Everything below applies to it too.
+On Windows this is a system tray icon, usually under the ^ arrow at the bottom right of the taskbar. Everything below applies to it too, except that the icon is white on a dark taskbar and black on a light one, following Windows' mode as it changes, and says a run is going or something waits in its tooltip rather than with a dot.
 
 <a href="images/index.md#day-to-day"><picture><source media="(prefers-color-scheme: dark)" srcset="images/tray-dark.png"><img alt="The menu-bar window: one task overdue, the counts, the capture box, what waits for you, and the menu" src="images/tray-light.png" width="360"></picture></a>
 
