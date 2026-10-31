@@ -178,24 +178,25 @@ pub struct DoneMsg {
     pub outcome: Outcome,
 }
 
-/// The effort `job` runs at on `model` (`ask::job_effort`): its own from Settings › AI assistants ›
-/// Models by job (`jobEffort.<job>`), else the assistant's (`effort.<cli>`), else none. A level the
-/// model doesn't list (Codex's models cache says which it takes) runs at the highest below it that
-/// it has (`ask::fit_effort`), so an assistant-wide level can't fail every scheduled job on that
-/// model. An Ask chat runs at its own instead, which starts as the assistant's.
+/// The effort `job` runs at on `model`: the one set for it (`set_effort`), as the model takes it
+/// (`fitted`). An Ask chat runs at its own instead, which starts as the assistant's, fitted alike.
 pub fn job_effort(app: &AppHandle, job: ask::Job, model: &str) -> Option<String> {
-    efforts(app, job, model).1
+    fitted(model, set_effort(app, job, model).as_deref())
 }
 
-/// The effort set for `job` on `model`, and the one it runs at (`job_effort`).
-fn efforts(app: &AppHandle, job: ask::Job, model: &str) -> (Option<String>, Option<String>) {
-    let set = {
-        let st = app.state::<crate::AppState>();
-        let s = st.settings.lock().unwrap();
-        ask::job_effort(&s.ui, job.key(), model).map(str::to_string)
-    };
-    let fit = set.as_deref().and_then(|e| ask::fit_effort(Cli::route(model), e, model_efforts(model).as_deref())).map(str::to_string);
-    (set, fit)
+/// The effort set for `job` on `model` (`ask::job_effort`): its own from Settings › AI assistants ›
+/// Models by job (`jobEffort.<job>`), else the assistant's (`effort.<cli>`), else none.
+fn set_effort(app: &AppHandle, job: ask::Job, model: &str) -> Option<String> {
+    let st = app.state::<crate::AppState>();
+    let s = st.settings.lock().unwrap();
+    ask::job_effort(&s.ui, job.key(), model).map(str::to_string)
+}
+
+/// `level` as `model` takes it: a level the model doesn't list (Codex's models cache says which it
+/// takes) runs at the highest below it that it has (`ask::fit_effort`), so an assistant-wide level
+/// can't fail every chat and scheduled job on that model.
+fn fitted(model: &str, level: Option<&str>) -> Option<String> {
+    level.and_then(|e| ask::fit_effort(Cli::route(model), e, model_efforts(model).as_deref())).map(str::to_string)
 }
 
 /// The model a job uses (`ask::job_model`): its own from Settings › AI assistants (`jobModels`),
@@ -298,33 +299,47 @@ pub fn run_with_images(
     images: &[PathBuf],
     on: &mut dyn FnMut(&Event),
 ) -> Outcome {
-    let (set, effort) = efforts(app, job, model);
-    if set != effort {
+    let set = set_effort(app, job, model);
+    run_fitted(app, job.key(), chat_id, prompt, model, session, system, mcp, images, set.as_deref(), on)
+}
+
+/// Runs a turn of `what` (a job's key, or "chat") at `set` as the model takes it (`fitted`), for a
+/// background job and an Ask chat alike.
+#[allow(clippy::too_many_arguments)]
+fn run_fitted(
+    app: &AppHandle,
+    what: &str,
+    chat_id: &str,
+    prompt: &str,
+    model: &str,
+    session: Option<&str>,
+    system: &str,
+    mcp: Option<&ask::Mcp>,
+    images: &[PathBuf],
+    set: Option<&str>,
+    on: &mut dyn FnMut(&Event),
+) -> Outcome {
+    let effort = fitted(model, set);
+    if set != effort.as_deref() {
         crate::applog!(
-            "ask: {} on {model}: the model doesn't take {} effort, so it runs at {}",
-            job.key(),
-            set.as_deref().unwrap_or_default(),
+            "ask: {what} on {model}: the model doesn't take {} effort, so it runs at {}",
+            set.unwrap_or_default(),
             effort.as_deref().unwrap_or("its default")
         );
     }
     let out = run_at(app, chat_id, prompt, model, session, system, mcp, images, effort.as_deref(), &mut *on);
     // A level the CLI or model refused (one the models cache doesn't cover, or an older CLI without
-    // the option): once more at the model's own default, rather than the job failing every time.
+    // the option): once more at the model's own default, rather than failing every time.
     match effort {
         Some(e) if ask::effort_refused(&out) => {
-            crate::applog!(
-                "ask: {} on {model} refused {e} effort, so it ran again without one: {}",
-                job.key(),
-                out.error.unwrap_or_default()
-            );
+            crate::applog!("ask: {what} on {model} refused {e} effort, so it ran again without one: {}", out.error.unwrap_or_default());
             run_at(app, chat_id, prompt, model, session, system, mcp, images, None, on)
         }
         _ => out,
     }
 }
 
-/// `run_with_images` at `effort` rather than the job's: an Ask chat runs at its own
-/// (None: the CLI's own default).
+/// One run of the CLI at exactly `effort` (None: the CLI's own default).
 #[allow(clippy::too_many_arguments)]
 fn run_at(
     app: &AppHandle,
@@ -444,7 +459,7 @@ fn feed_stdin(child: &mut std::process::Child, input: Option<String>) -> Option<
 const RUN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
 /// Asks in the background; the answer comes as events. `effort` is the chat's own (None: the CLI's
-/// own default), whatever is set for the CLI in Settings.
+/// own default), whatever is set for the CLI in Settings, fitted to the model as a job's is.
 #[tauri::command]
 pub fn ask_send(
     app: AppHandle,
@@ -471,7 +486,19 @@ pub fn ask_send(
                 system = format!("{system}\n{h}");
             }
             let prompt = brainstead_core::workflows::expand(&prompt).unwrap_or(prompt);
-            run_at(&app, &chat_id, &prompt, &model, session.as_deref(), &system, mcp.as_ref(), &[], effort.as_deref(), &mut |_| {})
+            run_fitted(
+                &app,
+                "chat",
+                &chat_id,
+                &prompt,
+                &model,
+                session.as_deref(),
+                &system,
+                mcp.as_ref(),
+                &[],
+                effort.as_deref(),
+                &mut |_| {},
+            )
         }))
         .unwrap_or_else(|_| Outcome {
             error: Some("Brainstead stopped this answer because something went wrong; its log has the details (Settings › About).".into()),
