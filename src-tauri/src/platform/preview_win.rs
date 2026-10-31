@@ -23,10 +23,12 @@
 //! thread, or with its window a child of the main window, it opens the file and shows its scroll
 //! bar but draws no slide (Word's draws either way). So the host is a popup owned by the main
 //! window, made on the main thread: it stays above the window, hides when it's minimised, and
-//! follows it as it moves, hides and shows (`follow`, a hook on the window's events). `open`,
-//! called off the main thread, posts the host what to do and waits for the answer, so the caller
-//! learns whether the preview is up; while the handler's process opens the document (seconds, for
-//! Office), COM's wait on the main thread keeps dispatching the window's messages.
+//! follows it as it moves, resizes, hides and shows (`follow`, a hook on the window's events).
+//! `open`, called off the main thread, posts the host what to do and waits for the answer, so the
+//! caller learns whether the preview is up. While the handler's process opens the document
+//! (seconds, for Office), COM's wait on the main thread keeps the window painting, moving and
+//! resizing, but Tauri's event loop, and so the page's commands, wait for the call (`Book::busy`):
+//! hence a deadline on every call.
 //!
 //! The host never takes the activation, so the main window keeps its focus, and the handler is
 //! released when the page closes the panel or the app quits (`shutdown`). It is not hidden when
@@ -70,11 +72,11 @@ use windows::Win32::UI::Shell::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, CreateWindowExW, DefWindowProcW, GetClientRect, GetGUIThreadInfo, GetWindow, GetWindowLongPtrW,
-    GetWindowThreadProcessId, IsChild, IsIconic, IsWindowVisible, PostMessageW, RegisterClassExW, SetWindowLongPtrW, SetWindowPos,
-    SetWindowsHookExW, ShowWindow, UnhookWindowsHookEx, CREATESTRUCTW, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW,
-    GUITHREADINFO, GWLP_USERDATA, GW_OWNER, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, OBJID_WINDOW, SWP_HIDEWINDOW, SWP_NOACTIVATE, SWP_NOSIZE,
-    SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, WH_KEYBOARD_LL, WINEVENT_OUTOFCONTEXT, WM_APP, WM_CREATE, WM_DESTROY, WM_ERASEBKGND, WM_KEYDOWN,
-    WM_NCDESTROY, WM_PAINT, WNDCLASSEXW, WS_CLIPCHILDREN, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_POPUP,
+    GetWindowThreadProcessId, IsChild, IsIconic, IsWindowVisible, PostMessageW, RegisterClassExW, SendNotifyMessageW, SetWindowLongPtrW,
+    SetWindowPos, SetWindowsHookExW, ShowWindow, UnhookWindowsHookEx, CREATESTRUCTW, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE,
+    EVENT_OBJECT_SHOW, GUITHREADINFO, GWLP_USERDATA, GW_OWNER, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, OBJID_WINDOW, SWP_HIDEWINDOW,
+    SWP_NOACTIVATE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, WH_KEYBOARD_LL, WINEVENT_OUTOFCONTEXT, WM_APP, WM_CREATE, WM_DESTROY,
+    WM_ERASEBKGND, WM_KEYDOWN, WM_NCDESTROY, WM_PAINT, WNDCLASSEXW, WS_CLIPCHILDREN, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_POPUP,
 };
 
 /// The shell extension handler category for preview handlers: `shellex\{this}` under a type's key
@@ -383,9 +385,10 @@ const CLASS: PCWSTR = w!("BRAINSTEAD_PREVIEW");
 #[derive(Debug, Default)]
 struct Book {
     /// A call into the handler is in flight. The handler's process answers it while COM waits on
-    /// the main thread, dispatching the window's other messages meanwhile: an open, move or close
-    /// then waits for the call to end (its slot stays full, or `close_after` is set), since a
-    /// second call into a handler busy with the first would hang both.
+    /// the main thread. That wait delivers sent messages, incoming calls and the window events
+    /// `follow` hooks, but not posted messages nor Tauri's event loop, so the page's commands, and
+    /// with them its opens, moves and closes, wait for the call to end; one that came first waits
+    /// in its slot (or `close_after`), since a second call into a busy handler would hang both.
     busy: bool,
     /// A handler is up or opening.
     showing: bool,
@@ -393,8 +396,19 @@ struct Book {
     id: u64,
     /// The page closed the panel during a call: the handler goes once the call ends.
     close_after: bool,
-    /// Where the panel is, kept so the host can follow the window.
+    /// Where the panel is, its latest place even during a call, kept so the host can follow the
+    /// window.
     at: Option<Frame>,
+    /// The colours the handler was last given (background, text), apart from `at`, which can
+    /// take a theme change during a call before the handler can.
+    painted: Option<(String, String)>,
+    /// The host has been put over the panel for this open, once the handler has the file (`show`);
+    /// until then the page's "Opening the preview…" shows.
+    placed: bool,
+    /// How far the panel's body sits from the main window's client area's right and bottom edges,
+    /// from the page's last place taken between calls: the body keeps them as the window resizes,
+    /// so the host can follow a resize during a call (`follow_resize`).
+    insets: Option<(i32, i32)>,
     /// A call into the handler missed its deadline: this host is done with (`abandon`).
     abandoned: bool,
 }
@@ -434,6 +448,8 @@ impl Book {
         self.id = f.id;
         self.close_after = false;
         self.at = Some(f.clone());
+        self.painted = None;
+        self.placed = false;
         Step::Go
     }
 
@@ -464,14 +480,21 @@ impl Book {
     }
 
     /// Whether the host is on screen, with the main window on screen or not (`owner`): only while
-    /// a preview is up or opening and not closed meanwhile, and never without the main window.
+    /// a preview is up or drawing and not closed meanwhile, never without the main window and
+    /// never under a dialog of the page's own.
     fn visible(&self, owner: bool) -> bool {
-        self.showing && !self.close_after && owner && !self.at.as_ref().is_some_and(|f| f.hidden)
+        self.showing && self.placed && !self.close_after && owner && !self.at.as_ref().is_some_and(|f| f.hidden)
     }
 
-    /// Whether `f` (the panel's place, for the preview up) brings other colours: the theme changed.
+    /// Whether `f` (the panel's place, for the preview up) brings colours other than those the
+    /// handler has: the theme changed.
     fn recoloured(&self, f: &Frame) -> bool {
-        self.showing && self.id == f.id && self.at.as_ref().is_some_and(|a| a.bg != f.bg || a.fg != f.fg)
+        self.showing && self.id == f.id && self.painted.as_ref().is_some_and(|(bg, fg)| *bg != f.bg || *fg != f.fg)
+    }
+
+    /// The handler was given `f`'s colours.
+    fn paint(&mut self, f: &Frame) {
+        self.painted = Some((f.bg.clone(), f.fg.clone()));
     }
 
     /// What letting go of the host for good (the app quitting, the host destroyed) does with its
@@ -488,7 +511,35 @@ impl Book {
         }
     }
 
-    /// The page moved the panel (between calls): whether there's a preview to move.
+    /// The page's place `at` was taken with the main window's client area `client` (width,
+    /// height) as it is now: the body's distance from its right and bottom edges is kept.
+    fn anchor(&mut self, client: (i32, i32)) {
+        self.insets = self.at.as_ref().map(|f| (client.0 - f.x - f.w, client.1 - f.y - f.h));
+    }
+
+    /// The main window's client area is now `client` during a call into the handler, when the
+    /// page's own place can't arrive: Tauri serves the page's commands from its event loop, which
+    /// COM's wait for the call doesn't run, while the window's own events still reach the host.
+    /// The body keeps its insets (the page lays it out so), so the new place is known: Some when
+    /// the host must be resized to it.
+    fn follow_resize(&mut self, client: (i32, i32)) -> Option<Frame> {
+        if !(self.busy && self.showing && self.placed) {
+            return None;
+        }
+        let (right, bottom) = self.insets?;
+        let at = self.at.as_mut()?;
+        let (w, h) = ((client.0 - at.x - right).max(1), (client.1 - at.y - bottom).max(1));
+        if (w, h) == (at.w, at.h) {
+            return None;
+        }
+        at.w = w;
+        at.h = h;
+        Some(at.clone())
+    }
+
+    /// The page moved the panel, or a dialog of its own hid it: whether there's a preview to
+    /// move. Taken before the handler has the file too, so the open places the host where the
+    /// panel is by then.
     fn moved(&mut self, f: &Frame) -> bool {
         let here = self.showing && f.id == self.id;
         if here {
@@ -526,8 +577,10 @@ thread_local! {
 /// its deadline, so its server lets go of the file now rather than when COM notices this process
 /// has gone. A handler with a call in flight has that call cancelled and is left (`Teardown`).
 /// Tauri hides its windows and ends the process without destroying them, so the host's own
-/// teardown (`WM_DESTROY`) doesn't run on a quit. Only on the host's thread (the app's exit event
-/// runs on the main thread); elsewhere it does nothing, and the process's end lets go instead.
+/// teardown (`WM_DESTROY`) doesn't run on a quit. A quit asked for during a call is served when
+/// the call ends, at its deadline at the latest, as Tauri's event loop waits for it. Only on the
+/// host's thread (the app's exit event runs on the main thread); elsewhere it does nothing, and
+/// the process's end lets go instead.
 pub fn shutdown() {
     let Some(host) = current().map(|h| HWND(h as _)) else { return };
     if !ON_HOST_THREAD.with(|on| on.get()) {
@@ -546,8 +599,8 @@ unsafe fn let_go(hwnd: HWND, st: &Shared, limit: Duration) {
     match step {
         Teardown::Nothing => {}
         Teardown::Leave => {
-            // On this thread, inside COM's wait for the call: cancelling it ends the wait, so the
-            // loop the app quits from is reached at once.
+            // On this thread, inside COM's wait for the call (the host destroyed during it):
+            // cancelling it ends the wait at once rather than at its deadline.
             let _ = CoCancelCall(0, 0);
             abandon(hwnd, st);
         }
@@ -570,9 +623,10 @@ unsafe fn make(parent: isize) -> Result<isize, String> {
     Ok(hwnd.0 as isize)
 }
 
-/// The main window moved, hid or showed: the host goes with it while a preview is up (Windows
-/// itself hides and shows it round a minimise). Only moves it, never calls the handler, so it's
-/// safe while a call into the handler is in flight.
+/// The main window moved, resized, hid or showed: the host goes with it while a preview is up
+/// (Windows itself hides and shows it round a minimise), and during a call takes the panel's new
+/// size from the window (`Book::follow_resize`). Only moves it, never calls the handler, so it's
+/// safe while a call into the handler is in flight, when these events still arrive.
 unsafe extern "system" fn follow(_: HWINEVENTHOOK, event: u32, hwnd: HWND, object: i32, _: i32, _: u32, _: u32) {
     let Some(host) = current().map(|h| HWND(h as _)) else { return };
     if object != OBJID_WINDOW.0 || GetWindow(host, GW_OWNER).ok() != Some(hwnd) {
@@ -580,6 +634,12 @@ unsafe extern "system" fn follow(_: HWINEVENTHOOK, event: u32, hwnd: HWND, objec
     }
     let Some(st) = state(host) else { return };
     let owner = event != EVENT_OBJECT_HIDE && owner_shown(host);
+    // Resized during a call into the handler: the host takes the panel's new size from the window.
+    let client = owner_client(host);
+    let resized = st.try_borrow_mut().ok().and_then(|mut s| s.book.follow_resize(client).map(|f| (f, s.book.visible(owner))));
+    if let Some((f, show)) = resized {
+        return place(host, &f, show);
+    }
     let Some((f, show)) =
         st.try_borrow().ok().and_then(|s| s.book.at.clone().filter(|_| s.book.showing).map(|f| (f, s.book.visible(owner))))
     else {
@@ -598,6 +658,15 @@ unsafe extern "system" fn follow(_: HWINEVENTHOOK, event: u32, hwnd: HWND, objec
 /// host is never shown without it, or it would stand alone on the desktop.
 unsafe fn owner_shown(host: HWND) -> bool {
     GetWindow(host, GW_OWNER).is_ok_and(|o| IsWindowVisible(o).as_bool() && !IsIconic(o).as_bool())
+}
+
+/// The main window's client area (width, height), in the physical pixels the frame is in.
+unsafe fn owner_client(host: HWND) -> (i32, i32) {
+    let mut rc = RECT::default();
+    if let Ok(owner) = GetWindow(host, GW_OWNER) {
+        let _ = GetClientRect(owner, &mut rc);
+    }
+    (rc.right - rc.left, rc.bottom - rc.top)
 }
 
 /// The panel's top left on the screen: the frame is in the main window's client pixels.
@@ -745,8 +814,9 @@ fn late_text(what: &str) -> String {
 ///
 /// Past the deadline a watchdog thread cancels the call (COM's call cancellation, turned on for
 /// this thread only during the call, so the main thread's other COM calls keep their speed) and
-/// posts `MSG_LATE`. A cancelled call returns at once, and the caller abandons the handler; if it
-/// still doesn't, `MSG_LATE`, dispatched by COM's wait inside the call, abandons it from there.
+/// sends `MSG_LATE` (sent, not posted: COM's wait delivers sent messages, not posted ones). A
+/// cancelled call returns at once, and the caller abandons the handler; if it still doesn't,
+/// `MSG_LATE`, run inside COM's wait for the call, abandons it from there.
 unsafe fn call<T>(hwnd: HWND, st: &Shared, limit: Duration, f: impl FnOnce() -> T) -> Result<T, Late> {
     let n = {
         let mut s = st.borrow_mut();
@@ -767,7 +837,7 @@ unsafe fn call<T>(hwnd: HWND, st: &Shared, limit: Duration, f: impl FnOnce() -> 
             flag.store(true, Ordering::Release);
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
             let _ = CoCancelCall(tid, 0);
-            let _ = PostMessageW(Some(HWND(host as _)), MSG_LATE, WPARAM(n as usize), LPARAM(0));
+            let _ = SendNotifyMessageW(HWND(host as _), MSG_LATE, WPARAM(n as usize), LPARAM(0));
         }
     });
     let _ = CoEnableCallCancellation(None);
@@ -880,16 +950,27 @@ unsafe fn show(hwnd: HWND, st: &Shared, path: &Path, f: &Frame) -> Result<bool, 
         return Err(format!("The preview couldn't open this file: {why}.").into());
     }
     crate::applog!("preview: {name}: file given in {:?}", t.elapsed());
-    let bg = st.borrow().bg;
+    // The panel's latest place: the page may have moved it, recoloured it or hidden it for a
+    // dialog while the handler started and read the file.
+    let at = st.borrow().book.at.clone().unwrap_or_else(|| f.clone());
+    let bg = colour(&at.bg);
+    st.borrow_mut().bg = bg;
     call(hwnd, st, QUICK, || {
         if let Ok(v) = handler.cast::<IPreviewHandlerVisuals>() {
             let _ = v.SetBackgroundColor(bg);
-            let _ = v.SetTextColor(colour(&f.fg));
+            let _ = v.SetTextColor(colour(&at.fg));
         }
     })?;
-    let show = st.borrow().book.visible(owner_shown(hwnd));
-    place(hwnd, f, show);
-    let rc = RECT { left: 0, top: 0, right: f.w, bottom: f.h };
+    let (owner, client) = (owner_shown(hwnd), owner_client(hwnd));
+    let show = {
+        let mut s = st.borrow_mut();
+        s.book.paint(&at);
+        s.book.placed = true;
+        s.book.anchor(client);
+        s.book.visible(owner)
+    };
+    place(hwnd, &at, show);
+    let rc = RECT { left: 0, top: 0, right: at.w, bottom: at.h };
     call(hwnd, st, QUICK, || handler.SetWindow(hwnd, &rc))?.map_err(|e| e.message())?;
     crate::applog!("preview: {name}: window set in {:?}", t.elapsed());
     call(hwnd, st, SLOW, || handler.DoPreview())?.map_err(|e| format!("The preview couldn't draw this file: {}.", e.message()))?;
@@ -935,7 +1016,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             if let Some(st) = state(hwnd).filter(|st| !st.borrow().book.abandoned) {
                 let id = st.borrow().book.id;
                 let step = st.borrow_mut().book.close(closed(id));
-                // Hidden at once, even mid-call; the handler goes now or when the call ends.
+                // Hidden at once; the handler goes now, or when a call in flight ends.
                 if step != Step::Skip {
                     let refocus = focus_in(hwnd);
                     let _ = ShowWindow(hwnd, SW_HIDE);
@@ -955,8 +1036,8 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             LRESULT(0)
         }
         MSG_LATE => {
-            // The watchdog's word that call `wparam` missed its deadline. Still in flight here
-            // means the cancel didn't end it: this runs inside COM's wait for it.
+            // The watchdog's word that call `wparam` missed its deadline, sent so that COM's wait
+            // delivers it. Still in flight here means the cancel didn't end it.
             if let Some(st) = state(hwnd) {
                 let stuck = st.try_borrow().is_ok_and(|s| s.book.busy && !s.book.abandoned && s.calls == wparam.0 as u64);
                 if stuck {
@@ -1111,22 +1192,26 @@ unsafe fn open_next(hwnd: HWND, st: &Shared) {
     }
 }
 
-/// Takes up the panel's latest place from `MOVED`, unless a call is in flight (its end posts again).
+/// Takes up the panel's latest place from `MOVED`, unless a call is in flight (its end posts
+/// again). The page's places can't arrive during a call anyway (`Book::follow_resize` says why).
 unsafe fn move_next(hwnd: HWND, st: &Shared) {
     if st.borrow().book.busy {
         return;
     }
     let Some(f) = crate::lock(&MOVED).take() else { return };
-    let (showing, recolour) = {
+    let owner = owner_shown(hwnd);
+    let client = owner_client(hwnd);
+    let (here, show) = {
         let mut s = st.borrow_mut();
-        let recolour = s.book.recoloured(&f);
-        (s.book.moved(&f) && s.handler.is_some(), recolour)
+        let here = s.book.moved(&f);
+        s.book.anchor(client);
+        (here && s.book.placed, s.book.visible(owner))
     };
-    if !showing {
+    if !here {
         return;
     }
-    let show = st.borrow().book.visible(owner_shown(hwnd));
     place(hwnd, &f, show);
+    let recolour = st.borrow().book.recoloured(&f);
     let Some(h) = st.borrow().handler.clone() else { return };
     let rc = RECT { left: 0, top: 0, right: f.w, bottom: f.h };
     let mut done = call(hwnd, st, QUICK, || h.SetRect(&rc)).is_ok();
@@ -1142,6 +1227,9 @@ unsafe fn move_next(hwnd: HWND, st: &Shared) {
             }
         })
         .is_ok();
+        if done {
+            st.borrow_mut().book.paint(&f);
+        }
     }
     if !done {
         std::mem::forget(h);
@@ -1293,7 +1381,9 @@ mod tests {
         let mut b = Book::default();
         assert!(!b.visible(true), "nothing up");
         assert_eq!(b.open(&frame(1, 10), false), Step::Go);
-        assert!(b.visible(true), "shown while it opens, so the handler draws into it");
+        assert!(!b.visible(true), "not before the handler has the file: the page says it is opening");
+        b.placed = true;
+        assert!(b.visible(true), "then shown while it draws, so the handler draws into it");
         assert!(!b.visible(false), "an open that ends while the window is in the tray stays hidden");
         assert!(b.opened(true, false));
         assert!(!b.visible(false), "a move or scale change while hidden doesn't show it");
@@ -1306,19 +1396,43 @@ mod tests {
     fn a_theme_change_recolours_the_preview_up() {
         let mut b = Book::default();
         assert_eq!(b.open(&frame(1, 10), false), Step::Go);
+        b.paint(&frame(1, 10));
         assert!(b.opened(true, false));
         assert!(!b.recoloured(&frame(1, 30)), "a move alone");
         let dark = Frame { bg: "#1b1d22".into(), fg: "#e8e6e1".into(), ..frame(1, 10) };
         assert!(b.recoloured(&dark));
         assert!(!b.recoloured(&Frame { id: 2, ..dark.clone() }), "another panel's");
         assert!(b.moved(&dark));
+        assert!(b.recoloured(&dark), "moved, but the handler hasn't the colours yet");
+        b.paint(&dark);
         assert!(!b.recoloured(&dark), "once taken");
+    }
+
+    #[test]
+    fn a_resize_during_a_slow_call_is_followed_from_the_window() {
+        let mut b = Book::default();
+        assert_eq!(b.open(&frame(1, 10), false), Step::Go);
+        // Office's first start: the page's text shows, and the host isn't placed yet.
+        b.busy = true;
+        assert!(b.follow_resize((1000, 800)).is_none(), "nothing on screen to resize");
+        // The handler has the file: the host is put over the panel (800x600 at 10,40 in a
+        // 1000x800 client area) and DoPreview is in flight for seconds.
+        b.placed = true;
+        b.anchor((1000, 800));
+        assert_eq!(b.insets, Some((190, 160)));
+        let f = b.follow_resize((900, 700)).expect("the window shrank during the call");
+        assert_eq!((f.x, f.y, f.w, f.h), (10, 40, 700, 500), "the body keeps its insets");
+        assert!(b.follow_resize((900, 700)).is_none(), "a move alone");
+        b.busy = false;
+        assert!(b.follow_resize((800, 600)).is_none(), "between calls the page's own place comes");
+        assert!(b.opened(true, false));
     }
 
     #[test]
     fn hidden_while_the_page_shows_a_dialog_over_it() {
         let mut b = Book::default();
         assert_eq!(b.open(&frame(1, 10), false), Step::Go);
+        b.placed = true;
         assert!(b.opened(true, false));
         assert!(b.moved(&Frame { hidden: true, ..frame(1, 10) }));
         assert!(!b.visible(true), "the Quit question is up");
