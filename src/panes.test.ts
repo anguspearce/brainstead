@@ -18,7 +18,6 @@ import {
   PANES,
   paneRoom,
   paneSpecs,
-  paneWidth,
   resetPaneWidth,
   resetPaneWidths,
   resizeLocked,
@@ -82,14 +81,6 @@ describe("pane widths", () => {
   it("leave the flexible pane its least width once the gaps and the columns that never move are taken", () => {
     expect(paneRoom(1000)).toBe(1000 - MIN_FLEX);
     expect(paneRoom(1000, 24)).toBe(1000 - 24 - MIN_FLEX);
-  });
-
-  it("show the stored width within the room, and nothing (the stylesheet's) when none is stored", () => {
-    const side = PANES["tasks.side"];
-    expect(paneWidth(side, undefined, "tasks.side")).toBeUndefined();
-    expect(paneWidth(side, { "tasks.side": 500 }, "tasks.side")).toBe(500);
-    expect(paneWidth(side, { "tasks.side": 500 }, "tasks.side", 420)).toBe(420);
-    expect(paneWidth(side, { "tasks.side": "wide" as unknown as number }, "tasks.side")).toBeUndefined();
   });
 
   it("have their custom property in the stylesheet at their usual width, with no width stored", () => {
@@ -181,9 +172,10 @@ describe("pane widths", () => {
     expect(() => setPaneWidth("trash.type", 150)).toThrow(lockedMessage("trash.type", "columns"));
     expect(() => resetPaneWidth("trash.type")).toThrow(/Column widths are locked/);
     expect(lockedMessage("trash.type", "columns")).toMatch(/turn off Lock column widths \(resizeLocks\.columns\)/);
-    // The other type isn't locked by it, and the locked one's width still shows.
+    // The other type isn't locked by it, and the locked one's width is kept (PaneResizer.test.tsx
+    // shows it drawn).
     expect(setPaneWidth("sidebar", 320)).toBe(320);
-    expect(paneWidth(PANES["trash.type"], settings.get().paneWidths, "trash.type")).toBe(120);
+    expect(settings.get().paneWidths).toEqual({ sidebar: 320, "trash.type": 120 });
     settings.update({ resizeLocks: { columns: true, panes: true } });
     expect(() => setPaneWidth("sidebar", 340)).toThrow(/^Pane widths are locked, so sidebar can't be resized/);
     resetPaneWidths();
