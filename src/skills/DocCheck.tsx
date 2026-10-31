@@ -20,6 +20,8 @@ import { TopBar } from "../TopBar";
 import { ago, SearchPick, Seg } from "../ui";
 import { CompareTabs } from "./CompareTabs";
 import { ASSISTANT_FRONTMATTER } from "../md/scripts";
+import { usePanes } from "../PaneResizer";
+import { PANES } from "../panes";
 
 type Mode = "standard" | "callouts";
 
@@ -82,6 +84,17 @@ export function governingDocs(reg: CanonicalRegister | null): CanonicalEntry[] {
 }
 
 export function DocCheckScreen() {
+  const panes = usePanes({ "doccheck.left": PANES["doccheck.left"] });
+  // The register's columns, each resized from its left edge (Document takes the rest); the row's
+  // padding (28px) and three gaps (36px) never move.
+  const regCols = usePanes(
+    {
+      "register.version": PANES["register.version"],
+      "register.status": PANES["register.status"],
+      "register.file": PANES["register.file"],
+    },
+    { mode: "column", fixed: 28 + 36 },
+  );
   const here = useStore(place).place;
   const [reg, setReg] = useState<CanonicalRegister | null>(null);
   const [sources, setSources] = useState<FileSummary[]>([]);
@@ -237,18 +250,22 @@ export function DocCheckScreen() {
             )}
           </div>
           {reg && reg.entries.length > 0 && (
-            <div className="card dcreg">
+            <div className="card dcreg" {...regCols.root}>
               <div className="dcr th">
                 <span>Document</span>
-                <span>Version</span>
-                <span>Status</span>
-                <span>File</span>
+                <span>Version{regCols.resizer("register.version")}</span>
+                <span>Status{regCols.resizer("register.status")}</span>
+                <span>File{regCols.resizer("register.file")}</span>
               </div>
               {reg.entries.map((e) => (
                 <div key={e.line} className={`dcr ${e.status}`}>
-                  <span className="ell">{e.title}</span>
-                  <span className="mono">{e.version}</span>
-                  <span>
+                  <span className="ell" title={e.title}>
+                    {e.title}
+                  </span>
+                  <span className="mono ell" title={e.version}>
+                    {e.version}
+                  </span>
+                  <span className="ell" title={STATUS[e.status][0]}>
                     <span className={`chip ${STATUS[e.status][1]}`}>{STATUS[e.status][0]}</span>
                   </span>
                   <span className={`ell ${e.exists ? "muted" : "red"}`} title={e.resolvedPath}>
@@ -359,7 +376,8 @@ export function DocCheckScreen() {
           </div>
         )}
         {r && !r.unrelated && (
-          <div className="dcres">
+          <div className="dcres" {...panes.root}>
+            {panes.resizers}
             <section className="card dcverdict">
               <span className="eyebrow">Verdict</span>
               <div className="dcv">{r.verdict}</div>

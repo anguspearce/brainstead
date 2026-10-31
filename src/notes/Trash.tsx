@@ -18,6 +18,8 @@ import { ago, Dialog, fmtBytes, LayerTag, SearchBox, Seg } from "../ui";
 import { errText } from "./actions";
 import { folderOf } from "./filename";
 import { useFeatures } from "../features";
+import { usePanes } from "../PaneResizer";
+import { PANES } from "../panes";
 
 const LABEL: Record<Layer, string> = { note: "Note", wiki: "Wiki", source: "Source", template: "Template" };
 
@@ -52,6 +54,17 @@ export function deletedWhen(iso: string, now = new Date()): string {
 type Confirm = { what: "delete"; ids: string[] } | { what: "empty" } | { what: "restore-as"; entry: TrashEntry };
 
 export function TrashScreen() {
+  // The columns with a divider, each at its left edge (Name takes the rest); the checkbox
+  // (28px), the buttons (190px), the row's padding (32px) and its six gaps never move.
+  const panes = usePanes(
+    {
+      "trash.type": PANES["trash.type"],
+      "trash.folder": PANES["trash.folder"],
+      "trash.deleted": PANES["trash.deleted"],
+      "trash.size": PANES["trash.size"],
+    },
+    { mode: "column", fixed: 28 + 190 + 32 + 6 * 12 },
+  );
   const v = useVaultVersion();
   const [rows, setRows] = useState<TrashEntry[] | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
@@ -83,7 +96,12 @@ export function TrashScreen() {
   useEffect(() => {
     if (!canLook) return;
     const k = (e: KeyboardEvent) => {
-      if (e.key !== " " || picked.length !== 1 || (e.target as HTMLElement)?.closest?.("input, textarea, button, [contenteditable]"))
+      if (
+        e.key !== " " ||
+        e.defaultPrevented ||
+        picked.length !== 1 ||
+        (e.target as HTMLElement)?.closest?.("input, textarea, button, [contenteditable], [role=separator]")
+      )
         return;
       e.preventDefault();
       void quickLook(picked[0]);
@@ -203,7 +221,7 @@ export function TrashScreen() {
             <p className="muted">The Trash is empty.</p>
           </div>
         ) : (
-          <div className="trlist" role="table" aria-label="Trash">
+          <div className="trlist" role="table" aria-label="Trash" {...panes.root}>
             <div className="trrow tb-head" role="row">
               <button
                 type="button"
@@ -217,10 +235,10 @@ export function TrashScreen() {
                 {allOn && <Icon name="check" size={11} />}
               </button>
               <span>Name</span>
-              <span>Type</span>
-              <span>Was in</span>
-              <span>Deleted</span>
-              <span className="r">Size</span>
+              <span>Type{panes.resizer("trash.type")}</span>
+              <span>Was in{panes.resizer("trash.folder")}</span>
+              <span>Deleted{panes.resizer("trash.deleted")}</span>
+              <span className="r">Size{panes.resizer("trash.size")}</span>
               <span />
             </div>
             {shown.length === 0 && <p className="muted trnone">Nothing in the Trash matches “{q.trim()}”.</p>}
@@ -241,7 +259,9 @@ export function TrashScreen() {
                     {on && <Icon name="check" size={11} />}
                   </button>
                   <div className="ell">
-                    <div className="ell trname">{r.basename.replace(/\.md$/i, "")}</div>
+                    <div className="ell trname" title={r.basename.replace(/\.md$/i, "")}>
+                      {r.basename.replace(/\.md$/i, "")}
+                    </div>
                     {stuck && (
                       <div className="trwarn">
                         <Icon name="info" size={12} />
@@ -252,11 +272,15 @@ export function TrashScreen() {
                   <span>
                     <LayerTag layer={r.layer} />
                   </span>
-                  <span className="mono faint ell">{folderOf(r.originalRel) || "/"}</span>
-                  <span className="faint" title={ago(new Date(r.deletedAt).getTime())}>
+                  <span className="mono faint ell" title={folderOf(r.originalRel) || "/"}>
+                    {folderOf(r.originalRel) || "/"}
+                  </span>
+                  <span className="faint ell" title={`${deletedWhen(r.deletedAt)}: ${ago(new Date(r.deletedAt).getTime())}`}>
                     {deletedWhen(r.deletedAt)}
                   </span>
-                  <span className="faint r">{fmtBytes(r.sizeBytes)}</span>
+                  <span className="faint r ell" title={fmtBytes(r.sizeBytes)}>
+                    {fmtBytes(r.sizeBytes)}
+                  </span>
                   <span className="tracts">
                     {/* Where there's no Quick Look (Windows), the same call opens the file in its own app. */}
                     {canLook ? (
