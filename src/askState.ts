@@ -522,46 +522,55 @@ export async function setPinned(id: string, pinned: boolean) {
 }
 
 /** Starts listening for answers and reopens the tabs from last time. */
-export async function startAsk() {
-  await api.onAskEvent(({ chatId, event }) => update(chatId, (c) => applyEvent(c, event)));
-  await api.onAskDone((d) => {
-    // A review run's turn is finished and saved by Rust (review-done).
-    if (ask.get().chats.find((c) => c.id === d.chatId)?.review) return;
-    void finish(d);
-  });
+/** Starts Ask's listeners and reopens its tabs; returns what stops the listeners again. */
+export async function startAsk(): Promise<() => void> {
+  const offs: (() => void)[] = [];
+  const stop = () => offs.splice(0).forEach((off) => off());
+  offs.push(await api.onAskEvent(({ chatId, event }) => update(chatId, (c) => applyEvent(c, event))));
+  offs.push(
+    await api.onAskDone((d) => {
+      // A review run's turn is finished and saved by Rust (review-done).
+      if (ask.get().chats.find((c) => c.id === d.chatId)?.review) return;
+      void finish(d);
+    }),
+  );
   // A missed ask-done doesn't leave a chat answering for ever.
-  setInterval(() => {
+  const recovering = setInterval(() => {
     for (const c of ask.get().chats) if (c.busy && !c.review) void recover(c.id);
   }, 5000);
-  followEffortSettings();
+  offs.push(() => clearInterval(recovering), followEffortSettings());
   // A scheduled review opens as a tab while it runs, without taking you to Ask, at its job's effort.
-  await api.onReviewStarted((r) => {
-    const c: Chat = {
-      ...blankChat(r.model),
-      effort: r.effort ?? null,
-      id: r.chatId,
-      title: r.title,
-      review: true,
-      busy: true,
-      streaming: "",
-      transcript: [{ id: uid(), role: "user", text: r.prompt }],
-    };
-    // Run now selects its tab; a scheduled run opens beside the one you're in.
-    const pick = wanted === c.id || !ask.get().active;
-    if (wanted === c.id) wanted = null;
-    setChats((cs) => [...cs.filter((x) => x.id !== c.id), c], pick ? c.id : ask.get().active);
-  });
-  await api.onReviewDone(async (r) => {
-    if (!r.filename) return update(r.chatId, (c) => ({ ...c, busy: false, streaming: null, status: null }));
-    try {
-      const saved = fromSaved(await api.chatRead(r.filename));
-      update(r.chatId, () => ({ ...saved, id: r.chatId, review: true, unread: !seeing(r.chatId) }));
-    } catch {
-      update(r.chatId, (c) => ({ ...c, busy: false }));
-    }
-  });
+  offs.push(
+    await api.onReviewStarted((r) => {
+      const c: Chat = {
+        ...blankChat(r.model),
+        effort: r.effort ?? null,
+        id: r.chatId,
+        title: r.title,
+        review: true,
+        busy: true,
+        streaming: "",
+        transcript: [{ id: uid(), role: "user", text: r.prompt }],
+      };
+      // Run now selects its tab; a scheduled run opens beside the one you're in.
+      const pick = wanted === c.id || !ask.get().active;
+      if (wanted === c.id) wanted = null;
+      setChats((cs) => [...cs.filter((x) => x.id !== c.id), c], pick ? c.id : ask.get().active);
+    }),
+  );
+  offs.push(
+    await api.onReviewDone(async (r) => {
+      if (!r.filename) return update(r.chatId, (c) => ({ ...c, busy: false, streaming: null, status: null }));
+      try {
+        const saved = fromSaved(await api.chatRead(r.filename));
+        update(r.chatId, () => ({ ...saved, id: r.chatId, review: true, unread: !seeing(r.chatId) }));
+      } catch {
+        update(r.chatId, (c) => ({ ...c, busy: false }));
+      }
+    }),
+  );
   // A screenshot scene sets its own chats.
-  if (settings.frozen) return;
+  if (settings.frozen) return stop;
   const s = settings.get();
   const chats: Chat[] = [];
   for (const t of s.askTabs ?? []) {
@@ -578,6 +587,7 @@ export async function startAsk() {
   const has = (id: string | null | undefined) => !!id && all.some((c) => c.id === id);
   const active = has(s.askActive) ? s.askActive! : has(now.active) ? now.active : (all[all.length - 1]?.id ?? null);
   ask.set({ chats: all, active });
+  return stop;
 }
 
 /** Selects a review run's tab: now if it's open, else as soon as it opens. */
