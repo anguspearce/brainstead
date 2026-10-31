@@ -74,7 +74,7 @@ A project is a note named `Project. <name>.md`, with its status, area and outcom
 
 An active project with no next action says **No next action** in red, and one where nothing has moved for two weeks says **Quiet** in amber. Add next actions, edit the outcome, area and status, and draft nudges for waiting-fors. **New project** writes the note with its headings.
 
-The status decides more than the tab a project is on: putting a project on hold or on Someday takes its tasks out of Next actions, the sidebar's count and the weekly review until it's active again (unless **Include on-hold and someday projects** is ticked), and so does a status written as `paused`, `hold` or `maybe`. A completed project's open tasks stay in Next actions.
+The status decides more than the tab a project is on: putting a project on hold or on Someday takes its tasks out of Next actions, the sidebar's count and the weekly review while it stays that way (unless **Include on-hold and someday projects** is ticked), and so does a status written as `paused`, `hold` or `maybe`. A completed project's open tasks stay in Next actions.
 
 - Click an area to fold its projects away; what's folded is remembered. Its pencil renames the area on every project under it; it keeps its place in the order, and undoing the rename (the toast's Undo, ⌘Z, Revert in Changes) puts it back where it was.
 - Drag an area, or a project within its area, by its grip to put them in order. The order is a Brainstead setting, not written to your notes; ones never moved come after, A to Z.

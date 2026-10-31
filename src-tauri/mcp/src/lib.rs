@@ -482,7 +482,7 @@ pub fn tools() -> Vec<Value> {
             "Sets a project's status, area or what done looks like (needs the app), as its page on the Projects screen does. Give only what changes; null clears area or done_looks_like. Recorded in Changes, where the user can revert it. To rename a project, as clicking its name on its page does, use rename_note on its note with type Project.",
             schema(json!({
                 "project": {"type": "string", "description": "The project's name."},
-                "status": {"type": "string", "enum": ["active", "on-hold", "someday", "completed"], "description": "The Projects screen's tabs; completed is its Mark complete (the Completed tab). on-hold and someday take the project's tasks out of Next actions (list_tasks' next, the sidebar's count, the weekly review) until it's active again, unless the user includes them; a completed project's open tasks stay."},
+                "status": {"type": "string", "enum": ["active", "on-hold", "someday", "completed"], "description": "The Projects screen's tabs; completed is its Mark complete (the Completed tab). on-hold and someday take the project's tasks out of Next actions (list_tasks' next, the sidebar's count, the weekly review) for as long as it has that status, unless the user includes them; a completed project's open tasks stay."},
                 "area": {"type": ["string", "null"], "description": "The area of responsibility; null clears it."},
                 "done_looks_like": {"type": ["string", "null"], "description": "What done looks like, one sentence; null clears it."}
             }), &["project"])),

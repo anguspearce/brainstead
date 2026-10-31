@@ -266,7 +266,7 @@ export function TasksScreen() {
                 {view.id === "next" && (
                   <label
                     className="row small"
-                    title="Also show tasks of projects whose status is on hold or someday; off keeps Next actions to active projects and tasks with no project"
+                    title="Also show tasks of projects whose status is on hold or someday; off leaves those out of Next actions"
                   >
                     <input
                       type="checkbox"

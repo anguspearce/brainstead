@@ -31,7 +31,7 @@ The steps are listed on the left by phase; click any to jump to it, which marks 
 - **Get creative**: Someday / maybe, Links to pages not written yet, New ideas (a capture box).
 
 ## Suggestions prepared from your week
-With an AI assistant set up, Brainstead reads the week ahead of the review and prepares suggestions for the steps. Starting the review prepares them only if the week has none yet. Without an assistant the steps work as normal. The suggestions for Next actions are about the tasks that step lists, so on-hold and someday projects' tasks are in them only while they're included.
+With an AI assistant set up, Brainstead reads the week ahead of the review and prepares suggestions for the steps. Starting the review prepares them only if the week has none yet. Without an assistant the steps work as normal. The suggestions leave out on-hold and someday projects' tasks unless they're included (as the step does), except those due or deferred in the next two weeks; the preparation reads the week its own way, so its list of next actions needn't match the step's.
 
 A line under the step's title says when they were prepared, with **Prepare again** for a fresh set. A bar shows while they're being prepared; if it fails you see why, with **Retry**. If the model stops part way, what came before is kept; if nothing can be read, the run's chat in Ask shows what it wrote.
 
