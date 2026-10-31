@@ -712,6 +712,17 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     if args.include_live and not args.all:
         ap.error("--include-live needs --all")
+    if not args.session_end:
+        return run(args)
+    # The SessionEnd hook: whatever goes wrong is reported, and the hook still succeeds.
+    try:
+        return run(args)
+    except Exception as e:
+        print(f"dev_stop: {type(e).__name__}: {e}", file=sys.stderr)
+        return 0
+
+
+def run(args: argparse.Namespace) -> int:
     hook = args.session_end
     if hook:
         try:
