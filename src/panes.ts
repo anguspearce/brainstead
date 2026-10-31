@@ -238,12 +238,6 @@ export function fitPanes(panes: { spec: PaneSpec; want: number; stored: boolean 
   return shown;
 }
 
-/** The width a pane shows: the stored one, clamped to the room; undefined for the stylesheet's own. */
-export function paneWidth(spec: PaneSpec, widths: Record<string, number> | undefined, key: string, room = Infinity): number | undefined {
-  const stored = storedPaneWidth(widths, key);
-  return stored === undefined ? undefined : clampPaneWidth(spec, stored, room);
-}
-
 /** Whether a type of pane is locked against resizing (Settings › General › Appearance). */
 export function resizeLocked(type: ResizeType, locks = settings.get().resizeLocks): boolean {
   return locks?.[type] === true;
