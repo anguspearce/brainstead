@@ -46,7 +46,7 @@ import { DocButton, useIsGone } from "./docButton";
 import { accelLabel, captureDefault, fileManager, hasSync, isMac, isWindows, keyLabel, terminalApp } from "./platform";
 import { useFeatures } from "./features";
 import { usePanes } from "./PaneResizer";
-import { PANES as PANE_SPECS, RESIZE_LOCKS, ResizeType, resetPaneWidths, resizeLocked } from "./panes";
+import { PANES as PANE_SPECS, RESIZE_LOCKS, ResizeType, resetPaneWidths, resizeLocked, setResizeLock } from "./panes";
 
 const PANES: [SettingsPane, string, string][] = [
   ["general", "General", "settings"],
@@ -456,11 +456,6 @@ function AccentColour() {
 function PaneWidths() {
   const { paneWidths: widths, resizeLocks } = useStore(settings);
   const n = Object.keys(widths ?? {}).length;
-  const lock = (type: ResizeType, on: boolean) => {
-    const next = { ...resizeLocks, [type]: on };
-    if (!on) delete next[type];
-    settings.update({ resizeLocks: Object.keys(next).length ? next : undefined });
-  };
   return (
     <div className="ifacesize">
       <div className="eyebrow">Pane widths</div>
@@ -480,7 +475,7 @@ function PaneWidths() {
             style={{ gap: 6 }}
             title={`${RESIZE_LOCKS[type].what} keep their widths and their dividers are hidden, until this is off`}
           >
-            <input type="checkbox" checked={resizeLocked(type, resizeLocks)} onChange={(e) => lock(type, e.target.checked)} />
+            <input type="checkbox" checked={resizeLocked(type, resizeLocks)} onChange={(e) => setResizeLock(type, e.target.checked)} />
             {RESIZE_LOCKS[type].label}
           </label>
         ))}
