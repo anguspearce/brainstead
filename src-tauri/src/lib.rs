@@ -853,6 +853,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             graph,
             updates::update_offered,
+            updates::update_unshown,
+            updates::update_failed,
             updates::update_install,
             updates::update_later,
             updates::update_skip,

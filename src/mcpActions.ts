@@ -2189,13 +2189,14 @@ async function graph(a: Args): Promise<string> {
 }
 
 async function status(): Promise<string> {
-  const [s, v, u, sw, perm, info] = await Promise.all([
+  const [s, v, u, sw, perm, info, failed] = await Promise.all([
     api.settingsRead(),
     api.vaultStatus(),
     api.undoPeek(),
     api.switchoverStatus().catch(() => null),
     api.permissions().catch(() => null),
     api.appInfo().catch(() => null),
+    api.updateFailed().catch(() => null),
   ]);
   const old = sw && (sw.skills || sw.scripts);
   const n = v.stats;
@@ -2216,6 +2217,8 @@ async function status(): Promise<string> {
       ? `Full Disk Access: ${perm.fullDiskAccess === true ? "granted" : perm.fullDiskAccess === false ? "not granted (Settings › Permissions says how to give it)" : `${isMac ? "macOS" : "the system"} can't say`}`
       : "",
     info ? `Brainstead ${info.version} (${info.build}); its app data folder: ${info.dataDir}; its website: ${WEBSITE}` : "",
+    // What the update dialog said at this start (Windows): the update the app closed for didn't install.
+    failed ? `${failed.title}: ${failed.text}` : "",
     `Brainstead runs the daily and weekly summaries (Settings › Jobs & schedule): ${s.summariesHere ? "on" : "off"}`,
     u ? `${keyLabel("⌘Z")} would undo: ${u.label}` : "Nothing to undo.",
     old
