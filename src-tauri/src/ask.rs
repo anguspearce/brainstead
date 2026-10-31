@@ -11,7 +11,7 @@
 //! previous app saves them (brainstead_core::chats), or, while Brainstead is read-only, in `chats/` in
 //! the app data folder until a save can reach the vault.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -32,6 +32,8 @@ use crate::AppState;
 #[derive(Default)]
 pub struct Running {
     children: Mutex<Vec<(String, u32)>>,
+    /// The chats Stop was pressed on while a CLI answered, so a refused effort isn't run again.
+    stopped: Mutex<HashSet<String>>,
 }
 
 impl Running {
@@ -45,9 +47,21 @@ impl Running {
         self.children.lock().unwrap().iter().any(|(c, _)| c == chat)
     }
     pub fn cancel(&self, chat: &str) {
-        for (_, pid) in self.children.lock().unwrap().iter().filter(|(c, _)| c == chat) {
-            platform::stop_group(*pid);
+        for pid in self.stopping(chat) {
+            platform::stop_group(pid);
         }
+    }
+    /// The processes answering `chat`, which is noted as stopped when there are any.
+    fn stopping(&self, chat: &str) -> Vec<u32> {
+        let pids: Vec<u32> = self.children.lock().unwrap().iter().filter(|(c, _)| c == chat).map(|(_, p)| *p).collect();
+        if !pids.is_empty() {
+            self.stopped.lock().unwrap().insert(chat.to_string());
+        }
+        pids
+    }
+    /// Whether Stop was pressed on `chat` since this was last asked.
+    fn stopped(&self, chat: &str) -> bool {
+        self.stopped.lock().unwrap().remove(chat)
     }
     /// Whether any CLI is answering (an Ask chat, or a run's model call).
     pub fn any(&self) -> bool {
@@ -320,6 +334,9 @@ fn run_fitted(
     on: &mut dyn FnMut(&Event),
 ) -> Outcome {
     let effort = fitted(model, set);
+    let running = app.state::<Arc<Running>>().inner().clone();
+    // A Stop from an earlier turn of this chat doesn't count.
+    running.stopped(chat_id);
     if set != effort.as_deref() {
         crate::applog!(
             "ask: {what} on {model}: the model doesn't take {} effort, so it runs at {}",
@@ -329,9 +346,10 @@ fn run_fitted(
     }
     let out = run_at(app, chat_id, prompt, model, session, system, mcp, images, effort.as_deref(), &mut *on);
     // A level the CLI or model refused (one the models cache doesn't cover, or an older CLI without
-    // the option): once more at the model's own default, rather than failing every time.
+    // the option): once more at the model's own default, rather than failing every time. A run the
+    // user stopped isn't started again, whatever its error says.
     match effort {
-        Some(e) if ask::effort_refused(&out) => {
+        Some(e) if ask::effort_refused(&out) && !running.stopped(chat_id) => {
             crate::applog!("ask: {what} on {model} refused {e} effort, so it ran again without one: {}", out.error.unwrap_or_default());
             run_at(app, chat_id, prompt, model, session, system, mcp, images, None, on)
         }
@@ -890,6 +908,20 @@ mod tests {
         }
         let v = version(&p).unwrap_or_default();
         assert!(v.contains("Claude Code"), "{v}");
+    }
+
+    #[test]
+    fn stop_is_noted_only_while_a_cli_answers() {
+        let r = Running::default();
+        assert!(r.stopping("c1").is_empty());
+        assert!(!r.stopped("c1"));
+        r.add("c1", 41);
+        r.add("c2", 42);
+        assert_eq!(r.stopping("c1"), [41]);
+        assert!(r.stopped("c1"));
+        // Asking forgets it, so the chat's next turn starts afresh.
+        assert!(!r.stopped("c1"));
+        assert!(!r.stopped("c2"));
     }
 
     #[test]
