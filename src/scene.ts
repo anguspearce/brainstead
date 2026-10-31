@@ -82,8 +82,9 @@ export interface Scene {
   toast?: string;
   /** The top bar's Teams and Outlook dot, with the sync on: connected, mail gone stale, or not signed in. */
   syncDot?: "ok" | "stale" | "off";
-  /** The update dialog: offering a sample version, downloading it, or saying it's up to date. */
-  update?: "offer" | "downloading" | "message";
+  /** The update dialog: offering a sample version, downloading it, saying it's up to date, or
+   * saying the last update didn't install (src-tauri/src/updates.rs, after_install). */
+  update?: "offer" | "downloading" | "message" | "failed";
 }
 
 /** The Ask scene's chat: a question about the fixture vault and an answer with links. */
@@ -289,8 +290,16 @@ export function applyScene(sc: Scene) {
 }
 
 /** The update scenes' dialog: a made-up next version with notes as tools/update_files.py writes them. */
-function sampleUpdate(kind: "offer" | "downloading" | "message"): UpdateView {
+function sampleUpdate(kind: "offer" | "downloading" | "message" | "failed"): UpdateView {
   if (kind === "message") return { kind, title: "You're up to date", text: "Brainstead 1.1.3 is the newest version." };
+  if (kind === "failed")
+    return {
+      kind: "message",
+      title: "The update didn't install",
+      text:
+        "Brainstead 1.2.0 didn't install, so this is still 1.1.3. The installer stopped before it finished, " +
+        "usually because something still had Brainstead's program open. Choose Check for Updates… to try again.",
+    };
   const offer = {
     name: "Brainstead",
     version: "1.2.0",

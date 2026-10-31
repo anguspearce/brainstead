@@ -841,21 +841,72 @@ pub fn release_updates() -> bool {
 
 /// Deletes the folders Windows' updater leaves in Temp, one per update installed
 /// ("Brainstead-1.3.0-updater-Zu7DmM", holding the installer it ran). By the next start that
-/// installer has done its work. Nothing to do elsewhere.
+/// installer has done its work. Also the old program files the installer moves aside next to this
+/// one ("Brainstead.exe.old", "Brainstead.exe.old-123456": NSIS_HOOK_PREINSTALL in
+/// src-tauri/windows/hooks.nsh) that were still running when it finished; one still running now
+/// stays for the next start. Nothing to do elsewhere.
 pub fn remove_update_installers(name: &str) {
     #[cfg(windows)]
     {
-        let Ok(dir) = std::fs::read_dir(std::env::temp_dir()) else { return };
-        let prefix = format!("{name}-");
+        if let Ok(dir) = std::fs::read_dir(std::env::temp_dir()) {
+            let prefix = format!("{name}-");
+            for e in dir.flatten() {
+                let n = e.file_name().to_string_lossy().into_owned();
+                if n.starts_with(&prefix) && n.contains("-updater-") && e.path().is_dir() {
+                    let _ = std::fs::remove_dir_all(e.path());
+                }
+            }
+        }
+        let Ok(exe) = std::env::current_exe() else { return };
+        let (Some(folder), Some(file)) = (exe.parent(), exe.file_name()) else { return };
+        let Ok(dir) = std::fs::read_dir(folder) else { return };
         for e in dir.flatten() {
-            let n = e.file_name().to_string_lossy().into_owned();
-            if n.starts_with(&prefix) && n.contains("-updater-") && e.path().is_dir() {
-                let _ = std::fs::remove_dir_all(e.path());
+            if is_moved_aside(&file.to_string_lossy(), &e.file_name().to_string_lossy()) {
+                let _ = std::fs::remove_file(e.path());
             }
         }
     }
     #[cfg(not(windows))]
     let _ = name;
+}
+
+/// Whether `file`, in the program's folder, is a copy of the program `exe` the installer moved
+/// aside: `<exe>.old`, or `<exe>.old-<n>` when one was still held from an earlier update. Windows'
+/// names don't go by case.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn is_moved_aside(exe: &str, file: &str) -> bool {
+    let (exe, file) = (exe.to_lowercase(), file.to_lowercase());
+    file.strip_prefix(&exe).is_some_and(|rest| rest == ".old" || rest.strip_prefix(".old-").is_some_and(|n| !n.is_empty()))
+}
+
+/// WebView2's user data folder for a copy that runs beside the installed app (`data` is its own
+/// data folder, `BRAINSTEAD_DATA`): `<data>\WebView2`. Every build otherwise uses the identifier's
+/// folder in `%LOCALAPPDATA%`, and WebView2 runs one browser process per user data folder, shared
+/// by every program using it and started by whichever came first: a dev copy started first would
+/// own the installed app's browser process, and stopping the dev copy (tools/dev_stop.py) would
+/// blank the installed app's window. Set as `WEBVIEW2_USER_DATA_FOLDER`, which takes precedence
+/// over the folder Tauri passes, before the windows are built, and taken away after
+/// (`webview_data_built`) so programs this copy starts don't inherit it. Nothing elsewhere: WebKit
+/// runs a copy's web content in processes of its own.
+pub fn own_webview_data(data: &std::path::Path) {
+    #[cfg(windows)]
+    std::env::set_var(WEBVIEW2_DATA_VAR, webview_data_folder(data));
+    #[cfg(not(windows))]
+    let _ = data;
+}
+
+/// Every window is built (`own_webview_data`).
+pub fn webview_data_built() {
+    #[cfg(windows)]
+    std::env::remove_var(WEBVIEW2_DATA_VAR);
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+const WEBVIEW2_DATA_VAR: &str = "WEBVIEW2_USER_DATA_FOLDER";
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn webview_data_folder(data: &std::path::Path) -> PathBuf {
+    data.join("WebView2")
 }
 
 /// Which of the features that aren't on every system this one has: one table in core, which the
@@ -890,6 +941,23 @@ fn secret_service() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_program_files_the_installer_moved_aside_are_old() {
+        for old in ["Brainstead.exe.old", "brainstead.EXE.old", "Brainstead.exe.old-1234567"] {
+            assert!(is_moved_aside("Brainstead.exe", old), "{old}");
+        }
+        for other in ["Brainstead.exe", "Brainstead.exe.old-", "Brainstead.exe.older", "uninstall.exe.old", "Brainstead.exe.old.txt"] {
+            assert!(!is_moved_aside("Brainstead.exe", other), "{other}");
+        }
+    }
+
+    #[test]
+    fn a_copy_beside_the_app_keeps_its_webview_data_in_its_own_data_folder() {
+        let data = std::path::Path::new("scratch").join("dev-data");
+        assert_eq!(webview_data_folder(&data), data.join("WebView2"));
+        assert_eq!(WEBVIEW2_DATA_VAR, "WEBVIEW2_USER_DATA_FOLDER");
+    }
 
     #[test]
     fn a_host_manifest_is_written_once_and_then_current() {

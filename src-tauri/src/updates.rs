@@ -20,6 +20,9 @@
 //! no questions). So there it's downloaded first and installed only once the window has dealt with
 //! unsaved edits (`install_downloaded`, from app_restart), after what quitting does. The installers
 //! the updater leaves in Temp are deleted at the next start (`platform::remove_update_installers`).
+//! The installer ends what runs the program, MCP servers included, and moves the old program aside
+//! before writing the new one (src-tauri/windows/hooks.nsh). If it stops anyway it opens the old
+//! version again, and that start says the update didn't install (`Started`, `after_install`).
 //!
 //! The offer and what follows are shown in the main window (src/Update.tsx): `update-offer`,
 //! then `update-progress` while it downloads, and `update-message` for what it has to say; the
@@ -59,6 +62,10 @@ pub struct Updates {
     downloaded: Mutex<Option<(Update, Vec<u8>)>>,
     /// An offer is up or an update is installing: no second offer meanwhile.
     asking: AtomicBool,
+    /// Said at start, before the window was listening (`after_install`): the window asks for it.
+    unshown: Mutex<Option<Message>>,
+    /// The same message, kept for as long as this copy runs: app_status reads it (`update_failed`).
+    failed: Mutex<Option<Message>>,
     busy: Busy,
 }
 
@@ -68,6 +75,34 @@ struct Saved {
     checked: u64,
     #[serde(default)]
     skipped: Option<String>,
+    /// Windows: the installer started by `install_downloaded`, until the next start reads it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    started: Option<Started>,
+}
+
+/// An update whose installer was started: `version` replacing `from`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+struct Started {
+    version: String,
+    from: String,
+}
+
+/// What the start after an installer ran says about it: nothing when the update went in, or when
+/// this is neither version (something else installed meanwhile); otherwise why it didn't. The
+/// installer puts the old version back and reopens it when it stops (`.onInstFailed` in
+/// src-tauri/windows/hooks.nsh).
+fn after_install(name: &str, started: &Started, running: &str) -> Option<Message> {
+    if running != started.from || started.version == started.from {
+        return None;
+    }
+    Some(Message {
+        title: "The update didn't install".into(),
+        text: format!(
+            "{name} {} didn't install, so this is still {running}. The installer stopped before it finished, \
+             usually because something still had {name}'s program open. Choose Check for Updates… to try again.",
+            started.version
+        ),
+    })
 }
 
 /// In the app's data folder, so `BRAINSTEAD_DATA` keeps a dev copy's checks apart.
@@ -100,9 +135,22 @@ pub fn start(app: &AppHandle, busy: Busy) {
         offered: Mutex::new(None),
         downloaded: Mutex::new(None),
         asking: AtomicBool::new(false),
+        unshown: Mutex::new(None),
+        failed: Mutex::new(None),
         busy,
     });
     crate::platform::remove_update_installers(&app_name(app));
+    let mut saved = load();
+    if let Some(started) = saved.started.take() {
+        save(&saved);
+        let running = app.package_info().version.to_string();
+        if let Some(message) = after_install(&app_name(app), &started, &running) {
+            crate::applog!("update to {} didn't install; still {running}", started.version);
+            let state = app.state::<Updates>();
+            *state.failed.lock().unwrap() = Some(message.clone());
+            *state.unshown.lock().unwrap() = Some(message);
+        }
+    }
     if cfg!(debug_assertions) || !crate::platform::release_updates() {
         return;
     }
@@ -219,8 +267,8 @@ struct Progress {
     total: Option<u64>,
 }
 
-#[derive(Clone, Serialize)]
-struct Message {
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Message {
     title: String,
     text: String,
 }
@@ -253,6 +301,19 @@ pub fn update_offered(app: AppHandle) -> Option<Offer> {
     let state = app.try_state::<Updates>()?;
     let offered = state.offered.lock().unwrap();
     offered.as_ref().map(|u| Offer::of(&app, u))
+}
+
+/// A message made at start, before the window was listening (an update that didn't install), once.
+#[tauri::command]
+pub fn update_unshown(app: AppHandle) -> Option<Message> {
+    app.try_state::<Updates>()?.unshown.lock().unwrap().take()
+}
+
+/// Whether the update this copy was started after didn't install, and why, while this copy runs:
+/// for app_status (src/mcpActions.ts), which the window's once-only `update_unshown` can't serve.
+#[tauri::command]
+pub fn update_failed(app: AppHandle) -> Option<Message> {
+    app.try_state::<Updates>()?.failed.lock().unwrap().clone()
 }
 
 /// Install and Restart, from the window's dialog.
@@ -358,14 +419,21 @@ async fn install(app: &AppHandle, update: Update) {
 /// quitting does (`crate::before_quit`), since it closes the app without a quit and opens the new
 /// version when it's done. Called by app_restart once the window has dealt with unsaved edits.
 /// False when nothing is waiting (always on macOS, where the update is in place before the restart).
-/// True and still running means the installer didn't start; the user is told why.
+/// True and still running means the installer didn't start; the user is told why. The update is
+/// noted as started first, so the next start can say if the installer stopped (`after_install`).
 pub fn install_downloaded(app: &AppHandle) -> bool {
     let Some(state) = app.try_state::<Updates>() else { return false };
     let Some((update, bytes)) = state.downloaded.lock().unwrap().take() else { return false };
     crate::before_quit(app);
+    let mut saved = load();
+    saved.started = Some(Started { version: update.version.clone(), from: update.current_version.clone() });
+    save(&saved);
     // Exits the app once the installer has started.
     if let Err(e) = update.install(&bytes) {
         crate::applog!("update install failed: {e}");
+        let mut saved = load();
+        saved.started = None;
+        save(&saved);
         let app = app.clone();
         tauri::async_runtime::spawn(async move { tell(&app, "The update didn't install", &e.to_string()).await });
     }
@@ -380,4 +448,36 @@ async fn tell(app: &AppHandle, title: &str, text: &str) {
     }
     let dialog = app.dialog().message(text).title(title).kind(MessageDialogKind::Info);
     let _ = tauri::async_runtime::spawn_blocking(move || dialog.blocking_show()).await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn started(version: &str, from: &str) -> Started {
+        Started { version: version.into(), from: from.into() }
+    }
+
+    #[test]
+    fn the_start_after_an_installer_says_only_when_the_old_version_is_still_running() {
+        let s = started("1.2.0", "1.1.3");
+        assert_eq!(after_install("Brainstead", &s, "1.2.0"), None);
+        // Installed some other way meanwhile: not this update's to report.
+        assert_eq!(after_install("Brainstead", &s, "1.3.0"), None);
+        let m = after_install("Brainstead", &s, "1.1.3").unwrap();
+        assert_eq!(m.title, "The update didn't install");
+        assert!(m.text.starts_with("Brainstead 1.2.0 didn't install, so this is still 1.1.3."), "{}", m.text);
+        // A reinstall of the same version can't be told from a failed one.
+        assert_eq!(after_install("Brainstead", &started("1.1.3", "1.1.3"), "1.1.3"), None);
+    }
+
+    #[test]
+    fn a_started_update_is_kept_with_the_checks_and_older_files_still_read() {
+        let saved = Saved { checked: 5, skipped: None, started: Some(started("1.2.0", "1.1.3")) };
+        let back: Saved = serde_json::from_slice(&serde_json::to_vec(&saved).unwrap()).unwrap();
+        assert_eq!(back.started, saved.started);
+        let old: Saved = serde_json::from_str(r#"{"checked": 5, "skipped": "1.1.4"}"#).unwrap();
+        assert_eq!((old.checked, old.skipped.as_deref(), &old.started), (5, Some("1.1.4"), &None));
+        assert!(!String::from_utf8(serde_json::to_vec(&old).unwrap()).unwrap().contains("started"));
+    }
 }

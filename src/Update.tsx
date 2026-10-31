@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // The update dialog: src-tauri/src/updates.rs offers a newer version here, reports the download's
-// progress and says what it has to say (up to date, couldn't check, the update will wait).
+// progress and says what it has to say (up to date, couldn't check, the update will wait, the
+// update didn't install).
 
 import { api, UpdateOffer, UpdateProgress } from "./api";
 import { Mark } from "./icons";
@@ -30,6 +31,11 @@ export function startUpdates() {
   void api
     .updateOffered()
     .then((offer) => offer && !updateView.get() && updateView.set({ kind: "offer", offer, progress: null }))
+    .catch(() => {});
+  // Said at start, before this window was listening: an update that didn't install.
+  void api
+    .updateUnshown()
+    .then((m) => m && !updateView.get() && updateView.set({ kind: "message", title: m.title, text: m.text }))
     .catch(() => {});
   return () => off.forEach((o) => void o.then((f) => f()));
 }
