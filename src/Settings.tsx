@@ -45,6 +45,8 @@ import { SpeedSlider, VoiceSelect } from "./speech/ReadAloud";
 import { DocButton, useIsGone } from "./docButton";
 import { accelLabel, captureDefault, fileManager, hasSync, isMac, isWindows, keyLabel, terminalApp } from "./platform";
 import { useFeatures } from "./features";
+import { usePanes } from "./PaneResizer";
+import { PANES as PANE_SPECS, RESIZE_LOCKS, ResizeType, resetPaneWidths, resizeLocked, setResizeLock } from "./panes";
 
 const PANES: [SettingsPane, string, string][] = [
   ["general", "General", "settings"],
@@ -59,6 +61,7 @@ const PANES: [SettingsPane, string, string][] = [
 ];
 
 export function SettingsScreen() {
+  const split = usePanes({ "settings.left": PANE_SPECS["settings.left"] });
   const p = useStore(place).place;
   const features = useFeatures();
   const panes = PANES.filter(([id]) => (id !== "permissions" || features.fullDiskAccess) && (id !== "sync" || hasSync));
@@ -67,7 +70,8 @@ export function SettingsScreen() {
   return (
     <main className="main">
       <TopBar title="Settings" sub={title} ask={{ about: `Settings › ${title}`, prompt: `About Settings › ${title}: ` }} />
-      <div className="body settings">
+      <div className="body settings" {...split.root}>
+        {split.resizers}
         <nav className="spanes" aria-label="Settings">
           {panes.map(([id, label, icon]) => (
             <button
@@ -415,6 +419,7 @@ function General() {
         />
         <AccentColour />
         <InterfaceSize />
+        <PaneWidths />
       </section>
     </>
   );
@@ -441,6 +446,44 @@ function AccentColour() {
       <p className="faint">
         System takes the accent colour from Windows Settings › Personalisation › Colours and follows it when it changes, lighter or darker
         where text on it would be hard to read.
+      </p>
+    </div>
+  );
+}
+
+/** Pane widths (src/panes.ts): the panes and table columns dragged wider or narrower, one button
+ *  to put every one back to the stylesheet's width, and a lock for each type of divider. */
+function PaneWidths() {
+  const { paneWidths: widths, resizeLocks } = useStore(settings);
+  const n = Object.keys(widths ?? {}).length;
+  return (
+    <div className="ifacesize">
+      <div className="eyebrow">Pane widths</div>
+      <div className="row">
+        <span title={n ? "Put every pane and column back to its usual width" : "No pane has been resized"}>
+          <button type="button" className="btn sm" disabled={!n} onClick={() => resetPaneWidths()}>
+            Reset pane widths
+          </button>
+        </span>
+        <span className="faint">{n === 0 ? "None resized" : n === 1 ? "1 pane resized" : `${n} panes resized`}</span>
+      </div>
+      <div className="row">
+        {(Object.keys(RESIZE_LOCKS) as ResizeType[]).map((type) => (
+          <label
+            key={type}
+            className="row"
+            style={{ gap: 6 }}
+            title={`${RESIZE_LOCKS[type].what} keep their widths and their dividers are hidden, until this is off`}
+          >
+            <input type="checkbox" checked={resizeLocked(type, resizeLocks)} onChange={(e) => setResizeLock(type, e.target.checked)} />
+            {RESIZE_LOCKS[type].label}
+          </label>
+        ))}
+      </div>
+      <p className="faint">
+        Drag the line between two panes, or beside a table column's heading, to resize it; arrow keys move a focused divider and Enter or a
+        double-click puts it back. Lock pane widths keeps the screens' panes and the sidebar as they are, Lock column widths every table's
+        columns; Reset pane widths still works while they're locked. Widths and locks are kept for this computer.
       </p>
     </div>
   );

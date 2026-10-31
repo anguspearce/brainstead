@@ -63,3 +63,6 @@ While the vault is read-only, a banner across the screen says so, with **Turn of
 
 ## How long history is kept
 Changes keeps 90 days or 500 MB of history, whichever comes first; held changes stay until you decide them. Set both in [Settings › AI assistants](app:settings/assistants). If your vault is in a OneDrive folder, older versions of a page are also in OneDrive's version history.
+
+## Resize the panes
+Drag the line between the list and the open change to resize them; a double-click on it puts it back ([pane widths](help:settings-general)).

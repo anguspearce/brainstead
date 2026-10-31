@@ -100,3 +100,6 @@ Beside the note:
 - On a 1-1 note named like `1-1. Maya - 2026-10-02.md`, **Last time with Maya**: the previous 1-1 and open follow-ups with them (tasks tagged `#followup/maya`).
 
 The chevron on **Linked from** folds the pane away; **Linked from** in the details row brings it back.
+
+## Resize the panes
+Drag the line between the note and **Linked from** to make the pane wider or narrower; a double-click on it puts it back ([pane widths](help:settings-general)).

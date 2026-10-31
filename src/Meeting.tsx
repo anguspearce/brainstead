@@ -22,6 +22,8 @@ import { lastSeen, useVaultVersion } from "./state";
 import { nav, openDoc, place, useViewState } from "./nav";
 import { Dialog, Seg } from "./ui";
 import { draftNotes, followThrough, keepNote, noteFile, specOf, specOk, trashTranscript } from "./meetingFlow";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 export { noteFile, specOf, specOk };
 
@@ -156,6 +158,7 @@ async function ingestExisting(transcript: string, note: string) {
 }
 
 export function MeetingScreen() {
+  const panes = usePanes({ "meeting.left": PANES["meeting.left"], "meeting.side": PANES["meeting.side"] });
   // The last list shows at once on reopening, while the transcripts are read again.
   const [all, setList] = useState(() => lastSeen.get<Transcript[]>("transcripts"));
   // Only the transcripts still to do, unless the switch says all.
@@ -325,7 +328,8 @@ export function MeetingScreen() {
         )}
       </TopBar>
       {readOnly && <ReadOnlyBanner blocks="no meeting note can be made" />}
-      <div className="body meeting">
+      <div className="body meeting" {...panes.root}>
+        {panes.resizers}
         <div className="ilist">
           {list?.length === 0 &&
             (all?.length ? (

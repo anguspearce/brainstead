@@ -25,6 +25,8 @@ import { fmtCount, Popover, SearchBox, Seg, TableBand, useDebounced, usePinnedBa
 import { settings, useStore } from "./store";
 import type { SavedTaskList } from "./api";
 import { keyLabel } from "./platform";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 /** Each grouping's band icon, and what its count's tooltip says. */
 const GROUP_ICON: Record<GroupBy, string> = { none: "", project: "project", context: "tag", due: taskDate("due").icon };
@@ -44,6 +46,7 @@ const groupTip = (by: GroupBy, label: string) =>
           : `due ${label.toLowerCase()}`;
 
 export function TasksScreen() {
+  const panes = usePanes({ "tasks.left": PANES["tasks.left"], "tasks.side": PANES["tasks.side"] });
   const all = useAllTasks();
   const inbox = useInbox();
   const [viewId, setViewId] = useViewState("tasks:view", "next");
@@ -151,7 +154,8 @@ export function TasksScreen() {
           New task
         </button>
       </TopBar>
-      <div className="body tasks3">
+      <div className="body tasks3" {...panes.root}>
+        {panes.resizers}
         <nav className="tagtree" aria-label="Task lists">
           {VIEWS.map((v) => (
             <button

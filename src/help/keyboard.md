@@ -20,6 +20,8 @@ Keys are shown for this computer: Windows uses Ctrl, Alt and Shift where the Mac
 - `⌘,` — Settings
 - `⇧⌘=` `⇧⌘-` `⇧⌘0` — Bigger, smaller, usual interface size (everything in the window; [Settings › General](app:settings/general))
 - `?` — Help for this screen
+- `←` `→` `⇧←` `⇧→` `↩` — On a pane's divider (`Tab` reaches it): move it 8 px, 40 px, or put the pane back ([Settings › General](app:settings/general))
+- `Home` `End` — On a pane's divider: the pane at its least or greatest width
 - `Esc` — Clear the screen's search box
 - `⇧⌘?` — Brainstead Help (Help menu)
 - `⌘Q` — Quit (asks first, and about unsaved changes before that). Mac only: on Windows, which has no menu bar, quit from the tray icon's window (**Quit Brainstead**, or `⌘Q` there)

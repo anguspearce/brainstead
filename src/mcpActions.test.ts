@@ -1869,6 +1869,80 @@ describe("MCP actions", () => {
       expect(document.getElementById("system-accent")?.textContent).toContain("--accent: #0078d4;");
       await run("settings", { action: "set", key: "accent", value: "app" });
       expect(document.documentElement.dataset.accent).toBeUndefined();
+      // Pane widths: one pane by key, clamped as its divider clamps it; null puts one or all back.
+      expect(await run("settings")).toMatch(
+        /paneWidths · Settings › General › Appearance › Pane widths [^\n]*: \{\} \(panes: sidebar \(the sidebar, 180 to 400, usually 232\), tasks\.left \(Tasks › the task lists, /,
+      );
+      expect(await run("settings", { action: "set", key: "paneWidths.tasks.left", value: 320 })).toBe(
+        "Settings › General › Appearance › Pane widths › tasks.left is now 320 px.",
+      );
+      expect(await run("settings", { action: "set", key: "paneWidths.sidebar", value: 900 })).toBe(
+        "Settings › General › Appearance › Pane widths › sidebar is now 400 px (180 to 400).",
+      );
+      expect(settings.get().paneWidths).toEqual({ "tasks.left": 320, sidebar: 400 });
+      expect(await run("settings")).toContain(
+        'paneWidths · Settings › General › Appearance › Pane widths (px by pane; paneWidths.<pane> sets one, null puts them all back): {"tasks.left":320,"sidebar":400}',
+      );
+      await expect(run("settings", { action: "set", key: "paneWidths.nowhere", value: 300 })).rejects.toThrow(
+        /No pane “nowhere”. Panes: sidebar, tasks.left/,
+      );
+      await expect(run("settings", { action: "set", key: "paneWidths.sidebar", value: "wide" })).rejects.toThrow(
+        /width in px, from 180 to 400/,
+      );
+      await expect(run("settings", { action: "set", key: "paneWidths", value: 300 })).rejects.toThrow(/takes null/);
+      expect(await run("settings", { action: "set", key: "paneWidths.sidebar", value: null })).toBe(
+        "Settings › General › Appearance › Pane widths › sidebar is back to its usual width (232 px).",
+      );
+      expect(settings.get().paneWidths).toEqual({ "tasks.left": 320 });
+      // A list table's column, though no table has been drawn here, by the table's own name.
+      expect(await run("settings")).toMatch(/wiki\.tags \(Wiki › the Tags column, 48 to 480, usually 200\)/);
+      // Named in the screens' own words: a column by the heading its table draws.
+      expect(await run("settings")).toContain("trash.folder (Trash › the Was in column, 80 to 480, usually 220)");
+      expect(await run("settings")).toContain("sources.ingested (Sources › the Status column, 48 to 480, usually 88)");
+      expect(await run("settings", { action: "set", key: "paneWidths.notes.type", value: 72 })).toBe(
+        "Settings › General › Appearance › Pane widths › notes.type is now 72 px.",
+      );
+      expect(await run("settings", { action: "set", key: "paneWidths.notes.type", value: null })).toMatch(/notes\.type is back/);
+      expect(settings.get().paneWidths).toEqual({ "tasks.left": 320 });
+      expect(await run("settings", { action: "set", key: "paneWidths", value: null })).toBe(
+        "Settings › General › Appearance › Pane widths: every pane is back to its usual width.",
+      );
+      expect(settings.get().paneWidths).toBeUndefined();
+      // Locks, by type: a locked type's panes are refused with the setting that unlocks them; the
+      // other type's aren't, and every pane back still works.
+      expect(await run("settings")).toMatch(
+        /- resizeLocks\.panes · Settings › General › Appearance › Pane widths › Lock pane widths: false/,
+      );
+      expect(await run("settings", { action: "set", key: "resizeLocks.columns", value: true })).toBe(
+        "Settings › General › Appearance › Pane widths › Lock column widths is now true.",
+      );
+      expect(settings.get().resizeLocks).toEqual({ columns: true });
+      expect(await run("settings")).toMatch(/- resizeLocks\.columns · [^\n]*Lock column widths: true/);
+      expect(await run("settings")).toContain("trash.type (Trash › the Type column, 60 to 200, usually 90, locked by resizeLocks.columns)");
+      await expect(run("settings", { action: "set", key: "paneWidths.trash.type", value: 120 })).rejects.toThrow(
+        "Column widths are locked, so trash.type can't be resized: turn off Lock column widths (resizeLocks.columns) in Settings › General › Appearance › Pane widths first.",
+      );
+      await expect(run("settings", { action: "set", key: "paneWidths.activity.when", value: null })).rejects.toThrow(
+        /Column widths are locked/,
+      );
+      expect(await run("settings", { action: "set", key: "paneWidths.sidebar", value: 300 })).toBe(
+        "Settings › General › Appearance › Pane widths › sidebar is now 300 px.",
+      );
+      await run("settings", { action: "set", key: "resizeLocks.panes", value: "true" });
+      await expect(run("settings", { action: "set", key: "paneWidths.sidebar", value: 320 })).rejects.toThrow(
+        /^Pane widths are locked, so sidebar can't be resized: turn off Lock pane widths \(resizeLocks\.panes\)/,
+      );
+      expect(settings.get().paneWidths).toEqual({ sidebar: 300 });
+      await run("settings", { action: "set", key: "paneWidths", value: null });
+      expect(settings.get().paneWidths).toBeUndefined();
+      await run("settings", { action: "set", key: "resizeLocks.panes", value: false });
+      await run("settings", { action: "set", key: "resizeLocks.columns", value: false });
+      // Stored as the screen stores it: a lock turned off is left out.
+      expect(settings.get().resizeLocks).toBeUndefined();
+      expect(await run("settings", { action: "set", key: "paneWidths.trash.type", value: 120 })).toBe(
+        "Settings › General › Appearance › Pane widths › trash.type is now 120 px.",
+      );
+      settings.update({ paneWidths: undefined, resizeLocks: undefined });
       answers.capture_shortcut_status = () => ["Control+Shift+K", null];
       expect(await run("settings", { action: "set", key: "captureShortcut", value: "shift+control+k" })).toMatch(
         /is now "Control\+Shift\+K", registered with the system/,
