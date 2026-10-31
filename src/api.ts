@@ -94,7 +94,7 @@ export interface Settings {
   /** Tasks' saved lists (a view with its filters), by name. */
   taskLists?: SavedTaskList[];
   /** Next actions keeps the tasks of on-hold and someday projects (the Tasks screen's "Include
-   *  on-hold and someday projects"); off unless true (D-20261031-01). */
+   *  on-hold and someday projects"); off unless true (D-20261031-05). */
   includeOnHoldSomeday?: boolean;
   /** Spelling and grammar marks in the editor (Settings › Notes); both on unless false. */
   spellCheck?: boolean;

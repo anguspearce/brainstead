@@ -4,7 +4,7 @@
 
 // Include on-hold and someday projects (`includeOnHoldSomeday`) reaches every screen that shows Next
 // actions: the Tasks screen, the sidebar's count and the weekly review's Next actions step
-// (D-20261031-01).
+// (D-20261031-05).
 
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
