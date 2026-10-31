@@ -13,7 +13,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke, convertFileSrc: (p: string) => 
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ onScaleChanged: async () => () => {} }) }));
 
-import { coveredBy, frameOf, holesIn, isLookKey, nextPreviewId, PreviewHost, previewView, quickLook } from "./Preview";
+import { coveredBy, frameOf, holesIn, isLookKey, keepOpen, nextPreviewId, PreviewHost, previewView, quickLook } from "./Preview";
 import { setPlatform } from "./platform";
 
 beforeEach(() => {
@@ -104,6 +104,11 @@ describe("what the page shows over the panel", () => {
     expect(holesIn(body, null)).toEqual([[1180, 1080, 400, 80]]);
     toast.getBoundingClientRect = () => rect(900, 700, 100, 30);
     expect(holesIn(body, null)).toEqual([]);
+    // A button's tooltip in the bar above, which reaches down over the body.
+    const tip = document.body.appendChild(document.createElement("div"));
+    tip.className = "tip";
+    tip.getBoundingClientRect = () => rect(700, 40, 120, 26);
+    expect(holesIn(body, null)).toEqual([[1380, -20, 240, 52]]);
   });
 });
 
@@ -158,9 +163,22 @@ describe("the panel on Windows", () => {
   afterEach(() => vi.restoreAllMocks());
   afterAll(() => setPlatform("linux"));
 
-  it("opens below the title bar, whose height is the top bar's, so the window's buttons never cover it", () => {
-    expect(css).toMatch(/html\[data-platform="windows"\] \.scrim\.winprevscrim \{\s*padding-top: var\(--top-h\);/);
+  // jsdom lays nothing out, so this reads the rule itself; the app's own window shows the result.
+  it("opens below the title bar, whose height is the top bar's, and leaves the bar uncovered", () => {
+    expect(css).toMatch(/html\[data-platform="windows"\] \.scrim\.winprevscrim \{\s*top: var\(--top-h\);\s*padding-top: 0;/);
     expect(css).toMatch(/\.winctl button \{[^}]*height: calc\(var\(--top-h\) - 1px\);/);
+  });
+
+  it("stays open for a drag of the title bar and the window's own buttons, not for the bar's other buttons", () => {
+    const bar = document.body.appendChild(document.createElement("div"));
+    bar.setAttribute("data-tauri-drag-region", "true");
+    const back = bar.appendChild(document.createElement("button"));
+    const ctl = bar.appendChild(document.createElement("div"));
+    ctl.className = "winctl";
+    const min = ctl.appendChild(document.createElement("button"));
+    expect(keepOpen(bar)).toBe(true);
+    expect(keepOpen(min)).toBe(true);
+    expect(keepOpen(back)).toBe(false);
   });
 
   it("draws the file at the body's frame, closes on Space and tells the window which panel closed", async () => {

@@ -208,8 +208,14 @@ export function Tooltips() {
   );
 }
 
-/** Closes on Escape or a click outside, except a click on what `keep` matches (a selector). */
-export function useDismiss(ref: React.RefObject<HTMLElement | null>, onClose: () => void, active = true, keep?: string) {
+/** Closes on Escape or a click outside, except a click on what `keep` matches (a selector) or the
+ *  element it says yes to (a function, given the element pressed). */
+export function useDismiss(
+  ref: React.RefObject<HTMLElement | null>,
+  onClose: () => void,
+  active = true,
+  keep?: string | ((pressed: Element) => boolean),
+) {
   useEffect(() => {
     if (!active) return;
     const key = (e: KeyboardEvent) => {
@@ -220,7 +226,8 @@ export function useDismiss(ref: React.RefObject<HTMLElement | null>, onClose: ()
     };
     const down = (e: MouseEvent) => {
       if (!ref.current || ref.current.contains(e.target as Node)) return;
-      if (keep && (e.target as Element | null)?.closest?.(keep)) return;
+      const t = e.target as Element | null;
+      if (t && keep && (typeof keep === "string" ? t.closest?.(keep) : keep(t))) return;
       onClose();
     };
     window.addEventListener("keydown", key, true);

@@ -34,19 +34,20 @@ export interface PreviewRequest {
 export const previewView = new Store<PreviewRequest | null>(null);
 
 /** Where Space (Quick Look, Preview on Windows) shows a file named like this: "quick look", the
- *  system's panel on a Mac; "window", the panel here on Windows for a type whose preview handler
- *  runs out of process; else "app", its own app. The MCP server's list_trash says the same. */
-export type LookIn = "quick look" | "window" | "app";
+ *  system's panel on a Mac; "preview", the panel here on Windows (the button reads Preview) for a
+ *  type whose preview handler runs out of process; else "app", its own app. The MCP server's
+ *  list_trash and app_status say the same. */
+export type LookIn = "quick look" | "preview" | "app";
 
 export async function lookIn(name: string): Promise<LookIn> {
   if (isMac) return "quick look";
   if (!isWindows) return "app";
-  return (await api.previewAvailable(name).catch(() => false)) ? "window" : "app";
+  return (await api.previewAvailable(name).catch(() => false)) ? "preview" : "app";
 }
 
 /** Previews a file as Quick Look (Space) does, where `lookIn` says. */
 export async function quickLook(req: PreviewRequest): Promise<void> {
-  if ((await lookIn(req.name)) === "window") previewView.set(req);
+  if ((await lookIn(req.name)) === "preview") previewView.set(req);
   else await req.look(null);
 }
 
@@ -95,6 +96,12 @@ export function isLookKey(e: KeyboardEvent, screen: "source" | "trash"): boolean
 
 /** Closes the panel; one function for the life of the page, so the panel's effects don't re-run. */
 const closePreview = () => previewView.set(null);
+
+/** A press outside the panel that leaves it open: the window's own minimise and close (.winctl,
+ *  page markup outside the panel; the preview hides and comes back with the window), and the empty
+ *  part of the top bar, which drags or maximises the window (Tauri drags only from the element
+ *  that carries the mark itself, never from a button in it). */
+export const keepOpen = (t: Element): boolean => !!t.closest?.(".winctl") || !!t.hasAttribute?.("data-tauri-drag-region");
 
 export function PreviewHost() {
   const v = useStore(previewView);
@@ -157,13 +164,13 @@ export function coveredBy(own: Element | null): boolean {
   return [...document.querySelectorAll(".scrim, [role=dialog], [role=alertdialog]")].some((el) => !own?.contains(el));
 }
 
-/** Where the page's messages (toasts) sit over the body `el`, in its physical pixels from its top
- *  left: the native window is cut away there, so they show through. */
+/** Where the page's messages (toasts) and tooltips (the bar's buttons' among them) sit over the body `el`, in
+ *  its physical pixels from its top left: the native window is cut away there, so they show through. */
 export function holesIn(el: HTMLElement | null, own: Element | null): number[][] {
   if (!el) return [];
   const b = el.getBoundingClientRect();
   const r = window.devicePixelRatio || 1;
-  return [...document.querySelectorAll(".toast")]
+  return [...document.querySelectorAll(".toast, .tip")]
     .filter((t) => !own?.contains(t))
     .map((t) => t.getBoundingClientRect())
     .filter((t) => t.width && t.height && t.right > b.left && t.left < b.right && t.bottom > b.top && t.top < b.bottom)
@@ -180,9 +187,7 @@ function PreviewPanel({ req, onClose }: { req: PreviewRequest; onClose: () => vo
   const [err, setErr] = useState("");
   // Escape and a click on the scrim close it. A click in the preview itself never reaches the page,
   // and gives the keys to the document, in the handler's own process, until the page is clicked.
-  // The window's own minimise and close (.winctl, page markup outside the panel) aren't a click
-  // outside it: the preview hides and comes back with the window.
-  useDismiss(box, onClose, !covered, ".winctl");
+  useDismiss(box, onClose, !covered, keepOpen);
   // Space closes it again, as it closes Quick Look, before the screen's own Space would reopen it.
   useEffect(() => {
     if (covered) return;

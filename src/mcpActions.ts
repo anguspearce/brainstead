@@ -159,7 +159,7 @@ import { LABEL as TRIAGE } from "./skills/Triage";
 import { ANSWERED, replyTask } from "./skills/Reply";
 import { actionLabel, actionsIn, filterLog, rankLog } from "./activityModel";
 import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from "./taskGroups";
-import { captureDefault, isMac, keyLabel, terminalApp, vaultFile } from "./platform";
+import { captureDefault, isMac, isWindows, keyLabel, terminalApp, vaultFile } from "./platform";
 
 const TODO_LIST = "Me. To Do List.md";
 const SCRATCHPAD = "Me. Scratchpad.md";
@@ -2027,7 +2027,7 @@ async function fixName(a: Args): Promise<string> {
 /** What Space does with a file, as list_trash says it. */
 const LOOK_TEXT: Record<LookIn, string> = {
   "quick look": "Quick Look shows it",
-  window: "Preview shows it in the window",
+  preview: "Preview shows it in the window",
   app: "opens in its app",
 };
 
@@ -2226,8 +2226,22 @@ async function graph(a: Args): Promise<string> {
   return [links, "", "Pages:", ...pages.slice(0, 200), ...(pages.length > 200 ? [`…and ${pages.length - 200} more`] : [])].join("\n");
 }
 
+/** The types a source or a trashed file is likely to be, for app_status's Preview line. */
+const PREVIEW_TYPES = ["docx", "doc", "pptx", "ppt", "xlsx", "xls", "pdf", "rtf", "txt", "md", "csv", "png", "jpg"];
+
+/** On Windows, which of `PREVIEW_TYPES` the Preview button and Space (Sources, the Trash) show in
+ *  the window, as the screens decide it (`lookIn`); "" elsewhere. */
+async function previewLine(): Promise<string> {
+  if (!isWindows) return "";
+  const looks = await Promise.all(PREVIEW_TYPES.map((t) => lookIn(`file.${t}`)));
+  const shown = PREVIEW_TYPES.filter((_, i) => looks[i] === "preview");
+  return `Preview (Sources' Preview button and Space, and the Trash's): ${
+    shown.length ? `shows .${shown.join(", .")} files in the window` : "shows no common type in the window"
+  }; any other type, and a file downloaded from the internet, opens in its app.`;
+}
+
 async function status(): Promise<string> {
-  const [s, v, u, sw, perm, info, failed] = await Promise.all([
+  const [s, v, u, sw, perm, info, failed, preview] = await Promise.all([
     api.settingsRead(),
     api.vaultStatus(),
     api.undoPeek(),
@@ -2235,6 +2249,7 @@ async function status(): Promise<string> {
     api.permissions().catch(() => null),
     api.appInfo().catch(() => null),
     api.updateFailed().catch(() => null),
+    previewLine(),
   ]);
   const old = sw && (sw.skills || sw.scripts);
   const n = v.stats;
@@ -2259,6 +2274,7 @@ async function status(): Promise<string> {
     failed ? `${failed.title}: ${failed.text}` : "",
     `Brainstead runs the daily and weekly summaries (Settings › Jobs & schedule): ${s.summariesHere ? "on" : "off"}`,
     u ? `${keyLabel("⌘Z")} would undo: ${u.label}` : "Nothing to undo.",
+    preview,
     old
       ? "The previous app's skills or scripts are still in the vault (.claude/skills, scripts/): don't use them; use these tools. The user can retire them in Settings › General › Moving over."
       : "",
