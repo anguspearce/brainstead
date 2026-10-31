@@ -265,6 +265,22 @@ describe("MCP actions", () => {
     ]);
   });
 
+  it("places a task between a hidden row and the shown one after it, so no rank ties with a hidden row", async () => {
+    const task = (line: number, text: string, rank: number, o: Partial<TaskRow> = {}) =>
+      row({ line, lineText: `- [ ] ${text}`, text, rank, ...o });
+    answers.tasks_all = () => [
+      task(1, "Ask Maya", 1024),
+      task(2, "Prune the roses", 2048, { project: "Project. Garden.md", projectStatus: "on-hold" }),
+      task(3, "Call Lena", 3072),
+      task(4, "Book the room", 4096),
+    ];
+    answers.change_task_line = (a) => `${a!.line} ^rank-${JSON.stringify(a!.edit)}`;
+    answers.changes_submit_many = outcomes(true);
+    await run("task.move", { task: "Me. To Do List.md:5", text: "Book the room", after: "Me. To Do List.md:2" });
+    // Not between Ask Maya (1024) and Call Lena (3072), where 2048 is the roses' rank.
+    expect(calls.find(([c]) => c === "change_task_line")![1]!.edit).toEqual({ op: "rank", prev: 2048, next: 3072 });
+  });
+
   it("moves tasks of on-hold and someday projects in Next actions as list_tasks gave them, and says when that's why it can't", async () => {
     onTestFinished(() => settings.update({ includeOnHoldSomeday: undefined }));
     const held = (line: number, text: string, rank: number) =>

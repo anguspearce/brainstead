@@ -336,12 +336,14 @@ export function withHiddenRows(order: TaskRow[], every: TaskRow[], moved: TaskRo
 /** Puts `moved` between the rows that are now above and below it in `order` (the list after the
  *  drop): its nearest ranked neighbours, or the whole list renumbered when there's no room or some
  *  rows have no rank yet (the previous app's TaskQueryBlock), with `every`'s hidden rows kept in
- *  their places (`withHiddenRows`). False (and said) when that couldn't be written. */
+ *  their places (`withHiddenRows`) and counted as neighbours, so the new rank ties with none. False (and said) when that couldn't be written. */
 export async function moveTask(order: TaskRow[], moved: TaskRow, every?: TaskRow[]): Promise<boolean> {
-  const gap = rankBetween(order, moved);
+  // The rows the list hides are neighbours too: a rank between the shown ones could tie with one.
+  const full = every ? withHiddenRows(order, every, moved) : order;
+  const gap = rankBetween(full, moved);
   try {
     if (gap && (await api.taskRank(moved, gap.prev, gap.next))) return true;
-    await api.tasksRankAll(every ? withHiddenRows(order, every, moved) : order);
+    await api.tasksRankAll(full);
     return true;
   } catch (e) {
     reportEditError(e);

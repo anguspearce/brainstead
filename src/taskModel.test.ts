@@ -9,7 +9,8 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 
 import type { TaskRow } from "./api";
 import { prepareCapture } from "./Capture";
-import { inParkedProject, leftOutNote, parkedLeftOut, todayRows, viewRows, VIEWS, weekOf, withHiddenRows } from "./taskModel";
+import { invoke } from "@tauri-apps/api/core";
+import { inParkedProject, leftOutNote, moveTask, parkedLeftOut, todayRows, viewRows, VIEWS, weekOf, withHiddenRows } from "./taskModel";
 import parkedTable from "../tests/fixtures/parked-projects.json";
 
 const t = (text: string, o: Partial<TaskRow> = {}): TaskRow => ({
@@ -96,6 +97,23 @@ describe("task views", () => {
     expect(names(withHiddenRows([a, c, b], [a, b, h2, c], b))).toEqual(["A", "Held 2", "C", "B"]);
     // Nothing hidden: the order as it is.
     expect(names(withHiddenRows([c, a, b], [a, b, c], c))).toEqual(["C", "A", "B"]);
+  });
+  it("ranks a drop between a hidden row and the shown row after it, not on the hidden row's rank", async () => {
+    const [a, h, c, x] = [1024, 2048, 3072, 4096].map((rank, i) => t(["A", "Held", "C", "X"][i], { rank, line: i }));
+    const mock = vi.mocked(invoke);
+    mock.mockReset();
+    mock.mockResolvedValue(true);
+    // X dragged between A and C; Held, hidden, followed A.
+    expect(await moveTask([a, x, c], x, [a, h, c, x])).toBe(true);
+    expect(mock).toHaveBeenCalledTimes(1);
+    expect(mock).toHaveBeenCalledWith("task_rank", expect.objectContaining({ line: 3, prev: 2048, next: 3072 }));
+    // A hidden row with no rank yet: the whole list is renumbered, Held in its place.
+    mock.mockClear();
+    const unranked = t("Held", { rank: null, line: 1 });
+    expect(await moveTask([a, x, c], x, [a, unranked, c, x])).toBe(true);
+    const sent = mock.mock.calls[0];
+    expect(sent[0]).toBe("tasks_rank_all");
+    expect((sent[1] as { tasks: { line: number }[] }).tasks.map((r) => r.line)).toEqual([0, 1, 3, 2]);
   });
   it("parks the projects' tasks the shared table says, as the weekly review's preparation does (tests/fixtures/parked-projects.json)", () => {
     for (const c of parkedTable.statuses) {

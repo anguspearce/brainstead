@@ -649,7 +649,9 @@ async function moveTask(a: Args, r: McpRequest): Promise<string> {
   const title = `Move “${taskWords(t.text)}”${where}`;
   const line = (x: TaskRow, ln: string) => ({ at: x.line, old: [x.lineText], new: [ln] });
   let edits: [TaskRow, { at: number; old: string[]; new: string[] }][] = [];
-  const gap = rankBetween(order, t);
+  // The rows the list hides are neighbours too: a rank between the shown ones could tie with one.
+  const full = withHiddenRows(order, list.every, t);
+  const gap = rankBetween(full, t);
   if (gap) {
     const ln = await api.changeTaskLine(t.lineText, { op: "rank", prev: gap.prev, next: gap.next }).catch(() => null);
     if (ln) edits = [[t, line(t, ln)]];
@@ -659,7 +661,7 @@ async function moveTask(a: Args, r: McpRequest): Promise<string> {
   let renumbered = false;
   if (!edits.length) {
     renumbered = true;
-    for (const [i, x] of withHiddenRows(order, list.every, t).entries()) {
+    for (const [i, x] of full.entries()) {
       const ln = await api.changeTaskLine(x.lineText, { op: "rank", prev: i * RANK_SPACING, next: null });
       if (ln !== x.lineText) edits.push([x, line(x, ln)]);
     }
