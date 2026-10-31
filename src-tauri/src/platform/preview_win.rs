@@ -35,6 +35,7 @@
 //! Which handler a type has is read from
 //! the registry as Explorer reads it (`handler_for`), which is what `available` answers, so the
 //! page opens its panel only for a file that can be previewed and opens the rest in their own app.
+//! A file downloaded from the web opens in its app too, as Explorer won't preview it (`refused`).
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -190,6 +191,48 @@ pub fn hostable(clsid: &str, reg: &dyn Classes) -> bool {
 /// Whether Windows has a preview handler for files named like `name` that can run out of process.
 pub fn available(name: &str) -> bool {
     ext_of(name).and_then(|e| handler_for(&e, &Registry)).is_some_and(|c| hostable(&c, &Registry))
+}
+
+/// What the panel says of a file it won't preview because it came from the web; it opens in its
+/// app instead, where Office shows it in Protected View.
+const FROM_WEB: &str = "This file was downloaded from the internet, and Windows doesn't preview such files, \
+                        as Explorer's preview pane doesn't: it opened in its app instead.";
+
+/// Why the panel won't preview `path`, which then opens in its app: Explorer's preview pane
+/// shows no file marked as from the internet or a restricted site (the mark of the web, since
+/// Windows' October 2025 update), as a handler reading one could hand the file's links the
+/// user's network credentials; this does as Explorer does. None for a file it previews.
+pub fn refused(path: &Path) -> Option<String> {
+    zone(path).filter(|z| *z >= 3).map(|_| FROM_WEB.to_string())
+}
+
+/// The zone Windows marked a downloaded file with, from its `Zone.Identifier` stream: 3 the
+/// internet, 4 a restricted site, below that this computer or the local network. None unmarked.
+fn zone(path: &Path) -> Option<u32> {
+    let mut marked = path.as_os_str().to_os_string();
+    marked.push(":Zone.Identifier");
+    std::fs::read(&marked).ok().and_then(|b| zone_id(&b))
+}
+
+/// The `ZoneId` in a `Zone.Identifier` stream, which browsers write as plain text and some tools
+/// as UTF-16 with its byte-order mark.
+fn zone_id(bytes: &[u8]) -> Option<u32> {
+    let text = match bytes {
+        [0xFF, 0xFE, rest @ ..] => {
+            let units: Vec<u16> =
+                rest.iter().step_by(2).zip(rest.iter().skip(1).step_by(2)).map(|(&lo, &hi)| u16::from_le_bytes([lo, hi])).collect();
+            String::from_utf16_lossy(&units)
+        }
+        _ => String::from_utf8_lossy(bytes).into_owned(),
+    };
+    text.lines().find_map(|l| {
+        let (k, v) = l.split_once('=')?;
+        if k.trim().eq_ignore_ascii_case("ZoneId") {
+            v.trim().parse().ok()
+        } else {
+            None
+        }
+    })
 }
 
 // What `open` and the page's commands post to the host window. Each carries nothing: what to do
@@ -1337,6 +1380,30 @@ mod tests {
             assert_eq!(deadline(SLOW), SLOW);
         }
         assert!(3 * SLOW + 4 * QUICK < BACKSTOP, "open's own wait outlasts every call of an unload and an open");
+    }
+
+    #[test]
+    fn a_file_from_the_web_opens_in_its_app_as_explorer_has_it() {
+        assert_eq!(zone_id(b"[ZoneTransfer]\r\nZoneId=3\r\nReferrerUrl=https://example.com/\r\n"), Some(3));
+        assert_eq!(zone_id(b"[ZoneTransfer]\nzoneid = 4\n"), Some(4), "any case and spacing");
+        let utf16: Vec<u8> =
+            [0xFF, 0xFE].into_iter().chain("[ZoneTransfer]\r\nZoneId=3\r\n".encode_utf16().flat_map(u16::to_le_bytes)).collect();
+        assert_eq!(zone_id(&utf16), Some(3), "UTF-16 with its mark");
+        assert_eq!(zone_id(b"[ZoneTransfer]\r\n"), None);
+        // A real file and its stream (NTFS, in a temp folder, never the vault).
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("Orbit App plan.docx");
+        std::fs::write(&file, b"not really a docx").unwrap();
+        assert_eq!(refused(&file), None, "made here: previewed");
+        let stream = |zone: u32| {
+            let mut s = file.as_os_str().to_os_string();
+            s.push(":Zone.Identifier");
+            std::fs::write(s, format!("[ZoneTransfer]\r\nZoneId={zone}\r\n")).unwrap();
+        };
+        stream(2);
+        assert_eq!(refused(&file), None, "a trusted site: previewed");
+        stream(3);
+        assert!(refused(&file).is_some_and(|why| why.contains("downloaded from the internet")), "the internet: its app");
     }
 
     #[test]

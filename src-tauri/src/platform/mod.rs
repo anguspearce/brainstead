@@ -113,9 +113,13 @@ pub fn quick_look(w: &tauri::WebviewWindow, path: &Path, frame: Option<PreviewFr
     }
     #[cfg(windows)]
     {
-        // A handler COM can't run out of process opens the file in its app, as no handler does.
+        // A handler COM can't run out of process opens the file in its app, as no handler does. A
+        // file from the web opens there too, and the panel says why (`preview_win::refused`).
         let here = match frame {
-            Some(f) => preview_win::open(w, path, f)?,
+            Some(f) => match preview_win::refused(path) {
+                Some(why) => return imp::quick_look(path).and(Err(why)),
+                None => preview_win::open(w, path, f)?,
+            },
             None => false,
         };
         if here {
