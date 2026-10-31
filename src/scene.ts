@@ -30,7 +30,8 @@ export interface Scene {
   pane?: SettingsPane;
   theme?: Exclude<Theme, "system">;
   palette?: boolean;
-  /** Accent colour on System: the system's own colour, or this #rrggbb in its place (src/accent.ts). */
+  /** Accent colour on System, from this #rrggbb in place of the system's (a Mac has none), or from
+   *  the system's own for "system" (src/accent.ts). */
   accent?: string;
   /** For "doc": the vault path to open; for "search" and "doc": the query. */
   path?: string;
