@@ -1260,10 +1260,25 @@ describe("MCP actions", () => {
         bytes: 3072,
         size: "3.0 KB",
         items: [
-          { id: "t2", path: "Idea. 2.md", layer: "note", deleted: "2026-09-03T10:00", bytes: 1024 },
-          { id: "t1", path: "Idea. 1.md", layer: "note", deleted: "2026-09-02T10:00", bytes: 1024 },
+          { id: "t2", path: "Idea. 2.md", layer: "note", deleted: "2026-09-03T10:00", bytes: 1024, look: "app" },
+          { id: "t1", path: "Idea. 1.md", layer: "note", deleted: "2026-09-02T10:00", bytes: 1024, look: "app" },
         ],
       });
+      // What Space does with each, as the Trash screen decides: on Windows, Preview where a handler is.
+      const was = platform();
+      try {
+        setPlatform("windows");
+        answers.preview_available = (a) => String(a?.name).endsWith("1.md");
+        expect((await data("trash", { limit: 2 })) as { items: { look: string }[] }).toMatchObject({
+          items: [{ look: "app" }, { look: "preview" }],
+        });
+        expect(await run("trash", { limit: 2 })).toContain("- Idea. 1.md · deleted 2026-09-02 · Preview shows it in the window  (id t1)");
+        setPlatform("macos");
+        expect(await run("trash", { limit: 1 })).toContain("· Quick Look shows it  (id t2)");
+      } finally {
+        setPlatform(was);
+        delete answers.preview_available;
+      }
       answers.trash_list = () => [];
       expect(await data("trash")).toMatchObject({ total: 0, items: [] });
       answers.projects_list = () => [];
@@ -1757,6 +1772,20 @@ describe("MCP actions", () => {
       });
       expect(await run("status")).toContain("The update didn't install: Brainstead 1.0.3 didn't install, so this is still 1.0.2.");
       delete answers.update_failed;
+      // Which types Preview shows in the window, as the screens decide it: Windows only.
+      const was = platform();
+      try {
+        setPlatform("macos");
+        expect(await run("status")).not.toContain("Preview (");
+        setPlatform("windows");
+        answers.preview_available = (a) => /\.(docx|pptx)$/.test(String(a?.name));
+        expect(await run("status")).toContain(
+          "Preview (Sources' Preview button and Space, and the Trash's): shows .docx, .pptx files in the window; any other type, and a file downloaded from the internet, opens in its app.",
+        );
+      } finally {
+        setPlatform(was);
+        delete answers.preview_available;
+      }
       answers.contradictions_report = () => ({
         last: {
           finished: "2026-10-06T09:00:00",

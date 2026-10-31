@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Sources that aren't markdown: PDFs through pdf.js (Tauri can't show them reliably in a frame),
-// Word, PowerPoint and Excel files as the text Brainstead reads from them, with Quick Look for how
-// they look (no web renderer draws Office files well), images inline with the text read from them,
-// other text as text.
+// Word, PowerPoint and Excel files as the text Brainstead reads from them, with Quick Look (on
+// Windows, the preview panel of src/Preview.tsx) for how they look (no web renderer draws Office
+// files well), images inline with the text read from them, other text as text.
 
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -14,6 +14,7 @@ import { SearchBox } from "./ui";
 import { api, FileSummary } from "./api";
 import { features, useFeatures } from "./features";
 import { vaultFile, isMac } from "./platform";
+import { isLookKey, quickLook } from "./Preview";
 
 const ext = (p: string) => p.slice(p.lastIndexOf(".") + 1).toLowerCase();
 const IMAGE = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "avif", "heic"]);
@@ -45,7 +46,10 @@ export function SourcePreview({ file, root, content }: { file: FileSummary; root
   if (kind === "text") return <pre className="srctext">{content}</pre>;
   return (
     <div className="srcnone">
-      <p className="muted">Brainstead can't show this kind of file{features.get().quickLook ? "; Quick Look may" : ""}.</p>
+      <p className="muted">
+        Brainstead can't show this kind of file{features.get().quickLook ? (isMac ? "; Quick Look may" : "; the system's preview may") : ""}
+        .
+      </p>
       <div className="officebar">
         <QuickLook path={file.path} />
         <OpenInApp path={file.path} />
@@ -330,21 +334,23 @@ function PdfView({ url }: { url: string }) {
 
 /** PowerPoint as its slides' text, Excel as its sheets (tab-separated cells drawn as tables),
  *  from the same extraction ingest uses. */
-/** Shows a vault file in the Quick Look panel; Space does the same while the preview is showing. */
+/** Shows a vault file in the Quick Look panel (on Windows, the preview panel, or its own app for a
+ *  type Windows can't preview); Space does the same while the preview is showing. */
 function QuickLook({ path }: { path: string }) {
   const available = useFeatures().quickLook;
   const [err, setErr] = useState<string | null>(null);
   const look = useCallback(() => {
     setErr(null);
-    api.fileQuickLook(path).catch((e) => setErr(String(e?.message ?? e)));
+    quickLook({
+      name: path.slice(path.lastIndexOf("/") + 1),
+      look: (frame) => api.fileQuickLook(path, frame),
+      openInApp: () => invoke<void>("file_open", { path }),
+    }).catch((e) => setErr(String(e?.message ?? e)));
   }, [path]);
   useEffect(() => {
     if (!available) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== " " || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
-      const t = e.target as HTMLElement | null;
-      if (t?.closest("input, textarea, select, button, [contenteditable=true], .cm-editor")) return;
-      if (document.querySelector(".scrim, [role=dialog]")) return;
+      if (!isLookKey(e, "source")) return;
       e.preventDefault();
       look();
     };
@@ -354,9 +360,18 @@ function QuickLook({ path }: { path: string }) {
   if (!available) return null;
   return (
     <>
-      <button type="button" className="btn pri" title="See the file as it looks in its app, in Quick Look (Space)" onClick={look}>
+      <button
+        type="button"
+        className="btn pri"
+        title={
+          isMac
+            ? "See the file as it looks in its app, in Quick Look (Space)"
+            : "See the file as it looks in its app, without opening it (Space)"
+        }
+        onClick={look}
+      >
         <Icon name="eye" size={14} />
-        Quick Look
+        {isMac ? "Quick Look" : "Preview"}
       </button>
       {err && <p className="muted">{err}</p>}
     </>

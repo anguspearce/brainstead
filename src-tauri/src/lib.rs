@@ -456,16 +456,41 @@ async fn file_open(app: AppHandle, path: String) -> Result<(), String> {
     .await
 }
 
-/// Shows a vault file (vault-relative path) in the system's Quick Look panel, as Finder's space bar
-/// does: Office files look as they do in Office, which the window can't draw.
+/// Shows a vault file (vault-relative path) without opening its app: the system's Quick Look panel
+/// on a Mac, as Finder's space bar does, or on Windows the file's preview handler in the page's
+/// panel at `frame` (src/Preview.tsx): Office files look as they do in Office, which the window
+/// can't draw. Without a frame, or where Windows has no preview for the type, the file opens in its
+/// own app (then false). On a blocking thread: on Windows it waits for the preview to draw.
 #[tauri::command]
-fn file_quick_look(app: AppHandle, path: String) -> Result<(), String> {
-    let abs = app.state::<VaultService>().resolve_path(&path)?;
-    if !abs.is_file() {
-        return Err(format!("{path} isn't in the vault any more."));
-    }
-    let w = app.get_webview_window("main").ok_or_else(|| "No window to show Quick Look over.".to_string())?;
-    platform::quick_look(&w, &abs)
+async fn file_quick_look(app: AppHandle, path: String, frame: Option<platform::PreviewFrame>) -> Result<bool, String> {
+    blocking(move || {
+        let abs = app.state::<VaultService>().resolve_path(&path)?;
+        if !abs.is_file() {
+            return Err(format!("{path} isn't in the vault any more."));
+        }
+        let w = app.get_webview_window("main").ok_or_else(|| "No window to show the preview over.".to_string())?;
+        platform::quick_look(&w, &abs, frame)
+    })
+    .await
+}
+
+/// Whether `file_quick_look` and `trash_quick_look` can show a file named like `name` in the
+/// window rather than its app (src/Preview.tsx opens its panel only then).
+#[tauri::command]
+fn preview_available(name: String) -> bool {
+    platform::preview_available(&name)
+}
+
+/// The preview panel moved or resized (src/Preview.tsx).
+#[tauri::command]
+fn preview_move(frame: platform::PreviewFrame) {
+    platform::preview_move(frame);
+}
+
+/// The preview panel `id` closed (src/Preview.tsx numbers them).
+#[tauri::command]
+fn preview_close(id: u64) {
+    platform::preview_close(id);
 }
 
 /// Shows a vault file (vault-relative path) or the vault folder itself (empty path) in Finder.
@@ -545,6 +570,7 @@ fn app_restart(app: AppHandle) {
 pub(crate) fn before_quit(app: &AppHandle) {
     let _ = app.save_window_state(STATE_FLAGS);
     app.state::<std::sync::Arc<ask::Running>>().kill_all();
+    platform::preview_shutdown();
 }
 
 /// What would be cut short by restarting into an update now, or None.
@@ -905,6 +931,9 @@ pub fn run() {
             paths_exist,
             file_open,
             file_quick_look,
+            preview_available,
+            preview_move,
+            preview_close,
             activity,
             activity_day,
             listnotes::bookmark_toggle,
