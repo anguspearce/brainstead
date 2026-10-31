@@ -1270,7 +1270,7 @@ describe("MCP actions", () => {
         setPlatform("windows");
         answers.preview_available = (a) => String(a?.name).endsWith("1.md");
         expect((await data("trash", { limit: 2 })) as { items: { look: string }[] }).toMatchObject({
-          items: [{ look: "app" }, { look: "window" }],
+          items: [{ look: "app" }, { look: "preview" }],
         });
         expect(await run("trash", { limit: 2 })).toContain("- Idea. 1.md · deleted 2026-09-02 · Preview shows it in the window  (id t1)");
         setPlatform("macos");
@@ -1764,6 +1764,20 @@ describe("MCP actions", () => {
       );
       answers.vault_status = () => ({ state: "error", error: "The index file is damaged.", stats });
       expect(await run("status")).toContain("Index: Index failed: The index file is damaged.");
+      // Which types Preview shows in the window, as the screens decide it: Windows only.
+      const was = platform();
+      try {
+        setPlatform("macos");
+        expect(await run("status")).not.toContain("Preview (");
+        setPlatform("windows");
+        answers.preview_available = (a) => /\.(docx|pptx)$/.test(String(a?.name));
+        expect(await run("status")).toContain(
+          "Preview (Sources' Preview button and Space, and the Trash's): shows .docx, .pptx files in the window; any other type, and a file downloaded from the internet, opens in its app.",
+        );
+      } finally {
+        setPlatform(was);
+        delete answers.preview_available;
+      }
       answers.contradictions_report = () => ({
         last: {
           finished: "2026-10-06T09:00:00",

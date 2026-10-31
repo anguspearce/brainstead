@@ -50,9 +50,10 @@ describe("Trash", () => {
       fireEvent.pointerDown(tick);
       fireEvent.click(tick);
       tick.focus();
-      fireEvent.keyDown(tick, { key: " " });
+      // Taken from the tick box: its default prevented, so the browser doesn't also untick it on keyup.
+      expect(fireEvent.keyDown(tick, { key: " " })).toBe(false);
       await waitFor(() => expect(previewView.get()?.name).toBe("Dup.md"));
-      expect((tick as HTMLInputElement).checked ?? tick.getAttribute("aria-checked")).toBeTruthy();
+      expect(tick.getAttribute("aria-checked")).toBe("true");
       previewView.set(null);
       cleanup();
       setPlatform("macos");

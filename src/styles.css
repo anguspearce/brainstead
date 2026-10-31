@@ -2190,10 +2190,12 @@ details.callout[open] .callout-chev {
   max-height: none;
 }
 
-/* On Windows it opens below the window's own title bar, the top bar's height, so the window's
-   buttons (.winctl, over every dialog) never cover its bar and its Close. */
+/* On Windows it opens below the window's own title bar, the top bar's height, and leaves that bar
+   uncovered: the window's buttons (.winctl) never cover the panel's bar and its Close, and the top
+   bar still drags the window (src/Preview.tsx keeps the panel open for that press). */
 html[data-platform="windows"] .scrim.winprevscrim {
-  padding-top: var(--top-h);
+  top: var(--top-h);
+  padding-top: 0;
 }
 .winprevbar {
   display: flex;
