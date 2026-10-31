@@ -85,6 +85,8 @@ pub struct TaskRow {
     /// The project note it belongs to: the one it's written in, else the first link on its line
     /// to one.
     pub project: Option<String>,
+    /// That project's status (`projects::status_of`): active, on-hold, someday or done.
+    pub project_status: Option<String>,
     /// From `#context/<name>` tags, without the prefix.
     pub contexts: Vec<String>,
     /// As written in `[effort:: …]`.
@@ -92,6 +94,14 @@ pub struct TaskRow {
     pub effort_min: Option<i64>,
     #[serde(skip)]
     pub(crate) mtime: i64,
+}
+
+impl TaskRow {
+    /// In an on-hold or someday project (`projects::parks_tasks`), so not a next action unless the
+    /// user includes those projects' tasks.
+    pub fn in_parked_project(&self) -> bool {
+        self.project_status.as_deref().is_some_and(crate::projects::parks_tasks)
+    }
 }
 
 fn rows_sql() -> String {
@@ -130,6 +140,7 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<TaskRow> {
         status: r.get(15)?,
         cancelled: r.get(16)?,
         project: r.get(17)?,
+        project_status: None,
         contexts: words(r.get(18)?),
         effort: r.get(19)?,
         effort_min: r.get(20)?,
@@ -172,7 +183,17 @@ impl Index {
         let mut st =
             self.conn().prepare_cached(&format!("{} WHERE f.layer != 'template' ORDER BY f.path, t.line", rows_sql())).map_err(e)?;
         let rows = st.query_map([], row).map_err(e)?;
-        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(e)
+        let rows = rows.collect::<std::result::Result<Vec<_>, _>>().map_err(e)?;
+        self.with_project_status(rows)
+    }
+
+    /// Fills each task's `project_status` from its project note.
+    fn with_project_status(&self, mut rows: Vec<TaskRow>) -> Result<Vec<TaskRow>> {
+        let statuses = self.project_statuses()?;
+        for t in &mut rows {
+            t.project_status = t.project.as_deref().and_then(|p| statuses.get(p)).map(|s| s.to_string());
+        }
+        Ok(rows)
     }
 
     pub fn tasks(&self, q: &TaskQuery) -> Result<Vec<TaskRow>> {
@@ -207,7 +228,7 @@ impl Index {
         if let Some(n) = q.limit {
             out.truncate(n);
         }
-        Ok(out)
+        self.with_project_status(out)
     }
 }
 

@@ -308,6 +308,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   // Today: overdue and due today (a badge when any is overdue); Tasks: next actions.
   const tasks = useAllTasks();
   const inbox = useInbox();
+  const onHoldSomeday = useStore(settings).includeOnHoldSomeday === true;
   const today = localToday();
   // While the vault is still opening, a failed read is only "not ready yet": no error, no count.
   const opening = useVaultOpening();
@@ -320,7 +321,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   } else if (tasks) {
     const t = todayRows(tasks, today);
     extra.today = { n: t.overdue.length + t.due.length, hot: t.overdue.length > 0 };
-    extra.tasks = { n: viewRows(tasks, VIEWS[0], today, inbox).length };
+    extra.tasks = { n: viewRows(tasks, VIEWS[0], today, inbox, onHoldSomeday).length };
   }
   if (inbox) extra.inbox = { n: inbox.filter(unclarified).length, hot: inbox.some(unclarified) };
   const projects = useProjects();

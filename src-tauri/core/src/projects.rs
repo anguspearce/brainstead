@@ -54,6 +54,24 @@ pub fn parse_status(s: &str) -> Option<&'static str> {
     }
 }
 
+/// A project note's status from its properties: one of the four, active when missing or unknown.
+pub fn status_of(frontmatter: Option<&str>) -> &'static str {
+    let fm: serde_json::Value = frontmatter.and_then(|s| serde_json::from_str(s).ok()).unwrap_or_default();
+    status_in(&fm)
+}
+
+fn status_in(fm: &serde_json::Value) -> &'static str {
+    crate::frontmatter::string(fm, "status").and_then(|s| parse_status(&s)).unwrap_or("active")
+}
+
+/// Whether a project in this status (one of `parse_status`'s four) parks its tasks: on hold or
+/// someday, so they aren't next actions unless the user includes them (`includeOnHoldSomeday`).
+/// `inParkedProject` in src/taskModel.ts is the same rule; both are checked against
+/// tests/fixtures/parked-projects.json.
+pub fn parks_tasks(status: &str) -> bool {
+    matches!(status, "on-hold" | "someday")
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectRow {
@@ -79,6 +97,14 @@ pub struct ProjectRow {
 }
 
 impl Index {
+    /// Every project note's status (`status_of`), by path.
+    pub(crate) fn project_statuses(&self) -> Result<HashMap<String, &'static str>> {
+        let mut st =
+            self.conn().prepare_cached(&format!("SELECT f.path, f.frontmatter FROM files f WHERE {}", is_project_sql("f"))).map_err(e)?;
+        let rows = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))).map_err(e)?;
+        rows.map(|r| r.map(|(path, fm)| (path, status_of(fm.as_deref())))).collect::<std::result::Result<_, _>>().map_err(e)
+    }
+
     /// Every project note, by name.
     pub fn projects(&self) -> Result<Vec<ProjectRow>> {
         let notes: Vec<(i64, String, Option<String>, i64)> = {
@@ -115,7 +141,7 @@ impl Index {
                 backlinks.query_map(params![id], |r| r.get(0)).map_err(e)?.collect::<std::result::Result<Vec<String>, _>>().map_err(e)?;
             out.push(ProjectRow {
                 name: project_name(&path),
-                status: prop("status").and_then(|s| parse_status(&s)).unwrap_or("active").to_string(),
+                status: status_in(&fm).to_string(),
                 area: prop("area"),
                 outcome: prop("outcome"),
                 next: open.len() - waiting - someday,
@@ -196,6 +222,21 @@ mod tests {
         assert_eq!(parse_status("blocked"), None);
     }
 
+    /// The table src/taskModel.test.ts checks `inParkedProject` against, so the weekly review's
+    /// preparation and the Tasks screen leave out the same projects' tasks.
+    #[test]
+    fn parks_the_tasks_the_shared_table_says() {
+        let table: serde_json::Value = serde_json::from_str(include_str!("../../../tests/fixtures/parked-projects.json")).unwrap();
+        for case in table["statuses"].as_array().unwrap() {
+            let (written, parked) = (case["written"].as_str(), case["parked"].as_bool().unwrap());
+            let status = written.map(|w| status_of(Some(&serde_json::json!({ "status": w }).to_string())));
+            assert_eq!(status, case["status"].as_str(), "{written:?}");
+            let t = crate::taskquery::TaskRow { project_status: status.map(String::from), ..Default::default() };
+            assert_eq!(t.in_parked_project(), parked, "{written:?}");
+            assert_eq!(status.is_some_and(parks_tasks), parked, "{written:?}");
+        }
+    }
+
     #[test]
     fn reads_the_fixture_projects() {
         let v = Vault::new(fixture(), vec![]);
@@ -226,6 +267,46 @@ mod tests {
         let linked = tasks.iter().find(|t| t.text.starts_with("Book the launch room")).unwrap();
         assert_eq!(linked.project.as_deref(), Some("Project. Orbit App launch.md"));
         assert!(tasks.iter().filter(|t| t.path == "Me. To Do List.md").all(|t| t.project.is_none()));
+    }
+
+    #[test]
+    fn tasks_carry_their_project_status() {
+        // A project in each status and one with no status; a task in each note, one linked from
+        // the To Do list, and one with no project.
+        let d = tempfile::tempdir().unwrap();
+        for (name, props) in [
+            ("Active", "status: active\n"),
+            ("Held", "status: on hold\n"),
+            ("Maybe", "status: Someday\n"),
+            ("Finished", "status: done\n"),
+            ("Bare", "area: Work\n"),
+        ] {
+            let note = format!("---\n{props}---\n\n## Next actions\n\n- [ ] {name} task\n");
+            std::fs::write(d.path().join(format!("Project. {name}.md")), note).unwrap();
+        }
+        std::fs::write(d.path().join("Me. To Do List.md"), "- [ ] Linked [[Project. Held]]\n- [ ] Loose\n").unwrap();
+        let mut ix = Index::open_in_memory().unwrap();
+        ix.sync(&Vault::new(d.path().to_path_buf(), vec![])).unwrap();
+        let tasks = ix.all_tasks().unwrap();
+        let status = |text: &str| tasks.iter().find(|t| t.text.starts_with(text)).unwrap().project_status.clone();
+        for (text, want) in [
+            ("Active task", Some("active")),
+            ("Held task", Some("on-hold")),
+            ("Maybe task", Some("someday")),
+            ("Finished task", Some("done")),
+            ("Bare task", Some("active")),
+            ("Linked", Some("on-hold")),
+            ("Loose", None),
+        ] {
+            assert_eq!(status(text).as_deref(), want, "{text}");
+        }
+        // The same statuses the Projects screen shows.
+        let ps = ix.projects().unwrap();
+        assert!(ps.iter().all(|p| tasks
+            .iter()
+            .filter(|t| t.project.as_deref() == Some(&p.path))
+            .all(|t| t.project_status.as_deref() == Some(&p.status))));
+        assert!(ix.tasks(&Default::default()).unwrap().iter().any(|t| t.project_status.as_deref() == Some("someday")));
     }
 
     #[test]

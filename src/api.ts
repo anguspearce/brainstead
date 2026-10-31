@@ -67,6 +67,9 @@ export interface Settings {
   askHistory?: string[];
   /** Tasks' saved lists (a view with its filters), by name. */
   taskLists?: SavedTaskList[];
+  /** Next actions keeps the tasks of on-hold and someday projects (the Tasks screen's "Include
+   *  on-hold and someday projects"); off unless true (D-20261031-02). */
+  includeOnHoldSomeday?: boolean;
   /** Spelling and grammar marks in the editor (Settings › Notes); both on unless false. */
   spellCheck?: boolean;
   grammarCheck?: boolean;
@@ -451,6 +454,8 @@ export interface TaskRow {
   heading: string | null;
   /** The project note it belongs to (stage 6): the one it's written in, or one its line links. */
   project?: string | null;
+  /** That project's status, as the Projects screen reads it (src-tauri/core/src/projects.rs `status_of`). */
+  projectStatus?: ProjectRow["status"] | null;
   /** From `#context/<name>` tags, without the prefix. */
   contexts?: string[];
   /** As written in `[effort:: 15m]`, and in minutes. */

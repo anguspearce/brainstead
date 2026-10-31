@@ -538,7 +538,7 @@ fn run_weekprep(s: &Scenario, root: &Path, model: &str) -> Outcome {
     let today = chrono::NaiveDate::from_ymd_opt(2026, 10, 2).unwrap();
     let now = today.and_hms_opt(12, 0, 0).unwrap().and_utc().timestamp_millis();
     let inbox = brainstead_core::inbox::items(root);
-    let inputs = match prep::gather(root, &ix, "2026-W40", today, now, &inbox) {
+    let inputs = match prep::gather(root, &ix, "2026-W40", today, now, &inbox, false) {
         Ok(i) => i,
         Err(e) => return Outcome { output: e.clone(), failures: vec![e] },
     };
