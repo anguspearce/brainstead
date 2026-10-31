@@ -1128,6 +1128,10 @@ export const api = {
     listen<{ title: string; text: string }>("update-message", (e) => f(e.payload)),
   /** The offer waiting for an answer, if one is (for a window that loaded after it was made). */
   updateOffered: () => invoke<UpdateOffer | null>("update_offered"),
+  /** A message made before the window was listening (an update that didn't install), once. */
+  updateUnshown: () => invoke<{ title: string; text: string } | null>("update_unshown"),
+  /** The update this copy was started after, if it didn't install, while this copy runs (app_status). */
+  updateFailed: () => invoke<{ title: string; text: string } | null>("update_failed"),
   updateInstall: () => invoke<void>("update_install"),
   updateLater: () => invoke<void>("update_later"),
   updateCheck: () => invoke<void>("update_check"),

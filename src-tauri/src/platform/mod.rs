@@ -810,21 +810,42 @@ pub fn release_updates() -> bool {
 
 /// Deletes the folders Windows' updater leaves in Temp, one per update installed
 /// ("Brainstead-1.3.0-updater-Zu7DmM", holding the installer it ran). By the next start that
-/// installer has done its work. Nothing to do elsewhere.
+/// installer has done its work. Also the old program files the installer moves aside next to this
+/// one ("Brainstead.exe.old", "Brainstead.exe.old-123456": NSIS_HOOK_PREINSTALL in
+/// src-tauri/windows/hooks.nsh) that were still running when it finished; one still running now
+/// stays for the next start. Nothing to do elsewhere.
 pub fn remove_update_installers(name: &str) {
     #[cfg(windows)]
     {
-        let Ok(dir) = std::fs::read_dir(std::env::temp_dir()) else { return };
-        let prefix = format!("{name}-");
+        if let Ok(dir) = std::fs::read_dir(std::env::temp_dir()) {
+            let prefix = format!("{name}-");
+            for e in dir.flatten() {
+                let n = e.file_name().to_string_lossy().into_owned();
+                if n.starts_with(&prefix) && n.contains("-updater-") && e.path().is_dir() {
+                    let _ = std::fs::remove_dir_all(e.path());
+                }
+            }
+        }
+        let Ok(exe) = std::env::current_exe() else { return };
+        let (Some(folder), Some(file)) = (exe.parent(), exe.file_name()) else { return };
+        let Ok(dir) = std::fs::read_dir(folder) else { return };
         for e in dir.flatten() {
-            let n = e.file_name().to_string_lossy().into_owned();
-            if n.starts_with(&prefix) && n.contains("-updater-") && e.path().is_dir() {
-                let _ = std::fs::remove_dir_all(e.path());
+            if is_moved_aside(&file.to_string_lossy(), &e.file_name().to_string_lossy()) {
+                let _ = std::fs::remove_file(e.path());
             }
         }
     }
     #[cfg(not(windows))]
     let _ = name;
+}
+
+/// Whether `file`, in the program's folder, is a copy of the program `exe` the installer moved
+/// aside: `<exe>.old`, or `<exe>.old-<n>` when one was still held from an earlier update. Windows'
+/// names don't go by case.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn is_moved_aside(exe: &str, file: &str) -> bool {
+    let (exe, file) = (exe.to_lowercase(), file.to_lowercase());
+    file.strip_prefix(&exe).is_some_and(|rest| rest == ".old" || rest.strip_prefix(".old-").is_some_and(|n| !n.is_empty()))
 }
 
 /// Which of the features that aren't on every system this one has: one table in core, which the
@@ -859,6 +880,16 @@ fn secret_service() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_program_files_the_installer_moved_aside_are_old() {
+        for old in ["Brainstead.exe.old", "brainstead.EXE.old", "Brainstead.exe.old-1234567"] {
+            assert!(is_moved_aside("Brainstead.exe", old), "{old}");
+        }
+        for other in ["Brainstead.exe", "Brainstead.exe.old-", "Brainstead.exe.older", "uninstall.exe.old", "Brainstead.exe.old.txt"] {
+            assert!(!is_moved_aside("Brainstead.exe", other), "{other}");
+        }
+    }
 
     #[test]
     fn a_host_manifest_is_written_once_and_then_current() {
