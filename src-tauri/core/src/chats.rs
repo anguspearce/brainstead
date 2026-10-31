@@ -257,11 +257,7 @@ mod tests {
         let mut e = chat();
         e.summary.effort = Some("high".into());
         let text = serialize(&e);
-        assert!(text.contains(
-            "
-effort: \"high\"
-"
-        ));
+        assert!(text.contains("\neffort: \"high\"\n"));
         assert_eq!(parse(&e.summary.filename, &text, "x"), e);
     }
 
