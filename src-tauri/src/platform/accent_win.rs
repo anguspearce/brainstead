@@ -5,7 +5,8 @@
 //! The Windows accent colour (Settings › Personalisation › Colours), for Appearance › Accent
 //! colour's System (src/accent.ts): `UISettings::GetColorValue(Accent)`, as Settings and Terminal
 //! take it. `ColorValuesChanged` also fires for the light and dark switch, and more than once a
-//! change, so the page is told only when the accent itself is different.
+//! change, so the page is told only when the accent itself is different. Also whether Windows
+//! hides scroll bars (`auto_hide_scrollbars`, src/scrollbars.ts), which `UISettings` gives too.
 
 use std::sync::Mutex;
 use tauri::Emitter;
@@ -16,6 +17,12 @@ use windows::UI::ViewManagement::{UIColorType, UISettings};
 /// The accent as `#rrggbb`; `None` when Windows doesn't say (no WinRT, as on Server Core).
 pub fn accent() -> Option<String> {
     hex(&UISettings::new().ok()?)
+}
+
+/// Whether Windows hides scroll bars until they're used: false when Settings › Accessibility ›
+/// Visual effects › Always show scrollbars is on. `None` when Windows doesn't say (before 1809).
+pub fn auto_hide_scrollbars() -> Option<bool> {
+    UISettings::new().ok()?.AutoHideScrollBars().ok()
 }
 
 fn hex(s: &UISettings) -> Option<String> {

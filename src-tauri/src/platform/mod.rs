@@ -277,6 +277,19 @@ pub fn activate() {
     }
 }
 
+/// Whether the system shows scroll bars all the time, so the app shows every scrollbar too
+/// (src/scrollbars.ts): Windows' Settings › Accessibility › Visual effects › Always show
+/// scrollbars (UISettings' AutoHideScrollBars off, platform/accent_win.rs), or macOS's Show scroll
+/// bars: Always, or Automatic with a mouse (platform/macos.rs). False elsewhere.
+pub fn always_show_scrollbars() -> bool {
+    #[cfg(windows)]
+    return accent_win::auto_hide_scrollbars() == Some(false);
+    #[cfg(target_os = "macos")]
+    return macos::always_show_scrollbars();
+    #[cfg(not(any(windows, target_os = "macos")))]
+    false
+}
+
 /// The system's accent colour as `#rrggbb`, for Appearance › Accent colour's System
 /// (platform/accent_win.rs). `None` off Windows, and Settings then hides the setting.
 pub fn system_accent() -> Option<String> {

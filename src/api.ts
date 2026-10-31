@@ -1213,6 +1213,9 @@ export const api = {
   loginItem: () => invoke<boolean | null>("login_item"),
   /** The Windows accent colour as #rrggbb; null elsewhere (src/accent.ts). */
   systemAccent: () => invoke<string | null>("system_accent"),
+  /** Whether the system shows scroll bars all the time (Windows' Always show scrollbars, macOS's
+   *  Show scroll bars: Always); the app then does too (src/scrollbars.ts). */
+  alwaysShowScrollbars: () => invoke<boolean>("always_show_scrollbars"),
   loginItemSet: (on: boolean) => invoke<boolean | null>("login_item_set", { on }),
   /** Open at login changed, from Settings or the menu-bar window. */
   onLoginItemChanged: (f: (on: boolean | null) => void): Promise<UnlistenFn> =>
