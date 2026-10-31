@@ -69,6 +69,7 @@ Every pane can be dragged wider or narrower by the line between it and the next:
 | ⌘Z | Undo the last change |
 | ⇧⌘= ⇧⌘- ⇧⌘0 (Ctrl+Shift+= … on Windows) | Interface size: everything bigger, smaller, or back to 100% |
 | ← → ⇧← ⇧→ ↩ | On a pane's divider (Tab reaches it): move it 8 px, 40 px, or put the pane back |
+| Home End | On a pane's divider: the pane at its least or greatest width |
 | ⌘, | Settings |
 | ? | Help for this screen |
 

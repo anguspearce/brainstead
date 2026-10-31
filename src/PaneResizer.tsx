@@ -7,10 +7,11 @@
 // grid root and its resizers inside it: each is a 6px hit area over the 1px divider, nothing at rest
 // and a 2px accent line while hovered, focused or dragged. A drag writes the pane's custom property
 // on the root as the pointer moves (no re-render per move) and keeps the width on release; arrow
-// keys move it PANE_STEP (Shift: PANE_STEP_BIG); Enter or a double-click puts the stylesheet's width
-// back. A table's columns (src/FileList.tsx, the Trash, Activity's log, Doc check's register) use
-// the same with mode "column": the resizer sits inside the column's header cell, on the edge away
-// from the table's one flexible column (a column before it at its right edge, a column after it at
+// keys move it PANE_STEP (Shift: PANE_STEP_BIG), Home and End to its least and most; Enter or a
+// double-click puts the stylesheet's width back. A table's columns (src/FileList.tsx, the Trash,
+// Activity's log, Doc check's register) use the same with mode "column": the resizer sits inside
+// the column's header cell (role columnheader, named by its heading), on the edge away from the
+// table's one flexible column (a column before it at its right edge, a column after it at
 // its left edge), so the divider moves with the pointer whichever side of the flexible column it is.
 // A type locked in Settings (src/panes.ts, resizeLocks) draws no resizers; its widths still apply.
 
@@ -250,7 +251,9 @@ export function usePanes<K extends string>(specs: Record<K, PaneSpec>, opts: Pan
     gone.has(key) || resizeLocked(specs[key].type, resizeLocks) ? null : (
       <PaneResizer key={key} paneKey={key} spec={specs[key]} live={live} layout={layout} root={root} mode={mode} />
     );
-  return { root: { ref: setRoot, style }, resizer, resizers: <>{keys.map((k) => resizer(k))}</> };
+  // Left to right, so Tab reaches a screen's dividers in the order they're drawn.
+  const inOrder = [...keys.filter((k) => specs[k].side === "left"), ...keys.filter((k) => specs[k].side === "right")];
+  return { root: { ref: setRoot, style }, resizer, resizers: <>{inOrder.map((k) => resizer(k))}</> };
 }
 
 interface ResizerProps<K extends string> {
@@ -333,11 +336,16 @@ export function PaneResizer<K extends string>({ spec, paneKey, live, layout, roo
   // A key the divider acts on stops here: a screen's own keys (the Inbox's Enter applies the
   // suggestion) listen on the window, and must not act on it too.
   const key = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "Enter" && e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    if (!["Enter", "ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
     e.preventDefault();
     e.stopPropagation();
     if (e.key === "Enter") {
       reset();
+      return;
+    }
+    // Home and End: the pane at its least and at its most, as a separator's value goes.
+    if (e.key === "Home" || e.key === "End") {
+      commit(e.key === "Home" ? spec.min : spec.max);
       return;
     }
     const step = e.shiftKey ? PANE_STEP_BIG : PANE_STEP;

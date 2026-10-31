@@ -302,12 +302,19 @@ export function FileList<T extends FileSummary>({
       >
         <div className="frow fhead tb-head" role="row">
           {columns.map((c) => (
-            <div key={c.key} className="fhcell" style={flexOf(c)}>
+            // The header cell holds the sort button and the column's divider, so the divider is the
+            // column header's and not a stray child of the row; it's named by its heading alone.
+            <div
+              key={c.key}
+              role="columnheader"
+              aria-label={c.label || undefined}
+              aria-sort={sort[0] === c.key ? (sort[1] === 1 ? "ascending" : "descending") : "none"}
+              className="fhcell"
+              style={flexOf(c)}
+            >
               <button
                 type="button"
-                role="columnheader"
                 className={`fcell ${c.align ?? ""}`}
-                aria-sort={sort[0] === c.key ? (sort[1] === 1 ? "ascending" : "descending") : "none"}
                 title={`Sort by ${c.label.toLowerCase()}${sort[0] === c.key ? "; click again to reverse" : ""}`}
                 onClick={() => {
                   setRanked(false);
