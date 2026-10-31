@@ -13,10 +13,17 @@ The tile is drawn with PIL; the mark is rasterised by AppKit
 
     python3 tools/make_icons.py            # then: npx tauri icon design/icon.png
     make icons                             # does both
+    python3 tools/make_icons.py --tray-win # only the Windows tray glyphs, from tray@2x.png (no swiftc)
+
+The Windows tray glyphs, tray-win-{white,black}-{16,20,24,32}.png, are tray@2x.png's brain cropped
+to its own edges, fitted to the width and centred, white for a dark taskbar and black for a light
+one (src-tauri/src/platform/tray.rs picks the size and colour). A full run draws tray@2x.png first
+and then these.
 """
 
 import pathlib
 import subprocess
+import sys
 import tempfile
 
 from PIL import Image, ImageDraw
@@ -123,6 +130,28 @@ def tray_icons(exe):
         img.resize((44, 44), Image.LANCZOS).save(ROOT / "src-tauri" / "icons" / f"{kind}@2x.png", optimize=True)
 
 
+# Windows' tray glyph sizes: the notification area's icon at 100, 125, 150 and 200% scale.
+TRAY_WIN_SIZES = (16, 20, 24, 32)
+
+
+def tray_win_icons():
+    """Writes tray-win-{white,black}-{16,20,24,32}.png from tray@2x.png: its brain, cropped to its
+    edges, fitted to the width with Lanczos and centred (rounding down) on a square clear canvas."""
+    icons = ROOT / "src-tauri" / "icons"
+    alpha = Image.open(icons / "tray@2x.png").convert("RGBA").getchannel("A")
+    edges = alpha.getbbox()
+    w, h = edges[2] - edges[0], edges[3] - edges[1]
+    brain = alpha.crop(edges)
+    for size in TRAY_WIN_SIZES:
+        fitted = brain.resize((size, max(1, round(h * size / w))), Image.LANCZOS)
+        a = Image.new("L", (size, size), 0)
+        a.paste(fitted, (0, (size - fitted.height) // 2))
+        for colour, rgb in (("white", 255), ("black", 0)):
+            img = Image.new("RGBA", (size, size), (rgb, rgb, rgb, 0))
+            img.putalpha(a)
+            img.save(icons / f"tray-win-{colour}-{size}.png", optimize=True)
+
+
 def svg2png(tmp):
     exe = pathlib.Path(tmp) / "svg2png"
     subprocess.run(["swiftc", "-O", str(ROOT / "tools" / "svg2png.swift"), "-o", str(exe)], check=True)
@@ -131,8 +160,13 @@ def svg2png(tmp):
 
 if __name__ == "__main__":
     (ROOT / "src-tauri" / "icons").mkdir(parents=True, exist_ok=True)
+    if "--tray-win" in sys.argv[1:]:
+        tray_win_icons()
+        print("drew the Windows tray glyphs from src-tauri/icons/tray@2x.png")
+        sys.exit(0)
     app_icon()
     app_icon(light=True)
     with tempfile.TemporaryDirectory() as t:
         tray_icons(svg2png(t))
+    tray_win_icons()
     print("drew design/icon.png, src-tauri/icons/about-light.png and the tray icons")
