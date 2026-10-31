@@ -19,12 +19,13 @@
 ; it: under /S it skips the file and the install still ends with exit code 0, keeping the old
 ; program; under /P it asks Abort, Retry or Ignore. So the hook runs that same check first and
 ; then renames the old program to Brainstead.exe.old, which Windows allows while it runs: the path
-; File writes is then free whatever starts meanwhile, and the template's check after the hook finds
-; nothing. A copy still held from a previous update gets a unique name. $MovedAside is the name the
-; program was given, so only that copy is ever put back. POSTINSTALL puts it back when File didn't
-; write the program (skipped under /S, or Ignore under /P), and otherwise deletes the old copies,
-; which fails harmlessly for one still running; the app deletes those at its next start
-; (src/platform/mod.rs, remove_update_installers).
+; File writes is then free whatever starts meanwhile. Something started between the check and the
+; rename runs the moved copy, out of reach of the template's check after the hook (which then finds
+; nothing), so the hook runs the check again on the moved copy. A copy still held from a previous
+; update gets a unique name. $MovedAside is the name the program was given, so only that copy is
+; ever put back. POSTINSTALL puts it back when File didn't write the program (skipped under /S, or
+; Ignore under /P), and otherwise deletes the old copies, which fails harmlessly for one still
+; running; the app deletes those at its next start (src/platform/mod.rs, remove_update_installers).
 ;
 ; This file is included before the template defines MAINBINARYNAME, so .onInstFailed, a function
 ; compiled where it stands, names the program as HOOK_PROGRAM, and PREINSTALL stops the build if the two
@@ -50,6 +51,8 @@ Var MovedAside
     Rename "$INSTDIR\${MAINBINARYNAME}.exe" "$MovedAside"
     ${If} ${Errors}
       StrCpy $MovedAside ""
+    ${Else}
+      !insertmacro CheckIfAppIsRunning "$MovedAside" "${PRODUCTNAME}"
     ${EndIf}
   ${EndIf}
 !macroend
