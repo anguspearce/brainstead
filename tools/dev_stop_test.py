@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Tests for dev_stop.py's matching, over fake process tables (`python3 tools/check.py python`)."""
 
+from __future__ import annotations
+
 import contextlib
 import io
 import json
