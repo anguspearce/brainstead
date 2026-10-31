@@ -63,6 +63,8 @@ import { FactsCard, SourcesCard, WikiFields } from "./wiki/WikiFields";
 import { iconizeEmoji } from "./md/fieldEmoji";
 import { dragRegion, isMod, isOptCmd, keyLabel, strayCtrl } from "./platform";
 import { useFeatures } from "./features";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 const isMarkdown = (p: string) => /\.(md|txt)$/i.test(p);
 const editable = (s: FileSummary) => isMarkdown(s.path) && s.layer !== "source";
@@ -75,6 +77,7 @@ function openingMode(): DocMode {
 }
 
 export function DocScreen() {
+  const panes = usePanes({ "note.side": PANES["note.side"] });
   const { place: here } = useStore(place);
   const path = here.path ?? "";
   const bookmarked = useBookmarked(path);
@@ -723,7 +726,8 @@ export function DocScreen() {
       >
         {err && <div className="docerr err">{err}</div>}
         {doc && s && (
-          <div className={`docgrid ${sideFolded || focus ? "wide" : ""} ${focus ? "focus" : ""}`}>
+          <div className={`docgrid ${sideFolded || focus ? "wide" : ""} ${focus ? "focus" : ""}`} {...panes.root}>
+            {!sideFolded && !focus && panes.resizers}
             <article
               className={`doc docsurf ${look.style === "brainstead" ? "" : "styled"} ${look.ownTheme ? "owntheme" : ""}`}
               data-doc-theme={look.theme}

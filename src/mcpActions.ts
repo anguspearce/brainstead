@@ -122,6 +122,7 @@ import { loadVoices, speechSettingsChanged, voiceLabel, voices } from "./speech/
 import { applyReadSize, applyTheme, READ_SIZE, settings } from "./store";
 import { clampInterfaceSize, INTERFACE_SIZE, setInterfaceSize } from "./interfaceSize";
 import { Accent, setAccent, systemAccent } from "./accent";
+import { lockedMessage, paneSpecs, RESIZE_LOCKS, ResizeType, resetPaneWidth, resetPaneWidths, resizeLocked, setPaneWidth } from "./panes";
 import { imageView } from "./ImageViewer";
 import { TOPICS } from "./help";
 import { HelpView, openHelp } from "./help/HelpDrawer";
@@ -3221,7 +3222,8 @@ async function taskLists(a: Args): Promise<string> {
 
 // ---- Settings
 
-type SettingKind = "bool" | "time" | "text" | "number" | "day" | "theme" | "choice" | "model" | "speed" | "size" | "percent" | "shortcut";
+type SettingKind =
+  "bool" | "time" | "text" | "number" | "day" | "theme" | "choice" | "model" | "speed" | "size" | "percent" | "shortcut" | "panes";
 /** A choice setting's choices, as its menu offers them: each value and how the screen names it. */
 type Choices = () => Promise<[string, string][]> | [string, string][];
 /** What the settings tool can change, by key: its pane, label, kind and default, a choice's
@@ -3254,6 +3256,16 @@ const settingRows = (): SettingRow[] => [
       ["system", "System"],
     ],
   ],
+  // The panes dragged wider or narrower (src/panes.ts), px by pane key; one pane is set as paneWidths.<pane>.
+  ["paneWidths", "General", "Appearance › Pane widths (px by pane; paneWidths.<pane> sets one, null puts them all back)", "panes", {}],
+  // A lock per type of divider (src/panes.ts RESIZE_LOCKS): resizeLocks.panes, resizeLocks.columns.
+  ...(Object.keys(RESIZE_LOCKS) as ResizeType[]).map((type): SettingRow => [
+    `resizeLocks.${type}`,
+    "General",
+    `Appearance › Pane widths › ${RESIZE_LOCKS[type].label}`,
+    "bool",
+    false,
+  ]),
   ["openAtLogin", "General", "Open at login", "bool", false],
   ["menuBar", "General", "Show in the menu bar", "bool", true],
   ["menuBarOnly", "General", `Only in the menu bar when the window is closed${isMac ? "" : " (Mac only; no effect here)"}`, "bool", false],
@@ -3385,6 +3397,7 @@ async function settingsTool(a: Args): Promise<string> {
     jobModels: { ...s.jobModels },
     jobEffort: { ...s.jobEffort },
     effort: { ...s.effort },
+    resizeLocks: { ...s.resizeLocks },
   };
   // Open at login is macOS's login item, not a setting in the file; null where macOS can't say
   // (a copy run from a folder), and then it isn't offered, as the screen hides it.
@@ -3414,6 +3427,17 @@ async function settingsTool(a: Args): Promise<string> {
           const list = cs.map(([v, l]) => (v === l ? v : `${v} (${l})`)).join(", ");
           extra = ` (one of: ${list || "none here"}${none ? `; null for ${none}` : ""})`;
         }
+        if (kind === "panes") {
+          // Each pane's key with its range and usual width, as the dividers clamp them, and whether
+          // its type is locked.
+          const panes = Object.entries(paneSpecs())
+            .map(
+              ([pk, sp]) =>
+                `${pk} (${sp.min} to ${sp.max}, usually ${sp.def}${resizeLocked(sp.type) ? `, locked by resizeLocks.${sp.type}` : ""})`,
+            )
+            .join(", ");
+          extra = ` (panes: ${panes})`;
+        }
         return `- ${k} · ${where(pane, label)}: ${shown(valueOf(k, def), none)}${extra}`;
       }),
     );
@@ -3421,6 +3445,36 @@ async function settingsTool(a: Args): Promise<string> {
   }
   if (action !== "set") throw new Error("action is get or set.");
   const key = str(a, "key");
+  // One pane's width, as its divider sets it: clamped to the pane's range (the screen clamps it to
+  // its room too, as it draws); null puts that pane, or with the bare key every pane, back. A pane
+  // whose type is locked (resizeLocks) is refused, as its divider is hidden; every pane back isn't.
+  if (key === "paneWidths" || key?.startsWith("paneWidths.")) {
+    const label = "Settings › General › Appearance › Pane widths";
+    if (key === "paneWidths") {
+      if (a.value !== null)
+        throw new Error("paneWidths takes null, to put every pane back; set one pane as paneWidths.<pane> (list_settings names them).");
+      resetPaneWidths();
+      await settings.flush();
+      noted("put every pane back to its usual width");
+      return `${label}: every pane is back to its usual width.`;
+    }
+    const pane = key.slice("paneWidths.".length);
+    const spec = paneSpecs()[pane];
+    if (!spec) throw new Error(`No pane “${pane}”. Panes: ${Object.keys(paneSpecs()).join(", ")}.`);
+    if (resizeLocked(spec.type)) throw new Error(lockedMessage(pane, spec.type));
+    if (a.value === null) {
+      resetPaneWidth(pane);
+      await settings.flush();
+      noted(`put the ${pane} pane back to its usual width`);
+      return `${label} › ${pane} is back to its usual width (${spec.def} px).`;
+    }
+    const n = Number(a.value);
+    if (!Number.isFinite(n)) throw new Error(`${key} is a width in px, from ${spec.min} to ${spec.max}, or null for its usual width.`);
+    const v = setPaneWidth(pane, n);
+    await settings.flush();
+    noted(`set the ${pane} pane to ${v} px`);
+    return `${label} › ${pane} is now ${v} px${v !== Math.round(n) ? ` (${spec.min} to ${spec.max})` : ""}.`;
+  }
   const row = offered.find(([k]) => k === key);
   if (!row)
     throw new Error(

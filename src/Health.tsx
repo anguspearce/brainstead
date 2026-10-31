@@ -47,6 +47,8 @@ import { Dialog, LayerTag } from "./ui";
 import { Store, useStore } from "./store";
 import { keyLabel } from "./platform";
 import { vaultVersion } from "./state";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 const undo = { label: "Undo", kbd: "⌘Z", run: () => void undoLast() };
 
@@ -124,6 +126,7 @@ const reshaped = (r: { applied: number; failed: string[] }) =>
   );
 
 export function HealthScreen() {
+  const panes = usePanes({ "health.side": PANES["health.side"] });
   useEffect(startKnowledge, []);
   const h = useStore(health);
   const r = h?.report ?? null;
@@ -220,7 +223,8 @@ export function HealthScreen() {
           ]}
         />
       </TopBar>
-      <div className="body health">
+      <div className="body health" {...panes.root}>
+        {panes.resizers}
         <div className="hmain">
           <div className="hsum">
             <div className="hnum">
