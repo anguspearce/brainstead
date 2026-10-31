@@ -24,7 +24,7 @@ Dev processes: `python3 tools/dev_stop.py` (`python` on Windows) lists the dev p
 |---|---|
 | `make dev` | Run with hot reload (Vite on localhost:1440) |
 | `make help` | List the targets |
-| `make check` | In parallel: Rust tests and Clippy (core, MCP, app), TypeScript check, ESLint, Vitest, formatting and repo checks (`tools/check.py`; `python3 tools/check.py rust` runs one group). Builds into `src-tauri/target/check`, so `make dev` doesn't block it. ~15 s warm, minutes cold |
+| `make check` | In parallel: Rust tests and Clippy (core, MCP, app), TypeScript check, ESLint, Vitest, the tools' Python tests (`tools/*_test.py`), formatting and repo checks (`tools/check.py`; `python3 tools/check.py rust` runs one group). Builds into `src-tauri/target/check`, so `make dev` doesn't block it. ~15 s warm, minutes cold |
 | `make test` | Same as `make check` |
 | `make lint` | Checks only: rustfmt, Clippy (warnings are errors), Prettier, ESLint, stylelint, ruff, licence headers, button tooltips |
 | `make fmt` | Reformat everything; add missing licence headers |
