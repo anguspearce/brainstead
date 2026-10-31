@@ -59,3 +59,6 @@ An assistant can do what the buttons do: start, move on, add notes and finish.
 The note is yours to edit, move or delete. Finishing the same week again rewrites it, but keeps anything under its **Added later** heading. If you remove that heading, the whole old note is kept under a new **Added later**. The scheduled weekly summary reads the note but never writes to it.
 
 The pane on the right shows this week's weekly summary, once written, with how many notes and meetings are dated this week, and **Your review: open** once you've finished.
+
+## Resize the panes
+Drag the line beside the steps, or beside the side column, to resize them; a double-click on it puts it back ([pane widths](help:settings-general)).

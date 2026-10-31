@@ -55,6 +55,8 @@ Counts that need you, such as overdue tasks, the Inbox and changes held for you,
 
 On Windows, scrollbars stay out of sight until the pointer is over a list or page, or it scrolls; then a thin line shows where you are, and it widens under the pointer to drag. It goes again a second after scrolling stops. Where Windows shows scroll bars all the time (Settings › Accessibility › Visual effects › **Always show scrollbars**), Brainstead shows them all the time too. A Mac keeps its native scrollbars.
 
+Every pane can be dragged wider or narrower by the line between it and the next: the sidebar, each screen's left list and right-hand pane, and the columns of every table (Notes, Wiki, Sources, Templates, Trash, Activity's log, Doc check's register) by their headings' edges (a column after the table's flexible one by its left edge), one flexible column in each taking the rest. A double-click on the line puts the pane back, **Reset pane widths** in Settings › General puts every one back, **Lock pane widths** and **Lock column widths** there stop either type being resized, and the widths are kept per computer ([day-to-day](day-to-day.md#settings)).
+
 | Keys | What they do |
 |---|---|
 | ⌘K | Search or jump to anything, and run commands |
@@ -68,6 +70,7 @@ On Windows, scrollbars stay out of sight until the pointer is over a list or pag
 | ⌘[ ⌘] | Back, forward |
 | ⌘Z | Undo the last change |
 | ⇧⌘= ⇧⌘- ⇧⌘0 (Ctrl+Shift+= … on Windows) | Interface size: everything bigger, smaller, or back to 100% |
+| ← → ⇧← ⇧→ ↩ | On a pane's divider (Tab reaches it): move it 8 px, 40 px, or put the pane back |
 | ⌘, | Settings |
 | ? | Help for this screen |
 

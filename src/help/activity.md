@@ -30,3 +30,6 @@ Entries are grouped by day; click a day's band to show only that day. Click an e
 - While searching, `↑` and `↓` move through the matches, `↩` opens the entry's page (or shows its day) and `Esc` clears the box.
 
 An assistant can filter and search the log the same way.
+
+## Resize the panes
+Drag the line beside the side column to make it wider or narrower; a double-click on it puts it back ([pane widths](help:settings-general)). The log's **When** (or **Time**) column resizes by its heading's right edge and **Action** by its left edge; **Item** takes the rest.

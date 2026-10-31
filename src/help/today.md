@@ -55,3 +55,6 @@ On macOS and Windows, with [Teams and Outlook sync](app:settings/sync) on, an **
 **Changes held for you** counts the changes held in [Changes](app:review) and lists the first four; click one, or **Review**, to accept or reject them.
 
 **Continue where you left off** shows up to six notes: unsaved ones first (marked Unsaved, with **Discard**), then notes you opened lately, then notes changed lately here or in another editor. **More in Activity** opens [Activity](app:activity).
+
+## Resize the panes
+Drag the line between the bands and the right rail to make the rail wider or narrower; a double-click on it puts it back. The width is kept for this computer, with the other [pane widths](help:settings-general).
