@@ -5,7 +5,7 @@
 // The accent tokens for Appearance › Accent colour's System (src/accent.ts), from one colour (the
 // Windows accent). The accent is that colour itself; the tints the stylesheet uses with it
 // (--accent-ink for links and hovers, --accent-soft for the selected row, --ring for the focus ring)
-// take its hue at the luminance today's tints have, so every contrast against text and the page is
+// take its hue at the luminance the app's own tints have, so every contrast against text and the page is
 // the one the app's own blue gives. Where a pair still falls short of WCAG AA (4.5:1 for text, 3:1
 // for the accent against the page in dark), only the lightness moves: hue and chroma are kept
 // (chroma lowered only to stay inside sRGB). Worked in OKLCH, where a lightness change doesn't drift
@@ -172,9 +172,9 @@ function deriveTheme(colour: string, theme: "light" | "dark"): AccentTokens {
   const app = APP_ACCENT[theme];
   const win = toLch(parseHex(colour)!);
   const ref = toLch(parseHex(app.accent)!);
-  // Each tint keeps today's share of the accent's chroma: a muted accent gives muted tints.
+  // Each tint keeps the app's own share of the accent's chroma: a muted accent gives muted tints.
   const scale = ref.c > 0 ? win.c / ref.c : 0;
-  const tint = (today: string) => atLuminance(luminance(today), toLch(parseHex(today)!).c * scale, win.h);
+  const tint = (own: string) => atLuminance(luminance(own), toLch(parseHex(own)!).c * scale, win.h);
   // Text is darker than its page in light, lighter in dark.
   const text = theme === "light" ? "below" : "above";
   const page = theme === "light" ? "above" : "below";

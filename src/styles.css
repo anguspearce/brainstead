@@ -2295,7 +2295,7 @@ details.callout[open] .callout-chev {
   align-self: flex-start;
 }
 
-/* Settings › General › Appearance: Interface size */
+/* Settings › General › Appearance: Interface size and Accent colour (a label, the control, a note) */
 .ifacesize {
   margin-top: 14px;
   display: flex;
