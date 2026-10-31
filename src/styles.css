@@ -2181,6 +2181,48 @@ details.callout[open] .callout-chev {
   border: 1px solid var(--line);
   box-shadow: var(--pop);
 }
+
+/* A file previewed in the window (src/Preview.tsx): the page's frame round the body Windows draws
+   the file into. The body's background and text colour are what the handler is given. */
+.winprev {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+
+/* On Windows it opens below the window's own title bar, the top bar's height, so the window's
+   buttons (.winctl, over every dialog) never cover its bar and its Close. */
+html[data-platform="windows"] .scrim.winprevscrim {
+  padding-top: var(--top-h);
+}
+.winprevbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 14px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink2);
+}
+.winprevbar .grow {
+  color: var(--ink);
+  font-weight: 600;
+}
+.winpreverr {
+  max-width: 40%;
+}
+
+/* A dialog of the page's own (Quit, unsaved edits, an update) opened over the preview: the panel
+   drops below it, and the native window hides meanwhile (src/Preview.tsx). */
+.scrim.winprevscrim.under {
+  z-index: 59;
+}
+.winprevbody {
+  flex: 1;
+  min-height: 0;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 14px;
+}
 .mfullbox {
   width: 100%;
   height: 100%;
