@@ -177,10 +177,10 @@ export function clampPaneWidth(spec: PaneSpec, px: number | undefined, room = In
   return Math.max(spec.min, Math.min(max, want));
 }
 
-/** The room a pane has on a screen `width` wide (the grid's content box), once the `others` (the
- *  screen's other fixed panes, as shown) and `fixed` (gaps, and columns that never move) are taken. */
-export function paneRoom(width: number, others: number[], fixed = 0): number {
-  return width - fixed - others.reduce((a, b) => a + b, 0) - MIN_FLEX;
+/** The room a screen's fixed panes share on a root `width` wide (the grid's content box), once
+ *  `fixed` (gaps, and columns that never move) and the flexible pane's MIN_FLEX are taken. */
+export function paneRoom(width: number, fixed = 0): number {
+  return width - fixed - MIN_FLEX;
 }
 
 /** What each of a screen's panes shows when `room` px are left for them all (the root's width less

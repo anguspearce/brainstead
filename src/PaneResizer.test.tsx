@@ -126,6 +126,26 @@ describe("a breakpoint", () => {
     render(<Tasks grid="1000px" />);
     expect(screen.queryAllByRole("separator")).toEqual([]);
   });
+
+  it("leaves the room of a pane it drops to the panes still shown", () => {
+    // The Weekly review in a 768px main area, its side column dropped: the steps may take all but
+    // the step's least, as if the side column weren't there.
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(768);
+    function Weekly() {
+      const panes = usePanes({ "weekly.left": PANES["weekly.left"], "weekly.side": PANES["weekly.side"] });
+      return (
+        <div data-testid="weekly" {...panes.root} style={{ ...panes.root.style, display: "grid", gridTemplateColumns: "260px 508px" }}>
+          {panes.resizers}
+        </div>
+      );
+    }
+    render(<Weekly />);
+    const steps = screen.getByRole("separator", { name: "Resize the review's steps" });
+    expect(steps.getAttribute("aria-valuemax")).toBe(String(Math.min(PANES["weekly.left"].max, 768 - MIN_FLEX)));
+    act(() => drag(steps, 140));
+    expect(stored()["weekly.left"]).toBe(400);
+    expect(screen.getByTestId("weekly").style.getPropertyValue("--pane-left")).toBe("400px");
+  });
 });
 
 describe("a divider's keys and locks", () => {
