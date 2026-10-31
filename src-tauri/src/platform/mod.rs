@@ -827,6 +827,35 @@ pub fn remove_update_installers(name: &str) {
     let _ = name;
 }
 
+/// WebView2's user data folder for a copy that runs beside the installed app (`data` is its own
+/// data folder, `BRAINSTEAD_DATA`): `<data>\WebView2`. Every build otherwise uses the identifier's
+/// folder in `%LOCALAPPDATA%`, and WebView2 runs one browser process per user data folder, shared
+/// by every program using it and started by whichever came first: a dev copy started first would
+/// own the installed app's browser process, and stopping the dev copy (tools/dev_stop.py) would
+/// blank the installed app's window. Set as `WEBVIEW2_USER_DATA_FOLDER`, which takes precedence
+/// over the folder Tauri passes, before the windows are built, and taken away after
+/// (`webview_data_built`) so programs this copy starts don't inherit it. Nothing elsewhere: WebKit
+/// runs a copy's web content in processes of its own.
+pub fn own_webview_data(data: &std::path::Path) {
+    #[cfg(windows)]
+    std::env::set_var(WEBVIEW2_DATA_VAR, webview_data_folder(data));
+    #[cfg(not(windows))]
+    let _ = data;
+}
+
+/// Every window is built (`own_webview_data`).
+pub fn webview_data_built() {
+    #[cfg(windows)]
+    std::env::remove_var(WEBVIEW2_DATA_VAR);
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+const WEBVIEW2_DATA_VAR: &str = "WEBVIEW2_USER_DATA_FOLDER";
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn webview_data_folder(data: &std::path::Path) -> PathBuf {
+    data.join("WebView2")
+}
 /// Which of the features that aren't on every system this one has: one table in core, which the
 /// window (`platform_features`) and the MCP server's `app_status` both read.
 pub use brainstead_core::features::{platform_features, PlatformFeatures};
@@ -859,6 +888,13 @@ fn secret_service() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_copy_beside_the_app_keeps_its_webview_data_in_its_own_data_folder() {
+        let data = std::path::Path::new("scratch").join("dev-data");
+        assert_eq!(webview_data_folder(&data), data.join("WebView2"));
+        assert_eq!(WEBVIEW2_DATA_VAR, "WEBVIEW2_USER_DATA_FOLDER");
+    }
 
     #[test]
     fn a_host_manifest_is_written_once_and_then_current() {
