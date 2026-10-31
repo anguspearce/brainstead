@@ -2,6 +2,8 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => undefined), convertFileSrc: (p: string) => p }));
@@ -88,6 +90,15 @@ describe("pane widths", () => {
     expect(paneWidth(side, { "tasks.side": 500 }, "tasks.side")).toBe(500);
     expect(paneWidth(side, { "tasks.side": 500 }, "tasks.side", 420)).toBe(420);
     expect(paneWidth(side, { "tasks.side": "wide" as unknown as number }, "tasks.side")).toBeUndefined();
+  });
+
+  it("have their custom property in the stylesheet at their usual width, with no width stored", () => {
+    // A screen's divider is placed by its pane's property: one only the grid's fallback gave would
+    // be unset until a width was stored, and the divider would sit at the root's left edge.
+    const css = readFileSync(resolve(__dirname, "styles.css"), "utf8");
+    for (const [key, spec] of Object.entries(PANES).filter(([, p]) => p.type === "panes"))
+      expect(css, key).toMatch(new RegExp(`^ *${spec.cssVar}: ${spec.def}px;$`, "m"));
+    expect(css).not.toMatch(/var\(--pane-[a-z]+,/);
   });
 
   it("are kept per pane in settings, one or all put back", () => {

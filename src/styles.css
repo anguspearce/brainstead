@@ -207,9 +207,12 @@ input {
 
 /* shell */
 .shell {
+  /* The sidebar's width, here rather than only as the grid's fallback: its divider is placed by it. */
+  --pane-sidebar: 232px;
+
   height: 100%;
   display: grid;
-  grid-template-columns: var(--pane-sidebar, 232px) minmax(0, 1fr);
+  grid-template-columns: var(--pane-sidebar) minmax(0, 1fr);
 }
 .side {
   background: var(--side);
