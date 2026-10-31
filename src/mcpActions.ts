@@ -123,6 +123,7 @@ import {
   resetPaneWidths,
   resizeLocked,
   setPaneWidth,
+  setResizeLock,
 } from "./panes";
 import { imageView } from "./ImageViewer";
 import { TOPICS } from "./help";
@@ -3479,6 +3480,9 @@ async function settingsTool(a: Args): Promise<string> {
   const [head, sub] = key!.split(".");
   if (key === "openAtLogin") {
     await api.loginItemSet(v as boolean);
+  } else if (head === "resizeLocks") {
+    // As the screen's checkbox sets it.
+    setResizeLock(sub as ResizeType, v as boolean);
   } else if (sub) {
     const next = { ...nested[head], [sub]: v };
     if (v === undefined) delete next[sub];

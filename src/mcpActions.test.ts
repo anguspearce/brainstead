@@ -1851,6 +1851,8 @@ describe("MCP actions", () => {
       expect(settings.get().paneWidths).toBeUndefined();
       await run("settings", { action: "set", key: "resizeLocks.panes", value: false });
       await run("settings", { action: "set", key: "resizeLocks.columns", value: false });
+      // Stored as the screen stores it: a lock turned off is left out.
+      expect(settings.get().resizeLocks).toBeUndefined();
       expect(await run("settings", { action: "set", key: "paneWidths.trash.type", value: 120 })).toBe(
         "Settings › General › Appearance › Pane widths › trash.type is now 120 px.",
       );

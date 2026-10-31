@@ -243,6 +243,14 @@ export function resizeLocked(type: ResizeType, locks = settings.get().resizeLock
   return locks?.[type] === true;
 }
 
+/** Turns a type's lock on or off, as its Settings checkbox does: a lock turned off is left out, so
+ *  no locks at all leaves no key in settings.json. */
+export function setResizeLock(type: ResizeType, on: boolean) {
+  const next = { ...settings.get().resizeLocks, [type]: on };
+  if (!on) delete next[type];
+  settings.update({ resizeLocks: Object.keys(next).length ? next : undefined });
+}
+
 /** What a change to a locked pane's width is told: what's locked and which setting unlocks it. */
 export function lockedMessage(key: string, type: ResizeType): string {
   const { label, what } = RESIZE_LOCKS[type];
