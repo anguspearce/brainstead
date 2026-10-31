@@ -51,7 +51,7 @@ fn icon_for(busy: bool, attention: bool) -> &'static [u8] {
 }
 
 /// Where Windows keeps the theme. The taskbar and notification area follow `SystemUsesLightTheme`
-/// (Settings › Personalization › Colors › "Choose your default Windows mode"), not
+/// (Settings › Personalisation › Colours › "Choose your default Windows mode"), not
 /// `AppsUseLightTheme`, which is the apps' mode.
 #[cfg(windows)]
 const PERSONALIZE: &str = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";

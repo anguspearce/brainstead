@@ -25,7 +25,7 @@ describe("the accent tints from a system colour", () => {
         // The lightness moves, the hue doesn't.
         expect(hueGap(hueOf(t.accent), hueOf(colour))).toBeLessThan(3);
         expect(hueGap(hueOf(t.accentInk), hueOf(colour))).toBeLessThan(3);
-        // Light text on a dark page, dark on a light one, as today.
+        // Light text on a dark page, dark on a light one, as in the app's own tints.
         expect(luminance(t.accentInk) < luminance(t.accentSoft)).toBe(theme === "light");
       });
     }
@@ -45,7 +45,7 @@ describe("the accent tints from a system colour", () => {
     expect(luminance(p.dark.accent)).toBeGreaterThan(luminance(ACCENTS.purple));
   });
 
-  it("gives each tint today's contrast against the page where AA already holds", () => {
+  it("gives each tint the app's own contrast against the page where AA already holds", () => {
     const t = deriveAccent(ACCENTS.blue)!;
     for (const theme of ["light", "dark"] as const) {
       const app = APP_ACCENT[theme];
