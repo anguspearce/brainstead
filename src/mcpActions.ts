@@ -113,6 +113,7 @@ import { DOC_ACCENTS, DOC_STYLES, docDefaults, lookOf, withOwnLook } from "./doc
 import { loadVoices, speechSettingsChanged, voiceLabel, voices } from "./speech/player";
 import { applyReadSize, applyTheme, READ_SIZE, settings } from "./store";
 import { clampInterfaceSize, INTERFACE_SIZE, setInterfaceSize } from "./interfaceSize";
+import { Accent, setAccent, systemAccent } from "./accent";
 import { imageView } from "./ImageViewer";
 import { TOPICS } from "./help";
 import { HelpView, openHelp } from "./help/HelpDrawer";
@@ -3201,6 +3202,17 @@ const settingRows = (): SettingRow[] => [
   ["ownerName", "General", "Your name", "text", ""],
   ["theme", "General", "Appearance (system, light or dark)", "theme", "system"],
   ["interfaceSize", "General", "Appearance › Interface size (80 to 150, %)", "percent", INTERFACE_SIZE.default],
+  [
+    "accent",
+    "General",
+    "Appearance › Accent colour",
+    "choice",
+    "app",
+    () => [
+      ["app", "App"],
+      ["system", "System"],
+    ],
+  ],
   ["openAtLogin", "General", "Open at login", "bool", false],
   ["menuBar", "General", "Show in the menu bar", "bool", true],
   ["menuBarOnly", "General", `Only in the menu bar when the window is closed${isMac ? "" : " (Mac only; no effect here)"}`, "bool", false],
@@ -3316,7 +3328,9 @@ async function settingsTool(a: Args): Promise<string> {
   // Open at login is macOS's login item, not a setting in the file; null where macOS can't say
   // (a copy run from a folder), and then it isn't offered, as the screen hides it.
   const login = (await api.loginItem().catch(() => null)) ?? null;
-  const offered = settingRows().filter(([k]) => k !== "openAtLogin" || login !== null);
+  // Accent colour is offered where the system has one (Windows), as the screen shows it.
+  const sysAccent = (await api.systemAccent().catch(() => null)) ?? null;
+  const offered = settingRows().filter(([k]) => (k !== "openAtLogin" || login !== null) && (k !== "accent" || sysAccent !== null));
   const valueOf = (key: string, def: unknown) => {
     if (key === "openAtLogin") return login;
     const [head, sub] = key.split(".");
@@ -3347,9 +3361,11 @@ async function settingsTool(a: Args): Promise<string> {
   const row = offered.find(([k]) => k === key);
   if (!row)
     throw new Error(
-      key === "openAtLogin"
-        ? `Open at login can't be changed for this copy of Brainstead (${isMac ? "macOS" : "the system"} manages it only for the installed app).`
-        : `Not a setting this tool changes: ${key}. list_settings lists them; the vault, Read-only and the folders left out are the user's, in the app.`,
+      key === "accent"
+        ? "Accent colour is offered only on Windows, which has a system accent colour to follow."
+        : key === "openAtLogin"
+          ? `Open at login can't be changed for this copy of Brainstead (${isMac ? "macOS" : "the system"} manages it only for the installed app).`
+          : `Not a setting this tool changes: ${key}. list_settings lists them; the vault, Read-only and the folders left out are the user's, in the app.`,
     );
   const [, pane, label, kind, , choices, none] = row;
   // The screen shows Only in the menu bar… only while Show in the menu bar is on.
@@ -3426,6 +3442,9 @@ async function settingsTool(a: Args): Promise<string> {
     settings.update({ readSize: applyReadSize(v as number) });
   } else if (kind === "percent") {
     await setInterfaceSize(v as number);
+  } else if (key === "accent") {
+    systemAccent.set(sysAccent);
+    setAccent(v as Accent);
   } else settings.update({ [key!]: v } as Partial<Settings>);
   await settings.flush();
   if (key === "speechVoice" || key === "speechRate") speechSettingsChanged();

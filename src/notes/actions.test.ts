@@ -19,7 +19,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 
 const TRANSCRIPT = "sources/Teams. Transcript. Offsite - 2026-10-06.md";
 
-import { fileAction, fullPath, loadImagesForPrint, pdfFooter, trashFile } from "./actions";
+import { fileAction, fullPath, loadImagesForPrint, pdfFooter, richOf, trashFile } from "./actions";
 import { settings } from "../store";
 
 describe("Move to the Trash from the file menu", () => {
@@ -86,5 +86,16 @@ describe("the PDF footer where the print draws it (Windows)", () => {
     const remove = pdfFooter("x".repeat(120));
     expect(document.head.lastElementChild!.textContent).toContain(`"${"x".repeat(89)}…"`);
     remove();
+  });
+});
+
+describe("Copy as rich text", () => {
+  it("leaves out the window's pointer and scroll state", () => {
+    const doc = document.createElement("div");
+    doc.setAttribute("data-pointer-in", "");
+    doc.innerHTML = '<div class="table" data-scrolling=""><p data-pointer-in="">Orbit App launch</p></div>';
+    const { html, text } = richOf(doc);
+    expect(html).toBe('<div class="table"><p>Orbit App launch</p></div>');
+    expect(text).toBe("Orbit App launch");
   });
 });

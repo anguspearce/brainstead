@@ -19,14 +19,17 @@ import { features } from "../features";
 import { fileManager, isWindows } from "../platform";
 import { isTranscriptPath, trashTranscript } from "../meetingFlow";
 import { settings } from "../store";
+import { SCROLL_STATE_ATTRS } from "../scrollbars";
 
 /** An error from Rust as one line for a person. */
 export const errText = (e: unknown) => (typeof e === "object" && e && "message" in e ? String((e as EditError).message) : String(e));
 
-/** The rendered document as HTML and plain text, without the app's own controls. */
+/** The rendered document as HTML and plain text, without the app's own controls or the window's
+ *  pointer and scroll state (src/scrollbars.ts). */
 export function richOf(el: HTMLElement): { html: string; text: string } {
   const c = el.cloneNode(true) as HTMLElement;
   c.querySelectorAll("button, .tqhead, [data-no-copy]").forEach((n) => n.remove());
+  for (const a of SCROLL_STATE_ATTRS) [c, ...c.querySelectorAll(`[${a}]`)].forEach((n) => n.removeAttribute(a));
   c.querySelectorAll<HTMLInputElement>('input[type="checkbox"]').forEach((n) => n.replaceWith(n.checked ? "☑ " : "☐ "));
   return { html: c.innerHTML, text: (c.innerText ?? c.textContent ?? "").trim() };
 }

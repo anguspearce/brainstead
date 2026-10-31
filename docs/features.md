@@ -53,6 +53,8 @@ The sidebar, top to bottom:
 
 Counts that need you, such as overdue tasks, the Inbox and changes held for you, are in bold.
 
+On Windows, scrollbars stay out of sight until the pointer is over a list or page, or it scrolls; then a thin line shows where you are, and it widens under the pointer to drag. It goes again a second after scrolling stops. Where Windows shows scroll bars all the time (Settings › Accessibility › Visual effects › **Always show scrollbars**), Brainstead shows them all the time too. A Mac keeps its native scrollbars.
+
 | Keys | What they do |
 |---|---|
 | ⌘K | Search or jump to anything, and run commands |
@@ -69,7 +71,9 @@ Counts that need you, such as overdue tasks, the Inbox and changes held for you,
 | ⌘, | Settings |
 | ? | Help for this screen |
 
-On Windows, ⌘ is Ctrl, ⌥ is Alt and ⇧ is Shift, so ⌘K is Ctrl+K. The window has no title bar, as on a Mac: its minimise, maximise and close buttons are at the top right, where Windows puts them, and the empty part of any screen's top bar drags the window (double-click it to maximise or restore). Hovering over maximise offers Windows 11's snap layouts, when they're on in Windows Settings › System › Multitasking. Windows has no Quick Look, so where a Mac offers it (a source Brainstead can't show, the Trash) Windows opens the file in its own app.
+On Windows, ⌘ is Ctrl, ⌥ is Alt and ⇧ is Shift, so ⌘K is Ctrl+K. The window has no title bar, as on a Mac: its minimise, maximise and close buttons are at the top right, where Windows puts them and drawn with Windows 11's own glyphs, and the empty part of any screen's top bar drags the window (double-click it to maximise or restore). Hovering over maximise offers Windows 11's snap layouts, when they're on in Windows Settings › System › Multitasking. Windows has no Quick Look, so where a Mac offers it (a source Brainstead can't show, the Trash) Windows opens the file in its own app.
+
+On Windows, Settings › General › Appearance › **Accent colour** can be **System**: buttons, links, the selected row, the focus ring and checked boxes then take the Windows accent colour, as Windows Settings and Terminal do, and follow it at once when it changes. A colour that text on it would be hard to read is made lighter or darker, keeping its hue.
 
 Every screen remembers its list, filter and selection across restarts. Back and forward go through where you've been. Closing the window leaves Brainstead running in the [menu bar](day-to-day.md#the-menu-bar) (on Windows, if **Show in the menu bar** is on; otherwise closing the window quits). ⌘Q quits (on Windows, which has no menu bar, the tray's **Quit Brainstead**), asking first about unsaved edits.
 
