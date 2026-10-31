@@ -12,7 +12,8 @@ import { applyGtdShorthand } from "./gtd";
 import { Icon, Mark } from "./icons";
 import { DatePicker } from "./DatePicker";
 import { applyShorthand, pendingShorthand, shorthandEmoji, ShorthandKind } from "./md/dates";
-import { applyTheme, settings } from "./store";
+import { settings } from "./store";
+import { applyLook } from "./accent";
 import { localToday } from "./md/taskQuery";
 import { reportEditError } from "./taskModel";
 import { toast } from "./Toast";
@@ -364,15 +365,15 @@ export function CaptureWindow() {
   const [n, setN] = useState(0);
   useEffect(() => {
     let off: (() => void) | undefined;
-    // The window lives for the whole run, so settings changed in the main window (the theme) are
-    // read again each time it opens.
+    // The window lives for the whole run, so settings changed in the main window (the theme and the
+    // accent colour) are read again each time it opens.
     const opened = () => {
       setN((x) => x + 1);
       api
         .settingsRead()
         .then((s) => {
           settings.loadFrom(s);
-          applyTheme(s.theme);
+          applyLook(s);
         })
         .catch(() => {});
     };

@@ -783,6 +783,13 @@ fn login_item_set(app: AppHandle, on: bool) -> Result<Option<bool>, String> {
     Ok(now)
 }
 
+/// The system's accent colour, `#rrggbb`, for Appearance › Accent colour (src/accent.ts); None off
+/// Windows, where the setting isn't offered.
+#[tauri::command]
+fn system_accent() -> Option<String> {
+    platform::system_accent()
+}
+
 /// Shows the app's log folder in Finder.
 #[tauri::command]
 fn logs_reveal() -> Result<(), String> {
@@ -881,6 +888,7 @@ pub fn run() {
             logs_reveal,
             login_item,
             login_item_set,
+            system_accent,
             switchover_status,
             switchover_retire,
             reviews::automated_list,
@@ -1085,6 +1093,7 @@ pub fn run() {
                 std::thread::spawn(nativehost::register);
             }
             nativehost::watch(app.handle().clone());
+            platform::watch_system_accent(app.handle());
             // Teams and Outlook sync's timer (D-20261025-01): off unless the user turns it on, and a
             // no-op without a sign-in. Not in a screenshot demo.
             if scene().is_none() {

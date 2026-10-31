@@ -460,6 +460,25 @@
     "docs": true
   },
   {
+    "name": "settings-accent",
+    "screen": "settings",
+    "pane": "general",
+    "accent": "system"
+  },
+  {
+    "name": "today-accent",
+    "screen": "today",
+    "accent": "system"
+  },
+  {
+    "name": "tasks-accent",
+    "screen": "tasks",
+    "view": {
+      "tasks:sel": "Project. Orbit App launch.md:9"
+    },
+    "accent": "system"
+  },
+  {
     "name": "source-provenance",
     "screen": "doc",
     "path": "sources/Roadmap Update 2026-09-18.md",

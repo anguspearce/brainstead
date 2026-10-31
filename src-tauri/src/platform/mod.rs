@@ -12,6 +12,8 @@ use std::process::{Child, Command};
 #[cfg(target_os = "macos")]
 mod about;
 #[cfg(windows)]
+mod accent_win;
+#[cfg(windows)]
 mod image_win;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -273,6 +275,24 @@ pub fn activate() {
             }
         }
     }
+}
+
+/// The system's accent colour as `#rrggbb`, for Appearance › Accent colour's System
+/// (platform/accent_win.rs). `None` off Windows, and Settings then hides the setting.
+pub fn system_accent() -> Option<String> {
+    #[cfg(windows)]
+    return accent_win::accent();
+    #[cfg(not(windows))]
+    None
+}
+
+/// Tells every window when the system's accent colour changes (`system-accent-changed`, the new
+/// `#rrggbb`). Nothing off Windows.
+pub fn watch_system_accent(app: &tauri::AppHandle) {
+    #[cfg(windows)]
+    accent_win::watch(app.clone());
+    #[cfg(not(windows))]
+    let _ = app;
 }
 
 /// Shows the file selected in Finder (or the system's file manager).
