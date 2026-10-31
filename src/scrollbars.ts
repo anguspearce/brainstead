@@ -2,8 +2,8 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Scrollbars stay hidden until the pointer is over their pane or it scrolls (src/styles.css). The
-// stylesheet can't go by :hover alone: WebView2 matches it but doesn't repaint the bar until
+// On Windows, scrollbars stay hidden until the pointer is over their pane or it scrolls
+// (src/styles.css); a Mac keeps its native ones and none of this runs there. The stylesheet can't go by :hover alone: WebView2 matches it but doesn't repaint the bar until
 // something else restyles the element. So the panes under the pointer carry data-pointer-in, and
 // one that scrolls carries data-scrolling until it has been still for a second. Attributes rather
 // than classes, which React would overwrite on its next render.
@@ -12,12 +12,13 @@
 // would touch the editor's lines on each move, and CodeMirror watches attributes inside
 // .cm-content: each one is a DOM sync for the editor, which then strips the attribute again.
 //
-// Where the system shows scroll bars all the time (Windows' Settings › Accessibility › Visual
-// effects › Always show scrollbars; macOS's Show scroll bars: Always, or Automatic with a mouse),
-// the root carries data-scrollbars="always" and every thumb shows. That's read at start-up and
-// again whenever the window takes the focus, as it does on coming back from the system's settings.
+// Where Windows is set to show scroll bars all the time (Settings › Accessibility › Visual
+// effects › Always show scrollbars), the root carries data-scrollbars="always" and every thumb
+// shows. That's read at start-up and again whenever the window takes the focus, as it does on
+// coming back from Windows' settings.
 
 import { api } from "./api";
+import { isWindows } from "./platform";
 
 /** The attributes this sets, which are window state: rich copy strips them (src/notes/actions.ts). */
 export const SCROLL_STATE_ATTRS = ["data-pointer-in", "data-scrolling"] as const;
@@ -49,13 +50,13 @@ export function scrolled(el: Element) {
   );
 }
 
-/** Shows every scrollbar all the time (`always`), as the system does, or only while in use. */
+/** Shows every scrollbar all the time (`always`), as Windows does, or only while in use. */
 export function applySystemScrollbars(always: boolean) {
   if (always) document.documentElement.setAttribute("data-scrollbars", "always");
   else document.documentElement.removeAttribute("data-scrollbars");
 }
 
-/** Asks the system whether it shows scroll bars all the time, and puts the answer in force. */
+/** Asks Windows whether it shows scroll bars all the time, and puts the answer in force. */
 async function readSystemScrollbars() {
   try {
     applySystemScrollbars(await api.alwaysShowScrollbars());
@@ -64,10 +65,10 @@ async function readSystemScrollbars() {
   }
 }
 
-/** Starts following the pointer and scrolling in this window, and the system's own preference;
- *  a second call does nothing. */
+/** Starts following the pointer and scrolling in this window, and Windows' own preference; a
+ *  second call does nothing, and off Windows the first does nothing either. */
 export function showScrollbarsWhileScrolling() {
-  if (started) return;
+  if (started || !isWindows) return;
   started = true;
   void readSystemScrollbars();
   window.addEventListener("focus", () => void readSystemScrollbars());

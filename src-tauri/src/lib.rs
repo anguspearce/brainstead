@@ -790,8 +790,8 @@ fn system_accent() -> Option<String> {
     platform::system_accent()
 }
 
-/// Whether the system shows scroll bars all the time, so the app does too (src/scrollbars.ts).
-/// Synchronous, so it runs on the main thread, where macOS answers it.
+/// Whether Windows shows scroll bars all the time, so the app does too (src/scrollbars.ts); false
+/// elsewhere.
 #[tauri::command]
 fn always_show_scrollbars() -> bool {
     platform::always_show_scrollbars()

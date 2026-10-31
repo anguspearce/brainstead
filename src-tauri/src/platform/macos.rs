@@ -26,14 +26,6 @@ pub fn native_host_dirs() -> Vec<(&'static str, PathBuf)> {
     .collect()
 }
 
-/// Whether macOS shows scroll bars all the time: NSScroller's preferred style is legacy (0) for
-/// General › Show scroll bars: Always, and for Automatic while a mouse is plugged in; overlay (1)
-/// otherwise. Read on the main thread: the command that asks is synchronous.
-pub fn always_show_scrollbars() -> bool {
-    let style: isize = unsafe { objc2::msg_send![objc2::class!(NSScroller), preferredScrollerStyle] };
-    style == 0
-}
-
 #[link(name = "ServiceManagement", kind = "framework")]
 unsafe extern "C" {}
 
