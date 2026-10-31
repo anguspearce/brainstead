@@ -30,7 +30,7 @@ import { Dialog, fmtBytes, fmtCount, Popover, Seg } from "./ui";
 import { TypeDot, TypePill } from "./typeTone";
 import { keyLabel } from "./platform";
 import { usePanes } from "./PaneResizer";
-import { ListTable, listWidth, PANES } from "./panes";
+import { ListTable, listColumn, PANES } from "./panes";
 
 function useFiles<T = FileSummary>(load: () => Promise<T[]>): T[] | null {
   const [rows, setRows] = useState<T[] | null>(null);
@@ -78,22 +78,19 @@ const titleCol = <T extends FileSummary>(drafts?: Set<string>): Column<T> => ({
 });
 const dateCol = <T extends FileSummary>(): Column<T> => ({
   key: "date",
-  label: "Date",
-  width: listWidth("notes.date"),
+  ...listColumn("notes.date"),
   value: (r) => r.date,
   render: (r) => <span className="faint">{r.date ?? "—"}</span>,
 });
 const modCol = <T extends FileSummary>(table: ListTable): Column<T> => ({
   key: "mtime",
-  label: "Modified",
-  width: listWidth(`${table}.mtime`),
+  ...listColumn(`${table}.mtime`),
   value: (r) => r.mtime,
   render: (r) => <span className="faint">{fmtDay(r.mtime)}</span>,
 });
 const sizeCol = <T extends FileSummary>(table: Exclude<ListTable, "wiki">): Column<T> => ({
   key: "size",
-  label: "Size",
-  width: listWidth(`${table}.size`),
+  ...listColumn(`${table}.size`),
   align: "right",
   value: (r) => r.size,
   render: (r) => <span className="faint">{fmtBytes(r.size)}</span>,
@@ -134,8 +131,7 @@ export function NotesScreen() {
     titleCol(drafts),
     {
       key: "type",
-      label: "Type",
-      width: listWidth("notes.type"),
+      ...listColumn("notes.type"),
       value: (r) => r.type,
       render: (r) => (r.type ? <TypePill type={r.type} /> : <span className="faint">—</span>),
     },
@@ -361,23 +357,20 @@ export function WikiScreen() {
     },
     {
       key: "type",
-      label: "Type",
-      width: listWidth("wiki.type"),
+      ...listColumn("wiki.type"),
       value: (r) => r.type,
       render: (r) => (r.type ? <TypePill type={r.type} wiki /> : <span className="faint">—</span>),
     },
     {
       key: "sources",
-      label: "Sources",
-      width: listWidth("wiki.sources"),
+      ...listColumn("wiki.sources"),
       align: "right",
       value: (r) => meta.get(r.path)?.sources ?? 0,
       render: (r) => <span className="faint">{meta.get(r.path)?.sources ?? 0}</span>,
     },
     {
       key: "health",
-      label: "Health",
-      width: listWidth("wiki.health"),
+      ...listColumn("wiki.health"),
       value: (r) => wikiHealth(r.path, pendingPages, report),
       render: (r) => {
         const [label, tone, tip] = HEALTH_CHIP[wikiHealth(r.path, pendingPages, report)];
@@ -390,9 +383,8 @@ export function WikiScreen() {
     },
     {
       key: "tags",
-      label: "Tags",
       // Fixed, as every column but Title is, so Title alone takes the rest (src/FileList.tsx).
-      width: listWidth("wiki.tags"),
+      ...listColumn("wiki.tags"),
       value: (r) => r.tags.join(" "),
       render: (r) => (
         <span className="chips ell">
@@ -691,15 +683,13 @@ export function SourcesScreen() {
     // A pill as Notes and Wiki show a type, after the title.
     {
       key: "kind",
-      label: "Kind",
-      width: listWidth("sources.kind"),
+      ...listColumn("sources.kind"),
       value: (r) => sourceBadge(r.path),
       render: (r) => <span className="chip">{sourceBadge(r.path)}</span>,
     },
     {
       key: "ingested",
-      label: "Status",
-      width: listWidth("sources.ingested"),
+      ...listColumn("sources.ingested"),
       value: (r) => sourceStatus(r, changed),
       render: (r) => {
         const [label, tone] = STATUS_CHIP[sourceStatus(r, changed)];
@@ -716,8 +706,7 @@ export function SourcesScreen() {
     {
       // Only the folder: the title already names the file.
       key: "path",
-      label: "Folder",
-      width: listWidth("sources.path"),
+      ...listColumn("sources.path"),
       value: (r) => sourceFolder(r.path),
       render: (r) => (
         <span className="faint ell" title={r.path}>

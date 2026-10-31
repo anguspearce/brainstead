@@ -122,7 +122,17 @@ import { loadVoices, speechSettingsChanged, voiceLabel, voices } from "./speech/
 import { applyReadSize, applyTheme, READ_SIZE, settings } from "./store";
 import { clampInterfaceSize, INTERFACE_SIZE, setInterfaceSize } from "./interfaceSize";
 import { Accent, setAccent, systemAccent } from "./accent";
-import { lockedMessage, paneSpecs, RESIZE_LOCKS, ResizeType, resetPaneWidth, resetPaneWidths, resizeLocked, setPaneWidth } from "./panes";
+import {
+  lockedMessage,
+  paneName,
+  paneSpecs,
+  RESIZE_LOCKS,
+  ResizeType,
+  resetPaneWidth,
+  resetPaneWidths,
+  resizeLocked,
+  setPaneWidth,
+} from "./panes";
 import { imageView } from "./ImageViewer";
 import { TOPICS } from "./help";
 import { HelpView, openHelp } from "./help/HelpDrawer";
@@ -3428,12 +3438,12 @@ async function settingsTool(a: Args): Promise<string> {
           extra = ` (one of: ${list || "none here"}${none ? `; null for ${none}` : ""})`;
         }
         if (kind === "panes") {
-          // Each pane's key with its range and usual width, as the dividers clamp them, and whether
-          // its type is locked.
+          // Each pane's key with what the screen calls it (a column by its heading), its range and
+          // usual width, as the dividers clamp them, and whether its type is locked.
           const panes = Object.entries(paneSpecs())
             .map(
               ([pk, sp]) =>
-                `${pk} (${sp.min} to ${sp.max}, usually ${sp.def}${resizeLocked(sp.type) ? `, locked by resizeLocks.${sp.type}` : ""})`,
+                `${pk} (${paneName(pk)}, ${sp.min} to ${sp.max}, usually ${sp.def}${resizeLocked(sp.type) ? `, locked by resizeLocks.${sp.type}` : ""})`,
             )
             .join(", ");
           extra = ` (panes: ${panes})`;

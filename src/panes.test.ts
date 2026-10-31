@@ -11,8 +11,9 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => undefined), c
 import {
   clampPaneWidth,
   fitPanes,
-  listWidth,
+  listColumn,
   lockedMessage,
+  paneName,
   MIN_FLEX,
   PANES,
   paneRoom,
@@ -132,7 +133,7 @@ describe("pane widths", () => {
       "wiki.tags",
       "wiki.mtime",
     ]);
-    expect(listWidth("wiki.tags")).toBe("0 0 200px");
+    expect(listColumn("wiki.tags")).toEqual({ label: "Tags", width: "0 0 200px" });
     settings.loadFrom({ ...DEFAULT_SETTINGS });
     expect(setPaneWidth("templates.size", 90)).toBe(90);
     resetPaneWidth("templates.size");
@@ -153,6 +154,13 @@ describe("pane widths", () => {
         expect(spec.min).toBeLessThan(spec.def);
         expect(spec.def).toBeLessThan(spec.max);
       }
+    // A column's label is its heading, as its table draws it; every key names its screen.
+    for (const [key, spec] of Object.entries(PANES)) {
+      if (spec.type === "columns") expect(spec.label, key).toBe(`the ${spec.heading} column`);
+      if (key !== "sidebar") expect(paneName(key), key).toMatch(/^[A-Z][^›]* › the /);
+    }
+    expect(paneName("trash.folder")).toBe("Trash › the Was in column");
+    expect(paneName("sidebar")).toBe("the sidebar");
     // The screens' panes and the sidebar are the panes lock's.
     expect(PANES.sidebar.type).toBe("panes");
     expect(PANES["sources.side"].type).toBe("panes");

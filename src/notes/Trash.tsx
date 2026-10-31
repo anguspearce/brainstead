@@ -235,10 +235,22 @@ export function TrashScreen() {
                 {allOn && <Icon name="check" size={11} />}
               </button>
               <span>Name</span>
-              <span>Type{panes.resizer("trash.type")}</span>
-              <span>Was in{panes.resizer("trash.folder")}</span>
-              <span>Deleted{panes.resizer("trash.deleted")}</span>
-              <span className="r">Size{panes.resizer("trash.size")}</span>
+              <span>
+                {PANES["trash.type"].heading}
+                {panes.resizer("trash.type")}
+              </span>
+              <span>
+                {PANES["trash.folder"].heading}
+                {panes.resizer("trash.folder")}
+              </span>
+              <span>
+                {PANES["trash.deleted"].heading}
+                {panes.resizer("trash.deleted")}
+              </span>
+              <span className="r">
+                {PANES["trash.size"].heading}
+                {panes.resizer("trash.size")}
+              </span>
               <span />
             </div>
             {shown.length === 0 && <p className="muted trnone">Nothing in the Trash matches “{q.trim()}”.</p>}

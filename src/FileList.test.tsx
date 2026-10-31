@@ -12,7 +12,7 @@ import { FileList } from "./FileList";
 import { nav, restorePlaces } from "./nav";
 import type { FileSummary } from "./api";
 import { settings } from "./store";
-import { listWidth } from "./panes";
+import { listColumn } from "./panes";
 
 afterEach(cleanup);
 beforeEach(() => settings.update({ viewMemory: {}, searchOrder: {} }));
@@ -97,7 +97,7 @@ describe("a list's columns", () => {
         rows={rows}
         columns={[
           { key: "title", label: "Title", width: "3", value: (r: FileSummary) => r.title },
-          { key: "tags", label: "Tags", width: listWidth("wiki.tags"), value: () => "" },
+          { key: "tags", ...listColumn("wiki.tags"), value: () => "" },
           { key: "act", label: "", width: "0 0 150px", value: () => "" },
         ]}
         layers={["wiki"]}

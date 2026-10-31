@@ -253,9 +253,18 @@ export function DocCheckScreen() {
             <div className="card dcreg" {...regCols.root}>
               <div className="dcr th">
                 <span>Document</span>
-                <span>Version{regCols.resizer("register.version")}</span>
-                <span>Status{regCols.resizer("register.status")}</span>
-                <span>File{regCols.resizer("register.file")}</span>
+                <span>
+                  {PANES["register.version"].heading}
+                  {regCols.resizer("register.version")}
+                </span>
+                <span>
+                  {PANES["register.status"].heading}
+                  {regCols.resizer("register.status")}
+                </span>
+                <span>
+                  {PANES["register.file"].heading}
+                  {regCols.resizer("register.file")}
+                </span>
               </div>
               {reg.entries.map((e) => (
                 <div key={e.line} className={`dcr ${e.status}`}>
