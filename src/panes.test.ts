@@ -53,7 +53,7 @@ describe("pane widths", () => {
         500,
       ),
     ).toEqual([90, 72]);
-    // 40px short: the default gives way, the width set keeps.
+    // 40px short: the default gives way down to its least (30px), then the width set the last 10.
     expect(
       fitPanes(
         [
