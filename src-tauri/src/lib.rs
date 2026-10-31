@@ -790,6 +790,13 @@ fn system_accent() -> Option<String> {
     platform::system_accent()
 }
 
+/// Whether the system shows scroll bars all the time, so the app does too (src/scrollbars.ts).
+/// Synchronous, so it runs on the main thread, where macOS answers it.
+#[tauri::command]
+fn always_show_scrollbars() -> bool {
+    platform::always_show_scrollbars()
+}
+
 /// Shows the app's log folder in Finder.
 #[tauri::command]
 fn logs_reveal() -> Result<(), String> {
@@ -882,6 +889,7 @@ pub fn run() {
             login_item,
             login_item_set,
             system_accent,
+            always_show_scrollbars,
             switchover_status,
             switchover_retire,
             reviews::automated_list,
