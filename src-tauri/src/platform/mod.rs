@@ -41,7 +41,7 @@ mod other;
 use other as imp;
 
 mod tray;
-pub use tray::{place_tray_window, tray_icon, tray_window_resized};
+pub use tray::{place_tray_window, tray_icon, tray_window_resized, watch_taskbar_theme};
 
 /// Where Brainstead keeps settings.json and index.db: `~/Library/Application Support/Brainstead/`
 /// on macOS, `%APPDATA%\Brainstead` on Windows. `BRAINSTEAD_DATA` overrides it (screenshots,
