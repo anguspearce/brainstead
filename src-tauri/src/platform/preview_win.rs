@@ -44,7 +44,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::path::Path;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU8, Ordering};
 use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
@@ -273,12 +273,15 @@ const BACKSTOP: Duration = Duration::from_secs(180);
 const CLOSED_TEXT: &str = "The preview was closed.";
 
 /// Opens `path` in its preview handler in the panel at `frame`, and returns once the handler has
-/// drawn it (or failed to). False when COM can't run the handler out of process after all (the
-/// caller opens the file in its app instead); Err when the type has no handler or the handler
-/// refused the file.
+/// drawn it (or failed to). False when the type has no handler, or none COM can run out of
+/// process (the caller opens the file in its app instead); Err when the handler refused the file
+/// or missed a deadline.
 pub fn open(w: &tauri::WebviewWindow, path: &Path, frame: Frame) -> Result<bool, String> {
     if closed(frame.id) {
         return Err(CLOSED_TEXT.to_string());
+    }
+    if !path.file_name().is_some_and(|n| available(&n.to_string_lossy())) {
+        return Ok(false);
     }
     let host = host(w)?;
     let (reply, answer) = channel();
@@ -560,6 +563,9 @@ struct State {
 
 type Shared = Rc<RefCell<State>>;
 
+/// The hook that keeps the host with the main window (`follow`) is installed.
+static FOLLOWING: AtomicBool = AtomicBool::new(false);
+
 thread_local! {
     /// Set on the thread that made the host (the main thread), the only one that may touch it.
     static ON_HOST_THREAD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
@@ -610,8 +616,11 @@ unsafe fn make(parent: isize) -> Result<isize, String> {
     CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().map_err(|e| e.to_string())?;
     let hwnd = create(HWND(parent as _))?;
     ON_HOST_THREAD.with(|on| on.set(true));
-    // This process's windows' moves and visibility, out of context: delivered on this thread.
-    SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_LOCATIONCHANGE, None, Some(follow), std::process::id(), 0, WINEVENT_OUTOFCONTEXT);
+    // This process's windows' moves and visibility, out of context: delivered on this thread. One
+    // hook for the life of the app, which `follow` applies to the host of the moment.
+    if !FOLLOWING.swap(true, Ordering::AcqRel) {
+        SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_LOCATIONCHANGE, None, Some(follow), std::process::id(), 0, WINEVENT_OUTOFCONTEXT);
+    }
     Ok(hwnd.0 as isize)
 }
 
@@ -723,6 +732,13 @@ fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
+/// `path` as a null-terminated wide string with every `/` a `\`.
+fn backslashed(path: &Path) -> Vec<u16> {
+    use std::os::windows::ffi::OsStrExt;
+    let slash = u16::from(b'/');
+    path.as_os_str().encode_wide().map(|c| if c == slash { u16::from(b'\\') } else { c }).chain(std::iter::once(0)).collect()
+}
+
 /// `#rrggbb` as GDI's COLORREF (0x00bbggrr); white for anything else.
 fn colour(hex: &str) -> COLORREF {
     let v = hex.trim_start_matches('#');
@@ -734,8 +750,9 @@ fn colour(hex: &str) -> COLORREF {
 
 /// Puts the host over the panel, cut to its rounded bottom corners and round the page's messages
 /// over it (`holes`), and shows or hides it (`show`, from `Book::visible`). The region reaches
-/// above the top, so only the bottom corners are rounded. Its z-order is left alone: Windows keeps an owned window just above its owner, and
-/// raising it would put it over whatever covers the main window. Never calls the handler.
+/// above the top, so only the bottom corners are rounded. Its z-order is left alone: Windows
+/// keeps an owned window just above its owner, and raising it would put it over whatever covers
+/// the main window. Never calls the handler.
 unsafe fn place(hwnd: HWND, f: &Frame, show: bool) {
     let pt = on_screen(hwnd, f);
     let shown = if show { SWP_SHOWWINDOW } else { SWP_HIDEWINDOW };
@@ -820,20 +837,23 @@ unsafe fn call<T>(hwnd: HWND, st: &Shared, limit: Duration, f: impl FnOnce() -> 
         s.calls += 1;
         s.calls
     };
-    let late = Arc::new(AtomicBool::new(false));
+    let race = Arc::new(Race::default());
     let (done, wait) = channel::<()>();
     let tid = GetWindowThreadProcessId(hwnd, None);
-    let (host, flag, limit) = (hwnd.0 as isize, late.clone(), deadline(limit));
+    let (host, watch, limit) = (hwnd.0 as isize, race.clone(), deadline(limit));
     std::thread::spawn(move || {
+        // Cancelled only if the call hasn't returned: a cancel after it would hit the next call.
         if let Err(RecvTimeoutError::Timeout) = wait.recv_timeout(limit) {
-            flag.store(true, Ordering::Release);
-            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-            let _ = CoCancelCall(tid, 0);
-            let _ = SendNotifyMessageW(HWND(host as _), MSG_LATE, WPARAM(n as usize), LPARAM(0));
+            if watch.expired() {
+                let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+                let _ = CoCancelCall(tid, 0);
+                let _ = SendNotifyMessageW(HWND(host as _), MSG_LATE, WPARAM(n as usize), LPARAM(0));
+            }
         }
     });
     let _ = CoEnableCallCancellation(None);
     let r = f();
+    let late = !race.returned();
     let _ = CoDisableCallCancellation(None);
     drop(done);
     let close = {
@@ -845,17 +865,39 @@ unsafe fn call<T>(hwnd: HWND, st: &Shared, limit: Duration, f: impl FnOnce() -> 
     for (_, msg) in waiting.into_iter().filter(|(w, _)| *w) {
         let _ = PostMessageW(Some(hwnd), msg, WPARAM(0), LPARAM(0));
     }
-    if late.load(Ordering::Acquire) {
+    if late {
         Err(Late)
     } else {
         Ok(r)
     }
 }
 
+/// One call's end, settled once by whichever comes first: the call returning or its deadline.
+#[derive(Default)]
+struct Race(AtomicU8);
+
+impl Race {
+    const RUNNING: u8 = 0;
+    const RETURNED: u8 = 1;
+    const EXPIRED: u8 = 2;
+
+    /// The call returned: true when that came before its deadline settled it.
+    fn returned(&self) -> bool {
+        self.0.compare_exchange(Self::RUNNING, Self::RETURNED, Ordering::AcqRel, Ordering::Acquire).is_ok()
+    }
+
+    /// The deadline passed: true when the call hadn't returned, so the watchdog cancels it.
+    fn expired(&self) -> bool {
+        self.0.compare_exchange(Self::RUNNING, Self::EXPIRED, Ordering::AcqRel, Ordering::Acquire).is_ok()
+    }
+}
+
 /// A call into the handler missed its deadline. The handler is never called again, not even to
-/// be released (that call could hang as the first did), so its reference is leaked; the host is
-/// hidden and let go, so the next open makes a new one; and the open waiting on it, and any open
-/// queued behind it, hear why at once.
+/// be released (that call could hang as the first did), so its reference is leaked and its
+/// process keeps the file open until it ends or Brainstead quits; the host is hidden and let go,
+/// never destroyed (that would destroy the handler's window, which belongs to the stuck process),
+/// so the next open makes a new one; and the open waiting on it, and any open queued behind it,
+/// hear why at once.
 unsafe fn abandon(hwnd: HWND, st: &Shared) {
     let (h, reply, what) = {
         let mut s = st.borrow_mut();
@@ -895,11 +937,11 @@ unsafe fn unload(hwnd: HWND, st: &Shared, limit: Duration) {
 /// shell item; the first it accepts wins. Every call has a deadline (`call`).
 unsafe fn show(hwnd: HWND, st: &Shared, path: &Path, f: &Frame) -> Result<bool, Fail> {
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let ext = ext_of(&name).ok_or_else(|| "This file has no type to preview by.".to_string())?;
+    // No type, or no handler for it (the registry changed since `open` asked): its app.
+    let Some(ext) = ext_of(&name) else { return Ok(false) };
     st.borrow_mut().what = ext.clone();
-    let clsid = handler_for(&ext, &Registry).ok_or_else(|| format!("Windows has no preview for {ext} files."))?;
+    let Some(clsid) = handler_for(&ext, &Registry) else { return Ok(false) };
     let guid = CLSIDFromString(PCWSTR(wide(&clsid).as_ptr())).map_err(|e| e.to_string())?;
-    let t = std::time::Instant::now();
     // Out of process only, as Explorer does (the module's doc says why). A handler COM can't run
     // that way, though `available` read it as one it could, opens in its app instead.
     let handler: IPreviewHandler = match call(hwnd, st, SLOW, || CoCreateInstance(&guid, None, CLSCTX_LOCAL_SERVER))? {
@@ -910,10 +952,9 @@ unsafe fn show(hwnd: HWND, st: &Shared, path: &Path, f: &Frame) -> Result<bool, 
     // Held by the host from here, so a failure below releases it as a close does, and a missed
     // deadline leaks it (`abandon`); this clone's release is local to the process.
     st.borrow_mut().handler = Some(handler.clone());
-    crate::applog!("preview: {name}: handler {clsid} up in {:?}", t.elapsed());
-    // A handler wants the path with backslashes: Office's refuse a forward-slash one.
-    let spelled = path.to_string_lossy().replace('/', "\\");
-    let wpath = wide(&spelled);
+    // A handler wants the path with backslashes: Office's refuse a forward-slash one. Kept exact
+    // in UTF-16, as Windows names it, even where it isn't valid Unicode.
+    let wpath = backslashed(path);
     let mut errs = Vec::new();
     let inited = call(hwnd, st, SLOW, || {
         let by_file = match handler.cast::<IInitializeWithFile>() {
@@ -940,7 +981,6 @@ unsafe fn show(hwnd: HWND, st: &Shared, path: &Path, f: &Frame) -> Result<bool, 
         let why = errs.into_iter().find(|e| !e.is_empty()).unwrap_or_else(|| "it refused the file".to_string());
         return Err(format!("The preview couldn't open this file: {why}.").into());
     }
-    crate::applog!("preview: {name}: file given in {:?}", t.elapsed());
     // The panel's latest place: the page may have moved it, recoloured it or hidden it for a
     // dialog while the handler started and read the file.
     let at = st.borrow().book.at.clone().unwrap_or_else(|| f.clone());
@@ -963,9 +1003,7 @@ unsafe fn show(hwnd: HWND, st: &Shared, path: &Path, f: &Frame) -> Result<bool, 
     place(hwnd, &at, show);
     let rc = RECT { left: 0, top: 0, right: at.w, bottom: at.h };
     call(hwnd, st, QUICK, || handler.SetWindow(hwnd, &rc))?.map_err(|e| e.message())?;
-    crate::applog!("preview: {name}: window set in {:?}", t.elapsed());
     call(hwnd, st, SLOW, || handler.DoPreview())?.map_err(|e| format!("The preview couldn't draw this file: {}.", e.message()))?;
-    crate::applog!("preview: {name}: drawn in {:?}", t.elapsed());
     Ok(true)
 }
 
@@ -1485,5 +1523,17 @@ mod tests {
         assert_eq!(ext_of("Makefile"), None);
         assert_eq!(colour("#ff8000").0, 0x0080ff);
         assert_eq!(colour("nope").0, 0xffffff);
+        let p = backslashed(Path::new("C:/Vault/sources/Orbit App.docx"));
+        assert_eq!(String::from_utf16_lossy(&p), "C:\\Vault\\sources\\Orbit App.docx\0");
+    }
+
+    #[test]
+    fn a_call_and_its_deadline_settle_once() {
+        let r = Race::default();
+        assert!(r.returned(), "returned in time");
+        assert!(!r.expired(), "so the watchdog cancels nothing, not even the next call");
+        let r = Race::default();
+        assert!(r.expired(), "the deadline came first: cancelled");
+        assert!(!r.returned(), "and the call is reported late, however it ended");
     }
 }
