@@ -2,7 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 const invoke = vi.fn(async (_cmd: string, _args?: unknown): Promise<unknown> => undefined);
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (c: string, a?: unknown) => invoke(c, a), convertFileSrc: (p: string) => p }));
@@ -161,8 +161,13 @@ describe("Ask state", () => {
     });
     settings.update({ effort: { claude: "low" } });
     vi.useFakeTimers();
-    await startAsk();
-    vi.useRealTimers();
+    const stop = await startAsk();
+    // Its listeners, its timer and its following of the effort settings end with this test.
+    onTestFinished(() => {
+      stop();
+      vi.useRealTimers();
+      vi.mocked(listen).mockImplementation(async () => () => {});
+    });
     handlers.get("review-started")!({
       payload: { chatId: "summary-1", title: "Daily summary", model: "claude:sonnet", effort: "high", prompt: "Daily summary for today" },
     });
