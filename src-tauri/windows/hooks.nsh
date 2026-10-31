@@ -11,7 +11,80 @@
 ; BROWSERS and HOST there. An update runs the old uninstaller with /UPDATE ($UpdateMode = 1), and
 ; then everything is kept, so open at login and the extensions keep working across it.
 
+; Installing writes Brainstead.exe, which Windows can't do while any process runs it: the app, an
+; assistant's MCP server (`Brainstead.exe --mcp`, one per session) or Chrome's capture host. The
+; template's own check (CheckIfAppIsRunning, Restart Manager) ends those, but a client can start a
+; new one from the same file before it is written (Claude Code's SDK sessions start their MCP server
+; again at the next tool call, Chrome its host at the next message). Then NSIS's File can't write
+; it: under /S it skips the file and the install still ends with exit code 0, keeping the old
+; program; under /P it asks Abort, Retry or Ignore. So the hook runs that same check first and
+; then renames the old program to Brainstead.exe.old, which Windows allows while it runs: the path
+; File writes is then free whatever starts meanwhile, and the template's check after the hook finds
+; nothing. A copy still held from a previous update gets a unique name. $MovedAside is the name the
+; program was given, so only that copy is ever put back. POSTINSTALL puts it back when File didn't
+; write the program (skipped under /S, or Ignore under /P), and otherwise deletes the old copies,
+; which fails harmlessly for one still running; the app deletes those at its next start
+; (src/platform/mod.rs, remove_update_installers).
+;
+; This file is included before the template defines MAINBINARYNAME, so .onInstFailed, a function
+; compiled where it stands, names the program as HOOK_PROGRAM, and PREINSTALL stops the build if the two
+; differ (productName or mainBinaryName changed in tauri.conf.json).
+!define HOOK_PROGRAM "Brainstead"
+Var MovedAside
+
+!macro NSIS_HOOK_PREINSTALL
+  !if "${MAINBINARYNAME}" != "${HOOK_PROGRAM}"
+    !error "hooks.nsh names the program ${HOOK_PROGRAM}.exe but the template installs ${MAINBINARYNAME}.exe: change HOOK_PROGRAM"
+  !endif
+  !insertmacro CheckIfAppIsRunning "$INSTDIR\${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
+  StrCpy $MovedAside ""
+  Delete "$INSTDIR\${MAINBINARYNAME}.exe.old*"
+  ${If} ${FileExists} "$INSTDIR\${MAINBINARYNAME}.exe"
+    ${If} ${FileExists} "$INSTDIR\${MAINBINARYNAME}.exe.old"
+      System::Call "kernel32::GetTickCount() i .r0"
+      StrCpy $MovedAside "$INSTDIR\${MAINBINARYNAME}.exe.old-$0"
+    ${Else}
+      StrCpy $MovedAside "$INSTDIR\${MAINBINARYNAME}.exe.old"
+    ${EndIf}
+    ClearErrors
+    Rename "$INSTDIR\${MAINBINARYNAME}.exe" "$MovedAside"
+    ${If} ${Errors}
+      StrCpy $MovedAside ""
+    ${EndIf}
+  ${EndIf}
+!macroend
+
+!macro NSIS_HOOK_POSTINSTALL
+  ${If} $MovedAside != ""
+  ${AndIfNot} ${FileExists} "$INSTDIR\${MAINBINARYNAME}.exe"
+    Rename "$MovedAside" "$INSTDIR\${MAINBINARYNAME}.exe"
+    StrCpy $MovedAside ""
+  ${EndIf}
+  Delete "$INSTDIR\${MAINBINARYNAME}.exe.old*"
+!macroend
+
+; An install that stops (the check couldn't end something, a file couldn't be written) puts the old
+; program back if the hook had moved it and nothing new took its place. For an update from the app
+; (the updater passes /UPDATE) it then opens the old version again, which says in its own update
+; dialog that the update didn't install (src/updates.rs, `Started`). NSIS calls this once the user
+; closes the failed installer's window, or at once under /S. The template declares $UpdateMode and
+; adds the nsis_tauri_utils plugin after this file, so this reads the command line itself and starts
+; the app with Exec (the install is per user, so not elevated).
+Function .onInstFailed
+  ${If} $MovedAside != ""
+  ${AndIfNot} ${FileExists} "$INSTDIR\${HOOK_PROGRAM}.exe"
+    Rename "$MovedAside" "$INSTDIR\${HOOK_PROGRAM}.exe"
+  ${EndIf}
+  ClearErrors
+  ${GetOptions} $CMDLINE "/UPDATE" $0
+  ${IfNot} ${Errors}
+  ${AndIf} ${FileExists} "$INSTDIR\${HOOK_PROGRAM}.exe"
+    Exec '"$INSTDIR\${HOOK_PROGRAM}.exe"'
+  ${EndIf}
+FunctionEnd
+
 !macro NSIS_HOOK_PREUNINSTALL
+  Delete "$INSTDIR\${MAINBINARYNAME}.exe.old*"
   ${If} $UpdateMode <> 1
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "Brainstead"
     DeleteRegKey HKCU "Software\Google\Chrome\NativeMessagingHosts\com.wayned.brainstead"
