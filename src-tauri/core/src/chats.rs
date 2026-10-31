@@ -48,7 +48,8 @@ pub struct Summary {
     pub session_id: Option<String>,
     pub model: Option<String>,
     /// The effort level the chat runs at (Brainstead only): one of its CLI's levels
-    /// (`ask::Cli::efforts`), or None for the CLI's own default.
+    /// (`ask::Cli::efforts`), or None for the CLI's own default. Kept in the note as
+    /// `reasoningEffort`, as `effort` is a task's duration field in the vault (Dataview's `[effort:: 15m]`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
     pub created_at: String,
@@ -155,7 +156,7 @@ pub fn serialize(c: &Chat) -> String {
         fm.push(format!("kind: {}", y(k)));
     }
     if let Some(e) = &s.effort {
-        fm.push(format!("effort: {}", y(e)));
+        fm.push(format!("reasoningEffort: {}", y(e)));
     }
     fm.extend([
         format!("model: {}", y(s.model.as_deref().unwrap_or(""))),
@@ -194,7 +195,7 @@ pub fn parse_summary(filename: &str, text: &str, mtime: &str) -> Summary {
         claude_session_id: st("claudeSessionId"),
         session_id: st("sessionId"),
         model: st("model"),
-        effort: st("effort"),
+        effort: st("reasoningEffort"),
         created_at: st("createdAt").unwrap_or_else(|| mtime.to_string()),
         updated_at: st("updatedAt").unwrap_or_else(|| mtime.to_string()),
         context_tokens: num("contextTokens"),
@@ -252,12 +253,12 @@ mod tests {
         assert!(text.contains("\n---\n> Chat · claude:sonnet · resumable\n\n**You:** What's due? -->\n\nTwo tasks.\n\n> ⚠ Oops\n\n<!-- brainstead:chat-transcript\n"));
         let back = parse(&c.summary.filename, &text, "x");
         assert_eq!(back, c);
-        assert!(!text.contains("effort:"));
+        assert!(!text.contains("reasoningEffort"));
         // A chat's own effort is kept beside its model.
         let mut e = chat();
         e.summary.effort = Some("high".into());
         let text = serialize(&e);
-        assert!(text.contains("\neffort: \"high\"\n"));
+        assert!(text.contains("\nreasoningEffort: \"high\"\n") && !text.contains("\neffort:"));
         assert_eq!(parse(&e.summary.filename, &text, "x"), e);
     }
 
