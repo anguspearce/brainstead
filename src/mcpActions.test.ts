@@ -2432,8 +2432,10 @@ describe("MCP actions", () => {
       expect(await run("settings", { action: "set", key: "jobEffort.weekprep", value: "Max" })).toMatch(/effort is now "max"/);
       expect(settings.get().jobEffort).toEqual({ weekprep: "max" });
       expect(settings.get().effort).toEqual({ claude: "low" });
-      // A model whose assistant has no max takes the job's effort away, as the screen does.
-      await run("settings", { action: "set", key: "jobModels.weekprep", value: "gpt-5" });
+      // A model whose assistant has no max takes the job's effort away, as the screen does, and says so.
+      expect(await run("settings", { action: "set", key: "jobModels.weekprep", value: "gpt-5" })).toMatch(
+        /is now "gpt-5"\. Its effort \(Max\) went back to Assistant's setting: ChatGPT \(Codex\) doesn't offer it\.$/,
+      );
       expect(settings.get().jobModels).toEqual({ weekprep: "gpt-5" });
       expect(settings.get().jobEffort).toEqual({});
       await expect(run("settings", { action: "set", key: "jobEffort.weekprep", value: "max" })).rejects.toThrow(
@@ -2442,17 +2444,18 @@ describe("MCP actions", () => {
       await run("settings", { action: "set", key: "jobEffort.weekprep", value: "high" });
       await run("settings", { action: "set", key: "jobEffort.weekprep", value: null });
       expect(settings.get().jobEffort).toEqual({});
-      // A model the job inherits changing under it (new chats', or the summaries' for weekprep) does
-      // the same, and list_settings says what the screen shows.
+      // A model the job inherits (new chats', or the summaries' for weekprep) moving to an assistant
+      // without its level sets it aside: list_settings says what the screen shows, and it comes back.
       settings.update({ askModel: "claude:opus", jobModels: {}, jobEffort: { find: "max", weekprep: "max" } });
       await run("settings", { action: "set", key: "jobModels.summaries", value: "gpt-5" });
-      expect(settings.get().jobEffort).toEqual({ find: "max" });
-      await run("settings", { action: "set", key: "askModel", value: "gpt-5" });
-      expect(settings.get().jobEffort).toEqual({});
-      // A level left behind (settings from before) reads as Assistant's setting, as on the screen.
-      settings.update({ jobEffort: { find: "max" } });
+      expect(await run("settings", { action: "set", key: "askModel", value: "gpt-5" })).not.toMatch(/Assistant's setting/);
+      expect(settings.get().jobEffort).toEqual({ find: "max", weekprep: "max" });
       expect(await run("settings")).toContain(
         "jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects's effort: null (Assistant's setting",
+      );
+      await run("settings", { action: "set", key: "askModel", value: "claude:opus" });
+      expect(await run("settings")).toContain(
+        'jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects\'s effort: "max"',
       );
       settings.update({ askModel: undefined, jobModels: undefined, jobEffort: undefined, effort: undefined });
     });

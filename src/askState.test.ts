@@ -37,11 +37,9 @@ import {
   save,
   send,
   sessionOf,
-  setAskModel,
   setEffort,
   setJobModel,
   setModel,
-  staleJobEfforts,
   startAsk,
   toSaved,
   unqueue,
@@ -109,28 +107,31 @@ describe("Ask state", () => {
       const cli = cliOf(model);
       expect(resolveEffort(cases.levels[cli], s.jobEffort?.[c.job], s.effort?.[cli]), c.name).toBe(c.effort);
     }
-    for (const p of cases.prune) {
-      const s = p.settings as unknown as Settings;
-      const stale = staleJobEfforts(s);
-      const kept = s.jobEffort ? Object.fromEntries(Object.entries(s.jobEffort).filter(([job]) => !stale.includes(job))) : null;
-      expect(kept, p.name).toEqual(p.kept);
-    }
     clis.set(null);
   });
 
-  it("puts a job back to Assistant's setting when the model it runs on loses its level", () => {
+  it("drops a job's own effort only when its own model moves to an assistant without it", () => {
     clis.set(found());
-    settings.update({ askModel: "claude:sonnet", jobModels: {}, jobEffort: { weekprep: "max", find: "max", clarify: "high" } });
-    // The summaries' model, which the weekly review's preparation borrows.
-    setJobModel("summaries", "gpt-5");
-    expect(settings.get().jobEffort).toEqual({ find: "max", clarify: "high" });
-    // New chats' model, from Settings or Ask's model menu.
+    const levels = { weekprep: "max", find: "max", clarify: "high" };
+    settings.update({ askModel: "claude:sonnet", jobModels: {}, jobEffort: levels });
+    // A model picked for one chat is that chat's: New chats use and the jobs on it stay as they are.
     const id = newChat("claude:sonnet");
     setModel(id, "gpt-5.5");
-    expect(settings.get().jobEffort).toEqual({ clarify: "high" });
-    // Going back doesn't bring Max back.
-    setAskModel("claude:sonnet");
-    expect(settings.get().jobEffort).toEqual({ clarify: "high" });
+    expect(ask.get().chats.find((c) => c.id === id)!.model).toBe("gpt-5.5");
+    expect(settings.get().askModel).toBe("claude:sonnet");
+    expect(settings.get().jobEffort).toEqual(levels);
+    // A model a job inherits (the summaries', for weekprep) sets its level aside until it comes back.
+    expect(setJobModel("summaries", "gpt-5")).toBeNull();
+    expect(jobOwnEffort("weekprep")).toBeNull();
+    expect(settings.get().jobEffort).toEqual(levels);
+    setJobModel("summaries", null);
+    expect(jobOwnEffort("weekprep")).toBe("max");
+    // Its own model on an assistant without the level drops it; one with the level keeps it.
+    expect(setJobModel("find", "gpt-5")).toBe("max");
+    expect(setJobModel("clarify", "gpt-5")).toBeNull();
+    expect(settings.get().jobEffort).toEqual({ weekprep: "max", clarify: "high" });
+    setJobModel("find", null);
+    expect(jobOwnEffort("find")).toBeNull();
     settings.update({ askModel: undefined, jobModels: undefined, jobEffort: undefined });
     clis.set(null);
   });

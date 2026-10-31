@@ -129,34 +129,24 @@ export function jobOwnEffort(job: string, s: Settings = settings.get()): string 
   return level && (!levels || levels.includes(level)) ? level : null;
 }
 
-/** The jobs whose own effort their model's assistant doesn't offer (it changed under them), once
- *  the assistants are found. brainstead_core::ask::drop_stale_job_efforts drops the same on every
- *  save; the window drops them at once. */
-export function staleJobEfforts(s: Settings = settings.get()): string[] {
-  return Object.keys(s.jobEffort ?? {}).filter((job) => {
-    const levels = levelsOf(cliOf(jobModelOf(job, s)));
-    return !!levels && !levels.includes(s.jobEffort![job]);
-  });
-}
-
-/** Applies a change to the models (new chats' or a job's), dropping each job's own effort its new
- *  model's assistant doesn't offer: the job goes back to Assistant's setting. */
-function setModels(patch: Pick<Settings, "askModel"> | Pick<Settings, "jobModels">) {
-  settings.update(patch);
-  const stale = staleJobEfforts();
-  if (stale.length)
-    settings.update({ jobEffort: Object.fromEntries(Object.entries(settings.get().jobEffort ?? {}).filter(([j]) => !stale.includes(j))) });
-}
-
-/** Sets `job`'s model (null: back to its default), as Models by job does. */
-export function setJobModel(job: string, model: string | null) {
-  const { [job]: _, ...models } = settings.get().jobModels ?? {};
-  setModels({ jobModels: model ? { ...models, [job]: model } : models });
-}
-
-/** Sets the model new chats use, as Settings › AI assistants › New chats use and Ask's model menu do. */
-export function setAskModel(model: string) {
-  setModels({ askModel: model });
+/** Sets `job`'s model (null: back to its default), as Models by job does. When the assistant of the
+ *  model the job now runs on doesn't offer its own effort (once the assistants are found), that goes
+ *  back to Assistant's setting; returns the level dropped. Only the job's own model does this: while
+ *  a model it inherits (New chats use, or the summaries' for weekprep) is on such an assistant, the
+ *  level is set aside (`jobOwnEffort`) and comes back with the model. */
+export function setJobModel(job: string, model: string | null): string | null {
+  const s = settings.get();
+  const { [job]: _, ...rest } = s.jobModels ?? {};
+  const jobModels = model ? { ...rest, [job]: model } : rest;
+  const level = s.jobEffort?.[job];
+  const levels = levelsOf(cliOf(jobModelOf(job, { ...s, jobModels })));
+  if (!level || !levels || levels.includes(level)) {
+    settings.update({ jobModels });
+    return null;
+  }
+  const { [job]: __, ...jobEffort } = s.jobEffort ?? {};
+  settings.update({ jobModels, jobEffort });
+  return level;
 }
 
 export function blankChat(model: string): Chat {
@@ -302,11 +292,12 @@ export function closeChat(id: string) {
   if (!ask.get().chats.length) newChat(c?.model ?? undefined);
 }
 
+/** A chat's model, before its first message. It's that chat's only: New chats use (Settings › AI
+ *  assistants) stays as set, and so do the jobs that run on it. */
 export function setModel(id: string, model: string) {
   // Another assistant has its own levels, so the chat starts again from the one set for it.
   const same = (c: Chat) => cliOf(c.model ?? DEFAULT_MODEL) === cliOf(model);
   update(id, (c) => (c.transcript.length ? c : { ...c, model, effort: same(c) ? c.effort : effortFor(model) }));
-  setAskModel(model);
 }
 
 /** Keeps the empty tabs on the effort set for their assistant: when Settings › AI assistants

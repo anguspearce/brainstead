@@ -301,22 +301,6 @@ pub fn job_effort<'a>(ui: &'a Ui, job: &str, model: &str) -> Option<&'a str> {
     resolve_effort(cli, own, text(ui.get("effort").and_then(|m| m.get(cli.key()))))
 }
 
-/// Drops each job's own effort that its model's assistant doesn't offer, so a level hidden while the
-/// job runs on another assistant (new chats' model or the summaries' changed under it) doesn't come
-/// back when the model does. Run on every settings save; src/askState.ts `staleJobEfforts` is the
-/// window's copy.
-pub fn drop_stale_job_efforts(ui: &mut Ui) {
-    let stale: Vec<String> = match ui.get("jobEffort").and_then(serde_json::Value::as_object) {
-        Some(m) => m.keys().filter(|j| job_own_effort(ui, j).is_none()).cloned().collect(),
-        None => return,
-    };
-    if let Some(m) = ui.get_mut("jobEffort").and_then(serde_json::Value::as_object_mut) {
-        for j in stale {
-            m.remove(&j);
-        }
-    }
-}
-
 /// `level` as a model whose own levels are `model_levels` takes it (None: its CLI doesn't list a
 /// model's levels, so the CLI decides): the level itself, else the highest of the CLI's levels
 /// below it that the model has, else none, the model's own default.
@@ -1215,11 +1199,6 @@ mod tests {
             assert_eq!(model, c["model"], "{name}");
             assert_eq!(serde_json::json!(job_own_effort(ui, job)), c["own"], "{name}");
             assert_eq!(serde_json::json!(job_effort(ui, job, &model)), c["effort"], "{name}");
-        }
-        for c in f["prune"].as_array().unwrap() {
-            let mut ui = c["settings"].as_object().unwrap().clone();
-            drop_stale_job_efforts(&mut ui);
-            assert_eq!(ui.get("jobEffort").cloned().unwrap_or_default(), c["kept"], "{}", c["name"]);
         }
     }
 

@@ -114,7 +114,6 @@ import {
   modelLabel,
   pinSaved,
   renameSaved,
-  setAskModel,
   setJobModel,
   trashSaved,
 } from "./askState";
@@ -3493,14 +3492,14 @@ async function settingsTool(a: Args): Promise<string> {
     v = scriptsFolder(String(v ?? ""));
   } else v = String(v ?? "").trim() || undefined;
   const [head, sub] = key!.split(".");
+  let dropped = "";
   if (key === "openAtLogin") {
     await api.loginItemSet(v as boolean);
   } else if (head === "jobModels") {
-    // As Models by job does: a job's own effort goes when its new assistant doesn't offer it.
-    setJobModel(sub, (v as string | undefined) ?? null);
-  } else if (key === "askModel") {
-    // As New chats use does: likewise for every job that runs on new chats' model.
-    setAskModel(v as string);
+    // As Models by job does: the job's own effort goes when its new model's assistant doesn't offer it.
+    const level = setJobModel(sub, (v as string | undefined) ?? null);
+    if (level)
+      dropped = ` Its effort (${effortLabel(level)}) went back to Assistant's setting: ${CLI_LABEL[cliOf(jobModelOf(sub))]} doesn't offer it.`;
   } else if (sub) {
     const next = { ...nested[head], [sub]: v };
     if (v === undefined) delete next[sub];
@@ -3529,7 +3528,7 @@ async function settingsTool(a: Args): Promise<string> {
     return `${where(pane, label)} is now ${said}, registered with the system.`;
   }
   noted(`set ${label} to ${said}`);
-  return `${where(pane, label)} is now ${said}.`;
+  return `${where(pane, label)} is now ${said}.${dropped}`;
 }
 
 // ---- a note's own look
