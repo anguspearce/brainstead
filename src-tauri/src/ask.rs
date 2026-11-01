@@ -190,7 +190,8 @@ fn ollama_info() -> CliInfo {
         info.models.push(Model { id: format!("{}{}", ask::OLLAMA_PREFIX, t.name), name, efforts: Some(show.efforts()) });
     }
     info.path = Some(host);
-    let mut note = format!("Through Codex{}", codex_version.map(|v| format!(" {v}")).unwrap_or_default());
+    // `codex --version` says "codex-cli 0.166.0"; the row already says Codex.
+    let mut note = format!("Through Codex{}", codex_version.map(|v| format!(" {}", v.trim_start_matches("codex-cli "))).unwrap_or_default());
     if !without_tools.is_empty() {
         note.push_str(&format!(
             ". Not listed, as {} can't call tools, which Codex's agent loop needs: {}",
