@@ -243,26 +243,11 @@ fn files(ix: &Index, layers: &str) -> Result<Vec<String>, String> {
 
 /// What the preparation of `week` reads, from the index, the notes on disk and the Inbox
 /// (`inbox`: what the Inbox lists, captures included). `now_ms` dates tasks with no created date.
-/// `on_hold_someday`: the `includeOnHoldSomeday` setting, so the next actions are the ones the
-/// Weekly screen's Next actions step shows.
-pub fn gather(
-    root: &Path,
-    ix: &Index,
-    week: &str,
-    today: NaiveDate,
-    now_ms: i64,
-    inbox: &[InboxItem],
-    on_hold_someday: bool,
-) -> Result<Inputs, String> {
+pub fn gather(root: &Path, ix: &Index, week: &str, today: NaiveDate, now_ms: i64, inbox: &[InboxItem]) -> Result<Inputs, String> {
     let w = week_window(week)?;
     let iso = |d: NaiveDate| d.format("%Y-%m-%d").to_string();
     let (from, until) = (iso(today), iso(today + Duration::days(AHEAD_DAYS)));
     let mut seen: Vec<String> = Vec::new();
-    // Turning the setting on changes what the model is given; off adds nothing, so a preparation
-    // made before the setting existed still matches.
-    if on_hold_someday {
-        seen.push("include on-hold and someday projects".into());
-    }
 
     let notes_all = files(ix, "'note'")?;
     let mut notes: Vec<Note> = notes_all
@@ -310,9 +295,9 @@ pub fn gather(
             "waiting"
         } else if has_tag(&t.tags, "someday-maybe") {
             "someday"
-        } else if !on_hold_someday && t.in_parked_project() {
+        } else if t.in_parked_project() {
             // An on-hold or someday project's task isn't a next action, as on the Tasks and Weekly
-            // screens (src/taskModel.ts's next view), unless the user includes them. Its due and
+            // screens (src/taskModel.ts's next view). Its due and
             // deferred dates still reach the look-ahead, as the Today screen lists them.
             "parked"
         } else {
@@ -1084,7 +1069,7 @@ mod tests {
         ix.sync(&Vault::new(root.clone(), vec![])).unwrap();
         let now = at(2026, 10, 2, 12, 0).and_utc().timestamp_millis();
         let inbox = crate::inbox::items(&root);
-        let i = gather(&root, &ix, "2026-W40", day(2026, 10, 2), now, &inbox, false).unwrap();
+        let i = gather(&root, &ix, "2026-W40", day(2026, 10, 2), now, &inbox).unwrap();
         (t, i)
     }
 
@@ -1105,9 +1090,8 @@ mod tests {
         let mut ix = Index::open_in_memory().unwrap();
         ix.sync(&Vault::new(root.clone(), vec![])).unwrap();
         let now = at(2026, 10, 2, 12, 0).and_utc().timestamp_millis();
-        let gathered = |on: bool| gather(&root, &ix, "2026-W40", day(2026, 10, 2), now, &crate::inbox::items(&root), on).unwrap();
-        // Hub migration is on hold: its task isn't an open next action unless the setting is on.
-        let off = gathered(false);
+        // Hub migration is on hold: its tasks aren't open next actions.
+        let off = gather(&root, &ix, "2026-W40", day(2026, 10, 2), now, &crate::inbox::items(&root)).unwrap();
         let has = |i: &Inputs, text: &str| i.tasks.iter().any(|t| t.text.contains(text));
         for gone in ["Draft the cut-over plan", "Archive the old hub", "Read the vendor notes"] {
             assert!(!has(&off, gone), "{gone}");
@@ -1122,13 +1106,6 @@ mod tests {
             assert!(ahead.contains(dated) && !open.contains(dated), "{dated}");
         }
         assert!(!text.contains("Draft the cut-over plan"));
-        let on = gathered(true);
-        let draft = on.tasks.iter().find(|t| t.text.contains("Draft the cut-over plan")).unwrap();
-        assert_eq!((draft.list.as_str(), draft.project.as_deref()), ("next", Some("Hub migration")));
-        let licence = on.tasks.iter().find(|t| t.text.contains("Renew the licence")).unwrap();
-        assert_eq!(licence.list, "next");
-        // The setting is part of what the preparation was made from.
-        assert_ne!(stamp(&off), stamp(&on));
     }
 
     #[test]
@@ -1164,8 +1141,7 @@ mod tests {
         let regather = |today: NaiveDate| {
             let mut ix = Index::open_in_memory().unwrap();
             ix.sync(&Vault::new(root.clone(), vec![])).unwrap();
-            gather(&root, &ix, "2026-W40", today, at(2026, 10, 3, 12, 0).and_utc().timestamp_millis(), &crate::inbox::items(&root), false)
-                .unwrap()
+            gather(&root, &ix, "2026-W40", today, at(2026, 10, 3, 12, 0).and_utc().timestamp_millis(), &crate::inbox::items(&root)).unwrap()
         };
         assert_eq!(stamp(&i), stamp(&regather(day(2026, 10, 3))));
         let steerco = root.join("Meeting. Orbit App Steerco - 2026-09-30.md");

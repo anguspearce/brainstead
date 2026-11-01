@@ -33,7 +33,7 @@ Under the tasks are **Mark complete** (or **Make active**), **Edit** and ⋯. Th
 - **Put on hold** (on ⋯) moves an active project to On hold.
 - **Someday** (on ⋯) parks it on Someday.
 
-The tasks stay in the note, but while a project is on hold or someday they leave Next actions on [Tasks](app:tasks), the sidebar's count and the weekly review, and stay out while it stays that way. **Include on-hold and someday projects** in Next actions shows them anyway. A completed project's open tasks stay in Next actions.
+The tasks stay in the note, but while a project is on hold or someday they leave Next actions on [Tasks](app:tasks), the sidebar's count and the weekly review, and stay out while it stays that way. A completed project's open tasks stay in Next actions.
 
 **Ask about this project** (on ⋯) opens [Ask](app:ask) with the project note attached. **Move to the Trash** (on ⋯) says how many tasks are in the note and how many elsewhere link it, then moves it to the [Trash](app:trash). **Undo** in the toast, or restoring it, brings it back; until then, tasks elsewhere link a missing note.
 

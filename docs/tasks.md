@@ -55,7 +55,7 @@ A capture offers only the choices that fit its kind. A transcript: make a meetin
 
 <a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/task-pane-dark.png"><img alt="Tasks: Next actions with a task open in the pane on the right, showing its dates, priority, context, effort and project" src="images/task-pane-light.png"></picture></a>
 
-Tasks (⌘3) has the GTD lists: **Next actions**, **Follow-ups**, **Waiting for**, **Deferred**, **Someday / maybe**, and **Done this week** and **last week**. Next actions leaves out deferred tasks until their day, Inbox tasks until you clarify them, and the tasks of projects whose status is on hold or someday. Tick **Include on-hold and someday projects**, next to the effort menu in Next actions, to show those too; while it's off, a grey count by it says how many are hidden. The choice is kept on this computer, not in the vault.
+Tasks (⌘3) has the GTD lists: **Next actions**, **Follow-ups**, **Waiting for**, **Deferred**, **Someday / maybe**, and **Done this week** and **last week**. Next actions leaves out deferred tasks until their day, Inbox tasks until you clarify them, and the tasks of a project that's On hold or Someday until it's active again (the task's `projectStatus`, read from its project note's `status`; they still show on the project's page).
 
 - Tick to finish a task; a recurring one gets its next occurrence. ⌘Z undoes.
 - The ⋯ menu, a right-click or the pane on the right renames a task, sets dates, priority, context, effort and project, marks a task in progress or waiting for, cancels, deletes or opens its note.
@@ -74,7 +74,7 @@ A project is a note named `Project. <name>.md`, with its status, area and outcom
 
 An active project with no next action says **No next action** in red, and one where nothing has moved for two weeks says **Quiet** in amber. Add next actions, edit the outcome, area and status, and draft nudges for waiting-fors. **New project** writes the note with its headings.
 
-The status decides more than the tab a project is on: putting a project on hold or on Someday takes its tasks out of Next actions, the sidebar's count and the weekly review while it stays that way (unless **Include on-hold and someday projects** is ticked), and so does a status written as `paused`, `hold` or `maybe`. A completed project's open tasks stay in Next actions.
+The status decides more than the tab a project is on: putting a project on hold or on Someday takes its tasks out of Next actions, the sidebar's count and the weekly review while it stays that way, and so does a status written as `paused`, `hold` or `maybe`. A completed project's open tasks stay in Next actions.
 
 - Click an area to fold its projects away; what's folded is remembered. Its pencil renames the area on every project under it; it keeps its place in the order, and undoing the rename (the toast's Undo, ⌘Z, Revert in Changes) puts it back where it was.
 - Drag an area, or a project within its area, by its grip to put them in order. The order is a Brainstead setting, not written to your notes; ones never moved come after, A to Z.
@@ -113,7 +113,7 @@ Tasks follow the widely used Tasks format, so other markdown editors read them:
 - A deferred task stays off Next actions until its day. A start date doesn't hide a task; it only makes it less urgent until then.
 - A context is a `#context/<name>` tag, and effort a `[effort:: …]` field.
 - `#followup`, `#waiting-for` and `#someday-maybe` put a task on those lists.
-- A task belongs to a project when it's in the project's note or links it, and stays off Next actions while that project is on hold or someday, unless **Include on-hold and someday projects** is ticked. A done project's open tasks stay on.
+- A task belongs to a project when it's in the project's note or links it, and stays off Next actions while that project is on hold or someday. A done project's open tasks stay on.
 - Tasks inside quotes and callouts (`> - [ ] …`) count too.
 
 The app shows dates and fields as icons and plain text under the task, never the emoji.

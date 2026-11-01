@@ -325,13 +325,7 @@ fn gather(app: &AppHandle, week: &str) -> Result<prep::Inputs, String> {
     let today = Local::now().date_naive();
     let ms = chrono::Utc::now().timestamp_millis();
     let inbox = gtd::inbox_items(app)?;
-    // The Tasks screen's Include on-hold and someday projects (`includeOnHoldSomeday`, off unless true).
-    let on_hold_someday = {
-        let st = app.state::<AppState>();
-        let s = crate::lock(&st.settings);
-        s.ui.get("includeOnHoldSomeday").and_then(|v| v.as_bool()).unwrap_or(false)
-    };
-    app.state::<VaultService>().with_index(|ix, v| prep::gather(&v.root, ix, week, today, ms, &inbox, on_hold_someday))
+    app.state::<VaultService>().with_index(|ix, v| prep::gather(&v.root, ix, week, today, ms, &inbox))
 }
 
 #[derive(Serialize, Clone)]

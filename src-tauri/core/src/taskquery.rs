@@ -85,7 +85,7 @@ pub struct TaskRow {
     /// The project note it belongs to: the one it's written in, else the first link on its line
     /// to one.
     pub project: Option<String>,
-    /// That project's status (`projects::status_of`): active, on-hold, someday or done.
+    /// That project's status (active, on-hold, someday, done), when it has one.
     pub project_status: Option<String>,
     /// From `#context/<name>` tags, without the prefix.
     pub contexts: Vec<String>,
@@ -97,10 +97,10 @@ pub struct TaskRow {
 }
 
 impl TaskRow {
-    /// In an on-hold or someday project (`projects::parks_tasks`), so not a next action unless the
-    /// user includes those projects' tasks.
+    /// In a project on hold or someday, whose tasks Next actions leaves out: src/taskModel.ts's
+    /// next view and the weekly review's preparation share the rule.
     pub fn in_parked_project(&self) -> bool {
-        self.project_status.as_deref().is_some_and(crate::projects::parks_tasks)
+        matches!(self.project_status.as_deref(), Some("on-hold" | "someday"))
     }
 }
 
@@ -111,7 +111,9 @@ fn rows_sql() -> String {
         "SELECT f.path, f.title, t.line, t.text, t.done, t.due, t.scheduled, t.done_on, t.created, t.rank, t.tags, t.heading, f.mtime, t.line_text, t.start, t.status, t.cancelled,
            CASE WHEN {own} THEN f.path ELSE (SELECT pf.path FROM links l JOIN files pf ON pf.id = l.target_id
              WHERE l.src = f.id AND l.line = t.line AND l.kind = 'link' AND {linked} ORDER BY l.rowid LIMIT 1) END,
-           t.contexts, t.effort, t.effort_min
+           t.contexts, t.effort, t.effort_min,
+           CASE WHEN {own} THEN f.frontmatter ELSE (SELECT pf.frontmatter FROM links l JOIN files pf ON pf.id = l.target_id
+             WHERE l.src = f.id AND l.line = t.line AND l.kind = 'link' AND {linked} ORDER BY l.rowid LIMIT 1) END
          FROM tasks t JOIN files f ON f.id = t.file_id"
     )
 }
@@ -140,11 +142,20 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<TaskRow> {
         status: r.get(15)?,
         cancelled: r.get(16)?,
         project: r.get(17)?,
-        project_status: None,
         contexts: words(r.get(18)?),
         effort: r.get(19)?,
         effort_min: r.get(20)?,
+        project_status: project_status(r.get(17)?, r.get(21)?),
     })
+}
+
+/// A task's project's status from the project note's properties: a missing or unknown one reads as
+/// active, as on the Projects screen (`projects::parse_status`).
+fn project_status(project: Option<String>, fm: Option<String>) -> Option<String> {
+    project?;
+    let fm: serde_json::Value = fm.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    let s = crate::frontmatter::string(&fm, "status").and_then(|s| crate::projects::parse_status(&s));
+    Some(s.unwrap_or("active").to_string())
 }
 
 fn tag_matches(tags: &[String], q: &str) -> bool {
@@ -183,17 +194,7 @@ impl Index {
         let mut st =
             self.conn().prepare_cached(&format!("{} WHERE f.layer != 'template' ORDER BY f.path, t.line", rows_sql())).map_err(e)?;
         let rows = st.query_map([], row).map_err(e)?;
-        let rows = rows.collect::<std::result::Result<Vec<_>, _>>().map_err(e)?;
-        self.with_project_status(rows)
-    }
-
-    /// Fills each task's `project_status` from its project note.
-    fn with_project_status(&self, mut rows: Vec<TaskRow>) -> Result<Vec<TaskRow>> {
-        let statuses = self.project_statuses()?;
-        for t in &mut rows {
-            t.project_status = t.project.as_deref().and_then(|p| statuses.get(p)).map(|s| s.to_string());
-        }
-        Ok(rows)
+        rows.collect::<std::result::Result<Vec<_>, _>>().map_err(e)
     }
 
     pub fn tasks(&self, q: &TaskQuery) -> Result<Vec<TaskRow>> {
@@ -228,7 +229,7 @@ impl Index {
         if let Some(n) = q.limit {
             out.truncate(n);
         }
-        self.with_project_status(out)
+        Ok(out)
     }
 }
 

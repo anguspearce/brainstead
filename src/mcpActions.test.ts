@@ -89,59 +89,25 @@ describe("MCP actions", () => {
     await expect(run("tasks.list", { view: "soon" })).rejects.toThrow(/No view/);
   });
 
-  it("leaves on-hold and someday projects out of next as the Tasks screen does, unless include_on_hold_someday", async () => {
-    // The setting is turned on below: off again even when an assertion fails first.
-    onTestFinished(() => settings.update({ includeOnHoldSomeday: undefined }));
+  it("leaves on-hold and someday projects' tasks out of next, as the Tasks screen does", async () => {
     answers.tasks_all = () => [
       row({ project: "Project. Orbit App launch.md", projectStatus: "active" }),
       row({ line: 3, text: "Prune the roses", project: "Project. Garden.md", projectStatus: "on-hold" }),
       row({ line: 4, text: "Learn the cello", project: "Project. Cello.md", projectStatus: "someday" }),
       row({ line: 5, text: "Loose end" }),
     ];
-    answers.settings_write = (a) => a!.settings;
     const texts = async (args: Record<string, unknown>) =>
       ((await data("tasks.list", { view: "next", ...args })).items as { text: string }[]).map((t) => t.text);
     expect(await texts({})).toEqual(["Call Sam about the launch", "Loose end"]);
-    expect(await run("tasks.list", { view: "next" })).toMatch(
-      /\n\(2 tasks of on-hold or someday projects left out, as the Tasks screen leaves them out; include_on_hold_someday: true shows them\.\)$/,
-    );
-    expect(await run("tasks.list", { view: "next", project: "Garden" })).toMatch(/^No tasks in next with those filters\.\n\(1 task of/);
-    // Only what query would have shown counts: the cello, not the roses.
-    expect(await run("tasks.list", { view: "next", query: "cello" })).toMatch(/^0 tasks in next matching “cello”, of 2:\n\(1 task of/);
-    expect(await run("tasks.list", { view: "next", query: "violin" })).not.toMatch(/left out/);
-    expect(await texts({ include_on_hold_someday: true })).toEqual([
+    // Still in all, each with its project's status as data.
+    const all = await data("tasks.list", { view: "all" });
+    expect((all.items as { text: string }[]).map((t) => t.text)).toEqual([
       "Call Sam about the launch",
       "Prune the roses",
       "Learn the cello",
       "Loose end",
     ]);
-    expect(await run("tasks.list", { view: "next", include_on_hold_someday: true })).not.toMatch(/left out/);
-    // As data too: the count, and each task's project status; the line names a parked project's.
-    expect((await data("tasks.list", { view: "next" })).left_out).toBe(2);
-    const both = await data("tasks.list", { view: "next", include_on_hold_someday: true });
-    expect(both.left_out).toBe(0);
-    expect((both.items as { projectStatus: string | null }[]).map((t) => t.projectStatus)).toEqual(["active", "on-hold", "someday", null]);
-    expect(await run("tasks.list", { view: "next", include_on_hold_someday: true })).toContain("project Garden (on-hold)");
-    expect((await data("tasks.list", { view: "waiting" })).left_out).toBeUndefined();
-    // Anything but a boolean is refused, not read as the setting.
-    await expect(run("tasks.list", { view: "next", include_on_hold_someday: "true" })).rejects.toThrow(
-      /include_on_hold_someday is true or false, not "true"/,
-    );
-    await expect(
-      run("task.move", { task: "Me. To Do List.md:5", after: "Me. To Do List.md:6", include_on_hold_someday: 1 }),
-    ).rejects.toThrow(/true or false/);
-    // On every path that takes it, whether or not the view or the project branch reads it.
-    for (const view of ["today", "all", "waiting", "deferred"])
-      await expect(run("tasks.list", { view, include_on_hold_someday: "yes" })).rejects.toThrow(/true or false/);
-    await expect(
-      run("task.move", { task: "Me. To Do List.md:5", after: "Me. To Do List.md:6", project: "Garden", include_on_hold_someday: 1 }),
-    ).rejects.toThrow(/true or false/);
-    // The setting the screen's checkbox keeps, through settings, is the default.
-    expect(await run("settings")).toMatch(/includeOnHoldSomeday · Tasks › Next actions › Include on-hold and someday projects: false/);
-    expect(await run("settings", { action: "set", key: "includeOnHoldSomeday", value: true })).toMatch(/is now true/);
-    expect(settings.get().includeOnHoldSomeday).toBe(true);
-    expect(await texts({})).toHaveLength(4);
-    expect(await texts({ include_on_hold_someday: false })).toHaveLength(2);
+    expect((all.items as { projectStatus: string | null }[]).map((t) => t.projectStatus)).toEqual(["active", "on-hold", "someday", null]);
   });
 
   it("matches query as the Tasks screen's search does: project, heading and tags too, accents ignored", async () => {
@@ -241,72 +207,6 @@ describe("MCP actions", () => {
       "Renumber “book the room” in Next actions",
     ]);
     expect(out).toContain("renumbered, 3 lines");
-  });
-
-  it("renumbers Next actions with the tasks it hides kept among their old neighbours", async () => {
-    const task = (line: number, text: string, rank: number | null, o: Partial<TaskRow> = {}) =>
-      row({ line, lineText: `- [ ] ${text}`, text, rank, ...o });
-    const garden = { project: "Project. Garden.md", projectStatus: "on-hold" as const };
-    answers.tasks_all = () => [
-      task(1, "Ask Maya", null),
-      task(2, "Prune the roses", 1024, garden),
-      task(3, "Book the room", 2048),
-      task(4, "Call Lena", 3072),
-    ];
-    answers.change_task_line = (a) => `${a!.line} ^rank-${JSON.stringify(a!.edit)}`;
-    answers.changes_submit_many = outcomes(true);
-    await run("task.move", { task: "Me. To Do List.md:5", text: "Call Lena", before: "Me. To Do List.md:2" });
-    const edits = calls.filter(([c]) => c === "change_task_line").map(([, a]) => [a!.line, (a!.edit as { prev: number }).prev]);
-    // The roses, hidden, stay after Ask Maya, which they followed, rather than keeping rank 1024.
-    expect(edits).toEqual([
-      ["- [ ] Call Lena", 0],
-      ["- [ ] Ask Maya", 1024],
-      ["- [ ] Prune the roses", 2048],
-      ["- [ ] Book the room", 3072],
-    ]);
-  });
-
-  it("places a task between a hidden row and the shown one after it, so no rank ties with a hidden row", async () => {
-    const task = (line: number, text: string, rank: number, o: Partial<TaskRow> = {}) =>
-      row({ line, lineText: `- [ ] ${text}`, text, rank, ...o });
-    answers.tasks_all = () => [
-      task(1, "Ask Maya", 1024),
-      task(2, "Prune the roses", 2048, { project: "Project. Garden.md", projectStatus: "on-hold" }),
-      task(3, "Call Lena", 3072),
-      task(4, "Book the room", 4096),
-    ];
-    answers.change_task_line = (a) => `${a!.line} ^rank-${JSON.stringify(a!.edit)}`;
-    answers.changes_submit_many = outcomes(true);
-    await run("task.move", { task: "Me. To Do List.md:5", text: "Book the room", after: "Me. To Do List.md:2" });
-    // Not between Ask Maya (1024) and Call Lena (3072), where 2048 is the roses' rank.
-    expect(calls.find(([c]) => c === "change_task_line")![1]!.edit).toEqual({ op: "rank", prev: 2048, next: 3072 });
-  });
-
-  it("moves tasks of on-hold and someday projects in Next actions as list_tasks gave them, and says when that's why it can't", async () => {
-    onTestFinished(() => settings.update({ includeOnHoldSomeday: undefined }));
-    const held = (line: number, text: string, rank: number) =>
-      row({
-        path: "Project. Garden.md",
-        line,
-        lineText: `- [ ] ${text}`,
-        text,
-        rank,
-        project: "Project. Garden.md",
-        projectStatus: "on-hold",
-      });
-    answers.tasks_all = () => [held(1, "Prune the roses", 1024), held(2, "Buy compost", 2048), held(3, "Mend the fence", 3072)];
-    answers.change_task_line = (a) => `${a!.line} ^rank-${JSON.stringify(a!.edit)}`;
-    answers.changes_submit_many = outcomes(true);
-    const move = (args: Record<string, unknown> = {}) =>
-      run("task.move", { task: "Project. Garden.md:4", text: "Mend the fence", after: "Project. Garden.md:2", ...args });
-    // Left out of Next actions: the error names the filter and the argument that lifts it.
-    await expect(move()).rejects.toThrow(/only with on-hold and someday projects' tasks included.*include_on_hold_someday: true/);
-    expect(await move({ include_on_hold_someday: true })).toMatch(/^Moved “Mend the fence” after “prune the roses” in Next actions/);
-    expect(calls.find(([c]) => c === "change_task_line")![1]!.edit).toEqual({ op: "rank", prev: 1024, next: 2048 });
-    // The setting is the default, as the Tasks screen's list.
-    settings.update({ includeOnHoldSomeday: true });
-    expect(await move()).toMatch(/^Moved/);
-    await expect(move({ include_on_hold_someday: false })).rejects.toThrow(/include_on_hold_someday: true/);
   });
 
   it("deletes a transcript from the Inbox as the screen's Delete does, its links pointed at its note first", async () => {
