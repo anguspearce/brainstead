@@ -1257,12 +1257,35 @@ body.presizing * {
 .spane {
   /* Full width so the scrollbar sits at the window's edge; the right padding keeps the content
      to about three quarters of the pane, so its text doesn't wrap early (percentages here are of
-     the pane's width). */
-  padding: 24px max(40px, 25%) 40px 40px;
+     the pane's width). In a pane 520px or narrower (a wide sidebar and the Settings list beside it
+     in a small window) the quarter would leave less than the widest control (the name field,
+     320px), so the padding is the left side's 40px: the inner term is the quarter at 520px and
+     falls ten times as fast below it, so the max takes 40px from 511px down; a container query
+     can't size its own container, which is why it's a formula. */
+  padding: 24px max(40px, min(25%, calc(10 * (100% - 520px) + 130px))) 40px 40px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 22px;
+  container: spane / inline-size;
+}
+
+/* Narrower still, a row's controls go under its label (a Settings row, and a job's row with its
+   day and time), as the Models by job card's rows do, rather than squeezing the label to a word a
+   line. */
+@container spane (width <= 440px) {
+  /* .spane first: a job's row is a grid (.job, later in the file), and the Models by job card's
+     rows stay a subgrid until their own card is narrow. */
+  .spane .srow,
+  .spane .job {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .spane .srow .t,
+  .spane .job .t {
+    flex: 1 1 160px;
+    min-width: 0;
+  }
 }
 
 /* Cards side by side in a section read as one card, a line between them, so it's clear which
@@ -2651,6 +2674,7 @@ details.callout[open] .callout-chev {
   overflow-y: auto;
   padding: 0 0 40px;
   min-width: 0;
+  container: tpage / inline-size;
 }
 
 /* The Tasks screen's list is a table: no header, a band per group, flat rows with dividers. */
@@ -6957,6 +6981,15 @@ select.sel {
   flex-direction: column;
   gap: 18px;
   align-items: flex-start;
+  container: iopen / inline-size;
+}
+
+/* A narrow detail (a wide list beside it in a small window): the suggestion's Accept goes under
+   "Suggested: ..." (together they take about 270px of the card) rather than past the card's edge. */
+@container iopen (width <= 400px) {
+  .isugg-head {
+    flex-wrap: wrap;
+  }
 }
 .iopen .soon {
   align-self: center;
@@ -9039,6 +9072,17 @@ button.hc {
   min-width: 0;
   min-height: 0;
 }
+.rthread {
+  container: rthread / inline-size;
+}
+
+/* A narrow thread column (a wide sidebar in a small window): its menu, about 240px wide with a
+   thread's name, goes under the Thread label rather than over the Drafted reply label beside it. */
+@container rthread (width <= 320px) {
+  .rthread > .row {
+    flex-wrap: wrap;
+  }
+}
 .rthread > .row,
 .rdraft > .row {
   flex: none;
@@ -9158,11 +9202,21 @@ button.hc {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  container: dcform / inline-size;
 }
 .dcform .row,
 .doccheck section > .row {
   gap: 10px;
   align-items: center;
+}
+
+/* A narrow form (a wide sidebar in a small window): the Against row's menu and hint, about 580px
+   with the switch, go under it, and the Check row's button under its field, rather than past the
+   card's edge. */
+@container dcform (width <= 620px) {
+  .dcform .row {
+    flex-wrap: wrap;
+  }
 }
 
 /* The register's heading row, then its table, with room between them. */
@@ -10195,6 +10249,20 @@ html.tray-view body {
 }
 .foundrow .tlink + .tlink::before {
   content: "· ";
+}
+
+/* Tasks' list between two wide panes in a small window: a suggestion's Accept, Edit and Skip, and
+   the heading's Look again, go under the text (the buttons and the heading's words take about
+   190px; the text keeps 200px to a line) rather than squeezing it to a word a line. After the
+   rules above, which set the text's flex. */
+@container tpage (width <= 400px) {
+  .foundhead,
+  .foundrow {
+    flex-wrap: wrap;
+  }
+  .foundrow .t {
+    flex-basis: 100%;
+  }
 }
 
 /* A system note's header, locked in the editor (src/editor/systemLock.ts). */

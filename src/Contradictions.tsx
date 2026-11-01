@@ -95,7 +95,7 @@ async function saveReport(r: ContradictionsReport) {
 }
 
 export function ContradictionsScreen() {
-  const panes = usePanes({ "contradictions.left": PANES["contradictions.left"] });
+  const panes = usePanes({ "contradictions.left": PANES["contradictions.left"] }, { minFlex: 320 });
   const [r, setR] = useState<ContradictionsReport | null>(null);
   const [sel, setSel] = useViewState<string | null>("contradictions:sel", null);
   const load = () =>

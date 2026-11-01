@@ -126,7 +126,7 @@ const reshaped = (r: { applied: number; failed: string[] }) =>
   );
 
 export function HealthScreen() {
-  const panes = usePanes({ "health.side": PANES["health.side"] });
+  const panes = usePanes({ "health.side": PANES["health.side"] }, { minFlex: 360 });
   useEffect(startKnowledge, []);
   const h = useStore(health);
   const r = h?.report ?? null;
