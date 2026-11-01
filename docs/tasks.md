@@ -55,7 +55,7 @@ A capture offers only the choices that fit its kind. A transcript: make a meetin
 
 <a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/task-pane-dark.png"><img alt="Tasks: Next actions with a task open in the pane on the right, showing its dates, priority, context, effort and project" src="images/task-pane-light.png"></picture></a>
 
-Tasks (⌘3) has the GTD lists: **Next actions**, **Follow-ups**, **Waiting for**, **Deferred**, **Someday / maybe**, and **Done this week** and **last week**. Next actions leaves out deferred tasks until their day, and Inbox tasks until you clarify them.
+Tasks (⌘3) has the GTD lists: **Next actions**, **Follow-ups**, **Waiting for**, **Deferred**, **Someday / maybe**, and **Done this week** and **last week**. Next actions leaves out deferred tasks until their day, Inbox tasks until you clarify them, and the tasks of a project that's On hold or Someday until it's active again (the task's `projectStatus`, read from its project note's `status`; they still show on the project's page).
 
 - Tick to finish a task; a recurring one gets its next occurrence. ⌘Z undoes.
 - The ⋯ menu, a right-click or the pane on the right renames a task, sets dates, priority, context, effort and project, marks a task in progress or waiting for, cancels, deletes or opens its note.

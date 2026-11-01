@@ -85,6 +85,8 @@ pub struct TaskRow {
     /// The project note it belongs to: the one it's written in, else the first link on its line
     /// to one.
     pub project: Option<String>,
+    /// That project's status (active, on-hold, someday, done), when it has one.
+    pub project_status: Option<String>,
     /// From `#context/<name>` tags, without the prefix.
     pub contexts: Vec<String>,
     /// As written in `[effort:: …]`.
@@ -101,7 +103,9 @@ fn rows_sql() -> String {
         "SELECT f.path, f.title, t.line, t.text, t.done, t.due, t.scheduled, t.done_on, t.created, t.rank, t.tags, t.heading, f.mtime, t.line_text, t.start, t.status, t.cancelled,
            CASE WHEN {own} THEN f.path ELSE (SELECT pf.path FROM links l JOIN files pf ON pf.id = l.target_id
              WHERE l.src = f.id AND l.line = t.line AND l.kind = 'link' AND {linked} ORDER BY l.rowid LIMIT 1) END,
-           t.contexts, t.effort, t.effort_min
+           t.contexts, t.effort, t.effort_min,
+           CASE WHEN {own} THEN f.frontmatter ELSE (SELECT pf.frontmatter FROM links l JOIN files pf ON pf.id = l.target_id
+             WHERE l.src = f.id AND l.line = t.line AND l.kind = 'link' AND {linked} ORDER BY l.rowid LIMIT 1) END
          FROM tasks t JOIN files f ON f.id = t.file_id"
     )
 }
@@ -133,7 +137,17 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<TaskRow> {
         contexts: words(r.get(18)?),
         effort: r.get(19)?,
         effort_min: r.get(20)?,
+        project_status: project_status(r.get(17)?, r.get(21)?),
     })
+}
+
+/// A task's project's status from the project note's properties: a missing or unknown one reads as
+/// active, as on the Projects screen (`projects::parse_status`).
+fn project_status(project: Option<String>, fm: Option<String>) -> Option<String> {
+    project?;
+    let fm: serde_json::Value = fm.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    let s = crate::frontmatter::string(&fm, "status").and_then(|s| crate::projects::parse_status(&s));
+    Some(s.unwrap_or("active").to_string())
 }
 
 fn tag_matches(tags: &[String], q: &str) -> bool {

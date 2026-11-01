@@ -225,7 +225,11 @@ mod tests {
         assert_eq!((call.contexts.clone(), call.effort.as_deref(), call.effort_min), (vec!["calls".to_string()], Some("15m"), Some(15)));
         let linked = tasks.iter().find(|t| t.text.starts_with("Book the launch room")).unwrap();
         assert_eq!(linked.project.as_deref(), Some("Project. Orbit App launch.md"));
-        assert!(tasks.iter().filter(|t| t.path == "Me. To Do List.md").all(|t| t.project.is_none()));
+        assert!(tasks.iter().filter(|t| t.path == "Me. To Do List.md").all(|t| t.project.is_none() && t.project_status.is_none()));
+        // And that project's status, for Next actions to leave a parked project's tasks off.
+        assert_eq!(call.project_status.as_deref(), Some("active"));
+        let hub: Vec<_> = tasks.iter().filter(|t| t.project.as_deref() == Some("Project. Hub migration.md")).collect();
+        assert!(!hub.is_empty() && hub.iter().all(|t| t.project_status.as_deref() == Some("on-hold")));
     }
 
     #[test]

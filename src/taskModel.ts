@@ -22,6 +22,9 @@ export type ViewId = "next" | "followups" | "waiting" | "scheduled" | "someday" 
 
 const has = (t: TaskRow, tag: string) => t.tags.some((g) => g === tag || g.startsWith(`${tag}/`));
 const parked = (t: TaskRow) => has(t, "followup") || has(t, "waiting-for") || has(t, "someday-maybe");
+/** A task of a project put on hold or moved to Someday: off Next actions until the project is active
+ *  again (it still shows on the project's page). */
+const projectParked = (t: TaskRow) => t.projectStatus === "on-hold" || t.projectStatus === "someday";
 
 /** Monday-start week, as the previous app counts "done this week". */
 export function weekOf(today: string, offset = 0): [string, string] {
@@ -56,8 +59,10 @@ export const VIEWS: View[] = [
     label: "Next actions",
     icon: "tasks",
     manual: true,
-    // A deferred task stays off until its day, and an Inbox task until it's clarified.
-    filter: (t, today, inbox) => !t.done && !parked(t) && !(t.scheduled && t.scheduled > today) && !inbox.has(`${t.path}:${t.line}`),
+    // A deferred task stays off until its day, an Inbox task until it's clarified, and a parked
+    // project's tasks until the project is active again.
+    filter: (t, today, inbox) =>
+      !t.done && !parked(t) && !projectParked(t) && !(t.scheduled && t.scheduled > today) && !inbox.has(`${t.path}:${t.line}`),
   },
   { id: "followups", label: "Follow-ups", icon: "ask", manual: true, filter: (t) => !t.done && has(t, "followup"), adds: "#followup" },
   {

@@ -451,6 +451,8 @@ export interface TaskRow {
   heading: string | null;
   /** The project note it belongs to (stage 6): the one it's written in, or one its line links. */
   project?: string | null;
+  /** That project's status (`ProjectStatus` in gtd.ts); a missing or unknown one reads as active. */
+  projectStatus?: string | null;
   /** From `#context/<name>` tags, without the prefix. */
   contexts?: string[];
   /** As written in `[effort:: 15m]`, and in minutes. */

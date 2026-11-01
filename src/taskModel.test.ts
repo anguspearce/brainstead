@@ -63,6 +63,11 @@ describe("task views", () => {
     expect(viewRows(rows, view("next"), FRI, inbox).map((x) => x.text)).toEqual(["ring Maya", "elsewhere"]);
     expect(viewRows(rows, view("next"), FRI).map((x) => x.text)).toEqual(["raw", "ring Maya", "elsewhere"]);
   });
+  it("leaves an on-hold or Someday project's tasks off Next actions until it's active again", () => {
+    const p = "Project. Orbit App.md";
+    const rows = ["active", "on-hold", "someday", "done"].map((s) => t(s, { project: p, projectStatus: s }));
+    expect(viewRows([...rows, t("loose")], view("next"), FRI).map((x) => x.text)).toEqual(["active", "done", "loose"]);
+  });
   it("gives a task added from a list that list's tag, so it shows there", () => {
     for (const id of ["followups", "waiting", "someday"]) {
       const v = view(id);

@@ -10,7 +10,7 @@ A task is a `- [ ]` line in any note. Tasks lists them all, and each change rewr
 ## Choose a list
 Each list on the left shows its count:
 
-- **Next actions**: open tasks without `#followup`, `#waiting-for` or `#someday-maybe`, and the sidebar's count. Deferred tasks stay off until their day, and tasks still in the [Inbox](app:inbox) until you clarify them.
+- **Next actions**: open tasks without `#followup`, `#waiting-for` or `#someday-maybe`, and the sidebar's count. Deferred tasks stay off until their day, tasks still in the [Inbox](app:inbox) until you clarify them, and the tasks of a project that's On hold or Someday until it's active again (they still show on the project's page in [Projects](app:projects)).
 - **Follow-ups**: tasks tagged `#followup`.
 - **Waiting for**: tasks tagged `#waiting-for`.
 - **Deferred**: tasks with a defer date, soonest first.
