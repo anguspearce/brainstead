@@ -1253,12 +1253,11 @@ describe("MCP actions", () => {
           deletedAt: `2026-09-0${i + 1}T10:00`,
           sizeBytes: 1024,
         }));
-      // What Space does with each row (`look`) is the Trash screen's decision, by platform: a
-      // Mac says Quick Look for every file, so the platform is set rather than the host's taken.
+      // The look depends on the platform (macOS says quick look for everything), so the test picks
+      // one: on Windows, each file opens in its app until a preview handler says otherwise.
       const was = platform();
       try {
         setPlatform("windows");
-        answers.preview_available = () => false;
         expect(await data("trash", { limit: 2 })).toEqual({
           total: 3,
           matching: 3,
@@ -1271,7 +1270,7 @@ describe("MCP actions", () => {
             { id: "t1", path: "Idea. 1.md", layer: "note", deleted: "2026-09-02T10:00", bytes: 1024, look: "app" },
           ],
         });
-        // On Windows, Preview where a handler is.
+        // What Space does with each, as the Trash screen decides: on Windows, Preview where a handler is.
         answers.preview_available = (a) => String(a?.name).endsWith("1.md");
         expect((await data("trash", { limit: 2 })) as { items: { look: string }[] }).toMatchObject({
           items: [{ look: "app" }, { look: "preview" }],
