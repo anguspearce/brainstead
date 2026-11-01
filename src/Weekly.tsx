@@ -23,7 +23,7 @@ import { TaskList, TasksFailed } from "./TaskList";
 import { leftOutNote, parkedLeftOut, reportEditError, tasksFailed, useAllTasks, viewRows, VIEWS } from "./taskModel";
 import { toast } from "./Toast";
 import { TopBar } from "./TopBar";
-import { ago, Dialog, LayerTag } from "./ui";
+import { ago, Dialog, LayerTag, Squeeze } from "./ui";
 import { PrepHeader, PrepRows, prepStep, WEEKLY_STATE_CHANGED, when } from "./weeklyPrep";
 import { keyLabel } from "./platform";
 import { usePanes } from "./PaneResizer";
@@ -256,8 +256,10 @@ export function WeeklyScreen() {
         ask={{ about: `this week's review: ${step.title.toLowerCase()}`, prompt: `For my weekly review, ${step.title.toLowerCase()}: ` }}
       >
         <span className="faint small wprog">
-          Step {st.step + 1} of {STEPS.length}
-          {left > 0 ? ` · about ${left * 3} min left` : ""}
+          <Squeeze
+            full={`Step ${st.step + 1} of ${STEPS.length}${left > 0 ? ` · about ${left * 3} min left` : ""}`}
+            tight={`Step ${st.step + 1} of ${STEPS.length}`}
+          />
         </span>
         <span className="pbar">
           <i style={{ width: `${(st.done.length / STEPS.length) * 100}%` }} />

@@ -250,6 +250,17 @@ html[data-platform="windows"] .tlspace {
   right: 0;
   z-index: 100;
   display: flex;
+
+  /* The top bar's own background (the main area's, in both themes), so a bar whose controls still
+     overflow never shows through the window's buttons. */
+  background: var(--ground);
+}
+
+/* Under a whole-window scrim (a dialog) the strip goes clear again, so the dimming reaches the
+   buttons' row as it does the rest of the bar; the full-screen overlays (.mfull) start below the bar
+   on Windows and leave it undimmed. */
+body:has(.scrim:not(.mfull)) .winctl {
+  background: transparent;
 }
 .winctl button {
   width: 46px;
@@ -561,23 +572,50 @@ html[data-platform="windows"] .top {
   gap: 10px;
   padding: 0 18px 0 12px;
   border-bottom: 1px solid var(--line);
+
+  /* The bar's controls condense on its own content width ("Narrow top bars" below), which on
+     Windows is already less the room kept for the window's buttons. */
+  container: top / inline-size;
 }
 .top .hist {
   display: flex;
   gap: 2px;
 }
+
+/* The title and subtitle are the only things in the bar that give way: the subtitle shrinks to
+   nothing first, then the title down to the crumbs' minimum, a few characters, each ending in an
+   ellipsis; neither ever paints under the controls after them. The title doesn't flex (a shrink of
+   a fraction of a pixel would already bring its ellipsis on) but is capped at the crumbs' width, so
+   it only gives way once the subtitle has gone. The minimum is the crumbs' rather than the title's
+   so a short title isn't padded out to it. The subtitle's dot and the space around it are inside
+   the subtitle, so they go with it. */
 .top .crumbs {
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
+  min-width: 48px;
+  overflow: hidden;
   white-space: nowrap;
   color: var(--ink3);
   font-weight: 500;
 }
 .top .crumbs b {
+  flex: none;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--ink);
   font-weight: 600;
+}
+.top .crumbs .sub {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.top .crumbs .sub::before {
+  content: "·";
+  margin: 0 6px;
 }
 
 /* The Teams and Outlook dot (SyncDot). */
@@ -10373,15 +10411,75 @@ html.tray-view body {
 
 /* Narrow windows: the top bar keeps its words on one line, side columns narrow, and a pane's own
    side column goes under it when there isn't room beside it. */
-.top .crumbs > span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.top .crumbs b,
 .seg button,
 .seglabel,
 .wprog {
   white-space: nowrap;
+}
+
+/* Narrow top bars. The bar's controls condense in two bands of its content width (container top,
+   set on .top), so the bar fits a 1000px window and the 1040px minimum with the widest sidebar, on
+   Windows too, where the window's buttons take 156px of it. Tight (800px and under): a segmented
+   control's details (.segd, the counts) go, and words with a tight form (.sq-t) take it. Narrow
+   (680px and under): a segmented control becomes its drop-down twin (.segsel, drawn by Seg in a bar),
+   its label and the progress bars go, words with a narrow form (.sq-n, an empty one leaving a button its icon alone) take it, and the
+   gaps close up. Graph's centre picker gives way before the title from the tight band on, and
+   narrow it takes what's left, down to its search glyph. A space in a detail is kept as typed, so "Notes · 1" lays
+   out as the one string did. */
+.segd {
+  white-space: pre;
+}
+.segsel {
+  display: none;
+}
+.sq:not(.sq-w) {
+  display: none;
+}
+
+@container top (width <= 800px) {
+  .top .segd {
+    display: none;
+  }
+  .top .sq:not(.sq-t) {
+    display: none;
+  }
+  .top .sq.sq-t {
+    display: inline;
+  }
+  .top .gpick {
+    width: auto;
+    flex: 0 10 240px;
+    min-width: 110px;
+  }
+}
+
+@container top (width <= 680px) {
+  .top {
+    gap: 8px;
+  }
+  .top .seg,
+  .top .seglabel,
+  .top .pbar {
+    display: none;
+  }
+  .top .segsel {
+    display: block;
+    max-width: 160px;
+  }
+  .top .sq:not(.sq-n) {
+    display: none;
+  }
+  .top .sq.sq-n {
+    display: inline;
+  }
+  .top .sq.sq-n:empty {
+    display: none;
+  }
+  .top .gpick {
+    flex: 1 10 240px;
+    max-width: 240px;
+    min-width: 40px;
+  }
 }
 
 @container pdetail (max-width: 720px) {
