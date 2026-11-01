@@ -455,8 +455,9 @@ function AccentColour() {
         onChange={setAccent}
       />
       <p className="faint">
-        System takes the accent colour from Windows Settings › Personalisation › Colours and follows it when it changes, lighter or darker
-        where text on it would be hard to read.
+        App is Brainstead's own blue. System takes the accent colour from Windows Settings › Personalisation › Colours and follows it when
+        you change it there, lighter or darker where text on it would be hard to read. It colours buttons, links, the selected row and the
+        focus ring, not the theme, and is kept for this computer, not in the vault.
       </p>
     </div>
   );
@@ -492,9 +493,10 @@ function PaneWidths() {
         ))}
       </div>
       <p className="faint">
-        Drag the line between two panes, or beside a table column's heading, to resize it; arrow keys move a focused divider and Enter or a
-        double-click puts it back. Lock pane widths keeps the screens' panes and the sidebar as they are, Lock column widths every table's
-        columns; Reset pane widths still works while they're locked. Widths and locks are kept for this computer.
+        Reset pane widths puts every pane and table column back to its usual width; Lock pane widths keeps the sidebar and the screens'
+        panes as they are, and Lock column widths every table's columns, with their lines hidden. To resize one pane, drag the line between
+        two panes or beside a column's heading; the arrow keys move a focused line, and Enter or a double-click puts that pane back. A lock
+        keeps the widths you set and doesn't stop Reset pane widths. Widths and locks are kept for this computer, not in the vault.
       </p>
     </div>
   );
@@ -542,8 +544,10 @@ function InterfaceSize() {
         </span>
       </div>
       <p className="faint">
-        Everything in the window, from the sidebar to the text, bigger or smaller together. {keyLabel("⇧⌘=")} and {keyLabel("⇧⌘-")} change
-        it anywhere and {keyLabel("⇧⌘0")} puts it back. A note's Text size comes on top of it.
+        Smaller and Bigger change everything in the window together, from {INTERFACE_SIZE.min}% to {INTERFACE_SIZE.max}% in steps of{" "}
+        {INTERFACE_SIZE.step}: the sidebar, lists, dialogs and the text of notes. {keyLabel("⇧⌘=")} and {keyLabel("⇧⌘-")} do the same from
+        any screen, and {keyLabel("⇧⌘0")} puts it back to {INTERFACE_SIZE.default}%. A note's Text size is separate and comes on top of it,
+        the quick capture window stays at 100%, and the size is kept for this computer, not in the vault.
       </p>
     </div>
   );

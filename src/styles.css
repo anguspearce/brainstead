@@ -2253,6 +2253,16 @@ details.callout[open] .callout-chev {
   padding: 16px;
 }
 
+/* On Windows a whole-window overlay (a diagram full screen, an image full size, the preview panel)
+   starts below the window's own title bar, the top bar's height, and leaves that bar uncovered: the
+   window's buttons (.winctl, fixed at the top right over everything) keep their own row instead of
+   sitting on the overlay's own buttons there, and the bar still drags the window (the overlay stays
+   open for that press: keepOpen in src/ui.tsx). macOS and Linux keep the overlay over the whole
+   window, since their title bars are the system's. */
+html[data-platform="windows"] .scrim.mfull {
+  top: var(--top-h);
+}
+
 /* An image full size (src/ImageViewer.tsx): fitted to the window, or at its actual size, scrolled. */
 .prose img.zoomable {
   cursor: zoom-in;
@@ -2282,8 +2292,11 @@ details.callout[open] .callout-chev {
   max-height: none;
   cursor: zoom-out;
 }
+
+/* Placed in the scrim (the nearest positioned ancestor), not the viewport, so on Windows it moves
+   down with the scrim and stays clear of the window's buttons; a scrolled image doesn't move it. */
 .imgclose {
-  position: fixed;
+  position: absolute;
   top: 24px;
   right: 24px;
   background: var(--surface);
@@ -2440,13 +2453,14 @@ html[data-platform="windows"] .scrim.winprevscrim {
   align-self: flex-start;
 }
 
-/* Settings › General › Appearance: Interface size and Accent colour (a label, the control, a note) */
+/* Settings › General › Appearance: Accent colour, Interface size and Pane widths (a label, the
+   control, a note). No width of its own: the note runs the pane's width, as the pane's other notes
+   do, and the controls keep their own (.seg and the buttons don't stretch). */
 .ifacesize {
   margin-top: 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 420px;
 }
 .ifacesize .pct {
   min-width: 44px;
