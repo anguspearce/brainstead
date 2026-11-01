@@ -208,8 +208,21 @@ export function Tooltips() {
   );
 }
 
-/** Closes on Escape or a click outside. */
-export function useDismiss(ref: React.RefObject<HTMLElement | null>, onClose: () => void, active = true) {
+/** A press outside a whole-window overlay (a full-screen diagram, an image full size) that leaves
+ *  it open: the window's own minimise, maximise and close (.winctl, page markup outside the overlay;
+ *  it hides and comes back with the window), and the empty part of the top bar, which drags or
+ *  maximises the window (Tauri drags only from the element that carries the mark itself, never from
+ *  a button in it). For useDismiss's `keep`. */
+export const keepOpen = (t: Element): boolean => !!t.closest?.(".winctl") || !!t.hasAttribute?.("data-tauri-drag-region");
+
+/** Closes on Escape or a click outside, except a click on what `keep` matches (a selector) or the
+ *  element it says yes to (a function, given the element pressed). */
+export function useDismiss(
+  ref: React.RefObject<HTMLElement | null>,
+  onClose: () => void,
+  active = true,
+  keep?: string | ((pressed: Element) => boolean),
+) {
   useEffect(() => {
     if (!active) return;
     const key = (e: KeyboardEvent) => {
@@ -219,7 +232,10 @@ export function useDismiss(ref: React.RefObject<HTMLElement | null>, onClose: ()
       }
     };
     const down = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+      if (!ref.current || ref.current.contains(e.target as Node)) return;
+      const t = e.target as Element | null;
+      if (t && keep && (typeof keep === "string" ? t.closest?.(keep) : keep(t))) return;
+      onClose();
     };
     window.addEventListener("keydown", key, true);
     const t = window.setTimeout(() => window.addEventListener("mousedown", down), 0);
@@ -228,7 +244,7 @@ export function useDismiss(ref: React.RefObject<HTMLElement | null>, onClose: ()
       window.removeEventListener("mousedown", down);
       window.clearTimeout(t);
     };
-  }, [ref, onClose, active]);
+  }, [ref, onClose, active, keep]);
 }
 
 /** A floating card placed below (or above, or beside) an anchor rectangle and kept on screen. */

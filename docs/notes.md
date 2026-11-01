@@ -47,7 +47,7 @@ Choose **Read aloud** on the top bar's ⋯, or press ⇧⌘P, to hear the note o
 
 - **Tasks queries** (`tasks` blocks) and **Dataview** (`dataview` blocks: TABLE, LIST, TASK and CALENDAR) run in View, with tasks you can tick. In Edit, the editor suggests what comes next, and **Build query…** opens a builder with a live preview.
 - **Callouts** (`> [!tip] Title`) are tinted boxes with an icon; `[!tip]-` or `[!tip]+` makes them fold.
-- **Mermaid** diagrams, with pan, zoom and a full-screen button (Escape closes it).
+- **Mermaid** diagrams, with pan, zoom and a full-screen button (Escape closes it; on Windows the full screen opens below the title bar, so the window's own buttons keep their row and don't close it).
 - **KaTeX** maths (`$…$` and `$$…$$`); an amount like $5 isn't taken for maths.
 - Highlighted code, and `==highlights==` in colours.
 
