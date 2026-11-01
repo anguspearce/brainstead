@@ -250,6 +250,17 @@ html[data-platform="windows"] .tlspace {
   right: 0;
   z-index: 100;
   display: flex;
+
+  /* The top bar's own background (the main area's, in both themes), so a bar whose controls still
+     overflow never shows through the window's buttons. */
+  background: var(--ground);
+}
+
+/* Under a whole-window scrim (a dialog) the strip goes clear again, so the dimming reaches the
+   buttons' row as it does the rest of the bar; the full-screen overlays (.mfull) start below the bar
+   on Windows and leave it undimmed. */
+body:has(.scrim:not(.mfull)) .winctl {
+  background: transparent;
 }
 .winctl button {
   width: 46px;
@@ -561,23 +572,50 @@ html[data-platform="windows"] .top {
   gap: 10px;
   padding: 0 18px 0 12px;
   border-bottom: 1px solid var(--line);
+
+  /* The bar's controls condense on its own content width ("Narrow top bars" below), which on
+     Windows is already less the room kept for the window's buttons. */
+  container: top / inline-size;
 }
 .top .hist {
   display: flex;
   gap: 2px;
 }
+
+/* The title and subtitle are the only things in the bar that give way: the subtitle shrinks to
+   nothing first, then the title down to the crumbs' minimum, a few characters, each ending in an
+   ellipsis; neither ever paints under the controls after them. The title doesn't flex (a shrink of
+   a fraction of a pixel would already bring its ellipsis on) but is capped at the crumbs' width, so
+   it only gives way once the subtitle has gone. The minimum is the crumbs' rather than the title's
+   so a short title isn't padded out to it. The subtitle's dot and the space around it are inside
+   the subtitle, so they go with it. */
 .top .crumbs {
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-width: 0;
+  min-width: 48px;
+  overflow: hidden;
   white-space: nowrap;
   color: var(--ink3);
   font-weight: 500;
 }
 .top .crumbs b {
+  flex: none;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--ink);
   font-weight: 600;
+}
+.top .crumbs .sub {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.top .crumbs .sub::before {
+  content: "·";
+  margin: 0 6px;
 }
 
 /* The Teams and Outlook dot (SyncDot). */
@@ -1257,12 +1295,35 @@ body.presizing * {
 .spane {
   /* Full width so the scrollbar sits at the window's edge; the right padding keeps the content
      to about three quarters of the pane, so its text doesn't wrap early (percentages here are of
-     the pane's width). */
-  padding: 24px max(40px, 25%) 40px 40px;
+     the pane's width). In a pane 520px or narrower (a wide sidebar and the Settings list beside it
+     in a small window) the quarter would leave less than the widest control (the name field,
+     320px), so the padding is the left side's 40px: the inner term is the quarter at 520px and
+     falls ten times as fast below it, so the max takes 40px from 511px down; a container query
+     can't size its own container, which is why it's a formula. */
+  padding: 24px max(40px, min(25%, calc(10 * (100% - 520px) + 130px))) 40px 40px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 22px;
+  container: spane / inline-size;
+}
+
+/* Narrower still, a row's controls go under its label (a Settings row, and a job's row with its
+   day and time), as the Models by job card's rows do, rather than squeezing the label to a word a
+   line. */
+@container spane (width <= 440px) {
+  /* .spane first: a job's row is a grid (.job, later in the file), and the Models by job card's
+     rows stay a subgrid until their own card is narrow. */
+  .spane .srow,
+  .spane .job {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .spane .srow .t,
+  .spane .job .t {
+    flex: 1 1 160px;
+    min-width: 0;
+  }
 }
 
 /* Cards side by side in a section read as one card, a line between them, so it's clear which
@@ -1301,6 +1362,36 @@ body.presizing * {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
+}
+
+/* Settings › AI assistants › Models by job: the job, its model and its Effort menu in columns that
+   line up down the list (each row is a subgrid of the card's columns), so a long job name wraps in
+   its own column instead of pushing the menus about. The px here scale with Interface size, which
+   zooms the whole webview. A job whose model takes no level keeps its menu, hidden, so every row is
+   one height. In a narrow pane (the container query) the rows wrap as the other cards' do. */
+.card.jobmodels {
+  display: grid;
+  grid-template-columns: auto minmax(140px, 1fr) auto auto;
+  container-type: inline-size;
+}
+.card.jobmodels .srow {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+.card.jobmodels .effortpick.placeholder {
+  visibility: hidden;
+}
+
+@container (max-width: 540px) {
+  .card.jobmodels .srow {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .card.jobmodels .srow .t {
+    flex: 1 1 160px;
+  }
 }
 
 /* Settings › Vault: each of the index's counts on one line */
@@ -2223,6 +2314,16 @@ details.callout[open] .callout-chev {
   padding: 16px;
 }
 
+/* On Windows a whole-window overlay (a diagram full screen, an image full size, the preview panel)
+   starts below the window's own title bar, the top bar's height, and leaves that bar uncovered: the
+   window's buttons (.winctl, fixed at the top right over everything) keep their own row instead of
+   sitting on the overlay's own buttons there, and the bar still drags the window (the overlay stays
+   open for that press: keepOpen in src/ui.tsx). macOS and Linux keep the overlay over the whole
+   window, since their title bars are the system's. */
+html[data-platform="windows"] .scrim.mfull {
+  top: var(--top-h);
+}
+
 /* An image full size (src/ImageViewer.tsx): fitted to the window, or at its actual size, scrolled. */
 .prose img.zoomable {
   cursor: zoom-in;
@@ -2252,8 +2353,11 @@ details.callout[open] .callout-chev {
   max-height: none;
   cursor: zoom-out;
 }
+
+/* Placed in the scrim (the nearest positioned ancestor), not the viewport, so on Windows it moves
+   down with the scrim and stays clear of the window's buttons; a scrolled image doesn't move it. */
 .imgclose {
-  position: fixed;
+  position: absolute;
   top: 24px;
   right: 24px;
   background: var(--surface);
@@ -2410,13 +2514,14 @@ html[data-platform="windows"] .scrim.winprevscrim {
   align-self: flex-start;
 }
 
-/* Settings › General › Appearance: Interface size and Accent colour (a label, the control, a note) */
+/* Settings › General › Appearance: Accent colour, Interface size and Pane widths (a label, the
+   control, a note). No width of its own: the note runs the pane's width, as the pane's other notes
+   do, and the controls keep their own (.seg and the buttons don't stretch). */
 .ifacesize {
   margin-top: 14px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 420px;
 }
 .ifacesize .pct {
   min-width: 44px;
@@ -2695,6 +2800,7 @@ html[data-platform="windows"] .scrim.winprevscrim {
   overflow-y: auto;
   padding: 0 0 40px;
   min-width: 0;
+  container: tpage / inline-size;
 }
 
 /* The Tasks screen's list is a table: no header, a band per group, flat rows with dividers. */
@@ -7001,6 +7107,15 @@ select.sel {
   flex-direction: column;
   gap: 18px;
   align-items: flex-start;
+  container: iopen / inline-size;
+}
+
+/* A narrow detail (a wide list beside it in a small window): the suggestion's Accept goes under
+   "Suggested: ..." (together they take about 270px of the card) rather than past the card's edge. */
+@container iopen (width <= 400px) {
+  .isugg-head {
+    flex-wrap: wrap;
+  }
 }
 .iopen .soon {
   align-self: center;
@@ -9083,6 +9198,17 @@ button.hc {
   min-width: 0;
   min-height: 0;
 }
+.rthread {
+  container: rthread / inline-size;
+}
+
+/* A narrow thread column (a wide sidebar in a small window): its menu, about 240px wide with a
+   thread's name, goes under the Thread label rather than over the Drafted reply label beside it. */
+@container rthread (width <= 320px) {
+  .rthread > .row {
+    flex-wrap: wrap;
+  }
+}
 .rthread > .row,
 .rdraft > .row {
   flex: none;
@@ -9202,11 +9328,21 @@ button.hc {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  container: dcform / inline-size;
 }
 .dcform .row,
 .doccheck section > .row {
   gap: 10px;
   align-items: center;
+}
+
+/* A narrow form (a wide sidebar in a small window): the Against row's menu and hint, about 580px
+   with the switch, go under it, and the Check row's button under its field, rather than past the
+   card's edge. */
+@container dcform (width <= 620px) {
+  .dcform .row {
+    flex-wrap: wrap;
+  }
 }
 
 /* The register's heading row, then its table, with room between them. */
@@ -10241,6 +10377,20 @@ html.tray-view body {
   content: "· ";
 }
 
+/* Tasks' list between two wide panes in a small window: a suggestion's Accept, Edit and Skip, and
+   the heading's Look again, go under the text (the buttons and the heading's words take about
+   190px; the text keeps 200px to a line) rather than squeezing it to a word a line. After the
+   rules above, which set the text's flex. */
+@container tpage (width <= 400px) {
+  .foundhead,
+  .foundrow {
+    flex-wrap: wrap;
+  }
+  .foundrow .t {
+    flex-basis: 100%;
+  }
+}
+
 /* A system note's header, locked in the editor (src/editor/systemLock.ts). */
 .cm-syslock {
   display: inline-flex;
@@ -10329,15 +10479,75 @@ html.tray-view body {
 
 /* Narrow windows: the top bar keeps its words on one line, side columns narrow, and a pane's own
    side column goes under it when there isn't room beside it. */
-.top .crumbs > span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.top .crumbs b,
 .seg button,
 .seglabel,
 .wprog {
   white-space: nowrap;
+}
+
+/* Narrow top bars. The bar's controls condense in two bands of its content width (container top,
+   set on .top), so the bar fits a 1000px window and the 1040px minimum with the widest sidebar, on
+   Windows too, where the window's buttons take 156px of it. Tight (800px and under): a segmented
+   control's details (.segd, the counts) go, and words with a tight form (.sq-t) take it. Narrow
+   (680px and under): a segmented control becomes its drop-down twin (.segsel, drawn by Seg in a bar),
+   its label and the progress bars go, words with a narrow form (.sq-n, an empty one leaving a button its icon alone) take it, and the
+   gaps close up. Graph's centre picker gives way before the title from the tight band on, and
+   narrow it takes what's left, down to its search glyph. A space in a detail is kept as typed, so "Notes · 1" lays
+   out as the one string did. */
+.segd {
+  white-space: pre;
+}
+.segsel {
+  display: none;
+}
+.sq:not(.sq-w) {
+  display: none;
+}
+
+@container top (width <= 800px) {
+  .top .segd {
+    display: none;
+  }
+  .top .sq:not(.sq-t) {
+    display: none;
+  }
+  .top .sq.sq-t {
+    display: inline;
+  }
+  .top .gpick {
+    width: auto;
+    flex: 0 10 240px;
+    min-width: 110px;
+  }
+}
+
+@container top (width <= 680px) {
+  .top {
+    gap: 8px;
+  }
+  .top .seg,
+  .top .seglabel,
+  .top .pbar {
+    display: none;
+  }
+  .top .segsel {
+    display: block;
+    max-width: 160px;
+  }
+  .top .sq:not(.sq-n) {
+    display: none;
+  }
+  .top .sq.sq-n {
+    display: inline;
+  }
+  .top .sq.sq-n:empty {
+    display: none;
+  }
+  .top .gpick {
+    flex: 1 10 240px;
+    max-width: 240px;
+    min-width: 40px;
+  }
 }
 
 @container pdetail (max-width: 720px) {

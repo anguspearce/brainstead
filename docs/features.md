@@ -9,13 +9,13 @@ The user guide to Brainstead, a Mac and Windows app for tasks, notes and an [LLM
 | [Tasks and GTD](tasks.md) | Today, Quick capture, the Inbox, Tasks, Projects, the weekly review, and how tasks are written |
 | [Notes](notes.md) | View, Edit and Source, saving and drafts, queries and callouts, templates, search and ⌘K, the Trash |
 | [The wiki and sources](wiki.md) | Sources and the browser extensions, ingest, Changes, wiki pages, Knowledge health, contradictions, meeting notes and the other tools |
-| [Ask and assistants](ask.md) | Chats with Claude Code, Codex, Copilot and Antigravity, what an assistant can do, Brainstead's tools in a terminal |
+| [Ask and assistants](ask.md) | Chats with Claude Code, Codex, Copilot and Antigravity, or Ollama's local models through Codex, what an assistant can do, Brainstead's tools in a terminal |
 | [Day to day](day-to-day.md) | The menu bar (system tray on Windows), the daily and weekly summaries and the daily check, help, Settings, and what happens in the background |
 
 ## Requirements
 
 - A Mac with Apple silicon (M1 or later) and macOS 14 or later, or a PC with Windows 10 or 11 (64-bit).
-- For Ask and the AI features: Claude Code, Codex, GitHub Copilot's CLI or Antigravity, installed and signed in. Everything else works without them.
+- For Ask and the AI features: Claude Code, Codex, GitHub Copilot's CLI or Antigravity, installed and signed in; or Ollama with a model that calls tools (about 14B parameters or more does jobs well; smaller ones miss things), and Codex to run it. Everything else works without them.
 - For the capture extensions: Chrome, Edge, Brave, Vivaldi or Chromium.
 
 ## First run
@@ -77,7 +77,7 @@ Every pane can be dragged wider or narrower by the line between it and the next:
 
 On Windows, ⌘ is Ctrl, ⌥ is Alt and ⇧ is Shift, so ⌘K is Ctrl+K. The window has no title bar, as on a Mac: its minimise, maximise and close buttons are at the top right, where Windows puts them and drawn with Windows 11's own glyphs, and the empty part of any screen's top bar drags the window (double-click it to maximise or restore). Hovering over maximise offers Windows 11's snap layouts, when they're on in Windows Settings › System › Multitasking. Where a Mac offers Quick Look (a Word, PowerPoint or Excel source, one Brainstead can't show, the Trash), Windows shows **Preview**: the file drawn in the window by the same preview handler Explorer's preview pane uses (Office's for its own files, Windows' for text, RTF, fonts and mail), framed by the file's name, **Open in its app** and Close. Each handler runs in its own process, as Explorer runs it (Office's in Word, Excel or PowerPoint, the rest in Windows' preview host), never inside Brainstead. A type Windows has no preview handler for, or one whose handler can only run inside the app, opens in its own app instead. So does a file Windows marks as downloaded from the internet (its mark of the web), which Explorer's preview pane has refused to show since Windows' October 2025 update; the panel says why.
 
-On Windows, Settings › General › Appearance › **Accent colour** can be **System**: buttons, links, the selected row, the focus ring and checked boxes then take the Windows accent colour, as Windows Settings and Terminal do, and follow it at once when it changes. A colour that text on it would be hard to read is made lighter or darker, keeping its hue.
+On Windows, Settings › General › Appearance › **Accent colour** can be **System**: buttons, links, the selected row, the focus ring and checked boxes then take the Windows accent colour, as Windows Settings and Terminal do, and follow it at once when it changes. The colour is lighter or darker where text on it would be hard to read, keeping its hue.
 
 Every screen remembers its list, filter and selection across restarts. Back and forward go through where you've been. Closing the window leaves Brainstead running in the [menu bar](day-to-day.md#the-menu-bar) (on Windows, if **Show in the menu bar** is on; otherwise closing the window quits). ⌘Q quits (on Windows, which has no menu bar, the tray's **Quit Brainstead**), asking first about unsaved edits.
 

@@ -2477,7 +2477,7 @@ async function assistantsFound(a: Args): Promise<string> {
     `Found on this computer (Settings › AI assistants)${a.look_again === true ? ", looked for again just now" : ""}: ${n ? `${n} assistant${n === 1 ? "" : "s"}` : "no assistants"}.`,
     ...found.map(
       (c) =>
-        `- ${CLI_LABEL[c.cli]}${c.version ? ` · ${c.version}` : ""}: ${c.path ? `${foundDetail(c).replace(/\.$/, "")}. ${effortSaid(c.cli)}.` : `${foundDetail(c)} How to install: ${INSTALL[c.cli]}`}`,
+        `- ${CLI_LABEL[c.cli]}${c.version ? ` · ${c.version}` : ""}: ${c.path ? `${foundDetail(c).replace(/\.$/, "")}. ${effortSaid(c.cli)}.` : `${foundDetail(c)} How to install: ${INSTALL[c.cli]}`}${c.path && c.note ? ` ${c.note.replace(/\.?$/, ".")}` : ""}`,
     ),
     "",
     cmds.length
@@ -2500,11 +2500,12 @@ function effortSaid(cli: CliName): string {
   return level ? `${effortLabel(level)} effort` : "Default effort (the assistant's own for each model)";
 }
 
-/** The effort levels an assistant can be set to, as its menus list them: none while it isn't
- *  installed, when the screens show no menu. */
-async function effortChoices(cli: CliName): Promise<[string, string][]> {
+/** The effort levels an assistant can be set to, as its menus list them (for `model`, the model's
+ *  own where its assistant lists them per model): none while it isn't installed, when the screens
+ *  show no menu. */
+async function effortChoices(cli: CliName, model?: string): Promise<[string, string][]> {
   await findClis(!clis.get()?.length);
-  return installedEfforts(cli).map((l) => [l, effortLabel(l)]);
+  return installedEfforts(cli, model).map((l) => [l, effortLabel(l)]);
 }
 
 /** A source's Provenance card, as Sources shows it: ingested or not and by which run, its size and
@@ -3255,9 +3256,10 @@ async function chatsTool(a: Args): Promise<string | Listing> {
   }
   if (action === "effort") {
     // As the menu beside the chat's model in Ask: its assistant's levels, by id or name.
-    const cli = cliOf(c.model ?? DEFAULT_MODEL);
+    const model = c.model ?? DEFAULT_MODEL;
+    const cli = cliOf(model);
     await findClis(!clis.get()?.length);
-    const levels = installedEfforts(cli);
+    const levels = installedEfforts(cli, model);
     const choices = `${levels.join(", ") || "none here"}, or empty for Default effort`;
     if (a.effort == null) throw new Error(`Give effort: for ${CLI_LABEL[cli]}, one of ${choices}.`);
     const want = String(a.effort).trim().toLowerCase();
@@ -3425,7 +3427,7 @@ const settingRows = (): SettingRow[] => [
     "model",
     null,
     modelChoices,
-    job === "weekprep" ? "As the summaries, else as new chats" : "As new chats",
+    job === "weekprep" ? "Default: the summaries' model, else new chats'" : "Default: the model new chats use",
   ]),
   ...MODEL_JOBS.map(([job, label]): SettingRow => [
     `jobEffort.${job}`,
@@ -3433,8 +3435,8 @@ const settingRows = (): SettingRow[] => [
     `Models by job › ${label} › Effort`,
     "choice",
     null,
-    () => effortChoices(cliOf(jobModelOf(job))),
-    "Assistant's setting, the effort set for the job's assistant",
+    () => effortChoices(cliOf(jobModelOf(job)), jobModelOf(job)),
+    "Default, the effort set for the job's assistant",
   ]),
   ...(Object.keys(CLI_LABEL) as CliName[]).map((cli): SettingRow => [
     `effort.${cli}`,
@@ -3511,7 +3513,7 @@ async function settingsTool(a: Args): Promise<string> {
   const valueOf = (key: string, def: unknown) => {
     if (key === "openAtLogin") return login;
     const [head, sub] = key.split(".");
-    // As Models by job shows it: a level the job's assistant doesn't offer is Assistant's setting.
+    // As Models by job shows it: a level the job's assistant doesn't offer reads Default.
     if (head === "jobEffort") return jobOwnEffort(sub, s);
     const v = sub ? nested[head][sub] : (s as unknown as Record<string, unknown>)[key];
     return v ?? def;
@@ -3548,8 +3550,9 @@ async function settingsTool(a: Args): Promise<string> {
   }
   if (action !== "set") throw new Error("action is get or set.");
   const key = str(a, "key");
-  // One pane's width, as its divider sets it: clamped to the pane's range (the screen clamps it to
-  // its room too, as it draws); null puts that pane, or with the bare key every pane, back. A pane
+  // One pane's width, as its divider sets it: clamped to the pane's range only (the screen fits it
+  // to its room as it draws, src/PaneResizer.tsx, so a width past the room shows narrower than it is
+  // kept); null puts that pane, or with the bare key every pane, back. A pane
   // whose type is locked (resizeLocks) is refused, as its divider is hidden; every pane back isn't.
   if (key === "paneWidths" || key?.startsWith("paneWidths.")) {
     const label = "Settings › General › Appearance › Pane widths";
@@ -3659,7 +3662,7 @@ async function settingsTool(a: Args): Promise<string> {
     // As Models by job does: the job's own effort goes when its new model's assistant doesn't offer it.
     const level = setJobModel(sub, (v as string | undefined) ?? null);
     if (level)
-      dropped = ` Its effort (${effortLabel(level)}) went back to Assistant's setting: ${CLI_LABEL[cliOf(jobModelOf(sub))]} doesn't offer it.`;
+      dropped = ` Its effort (${effortLabel(level)}) went back to Default: ${CLI_LABEL[cliOf(jobModelOf(sub))]} doesn't offer it for ${modelLabel(jobModelOf(sub), clis.get())}.`;
   } else if (sub) {
     const next = { ...nested[head], [sub]: v };
     if (v === undefined) delete next[sub];

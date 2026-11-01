@@ -33,12 +33,15 @@ export const CLI_LABEL: Record<CliName, string> = {
   codex: "ChatGPT (Codex)",
   antigravity: "Antigravity (Google)",
   copilot: "GitHub Copilot",
+  ollama: "Ollama",
 };
 
-/** Which CLI a model id runs on, as Rust routes it (brainstead_core::ask::Cli::route). */
+/** Which CLI a model id runs on, as Rust routes it (brainstead_core::ask::Cli::route). An `ollama:`
+ *  model runs through Codex, pointed at Ollama's server, under its own entry. */
 export function cliOf(model: string): CliName {
   if (model.startsWith("agy:")) return "antigravity";
   if (model.startsWith("copilot:")) return "copilot";
+  if (model.startsWith("ollama:")) return "ollama";
   if (model.startsWith("claude")) return "claude";
   return "codex";
 }
@@ -67,7 +70,7 @@ export const MODEL_JOBS: [job: string, label: string, icon: string][] = [
 export function modelLabel(model: string, clis: CliInfo[] | null): string {
   const cli = cliOf(model);
   const m = clis?.find((c) => c.cli === cli)?.models.find((x) => x.id === model);
-  const name = m?.name ?? model.replace(/^(claude:|agy:|copilot:)/, "");
+  const name = m?.name ?? model.replace(/^(claude:|agy:|copilot:|ollama:)/, "");
   return `${CLI_LABEL[cli].replace(/ \(.*\)$/, "")} · ${name}`;
 }
 
@@ -98,18 +101,25 @@ export function resolveEffort(
   return [job, assistant].find((e): e is string => !!e && (!levels || levels.includes(e))) ?? null;
 }
 
-/** The levels an assistant offers, once the assistants are found (CliInfo `efforts`). */
-const levelsOf = (cli: CliName): string[] | null => clis.get()?.find((c) => c.cli === cli)?.efforts ?? null;
+/** The levels an assistant offers, once the assistants are found (CliInfo `efforts`), or, with
+ *  `model`, the model's own where the assistant lists them per model (an Ollama model's named
+ *  thinking levels; none for one that only thinks or not). */
+const levelsOf = (cli: CliName, model?: string): string[] | null => {
+  const c = clis.get()?.find((c) => c.cli === cli);
+  return c ? (model && c.models.find((m) => m.id === model)?.efforts) || c.efforts : null;
+};
 
-/** The levels an Effort menu offers for an assistant: none while it isn't installed, as the screens
- *  show no menu then (Found on this computer, Models by job, Ask). */
-export const installedEfforts = (cli: CliName): string[] => clis.get()?.find((c) => c.cli === cli && c.path)?.efforts ?? [];
+/** The levels an Effort menu offers for an assistant, or for `model` where its assistant lists them
+ *  per model: none while the assistant isn't installed, as the screens show no menu then (Found on
+ *  this computer, Models by job, Ask). */
+export const installedEfforts = (cli: CliName, model?: string): string[] =>
+  clis.get()?.some((c) => c.cli === cli && c.path) ? (levelsOf(cli, model) ?? []) : [];
 
 /** The effort a new chat on `model` starts with: the assistant's (no job's, so a job's level never
- *  becomes a chat's), or null for the assistant's own default. */
+ *  becomes a chat's), or null for the assistant's own default (or a model that takes no level). */
 export function effortFor(model: string): string | null {
   const cli = cliOf(model);
-  return resolveEffort(levelsOf(cli), null, settings.get().effort?.[cli]);
+  return resolveEffort(levelsOf(cli, model), null, settings.get().effort?.[cli]);
 }
 
 /** The model `job` runs on: its own, else (the weekly review's preparation) the summaries', else new
@@ -125,13 +135,14 @@ export function jobModelOf(job: string, s: Settings = settings.get()): string {
  *  brainstead_core::ask::job_own_effort is the same rule. */
 export function jobOwnEffort(job: string, s: Settings = settings.get()): string | null {
   const level = s.jobEffort?.[job];
-  const levels = levelsOf(cliOf(jobModelOf(job, s)));
+  const model = jobModelOf(job, s);
+  const levels = levelsOf(cliOf(model), model);
   return level && (!levels || levels.includes(level)) ? level : null;
 }
 
 /** Sets `job`'s model (null: back to its default), as Models by job does. When the assistant of the
  *  model the job now runs on doesn't offer its own effort (once the assistants are found), that goes
- *  back to Assistant's setting; returns the level dropped. Only the job's own model does this: while
+ *  back to Default; returns the level dropped. Only the job's own model does this: while
  *  a model it inherits (New chats use, or the summaries' for weekprep) is on such an assistant, the
  *  level is set aside (`jobOwnEffort`) and comes back with the model. */
 export function setJobModel(job: string, model: string | null): string | null {
@@ -139,7 +150,8 @@ export function setJobModel(job: string, model: string | null): string | null {
   const { [job]: _, ...rest } = s.jobModels ?? {};
   const jobModels = model ? { ...rest, [job]: model } : rest;
   const level = s.jobEffort?.[job];
-  const levels = levelsOf(cliOf(jobModelOf(job, { ...s, jobModels })));
+  const next = jobModelOf(job, { ...s, jobModels });
+  const levels = levelsOf(cliOf(next), next);
   if (!level || !levels || levels.includes(level)) {
     settings.update({ jobModels });
     return null;
@@ -310,8 +322,9 @@ export function followEffortSettings(): () => void {
     was = settings.get().effort;
     if (was === before) return;
     const stale = (c: Chat) => {
-      const cli = cliOf(c.model ?? DEFAULT_MODEL);
-      return fresh(c) && (c.effort ?? null) === resolveEffort(levelsOf(cli), null, before?.[cli]);
+      const model = c.model ?? DEFAULT_MODEL;
+      const cli = cliOf(model);
+      return fresh(c) && (c.effort ?? null) === resolveEffort(levelsOf(cli, model), null, before?.[cli]);
     };
     if (ask.get().chats.some(stale))
       setChats((cs) => cs.map((c) => (stale(c) ? { ...c, effort: effortFor(c.model ?? DEFAULT_MODEL) } : c)));

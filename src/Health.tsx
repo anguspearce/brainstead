@@ -43,7 +43,7 @@ import { nav, openDoc, useViewState } from "./nav";
 import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
 import { MoreMenu, TopBar } from "./TopBar";
-import { Dialog, LayerTag } from "./ui";
+import { Dialog, LayerTag, Squeeze } from "./ui";
 import { Store, useStore } from "./store";
 import { keyLabel } from "./platform";
 import { vaultVersion } from "./state";
@@ -126,7 +126,7 @@ const reshaped = (r: { applied: number; failed: string[] }) =>
   );
 
 export function HealthScreen() {
-  const panes = usePanes({ "health.side": PANES["health.side"] });
+  const panes = usePanes({ "health.side": PANES["health.side"] }, { minFlex: 360 });
   useEffect(startKnowledge, []);
   const h = useStore(health);
   const r = h?.report ?? null;
@@ -192,7 +192,10 @@ export function HealthScreen() {
           disabled={!fixes.length}
           onClick={() => act("fix-all", () => api.healthFix(fixes), fixed)}
         >
-          Fix safe issues{fixes.length ? ` (${fixes.length})` : ""}
+          <Squeeze
+            full={`Fix safe issues${fixes.length ? ` (${fixes.length})` : ""}`}
+            narrow={`Fix safe${fixes.length ? ` (${fixes.length})` : ""}`}
+          />
         </BusyButton>
         <button
           type="button"

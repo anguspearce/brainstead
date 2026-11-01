@@ -21,7 +21,7 @@ import { InfoTip, TaskEditor, taskKey, TaskList, TasksFailed, useTaskListKeys } 
 import { taskDate } from "./taskDates";
 import { leftOutNote, parkedLeftOut, tasksFailed, useAllTasks, viewRows, VIEWS, ViewId } from "./taskModel";
 import { askLink, askQuote, TopBar } from "./TopBar";
-import { fmtCount, Popover, SearchBox, Seg, TableBand, useDebounced, usePinnedBar } from "./ui";
+import { fmtCount, Popover, SearchBox, Seg, Squeeze, TableBand, useDebounced, usePinnedBar } from "./ui";
 import { settings, useStore } from "./store";
 import type { SavedTaskList } from "./api";
 import { keyLabel } from "./platform";
@@ -46,7 +46,7 @@ const groupTip = (by: GroupBy, label: string) =>
           : `due ${label.toLowerCase()}`;
 
 export function TasksScreen() {
-  const panes = usePanes({ "tasks.left": PANES["tasks.left"], "tasks.side": PANES["tasks.side"] });
+  const panes = usePanes({ "tasks.left": PANES["tasks.left"], "tasks.side": PANES["tasks.side"] }, { minFlex: 320 });
   const all = useAllTasks();
   const inbox = useInbox();
   const [viewId, setViewId] = useViewState("tasks:view", "next");
@@ -163,7 +163,7 @@ export function TasksScreen() {
           onClick={(e) => setAdding(e.currentTarget.getBoundingClientRect())}
         >
           <Icon name="plus" size={14} />
-          New task
+          <Squeeze full="New task" narrow="New" />
         </button>
       </TopBar>
       <div className="body tasks3" {...panes.root}>

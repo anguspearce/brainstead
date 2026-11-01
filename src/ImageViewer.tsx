@@ -5,13 +5,15 @@
 // An image full size over the whole window, as a diagram's Full screen shows it: a click on an
 // image in View, its expand button in Edit, or `open` with an image. It fits the window; a click
 // shows it at its actual size (scrolled), another fits it again. Escape, a click outside or the
-// button closes it.
+// button closes it. On Windows it starts below the window's own title bar (styles.css,
+// .scrim.mfull), whose buttons would otherwise sit on its Close, and a press on those buttons or on
+// the bar leaves it open.
 
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 import { Store, useStore } from "./store";
-import { useDismiss } from "./ui";
+import { keepOpen, useDismiss } from "./ui";
 
 /** The image showing full size: its URL, and its alt text for the dialog's label. */
 export const imageView = new Store<{ url: string; alt: string } | null>(null);
@@ -24,7 +26,7 @@ export function ImageViewerHost() {
 function ImageViewer({ url, alt, onClose }: { url: string; alt: string; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [actual, setActual] = useState(false);
-  useDismiss(ref, onClose);
+  useDismiss(ref, onClose, true, keepOpen);
   return createPortal(
     <div className="scrim mfull">
       <div

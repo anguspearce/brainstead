@@ -61,7 +61,7 @@ const PANES: [SettingsPane, string, string][] = [
 ];
 
 export function SettingsScreen() {
-  const split = usePanes({ "settings.left": PANE_SPECS["settings.left"] });
+  const split = usePanes({ "settings.left": PANE_SPECS["settings.left"] }, { minFlex: 360 });
   const p = useStore(place).place;
   const features = useFeatures();
   const panes = PANES.filter(([id]) => (id !== "permissions" || features.fullDiskAccess) && (id !== "sync" || hasSync));
@@ -193,16 +193,19 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
   const [at, setAt] = useState<{ job: string; rect: DOMRect } | null>(null);
   const models = s.jobModels ?? {};
   // The weekly review's preparation falls back to the summaries' model (src-tauri/src/weekprep.rs).
-  const fallbackFor = (job: string) => (job === "weekprep" && models.summaries ? models.summaries : fallback);
-  const fallbackName = (job: string) => (job === "weekprep" && models.summaries ? "As the summaries" : "As new chats");
+  const borrows = (job: string) => job === "weekprep" && !!models.summaries;
+  const fallbackFor = (job: string) => (borrows(job) ? models.summaries! : fallback);
+  // Whose model the default is, for the menu item and the tooltip.
+  const fallbackName = (job: string) => (borrows(job) ? "Default: the summaries' model" : "Default: the model new chats use");
   const levelsFor = (job: string) => {
-    const levels = found ? installedEfforts(cliOf(jobModelOf(job, s))) : [];
+    const model = jobModelOf(job, s);
+    const levels = found ? installedEfforts(cliOf(model), model) : [];
     return levels.length ? levels : null;
   };
   return (
     <section className="sgroup">
       <h2 className="h3">Models by job</h2>
-      <div className="card">
+      <div className="card jobmodels">
         {MODEL_JOBS.map(([job, label, icon]) => (
           <div key={job} className="srow">
             <Icon name={icon} />
@@ -212,15 +215,17 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
             <button
               type="button"
               className="btn sm"
-              title={`Choose the model for ${label.toLowerCase()}`}
+              title={
+                models[job]
+                  ? `Choose the model for ${label.toLowerCase()}`
+                  : `Choose the model for ${label.toLowerCase()}; until it has its own it runs on ${fallbackName(job).replace(/^Default: /, "")}`
+              }
               onClick={(e) => setAt({ job, rect: e.currentTarget.getBoundingClientRect() })}
             >
               {models[job] ? (
                 modelLabel(models[job], found)
               ) : (
-                <span className="faint">
-                  {fallbackName(job)} ({modelLabel(fallbackFor(job), found)})
-                </span>
+                <span className="faint">Default ({modelLabel(fallbackFor(job), found)})</span>
               )}
               <Icon name="chevdown" size={12} />
             </button>
@@ -234,7 +239,7 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
             <div className="menu">
               <button
                 type="button"
-                title={`Use the same model as ${fallbackName(at.job).replace(/^As /, "")} for this job`}
+                title={`Use ${fallbackName(at.job).replace(/^Default: /, "")} for this job`}
                 onClick={() => {
                   setJobModel(at.job, null);
                   setAt(null);
@@ -261,26 +266,32 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
 }
 
 /** A job's own effort (`jobEffort.<job>`), the same menu as an assistant's under Found on this
- *  computer; Assistant's setting leaves it to `effort.<cli>`, which new chats start from. Not shown
- *  while the job's assistant isn't found. */
+ *  computer; Default leaves it to `effort.<cli>`, which new chats start from. While the job's
+ *  assistant isn't found, or its model takes no level, the menu is kept but hidden, so the rows of
+ *  Models by job stay one height. */
 function JobEffort({ job, label, levels }: { job: string; label: string; levels: string[] | null }) {
   const s = useStore(settings);
-  if (!levels) return null;
   const efforts = s.jobEffort ?? {};
   return (
-    <label className="effortpick" title={`How hard the assistant thinks for ${label.toLowerCase()}, without changing new chats'`}>
+    <label
+      className={`effortpick${levels ? "" : " placeholder"}`}
+      aria-hidden={!levels}
+      title={levels ? `How hard the assistant thinks for ${label.toLowerCase()}, without changing new chats'` : undefined}
+    >
       <span className="faint">Effort</span>
       <select
         className="sel"
         aria-label={`Effort for ${label.toLowerCase()}`}
         value={jobOwnEffort(job, s) ?? ""}
+        disabled={!levels}
+        tabIndex={levels ? undefined : -1}
         onChange={(e) => {
           const { [job]: _, ...rest } = efforts;
           settings.update({ jobEffort: e.target.value ? { ...rest, [job]: e.target.value } : rest });
         }}
       >
-        <option value="">Assistant&apos;s setting</option>
-        {levels.map((l) => (
+        <option value="">Default</option>
+        {(levels ?? []).map((l) => (
           <option key={l} value={l}>
             {effortLabel(l)}
           </option>
@@ -444,8 +455,9 @@ function AccentColour() {
         onChange={setAccent}
       />
       <p className="faint">
-        System takes the accent colour from Windows Settings › Personalisation › Colours and follows it when it changes, lighter or darker
-        where text on it would be hard to read.
+        App is Brainstead's own blue. System takes the accent colour from Windows Settings › Personalisation › Colours and follows it when
+        you change it there, lighter or darker where text on it would be hard to read. It colours buttons, links, the selected row and the
+        focus ring, not the theme, and is kept for this computer, not in the vault.
       </p>
     </div>
   );
@@ -481,9 +493,10 @@ function PaneWidths() {
         ))}
       </div>
       <p className="faint">
-        Drag the line between two panes, or beside a table column's heading, to resize it; arrow keys move a focused divider and Enter or a
-        double-click puts it back. Lock pane widths keeps the screens' panes and the sidebar as they are, Lock column widths every table's
-        columns; Reset pane widths still works while they're locked. Widths and locks are kept for this computer.
+        Reset pane widths puts every pane and table column back to its usual width; Lock pane widths keeps the sidebar and the screens'
+        panes as they are, and Lock column widths every table's columns, with their lines hidden. To resize one pane, drag the line between
+        two panes or beside a column's heading; the arrow keys move a focused line, and Enter or a double-click puts that pane back. A lock
+        keeps the widths you set and doesn't stop Reset pane widths. Widths and locks are kept for this computer, not in the vault.
       </p>
     </div>
   );
@@ -531,8 +544,10 @@ function InterfaceSize() {
         </span>
       </div>
       <p className="faint">
-        Everything in the window, from the sidebar to the text, bigger or smaller together. {keyLabel("⇧⌘=")} and {keyLabel("⇧⌘-")} change
-        it anywhere and {keyLabel("⇧⌘0")} puts it back. A note's Text size comes on top of it.
+        Smaller and Bigger change everything in the window together, from {INTERFACE_SIZE.min}% to {INTERFACE_SIZE.max}% in steps of{" "}
+        {INTERFACE_SIZE.step}: the sidebar, lists, dialogs and the text of notes. {keyLabel("⇧⌘=")} and {keyLabel("⇧⌘-")} do the same from
+        any screen, and {keyLabel("⇧⌘0")} puts it back to {INTERFACE_SIZE.default}%. A note's Text size is separate and comes on top of it,
+        the quick capture window stays at 100%, and the size is kept for this computer, not in the vault.
       </p>
     </div>
   );
@@ -999,10 +1014,18 @@ export const INSTALL: Record<string, string> = {
   codex: "https://developers.openai.com/codex/cli",
   antigravity: "https://antigravity.google",
   copilot: "https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli",
+  ollama: "https://ollama.com/download",
 };
 
-/** An assistant's line under Found on this computer: its models and where it is, or what to do. */
+/** An assistant's line under Found on this computer: its models and where it is, or what to do.
+ *  Ollama's "where" is its server; Rust's note says why it can't be used (not running, Codex missing). */
 export function foundDetail(c: CliInfo): string {
+  if (c.cli === "ollama") {
+    if (!c.path) return c.note ?? "Ollama isn't running, or isn't installed.";
+    return c.models.length
+      ? `${c.models.length} model${c.models.length === 1 ? "" : "s"} · ${c.path}`
+      : `No models pulled: open ${terminalApp} and run ollama pull with a model that calls tools. · ${c.path}`;
+  }
   if (!c.path) return "Not installed.";
   return c.models.length
     ? `${c.models.length} model${c.models.length === 1 ? "" : "s"} · ${c.path}`
@@ -1196,8 +1219,9 @@ function Assistants() {
                   {CLI_LABEL[c.cli]} {c.version && <span className="faint">· {c.version}</span>}
                 </div>
                 <div className="faint">{foundDetail(c)}</div>
+                {c.path && c.note && <div className="faint">{c.note}</div>}
               </div>
-              {c.path && (
+              {c.path && !!c.efforts.length && (
                 <label
                   className="effortpick"
                   title={`How hard ${CLI_LABEL[c.cli]} thinks before answering: new chats to start with, and its jobs that have no effort of their own`}
@@ -1293,8 +1317,9 @@ function HandedOver() {
   );
 }
 
-/** Each CLI's own command to register Brainstead's server for all its sessions (its user config). */
-const ADD_COMMAND: Record<CliName, (exe: string) => string> = {
+/** Each CLI's own command to register Brainstead's server for all its sessions (its user config).
+ *  Ollama's models run through Codex, whose command covers them. */
+const ADD_COMMAND: Partial<Record<CliName, (exe: string) => string>> = {
   claude: (exe) => `claude mcp add -s user brainstead -- "${exe}" --mcp`,
   codex: (exe) => `codex mcp add brainstead -- "${exe}" --mcp`,
   copilot: (exe) => `copilot mcp add brainstead -- "${exe}" --mcp`,
@@ -1304,7 +1329,10 @@ const ADD_COMMAND: Record<CliName, (exe: string) => string> = {
 /** The commands Brainstead's tools pane shows, [assistant, command], for the assistants found on
  *  this computer (list_assistants gives the same). */
 export const terminalCommands = (found: { cli: CliName; path: string | null }[], exe: string): [string, string][] =>
-  found.filter((c) => c.path).map((c) => [CLI_LABEL[c.cli], ADD_COMMAND[c.cli](exe)]);
+  found.flatMap((c) => {
+    const cmd = ADD_COMMAND[c.cli];
+    return c.path && cmd ? [[CLI_LABEL[c.cli], cmd(exe)] as [string, string]] : [];
+  });
 
 /** Brainstead's MCP server: what Ask gives each CLI, and how to add it to one in a terminal. */
 function McpGroup() {

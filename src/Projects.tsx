@@ -34,7 +34,7 @@ import { reportEditError, undoLast, useAllTasks } from "./taskModel";
 import { toast } from "./Toast";
 import { askLink, askQuote, MoreMenu, TopBar } from "./TopBar";
 import { iconizeEmoji } from "./md/fieldEmoji";
-import { ago, Dialog, fmtCount, LayerTag, Seg } from "./ui";
+import { ago, Dialog, fmtCount, LayerTag, Seg, Squeeze } from "./ui";
 import { usePanes } from "./PaneResizer";
 import { PANES } from "./panes";
 
@@ -48,7 +48,7 @@ export function startNewProject() {
 const TABS: ProjectStatus[] = ["active", "on-hold", "someday", "done"];
 
 export function ProjectsScreen() {
-  const panes = usePanes({ "projects.list": PANES["projects.list"] });
+  const panes = usePanes({ "projects.list": PANES["projects.list"] }, { minFlex: 320 });
   const projects = useProjects();
   const all = useAllTasks();
   const here = useStore(place).place;
@@ -155,7 +155,7 @@ export function ProjectsScreen() {
         <Seg<ProjectStatus>
           label="Show"
           value={tab}
-          options={TABS.map((s) => [s, projects ? `${STATUS_LABEL[s]} ${counts.get(s) ?? 0}` : STATUS_LABEL[s]])}
+          options={TABS.map((s) => [s, STATUS_LABEL[s], undefined, projects ? ` ${counts.get(s) ?? 0}` : undefined])}
           onChange={setTab}
         />
         <button
@@ -165,7 +165,7 @@ export function ProjectsScreen() {
           onClick={() => setCreating(true)}
         >
           <Icon name="plus" size={14} />
-          New project
+          <Squeeze full="New project" narrow="New" />
         </button>
       </TopBar>
       <div className="body projects" {...panes.root}>

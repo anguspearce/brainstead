@@ -8,7 +8,7 @@ summary: Use the AI assistants already on your computer, in Ask or in Terminal, 
 Brainstead has no model of its own. It runs the assistants you've installed, signed in with your own account.
 
 ## Check which assistants are found
-Open [Settings › AI assistants](app:settings/assistants). **Found on this computer** lists Claude Code, Codex, Antigravity and Copilot, with each one's version. If one is missing, **How to install** opens its instructions. Sign in to it in Terminal, then click **Look again**.
+Open [Settings › AI assistants](app:settings/assistants). **Found on this computer** lists Claude Code, Codex, Antigravity and Copilot, with each one's version, and Ollama, for models you run yourself (through Codex). If one is missing, **How to install** opens its instructions. Sign in to it in Terminal, then click **Look again**.
 
 ## Choose the models
 In [Settings › AI assistants](app:settings/assistants), **New chats use** sets the model a new chat in [Ask](app:ask) starts with. **Models by job** gives the summaries, ingests, meeting notes and other background work a model and an effort of their own.
