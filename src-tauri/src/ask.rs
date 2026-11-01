@@ -193,6 +193,9 @@ fn ollama_info() -> CliInfo {
     // `codex --version` says "codex-cli 0.166.0"; the row already says Codex.
     let mut note =
         format!("Through Codex{}", codex_version.map(|v| format!(" {}", v.trim_start_matches("codex-cli "))).unwrap_or_default());
+    if !info.models.is_empty() {
+        note.push_str(". Jobs do best on a model of about 14B or more (gpt-oss:20b, qwen3:14b); a small one misses things");
+    }
     if !without_tools.is_empty() {
         note.push_str(&format!(
             ". Not listed, as {} can't call tools, which Codex's agent loop needs: {}",
