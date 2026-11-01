@@ -5,7 +5,7 @@ screens: []
 order: 38
 summary: What AI assistants can do in Brainstead through its tools, in Ask and in sessions outside the app, and what waits for you.
 ---
-Brainstead gives AI assistants a set of tools that do what its screens do, as an MCP server (the standard way to add tools to an assistant). Ask's Claude Code, Codex and Copilot chats get them, and so does an assistant run outside the app once you add them (the command is in [Settings › AI assistants](app:settings/assistants)).
+Brainstead gives AI assistants a set of tools that do what its screens do, as an MCP server (the standard way to add tools to an assistant). Ask's Claude Code, Codex, Copilot and Ollama chats get them (Ollama's models run through Codex), and so does an assistant run outside the app once you add them (the command is in [Settings › AI assistants](app:settings/assistants)).
 
 An assistant never edits a file itself. Its tools ask the app, which makes each change with the same checks the screens use. In short, an assistant can do whatever the screens do, and the rest of this page says what happens to each kind of change.
 

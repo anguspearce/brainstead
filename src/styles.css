@@ -1364,6 +1364,36 @@ body.presizing * {
   align-items: center;
 }
 
+/* Settings › AI assistants › Models by job: the job, its model and its Effort menu in columns that
+   line up down the list (each row is a subgrid of the card's columns), so a long job name wraps in
+   its own column instead of pushing the menus about. The px here scale with Interface size, which
+   zooms the whole webview. A job whose model takes no level keeps its menu, hidden, so every row is
+   one height. In a narrow pane (the container query) the rows wrap as the other cards' do. */
+.card.jobmodels {
+  display: grid;
+  grid-template-columns: auto minmax(140px, 1fr) auto auto;
+  container-type: inline-size;
+}
+.card.jobmodels .srow {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+.card.jobmodels .effortpick.placeholder {
+  visibility: hidden;
+}
+
+@container (max-width: 540px) {
+  .card.jobmodels .srow {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .card.jobmodels .srow .t {
+    flex: 1 1 160px;
+  }
+}
+
 /* Settings › Vault: each of the index's counts on one line */
 .srow .nowrap {
   white-space: nowrap;

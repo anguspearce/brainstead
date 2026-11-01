@@ -22,6 +22,7 @@ import {
   clis,
   effortLabel,
   effortFor,
+  installedEfforts,
   exchanges,
   followEffortSettings,
   jobModelOf,
@@ -57,11 +58,51 @@ describe("Ask state", () => {
     expect(cliOf("claude-sonnet-5")).toBe("claude");
     expect(cliOf("agy:gemini-3")).toBe("antigravity");
     expect(cliOf("copilot:auto")).toBe("copilot");
+    expect(cliOf("ollama:gpt-oss:20b")).toBe("ollama");
     expect(cliOf("gpt-5.5")).toBe("codex");
     const found = [{ cli: "claude" as const, path: "/x", version: "2", models: [{ id: "claude:sonnet", name: "Sonnet" }], efforts: [] }];
     expect(modelLabel("claude:sonnet", found)).toBe("Claude Code · Sonnet");
     expect(modelLabel("gpt-5.5", null)).toBe("ChatGPT · gpt-5.5");
+    expect(modelLabel("ollama:qwen3:4b", null)).toBe("Ollama · qwen3:4b");
     expect(["low", "xhigh", "max"].map(effortLabel)).toEqual(["Low", "Extra high", "Max"]);
+  });
+
+  it("offers an Ollama model the levels it names, and none for one that only thinks or not", () => {
+    clis.set([
+      {
+        cli: "ollama",
+        path: "http://localhost:11434",
+        version: "0.35.1",
+        efforts: ["low", "medium", "high"],
+        models: [
+          { id: "ollama:gpt-oss:20b", name: "gpt-oss:20b", efforts: ["low", "medium", "high"] },
+          { id: "ollama:qwen3:4b", name: "qwen3:4b", efforts: [] },
+        ],
+      },
+      {
+        cli: "codex",
+        path: "/bin/codex",
+        version: "1",
+        models: [{ id: "gpt-5", name: "gpt-5" }],
+        efforts: ["low", "medium", "high", "xhigh"],
+      },
+    ]);
+    // The assistant's own list, then each model's where it has one; Codex's models take Codex's.
+    expect(installedEfforts("ollama")).toEqual(["low", "medium", "high"]);
+    expect(installedEfforts("ollama", "ollama:gpt-oss:20b")).toEqual(["low", "medium", "high"]);
+    expect(installedEfforts("ollama", "ollama:qwen3:4b")).toEqual([]);
+    expect(installedEfforts("codex", "gpt-5")).toEqual(["low", "medium", "high", "xhigh"]);
+    // A new chat starts at Ollama's effort only on a model that takes it.
+    settings.update({ effort: { ollama: "high" } });
+    expect(effortFor("ollama:gpt-oss:20b")).toBe("high");
+    expect(effortFor("ollama:qwen3:4b")).toBeNull();
+    // A job's own level shows, and stays, only while its model names it.
+    settings.update({ jobModels: { find: "ollama:gpt-oss:20b" }, jobEffort: { find: "medium" } });
+    expect(jobOwnEffort("find")).toBe("medium");
+    expect(setJobModel("find", "ollama:qwen3:4b")).toBe("medium");
+    expect(settings.get().jobEffort).toEqual({});
+    settings.update({ effort: undefined, jobModels: undefined, jobEffort: undefined });
+    clis.set(null);
   });
 
   it("resolves a run's effort: the job's, else the assistant's, else none", () => {
