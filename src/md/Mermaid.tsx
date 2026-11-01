@@ -5,12 +5,14 @@
 // Mermaid diagrams, loaded only when a document has one. Strict security level, renders one at a
 // time and cached by source, pan by dragging, zoom with ⌘-scroll or the buttons, double-click to
 // fit (the previous app's MermaidDiagram.tsx). Full screen shows it over the whole window; Escape
-// or its button closes it.
+// or its button closes it. On Windows it starts below the window's own title bar (styles.css,
+// .scrim.mfull), whose buttons would otherwise sit on the diagram's, and a press on those buttons
+// or on the bar leaves it open.
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "../icons";
-import { useDismiss } from "../ui";
+import { keepOpen, useDismiss } from "../ui";
 
 type MermaidApi = typeof import("mermaid").default;
 let loading: Promise<MermaidApi> | null = null;
@@ -173,7 +175,7 @@ export function Mermaid({ src, full, onClose }: { src: string; full?: boolean; o
 
 function FullScreen({ src, onClose }: { src: string; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
-  useDismiss(ref, onClose);
+  useDismiss(ref, onClose, true, keepOpen);
   return createPortal(
     <div className="scrim mfull">
       <div ref={ref} role="dialog" aria-label="Diagram" className="mfullbox">

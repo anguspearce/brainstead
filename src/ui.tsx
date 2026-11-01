@@ -208,6 +208,13 @@ export function Tooltips() {
   );
 }
 
+/** A press outside a whole-window overlay (a full-screen diagram, an image full size) that leaves
+ *  it open: the window's own minimise, maximise and close (.winctl, page markup outside the overlay;
+ *  it hides and comes back with the window), and the empty part of the top bar, which drags or
+ *  maximises the window (Tauri drags only from the element that carries the mark itself, never from
+ *  a button in it). For useDismiss's `keep`. */
+export const keepOpen = (t: Element): boolean => !!t.closest?.(".winctl") || !!t.hasAttribute?.("data-tauri-drag-region");
+
 /** Closes on Escape or a click outside, except a click on what `keep` matches (a selector) or the
  *  element it says yes to (a function, given the element pressed). */
 export function useDismiss(
