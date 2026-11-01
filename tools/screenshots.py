@@ -81,8 +81,9 @@ WIDTH = 1400
 WINDOW = 1440
 SETTLE = 5.0
 # How long past its delay a snapshot may take to come before the launch is given up as failed
-# (normally it's there within a second or two).
-GRACE = 10.0
+# (normally it's there within a second or two). A debug build on Windows starts slowly when
+# several run at once (WebView2 brings up a browser per app), so it gets longer.
+GRACE = 25.0 if WINDOWS else 10.0
 # Apps running side by side (-j): each settles more slowly, so each waits a little longer.
 PARALLEL = 1
 
