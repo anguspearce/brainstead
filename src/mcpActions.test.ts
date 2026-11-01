@@ -1374,22 +1374,24 @@ describe("MCP actions", () => {
           deletedAt: `2026-09-0${i + 1}T10:00`,
           sizeBytes: 1024,
         }));
-      expect(await data("trash", { limit: 2 })).toEqual({
-        total: 3,
-        matching: 3,
-        offset: 0,
-        next_offset: 2,
-        bytes: 3072,
-        size: "3.0 KB",
-        items: [
-          { id: "t2", path: "Idea. 2.md", layer: "note", deleted: "2026-09-03T10:00", bytes: 1024, look: "app" },
-          { id: "t1", path: "Idea. 1.md", layer: "note", deleted: "2026-09-02T10:00", bytes: 1024, look: "app" },
-        ],
-      });
-      // What Space does with each, as the Trash screen decides: on Windows, Preview where a handler is.
+      // The look depends on the platform (macOS says quick look for everything), so the test picks
+      // one: on Windows, each file opens in its app until a preview handler says otherwise.
       const was = platform();
       try {
         setPlatform("windows");
+        expect(await data("trash", { limit: 2 })).toEqual({
+          total: 3,
+          matching: 3,
+          offset: 0,
+          next_offset: 2,
+          bytes: 3072,
+          size: "3.0 KB",
+          items: [
+            { id: "t2", path: "Idea. 2.md", layer: "note", deleted: "2026-09-03T10:00", bytes: 1024, look: "app" },
+            { id: "t1", path: "Idea. 1.md", layer: "note", deleted: "2026-09-02T10:00", bytes: 1024, look: "app" },
+          ],
+        });
+        // What Space does with each, as the Trash screen decides: on Windows, Preview where a handler is.
         answers.preview_available = (a) => String(a?.name).endsWith("1.md");
         expect((await data("trash", { limit: 2 })) as { items: { look: string }[] }).toMatchObject({
           items: [{ look: "app" }, { look: "preview" }],
