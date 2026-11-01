@@ -1894,7 +1894,7 @@ describe("MCP actions", () => {
         /askModel · Settings › AI assistants › New chats use: "claude:sonnet" \(one of: claude:haiku \(Claude Code · Haiku\), claude:sonnet/,
       );
       expect(all).toContain(
-        "jobModels.summaries · Settings › AI assistants › Models by job › Daily and weekly summaries: null (As new chats)",
+        "jobModels.summaries · Settings › AI assistants › Models by job › Daily and weekly summaries: null (Default: the model new chats use)",
       );
       const none = isMac ? "As macOS" : "As the system";
       expect(all).toContain(
@@ -2601,6 +2601,74 @@ describe("MCP actions", () => {
       expect(out).toContain("- GitHub Copilot: Not installed. How to install: https://docs.github.com/");
     });
 
+    it("lists Ollama's row as the pane does: its server, its models through Codex, or what's missing", async () => {
+      answers.settings_write = (a) => a!.settings;
+      answers.login_item = () => null;
+      const oss = { id: "ollama:gpt-oss:20b", name: "gpt-oss:20b (20.9B)", efforts: ["low", "medium", "high"] };
+      const qwen = { id: "ollama:qwen3:4b", name: "qwen3:4b (4.0B)", efforts: [] };
+      answers.ask_clis = () => [
+        {
+          cli: "codex",
+          path: "/usr/local/bin/codex",
+          version: "0.166.0",
+          models: [{ id: "gpt-5", name: "gpt-5" }],
+          efforts: ["low", "medium", "high", "xhigh"],
+        },
+        {
+          cli: "ollama",
+          path: "http://localhost:11434",
+          version: "0.35.1",
+          models: [oss, qwen],
+          efforts: ["low", "medium", "high"],
+          note: "Through Codex 0.166.0. Not listed, as it can't call tools, which Codex's agent loop needs: llama2",
+        },
+      ];
+      const out = (await run("assistants.found", { look_again: true })) as string;
+      expect(out).toContain(
+        "- Ollama · 0.35.1: 2 models · http://localhost:11434. Default effort (the assistant's own for each model). Through Codex 0.166.0. Not listed, as it can't call tools, which Codex's agent loop needs: llama2.",
+      );
+      // Its models can be picked for new chats and jobs, and a job's Effort offers the levels its model names.
+      expect(await run("settings", { action: "set", key: "askModel", value: "Ollama · gpt-oss:20b (20.9B)" })).toMatch(
+        /is now "ollama:gpt-oss:20b"/,
+      );
+      const all = (await run("settings")) as string;
+      expect(all).toContain(
+        "jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects › Effort: null (Default, the effort set for the job's assistant) (one of: low (Low), medium (Medium), high (High); null for Default",
+      );
+      expect(all).toContain("effort.ollama · Settings › AI assistants › Found on this computer › Ollama › Effort: null (Default effort");
+      await expect(run("settings", { action: "set", key: "jobEffort.find", value: "xhigh" })).rejects.toThrow(
+        /one of: low, medium, high, or null/,
+      );
+      // A model that names no level offers none, and takes a job's own level away, saying so.
+      await run("settings", { action: "set", key: "jobEffort.find", value: "high" });
+      expect(await run("settings", { action: "set", key: "jobModels.find", value: "ollama:qwen3:4b" })).toMatch(
+        /went back to Default: Ollama doesn't offer it for Ollama · qwen3:4b \(4\.0B\)\.$/,
+      );
+      expect((await run("settings")) as string).toContain(
+        "jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects › Effort: null (Default, the effort set for the job's assistant) (one of: none here; null for Default",
+      );
+      settings.update({ askModel: undefined, jobModels: undefined, jobEffort: undefined, effort: undefined });
+      // Not usable: the row says why, and where to read how to install it.
+      answers.ask_clis = () => [
+        { cli: "codex", path: null, version: null, models: [], efforts: ["low", "medium", "high", "xhigh"] },
+        {
+          cli: "ollama",
+          path: null,
+          version: null,
+          models: [],
+          efforts: ["low", "medium", "high"],
+          note: "Ollama isn't running at http://localhost:11434, or isn't installed, and its models run through Codex, which isn't installed either.",
+        },
+      ];
+      const none = (await run("assistants.found", { look_again: true })) as string;
+      expect(none).toContain(
+        "- Ollama: Ollama isn't running at http://localhost:11434, or isn't installed, and its models run through Codex, which isn't installed either. How to install: https://ollama.com/download",
+      );
+      // Brainstead's tools' commands: Codex's covers Ollama, which gets none of its own.
+      expect(none).not.toMatch(/- Ollama: ollama/);
+      clis.set(null);
+    });
+
     it("reads and sets each assistant's effort as Found on this computer does", async () => {
       answers.settings_write = (a) => a!.settings;
       answers.login_item = () => null;
@@ -2651,7 +2719,7 @@ describe("MCP actions", () => {
       settings.update({ effort: { claude: "low" } });
       const all = (await run("settings")) as string;
       expect(all).toContain(
-        "jobEffort.weekprep · Settings › AI assistants › Models by job › Weekly review preparation › Effort: null (Assistant's setting, the effort set for the job's assistant) (one of: low (Low), medium (Medium), high (High), xhigh (Extra high), max (Max)",
+        "jobEffort.weekprep · Settings › AI assistants › Models by job › Weekly review preparation › Effort: null (Default, the effort set for the job's assistant) (one of: low (Low), medium (Medium), high (High), xhigh (Extra high), max (Max)",
       );
       expect(await run("settings", { action: "set", key: "jobEffort.weekprep", value: "Max" })).toMatch(
         /Weekly review preparation › Effort is now "max"/,
@@ -2660,12 +2728,12 @@ describe("MCP actions", () => {
       expect(settings.get().effort).toEqual({ claude: "low" });
       // A model whose assistant has no max takes the job's effort away, as the screen does, and says so.
       expect(await run("settings", { action: "set", key: "jobModels.weekprep", value: "gpt-5" })).toMatch(
-        /is now "gpt-5"\. Its effort \(Max\) went back to Assistant's setting: ChatGPT \(Codex\) doesn't offer it\.$/,
+        /is now "gpt-5"\. Its effort \(Max\) went back to Default: ChatGPT \(Codex\) doesn't offer it for ChatGPT · gpt-5\.$/,
       );
       expect(settings.get().jobModels).toEqual({ weekprep: "gpt-5" });
       expect(settings.get().jobEffort).toEqual({});
       await expect(run("settings", { action: "set", key: "jobEffort.weekprep", value: "max" })).rejects.toThrow(
-        /one of: low, medium, high, xhigh, or null for Assistant's setting/,
+        /one of: low, medium, high, xhigh, or null for Default/,
       );
       await run("settings", { action: "set", key: "jobEffort.weekprep", value: "high" });
       await run("settings", { action: "set", key: "jobEffort.weekprep", value: null });
@@ -2674,10 +2742,10 @@ describe("MCP actions", () => {
       // without its level sets it aside: list_settings says what the screen shows, and it comes back.
       settings.update({ askModel: "claude:opus", jobModels: {}, jobEffort: { find: "max", weekprep: "max" } });
       await run("settings", { action: "set", key: "jobModels.summaries", value: "gpt-5" });
-      expect(await run("settings", { action: "set", key: "askModel", value: "gpt-5" })).not.toMatch(/Assistant's setting/);
+      expect(await run("settings", { action: "set", key: "askModel", value: "gpt-5" })).not.toMatch(/went back to Default/);
       expect(settings.get().jobEffort).toEqual({ find: "max", weekprep: "max" });
       expect(await run("settings")).toContain(
-        "jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects › Effort: null (Assistant's setting",
+        "jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects › Effort: null (Default",
       );
       await run("settings", { action: "set", key: "askModel", value: "claude:opus" });
       expect(await run("settings")).toContain(

@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Ask: runs an AI CLI already installed and signed in on this computer (Claude Code, Codex,
-//! Antigravity or GitHub Copilot) in the vault, read-only, and streams its answer to the window
+//! Antigravity or GitHub Copilot, or Codex on a model Ollama serves) in the vault, read-only, and
+//! streams its answer to the window
 //! as `ask-event` and `ask-done` events keyed by chat id. The command lines and the stream reading
 //! are in brainstead_core::ask; this side finds the programs, runs them and keeps the chats.
 //!
@@ -83,17 +84,29 @@ pub fn find(cli: Cli) -> Option<platform::Program> {
 pub struct Model {
     id: String,
     name: String,
+    /// The model's own effort levels, where its assistant knows them per model (Ollama: the
+    /// thinking levels a model names, none for one that only thinks or not); None where the
+    /// assistant's list stands for every model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    efforts: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
 pub struct CliInfo {
     cli: Cli,
+    /// Where it is: the program, or for Ollama its server's address. None when it can't be used,
+    /// and `note` says why.
     path: Option<String>,
     version: Option<String>,
-    /// Codex's and Antigravity's come from the signed-in account; Claude's are its aliases.
+    /// Codex's and Antigravity's come from the signed-in account; Claude's are its aliases;
+    /// Ollama's are the models it has pulled that call tools.
     models: Vec<Model>,
     /// The effort levels Settings › AI assistants offers for it (`Cli::efforts`).
     efforts: &'static [&'static str],
+    /// A line for its row under Found on this computer: for Ollama, what it runs through and the
+    /// models left out, or why it can't be used (its server not answering, Codex missing).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<String>,
 }
 
 fn version(bin: &platform::Program) -> Option<String> {
@@ -103,7 +116,7 @@ fn version(bin: &platform::Program) -> Option<String> {
 }
 
 fn models(cli: Cli, bin: &platform::Program) -> Vec<Model> {
-    let m = |id: String, name: &str| Model { id, name: name.to_string() };
+    let m = |id: String, name: &str| Model { id, name: name.to_string(), efforts: None };
     match cli {
         Cli::Claude => [("fable", "Fable"), ("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku")]
             .into_iter()
@@ -119,7 +132,7 @@ fn models(cli: Cli, bin: &platform::Program) -> Vec<Model> {
                 .filter_map(|x| {
                     let id = x["slug"].as_str()?.to_string();
                     let name = x["display_name"].as_str().unwrap_or(&id).to_string();
-                    Some((x["priority"].as_i64().unwrap_or(i64::MAX), Model { id, name }))
+                    Some((x["priority"].as_i64().unwrap_or(i64::MAX), Model { id, name, efforts: None }))
                 })
                 .collect();
             ms.sort_by_key(|(p, _)| *p);
@@ -134,7 +147,59 @@ fn models(cli: Cli, bin: &platform::Program) -> Vec<Model> {
                 .collect()
         }
         Cli::Copilot => vec![m(format!("{}auto", ask::COPILOT_PREFIX), "Copilot (Auto)")],
+        // Ollama's come from its server, not a program (`ollama_info`).
+        Cli::Ollama => Vec::new(),
     }
+}
+
+/// Ollama's row: usable when its server answers and Codex, which runs its models, is installed.
+/// The models are the ones pulled that call tools (Codex's agent loop needs them), each with the
+/// effort levels it names; the note says what it runs through and counts the models left out, or
+/// says what's missing.
+fn ollama_info() -> CliInfo {
+    let host = crate::ollama::host();
+    let codex = find(Cli::Codex);
+    let codex_version = codex.as_ref().and_then(version);
+    let server = crate::ollama::server(&host);
+    let mut info = CliInfo { cli: Cli::Ollama, path: None, version: None, models: Vec::new(), efforts: Cli::Ollama.efforts(), note: None };
+    let Some((version, tags)) = server else {
+        info.note = Some(match codex {
+            Some(_) => format!("Ollama isn't running at {host}, or isn't installed. Start it (or install it), then click Look again."),
+            None => format!(
+                "Ollama isn't running at {host}, or isn't installed, and its models run through Codex, which isn't installed either."
+            ),
+        });
+        return info;
+    };
+    info.version = version;
+    if codex.is_none() {
+        info.note = Some(format!("Ollama is running at {host}, but its models run through Codex, which isn't installed."));
+        return info;
+    }
+    let mut without_tools = Vec::new();
+    for t in tags {
+        let show = crate::ollama::show(&host, &t.name).unwrap_or_default();
+        if !show.tools {
+            without_tools.push(t.name);
+            continue;
+        }
+        let name = match &t.parameters {
+            Some(p) => format!("{} ({p})", t.name),
+            None => t.name.clone(),
+        };
+        info.models.push(Model { id: format!("{}{}", ask::OLLAMA_PREFIX, t.name), name, efforts: Some(show.efforts()) });
+    }
+    info.path = Some(host);
+    let mut note = format!("Through Codex{}", codex_version.map(|v| format!(" {v}")).unwrap_or_default());
+    if !without_tools.is_empty() {
+        note.push_str(&format!(
+            ". Not listed, as {} can't call tools, which Codex's agent loop needs: {}",
+            if without_tools.len() == 1 { "it" } else { "they" },
+            without_tools.join(", ")
+        ));
+    }
+    info.note = Some(note);
+    info
 }
 
 /// The list Codex caches for the signed-in account; None until Codex has run once.
@@ -144,8 +209,13 @@ fn codex_models() -> Option<serde_json::Value> {
 }
 
 /// The effort levels `model` takes, where its CLI lists them per model: Codex's cache does
-/// (`supported_reasoning_levels`). None for the others, and for a model the cache doesn't have.
+/// (`supported_reasoning_levels`), and Ollama's server says which levels a model names (none, so
+/// no level, for one that only thinks or not). None for the others, and for a model the cache or
+/// the server doesn't have.
 fn model_efforts(model: &str) -> Option<Vec<String>> {
+    if Cli::route(model) == Cli::Ollama {
+        return crate::ollama::show(&crate::ollama::host(), model.strip_prefix(ask::OLLAMA_PREFIX)?).map(|s| s.efforts());
+    }
     if Cli::route(model) != Cli::Codex {
         return None;
     }
@@ -169,8 +239,10 @@ pub async fn ask_clis() -> Vec<CliInfo> {
                     version: bin.as_ref().and_then(version),
                     models: bin.as_ref().map(|b| models(cli, b)).unwrap_or_default(),
                     path: bin.map(|p| p.path.to_string_lossy().into_owned()),
+                    note: None,
                 }
             })
+            .chain(std::iter::once(ollama_info()))
             .collect()
     })
     .await
@@ -379,7 +451,8 @@ fn run_at(
     let Some(vault) = app.state::<VaultService>().root() else { return fail("No vault is open.".into()) };
     let vault_s = vault.to_string_lossy().into_owned();
     let mcp = mcp.filter(|_| cli.takes_mcp());
-    let req = Request { prompt, model, session, system, vault: &vault_s, mcp, images, effort };
+    let ollama_host = crate::ollama::host();
+    let req = Request { prompt, model, session, system, vault: &vault_s, mcp, images, effort, ollama_host: &ollama_host };
     let launch = match ask::args(cli, &req) {
         Ok(l) => l,
         Err(e) => return fail(e),
@@ -401,7 +474,12 @@ fn run_at(
     };
     let mut cmd = bin.command();
     let stdin = if launch.stdin.is_some() { Stdio::piped() } else { Stdio::null() };
-    cmd.current_dir(&cwd).args(&launch.args).stdin(stdin).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.current_dir(&cwd)
+        .args(&launch.args)
+        .envs(launch.env.iter().map(|(k, v)| (k, v)))
+        .stdin(stdin)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     let mut child = match platform::spawn_group(&mut cmd) {
         Ok(c) => c,
         // Through cmd.exe (a `.cmd` that isn't an npm shim it can read), std refuses an argument

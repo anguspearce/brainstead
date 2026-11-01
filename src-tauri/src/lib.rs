@@ -20,6 +20,7 @@ mod listnotes;
 mod menu;
 mod nativehost;
 mod notes;
+mod ollama;
 mod platform;
 mod reviews;
 mod settings;

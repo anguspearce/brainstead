@@ -9,13 +9,13 @@ The user guide to Brainstead, a Mac and Windows app for tasks, notes and an [LLM
 | [Tasks and GTD](tasks.md) | Today, Quick capture, the Inbox, Tasks, Projects, the weekly review, and how tasks are written |
 | [Notes](notes.md) | View, Edit and Source, saving and drafts, queries and callouts, templates, search and ⌘K, the Trash |
 | [The wiki and sources](wiki.md) | Sources and the browser extensions, ingest, Changes, wiki pages, Knowledge health, contradictions, meeting notes and the other tools |
-| [Ask and assistants](ask.md) | Chats with Claude Code, Codex, Copilot and Antigravity, what an assistant can do, Brainstead's tools in a terminal |
+| [Ask and assistants](ask.md) | Chats with Claude Code, Codex, Copilot and Antigravity, or Ollama's local models through Codex, what an assistant can do, Brainstead's tools in a terminal |
 | [Day to day](day-to-day.md) | The menu bar (system tray on Windows), the daily and weekly summaries and the daily check, help, Settings, and what happens in the background |
 
 ## Requirements
 
 - A Mac with Apple silicon (M1 or later) and macOS 14 or later, or a PC with Windows 10 or 11 (64-bit).
-- For Ask and the AI features: Claude Code, Codex, GitHub Copilot's CLI or Antigravity, installed and signed in. Everything else works without them.
+- For Ask and the AI features: Claude Code, Codex, GitHub Copilot's CLI or Antigravity, installed and signed in; or Ollama with a model that calls tools, and Codex to run it. Everything else works without them.
 - For the capture extensions: Chrome, Edge, Brave, Vivaldi or Chromium.
 
 ## First run

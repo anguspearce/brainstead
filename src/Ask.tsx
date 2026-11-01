@@ -414,7 +414,7 @@ function AskEmpty({ c, found }: { c: Chat; found: CliInfo[] | null }) {
     return (
       <div className="askempty">
         <h1 className="h2">No assistant found</h1>
-        <p className="muted">Install Claude Code, Codex, Antigravity or Copilot, sign in, then open Ask again.</p>
+        <p className="muted">Install Claude Code, Codex, Antigravity or Copilot (or Ollama with Codex), sign in, then open Ask again.</p>
       </div>
     );
   return (
@@ -769,7 +769,7 @@ function Composer({ c, found }: { c: Chat; found: CliInfo[] | null }) {
 
   const model = c.model ?? DEFAULT_MODEL;
   const locked = c.transcript.length > 0;
-  const efforts = found ? installedEfforts(cliOf(model)) : [];
+  const efforts = found ? installedEfforts(cliOf(model), model) : [];
   // A scheduled run goes at its job's effort until it ends.
   const running = !!c.review && c.busy;
   return (
@@ -931,7 +931,7 @@ export function ModelMenu({ found, value, onPick }: { found: CliInfo[] | null; v
     <div className="menu modelmenu" role="menu">
       {!there.length && (
         <div className="faint mpad">
-          No assistant found. Install Claude Code, Codex, Antigravity or Copilot, sign in, then open Ask again.
+          No assistant found. Install Claude Code, Codex, Antigravity or Copilot (or Ollama with Codex), sign in, then open Ask again.
         </div>
       )}
       {there.map((c) => (
@@ -939,7 +939,11 @@ export function ModelMenu({ found, value, onPick }: { found: CliInfo[] | null; v
           <div className="mg">
             {CLI_LABEL[c.cli]} {c.version && <span className="v">· {c.version}</span>}
           </div>
-          {!c.models.length && <div className="faint mpad">No models listed: is it signed in?</div>}
+          {!c.models.length && (
+            <div className="faint mpad">
+              {c.cli === "ollama" ? "No models pulled: ollama pull one first." : "No models listed: is it signed in?"}
+            </div>
+          )}
           {c.models.map((m) => (
             <button
               key={m.id}
