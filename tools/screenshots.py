@@ -22,6 +22,12 @@ Nothing outside .demo/ is read or written; the real vault is never opened.
     python3 tools/screenshots.py --release       # the built app (make app), with its own CSP
 
 Needs the Vite dev server (started here if it isn't running) and Pillow.
+
+On Windows (`python tools/screenshots.py`) the same scenes run on the debug build, kept off every
+monitor rather than transparent (src-tauri/src/platform/snapshot_win.rs), and every shot goes to
+tools/screenshots/out/, never to docs/images/ or site/img/: WebView2's fonts, scrollbars and the
+page's own window buttons differ from the Mac's, so the committed pictures stay macOS captures.
+The vault's path shows as it is (.demo/Home/Notes under this repo) rather than as ~/Notes.
 """
 
 import argparse
@@ -35,7 +41,6 @@ import os
 import pathlib
 import queue
 import shutil
-import signal
 import subprocess
 import sys
 import tempfile
@@ -56,8 +61,18 @@ OUT = ROOT / "docs" / "images"
 # there too, from the same snapshot at its full (2x) size, so it stays sharp on a Retina screen.
 SITE = ROOT / "site" / "img"
 CHECK = ROOT / "tools" / "screenshots" / "out"
-BIN = ROOT / "src-tauri" / "target" / "debug" / "Brainstead"
-RELEASE_BIN = ROOT / "src-tauri" / "target" / "release" / "bundle" / "macos" / "Brainstead.app" / "Contents" / "MacOS" / "Brainstead"
+WINDOWS = sys.platform == "win32"
+# The dev build, `cargo build` in src-tauri/ (run here before the scenes); the release build is
+# `make app`'s bundle on a Mac and `npm run tauri build`'s program on Windows.
+BIN = ROOT / "src-tauri" / "target" / "debug" / ("Brainstead.exe" if WINDOWS else "Brainstead")
+if WINDOWS:
+    RELEASE_BIN = ROOT / "src-tauri" / "target" / "release" / "Brainstead.exe"
+    RELEASE_HOW = "npm run tauri build"
+else:
+    RELEASE_BIN = ROOT / "src-tauri" / "target" / "release" / "bundle" / "macos" / "Brainstead.app" / "Contents" / "MacOS" / "Brainstead"
+    RELEASE_HOW = "make app"
+# npm's launcher is npx.cmd on Windows, which Popen finds only by its full name.
+NPX = shutil.which("npx") or "npx"
 DEV_URL = "http://localhost:1440"
 FIXTURE = ROOT / "tests" / "fixtures" / "vault"
 WIDTH = 1400
@@ -90,7 +105,7 @@ def dev_server():
         return None
     except OSError:
         pass
-    p = subprocess.Popen(["npx", "vite", "--port", "1440", "--strictPort"], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    p = subprocess.Popen([NPX, "vite", "--port", "1440", "--strictPort"], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(60):
         time.sleep(0.5)
         try:
@@ -101,13 +116,25 @@ def dev_server():
     sys.exit("the Vite dev server didn't start")
 
 
+def stop(p):
+    """Stops a process this script started. On Windows the whole tree: npx.cmd's node would
+    otherwise outlive it, holding the port."""
+    if WINDOWS:
+        subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    else:
+        p.terminate()
+    p.wait()
+
+
 def build():
     subprocess.run(["cargo", "build"], cwd=ROOT / "src-tauri", check=True)
 
 
 def env(data=DEMO / "data"):
-    # HOME is the demo's, so paths show as ~/Notes and not as where this repo is on this Mac.
-    return {**os.environ, "HOME": str(DEMO / "Home"), "BRAINSTEAD_DATA": str(data)}
+    # HOME is the demo's, so paths show as ~/Notes and not as where this repo is on this Mac. On
+    # Windows the profile is pointed there too, so nothing home-relative reaches the real one, but
+    # the app shows a vault's path as it is, so there it reads .demo\Home\Notes under this repo.
+    return {**os.environ, "HOME": str(DEMO / "Home"), "USERPROFILE": str(DEMO / "Home"), "BRAINSTEAD_DATA": str(data)}
 
 
 def make_demo():
@@ -307,7 +334,8 @@ def capture(scene, theme, data, settle):
 
         sc["path"] = demo_tutorial.fill(sc["path"], datetime.datetime.now())
     with tempfile.TemporaryDirectory() as tmp:
-        shot = pathlib.Path(tmp) / "shot.tiff"
+        # A TIFF from WebKit, a PNG from WebView2 (platform::snapshot); Pillow reads either.
+        shot = pathlib.Path(tmp) / ("shot.png" if WINDOWS else "shot.tiff")
         app = subprocess.Popen(
             [str(BIN)],
             cwd=ROOT / "src-tauri",
@@ -321,7 +349,7 @@ def capture(scene, theme, data, settle):
             stderr=subprocess.DEVNULL,
         )
         try:
-            # The app writes the file whole (atomically) once WebKit has drawn it; when it hasn't
+            # The app writes the file whole (atomically) once the engine has drawn it; when it hasn't
             # shortly after the delay (the app quit, or the snapshot failed), this launch failed.
             end = time.time() + settle + GRACE + 2 * (PARALLEL - 1)
             while not shot.exists() and app.poll() is None and time.time() < end:
@@ -332,24 +360,31 @@ def capture(scene, theme, data, settle):
             im.load()
             return to_srgb(im.convert("RGBA") if im.mode not in ("RGB", "RGBA") else im)
         finally:
-            app.send_signal(signal.SIGKILL)
+            # SIGKILL, or TerminateProcess on Windows: the app saves nothing in a scene.
+            app.kill()
             app.wait()
 
 
 def chrome(im, theme, s=1.0):
     """Draws back what a webview snapshot leaves out: the window's (unfocused) buttons and its
-    rounded corners, as a capture of the window showed them. `s`: the shot's size over the docs'."""
+    rounded corners, as a capture of the window showed them. `s`: the shot's size over the docs'.
+    On Windows the page draws its own buttons (src/WindowControls.tsx), so only the corners are
+    rounded, as Windows 11 rounds them."""
     k = 4  # drawn large and scaled down, for smooth edges
     w, h = im.size
-    over = Image.new("RGBA", (w * k, h * k))
-    d = ImageDraw.Draw(over)
-    fill, rim = ((230, 231, 233), (220, 221, 223)) if theme == "light" else ((126, 127, 129), (140, 141, 143))
-    for cx in (23.5, 46, 68.5):
-        cx, cy, r = cx * s, 19 * s, 7 * s
-        d.ellipse([(cx - r) * k, (cy - r) * k, (cx + r) * k, (cy + r) * k], fill=fill + (255,), outline=rim + (255,), width=round(k * s))
-    im = Image.alpha_composite(im.convert("RGBA"), over.resize((w, h), Image.LANCZOS))
+    im = im.convert("RGBA")
+    if not WINDOWS:
+        over = Image.new("RGBA", (w * k, h * k))
+        d = ImageDraw.Draw(over)
+        fill, rim = ((230, 231, 233), (220, 221, 223)) if theme == "light" else ((126, 127, 129), (140, 141, 143))
+        for cx in (23.5, 46, 68.5):
+            cx, cy, r = cx * s, 19 * s, 7 * s
+            box = [(cx - r) * k, (cy - r) * k, (cx + r) * k, (cy + r) * k]
+            d.ellipse(box, fill=fill + (255,), outline=rim + (255,), width=round(k * s))
+        im = Image.alpha_composite(im, over.resize((w, h), Image.LANCZOS))
     mask = Image.new("L", (w * k, h * k))
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, w * k - 1, h * k - 1], radius=round(16 * k * s), fill=255)
+    radius = 8 if WINDOWS else 16
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, w * k - 1, h * k - 1], radius=round(radius * k * s), fill=255)
     im.putalpha(mask.resize((w, h), Image.LANCZOS))
     return im
 
@@ -373,8 +408,9 @@ def same(a, b):
 def shoot(scene, theme, data):
     # A shot is kept once it's settled: the same as the scene's last kept shot, or as a second one
     # taken later. So one caught mid-load ("Loading…", "Reading your vault") is taken again, later,
-    # rather than kept. One that came out blank (or never came) is taken again too.
-    out = (OUT if scene.get("docs") else CHECK) / f"{scene['name']}-{theme}.png"
+    # rather than kept. One that came out blank (or never came) is taken again too. A Windows
+    # capture is for checking only: the committed pictures (docs/images/, site/img/) are the Mac's.
+    out = (OUT if scene.get("docs") and not WINDOWS else CHECK) / f"{scene['name']}-{theme}.png"
     last = None
     if out.exists():
         with Image.open(out) as f:
@@ -397,6 +433,8 @@ def shoot(scene, theme, data):
         return False
     im.save(out, optimize=True)
     print(f"  {out.relative_to(ROOT)}  {im.width}x{im.height}")
+    if WINDOWS:
+        return True
     site = SITE / f"{scene['name']}-{theme}.webp"
     if site.exists():
         big = finish(raw, scene, theme, scale=2)
@@ -444,12 +482,16 @@ def main():
     ap.add_argument("--fresh", action="store_true", help="remake the demo data")
     ap.add_argument("--docs", action="store_true", help="only the scenes the docs show")
     ap.add_argument("-j", type=int, default=4, metavar="N", help="apps to run side by side (default 4)")
-    ap.add_argument("--release", action="store_true", help="run the built app (make app) instead of the dev build")
+    ap.add_argument("--release", action="store_true", help=f"run the built app ({RELEASE_HOW}) instead of the dev build")
     a = ap.parse_args()
+    if WINDOWS and not sys.flags.utf8_mode:
+        # The demo's notes hold emoji and curly quotes, which Python on Windows would otherwise write
+        # and read in the console's code page: the same script again, in UTF-8 mode throughout.
+        sys.exit(subprocess.run([sys.executable, "-X", "utf8", __file__, *sys.argv[1:]], check=False).returncode)
     global BIN
     if a.release:
         if not RELEASE_BIN.exists():
-            sys.exit("no built app: run make app first")
+            sys.exit(f"no built app: run {RELEASE_HOW} first")
         BIN = RELEASE_BIN
     scenes = json.loads((HERE / "scenes.json").read_text())
     if a.names:
@@ -494,7 +536,7 @@ def main():
                 ok = all(list(pool.map(one, jobs)))
     finally:
         if server:
-            server.terminate()
+            stop(server)
     sys.exit(0 if ok else 1)
 
 
