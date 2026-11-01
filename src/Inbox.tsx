@@ -199,7 +199,7 @@ const DONE_ALL: Record<string, string> = {
 const startText = (i: InboxItem) => (i.kind === "capture" ? `Follow up on [[${i.text}]]` : itemText(i));
 
 export function InboxScreen() {
-  const panes = usePanes({ "inbox.left": PANES["inbox.left"] });
+  const panes = usePanes({ "inbox.left": PANES["inbox.left"] }, { minFlex: 320 });
   // Drawn again when settings change: Make a meeting note's label follows the Meeting notes switches.
   useStore(settings);
   const raw = useInbox();

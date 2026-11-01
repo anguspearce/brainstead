@@ -61,7 +61,7 @@ const PANES: [SettingsPane, string, string][] = [
 ];
 
 export function SettingsScreen() {
-  const split = usePanes({ "settings.left": PANE_SPECS["settings.left"] });
+  const split = usePanes({ "settings.left": PANE_SPECS["settings.left"] }, { minFlex: 360 });
   const p = useStore(place).place;
   const features = useFeatures();
   const panes = PANES.filter(([id]) => (id !== "permissions" || features.fullDiskAccess) && (id !== "sync" || hasSync));

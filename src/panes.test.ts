@@ -81,6 +81,8 @@ describe("pane widths", () => {
   it("leave the flexible pane its least width once the gaps and the columns that never move are taken", () => {
     expect(paneRoom(1000)).toBe(1000 - MIN_FLEX);
     expect(paneRoom(1000, 24)).toBe(1000 - 24 - MIN_FLEX);
+    // A screen whose flexible column holds more (Settings) reserves more for it.
+    expect(paneRoom(1000, 24, 360)).toBe(1000 - 24 - 360);
   });
 
   it("have their custom property in the stylesheet at their usual width, with no width stored", () => {

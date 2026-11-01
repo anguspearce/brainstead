@@ -46,7 +46,7 @@ const groupTip = (by: GroupBy, label: string) =>
           : `due ${label.toLowerCase()}`;
 
 export function TasksScreen() {
-  const panes = usePanes({ "tasks.left": PANES["tasks.left"], "tasks.side": PANES["tasks.side"] });
+  const panes = usePanes({ "tasks.left": PANES["tasks.left"], "tasks.side": PANES["tasks.side"] }, { minFlex: 320 });
   const all = useAllTasks();
   const inbox = useInbox();
   const [viewId, setViewId] = useViewState("tasks:view", "next");

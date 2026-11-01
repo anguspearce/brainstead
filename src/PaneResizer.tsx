@@ -31,6 +31,7 @@ import {
 import {
   clampPaneWidth,
   fitPanes,
+  MIN_FLEX,
   PANE_STEP,
   PANE_STEP_BIG,
   PaneSpec,
@@ -78,12 +79,14 @@ function measure(el: HTMLElement, vars: string[]): Measured {
   const cs = getComputedStyle(el);
   const px = (v: string) => parseFloat(v) || 0;
   const gap = px(cs.columnGap);
-  // Line names ("[a]") and empty tracks drop out; what's left is each column's width.
+  // Line names ("[a]") drop out; what's left is each column's width, a flexible column squeezed to
+  // 0px by wide panes beside it included: it is still a column, and paneShown counts it, where
+  // dropping it would read as a breakpoint having dropped a pane.
   const tracks = cs.display.includes("grid")
     ? cs.gridTemplateColumns
         .split(" ")
         .map(parseFloat)
-        .filter((t) => t > 0)
+        .filter((t) => t >= 0)
     : null;
   return {
     width: el.clientWidth - px(cs.paddingLeft) - px(cs.paddingRight),
@@ -96,9 +99,11 @@ function measure(el: HTMLElement, vars: string[]): Measured {
   };
 }
 
-/** Whether a screen's pane is still a column of its grid, by the tracks laid out: all there; or,
- *  where a breakpoint dropped some (the Weekly review's side column at 868px), the track on the
- *  pane's side is its width; none when the grid is one column (stacked). */
+/** Whether a screen's pane is still a column of its grid, by the tracks laid out: all there (every
+ *  pane's and the flexible one's, which counts at 0px too: a stored pane wider than the main area
+ *  squeezes it to nothing on the first measure, and the fit then narrows the pane); or, where a
+ *  breakpoint dropped some (the Weekly review's side column at 868px), the track on the pane's side
+ *  is its width; none when the grid is one column (stacked). */
 export function paneShown(tracks: number[] | null, panes: number, side: PaneSpec["side"], width: number): boolean {
   if (!tracks || tracks.length >= panes + 1) return true;
   if (tracks.length < 2) return false;
@@ -111,6 +116,10 @@ export interface PanesOptions {
   /** Px of the root that never move: gaps where the root isn't a grid, and columns with no divider
    *  (the Trash's checkbox and buttons). A grid's own column gaps are measured. */
   fixed?: number;
+  /** The least the flexible pane keeps, MIN_FLEX unless the screen's flexible column holds more
+   *  than that shows well (Settings' cards and their padding, a project's detail with its buttons):
+   *  the fixed panes give way before it. */
+  minFlex?: number;
 }
 
 export interface Panes<K extends string> {
@@ -169,6 +178,7 @@ export function usePanes<K extends string>(specs: Record<K, PaneSpec>, opts: Pan
   const varList = keys.map((k) => specs[k].cssVar).join(" ");
   const mode = opts.mode ?? "pane";
   const fixed = opts.fixed ?? 0;
+  const minFlex = opts.minFlex ?? MIN_FLEX;
   const layout = (m: Measured): Layout<K> => {
     const widths = {} as Record<K, number | undefined>;
     const shown = {} as Record<K, number>;
@@ -192,7 +202,7 @@ export function usePanes<K extends string>(specs: Record<K, PaneSpec>, opts: Pan
     // Every shown pane's width, stored or the stylesheet's, fitted to the room together: a default
     // too wide for a narrow screen (a wide sidebar beside it, say) is narrowed as a stored one is. A
     // grid has a gap beside each fixed pane it shows; a table's are in `fixed`.
-    const room = paneRoom(m.width, fixed + (mode === "pane" ? m.gap * here.length : 0));
+    const room = paneRoom(m.width, fixed + (mode === "pane" ? m.gap * here.length : 0), minFlex);
     const wants = here.map(want);
     const fit = fitPanes(wants, room);
     const total = fit.reduce((a, b) => a + b, 0);

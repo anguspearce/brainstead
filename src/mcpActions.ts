@@ -3550,8 +3550,9 @@ async function settingsTool(a: Args): Promise<string> {
   }
   if (action !== "set") throw new Error("action is get or set.");
   const key = str(a, "key");
-  // One pane's width, as its divider sets it: clamped to the pane's range (the screen clamps it to
-  // its room too, as it draws); null puts that pane, or with the bare key every pane, back. A pane
+  // One pane's width, as its divider sets it: clamped to the pane's range only (the screen fits it
+  // to its room as it draws, src/PaneResizer.tsx, so a width past the room shows narrower than it is
+  // kept); null puts that pane, or with the bare key every pane, back. A pane
   // whose type is locked (resizeLocks) is refused, as its divider is hidden; every pane back isn't.
   if (key === "paneWidths" || key?.startsWith("paneWidths.")) {
     const label = "Settings › General › Appearance › Pane widths";
