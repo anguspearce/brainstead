@@ -27,7 +27,7 @@ A new review covers the week just ended on a Monday or Tuesday, otherwise this w
 The steps are listed on the left by phase; click any to jump to it, which marks the step you were on done. **Next** marks the current step done and goes on, and **Back** returns. The top bar shows the step, about how long is left and a progress bar.
 
 - **Get clear**: Collect loose ends (a capture box), Empty the inbox (its count and Open the Inbox), Process this week's notes (notes whose name carries a date this week, such as `Idea. Pricing - 2026-10-01`, other than meetings; older notes you only edited aren't listed).
-- **Get current**: Next actions (tick or change them in place; as in [Tasks](app:tasks), the tasks of on-hold and someday projects are left out unless **Include on-hold and someday projects** is ticked there), Look back: this week's meetings (meeting, 1-1 and interview notes dated this week), Look ahead: check your calendar, Projects, Waiting for.
+- **Get current**: Next actions (tick or change them in place; as in [Tasks](app:tasks), the tasks of on-hold and someday projects are left out), Look back: this week's meetings (meeting, 1-1 and interview notes dated this week), Look ahead: check your calendar, Projects, Waiting for.
 - **Get creative**: Someday / maybe, Links to pages not written yet, New ideas (a capture box).
 
 ## Suggestions prepared from your week

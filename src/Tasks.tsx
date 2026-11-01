@@ -19,7 +19,7 @@ import { nav, openDoc, useViewState } from "./nav";
 import { askWith } from "./askState";
 import { InfoTip, TaskEditor, taskKey, TaskList, TasksFailed, useTaskListKeys } from "./TaskList";
 import { taskDate } from "./taskDates";
-import { leftOutNote, parkedLeftOut, tasksFailed, useAllTasks, viewRows, VIEWS, ViewId } from "./taskModel";
+import { tasksFailed, useAllTasks, viewRows, VIEWS, ViewId } from "./taskModel";
 import { askLink, askQuote, TopBar } from "./TopBar";
 import { fmtCount, Popover, SearchBox, Seg, Squeeze, TableBand, useDebounced, usePinnedBar } from "./ui";
 import { settings, useStore } from "./store";
@@ -56,12 +56,9 @@ export function TasksScreen() {
   // The search narrows every list, so the counts on the left say where the matches are.
   const [q, setQ] = useViewState("tasks:q", "");
   const dq = useDebounced(q).trim();
-  // Per machine, in settings: Next actions keeps on-hold and someday projects' tasks only when on.
-  const onHoldSomeday = useStore(settings).includeOnHoldSomeday === true;
   const counts = useMemo(
-    () =>
-      new Map(VIEWS.map((v) => [v.id, all ? viewRows(all, v, today, inbox, onHoldSomeday).filter((t) => matchesSearch(t, dq)).length : 0])),
-    [all, inbox, today, dq, onHoldSomeday],
+    () => new Map(VIEWS.map((v) => [v.id, all ? viewRows(all, v, today, inbox).filter((t) => matchesSearch(t, dq)).length : 0])),
+    [all, inbox, today, dq],
   );
   const [ctx, setCtx] = useViewState("tasks:context", "");
   const [effort, setEffort] = useViewState("tasks:effort", "");
@@ -72,18 +69,9 @@ export function TasksScreen() {
     (t: TaskRow) => (!ctx || (t.contexts ?? []).includes(ctx)) && withinEffort(t, effort) && matchesSearch(t, dq),
     [ctx, effort, dq],
   );
-  const rows = useMemo(
-    () => (all ? viewRows(all, view, today, inbox, onHoldSomeday) : []).filter(filtered),
-    [all, inbox, view, today, filtered, onHoldSomeday],
-  );
-  // The whole manual list, with what the setting and the filters hide, for a drag's renumber.
-  const every = useMemo(() => (all && view.manual ? viewRows(all, view, today, inbox, true) : undefined), [all, inbox, view, today]);
-  // Next actions' tasks of on-hold and someday projects that the filters would show, while they're
-  // left out: counted by the checkbox, as list_tasks counts them.
-  const hidden = useMemo(
-    () => (all && view.id === "next" ? parkedLeftOut(all, today, inbox, onHoldSomeday).filter(filtered).length : 0),
-    [all, inbox, view, today, filtered, onHoldSomeday],
-  );
+  const rows = useMemo(() => (all ? viewRows(all, view, today, inbox) : []).filter(filtered), [all, inbox, view, today, filtered]);
+  // The whole manual list, with what the filters hide, for a drag's renumber.
+  const every = useMemo(() => (all && view.manual ? viewRows(all, view, today, inbox) : undefined), [all, inbox, view, today]);
   const groups = useMemo(() => groupTasks(rows, groupBy, today), [rows, groupBy, today]);
   // Saved lists: a view with its context, effort and grouping, by name (settings `taskLists`).
   const saved = useStore(settings).taskLists ?? [];
@@ -267,27 +255,6 @@ export function TasksScreen() {
                     </option>
                   ))}
                 </select>
-                {view.id === "next" && (
-                  <label
-                    className="row small"
-                    title="Also show tasks of projects whose status is on hold or someday; off leaves those out of Next actions"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={onHoldSomeday}
-                      onChange={(e) => settings.update({ includeOnHoldSomeday: e.target.checked })}
-                    />
-                    <span>Include on-hold and someday projects</span>
-                    {hidden > 0 && (
-                      <span
-                        className="faint"
-                        title={`${fmtCount(hidden)} ${hidden === 1 ? "task" : "tasks"} of on-hold or someday projects left out`}
-                      >
-                        {fmtCount(hidden)} hidden
-                      </span>
-                    )}
-                  </label>
-                )}
               </div>
               <div className="ttable" role="table" aria-label={view.label}>
                 {groups.map((g) => (
@@ -312,11 +279,11 @@ export function TasksScreen() {
                       onOpen={() => document.querySelector<HTMLElement>(".trow.sel .trename")?.click()}
                       keys
                       empty={
-                        (dq
+                        dq
                           ? `No tasks in this list match “${dq}”.`
                           : ctx || effort
                             ? "No tasks here match the filter."
-                            : "No tasks in this list.") + (hidden > 0 ? ` ${leftOutNote(hidden)}` : "")
+                            : "No tasks in this list."
                       }
                     />
                   </div>

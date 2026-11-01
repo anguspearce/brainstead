@@ -206,7 +206,7 @@ def make_demo():
         "### Followups\n\n```tasks\nnot done\n(tags include #followup/<% name %>)\n```\n\n## Notes\n<% tp.file.cursor(1) -%>\n"
         + "".join(f"\n## Topic {i}\n- \n" for i in range(1, 13))
     )
-    # A next action in the on-hold project, for the `tasks-onhold-*` scenes.
+    # A next action in the on-hold project, for the `tasks-onhold` scene.
     hub = vault / "Project. Hub migration.md"
     hub.write_text(hub.read_text().replace("## Next actions\n", "## Next actions\n\n- [ ] Draft the cut-over plan #context/office\n", 1))
     # A note with mistakes in it, for the `spelling` scene.

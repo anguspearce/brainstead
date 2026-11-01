@@ -22,11 +22,9 @@ export type ViewId = "next" | "followups" | "waiting" | "scheduled" | "someday" 
 
 const has = (t: TaskRow, tag: string) => t.tags.some((g) => g === tag || g.startsWith(`${tag}/`));
 const parked = (t: TaskRow) => has(t, "followup") || has(t, "waiting-for") || has(t, "someday-maybe");
-/** In an on-hold or someday project (its status as the Projects screen reads it, from Rust), so not
- *  a next action unless the `includeOnHoldSomeday` setting keeps it in. The weekly review's
- *  preparation has the same rule (brainstead_core `projects::parks_tasks`); both are checked
- *  against tests/fixtures/parked-projects.json. */
-export const inParkedProject = (t: TaskRow) => t.projectStatus === "on-hold" || t.projectStatus === "someday";
+/** A task of a project put on hold or moved to Someday: off Next actions until the project is active
+ *  again (it still shows on the project's page). */
+const projectParked = (t: TaskRow) => t.projectStatus === "on-hold" || t.projectStatus === "someday";
 
 /** Monday-start week, as the previous app counts "done this week". */
 export function weekOf(today: string, offset = 0): [string, string] {
@@ -44,9 +42,8 @@ export interface View {
   icon: string;
   /** Rows can be dragged into a new order (written as ^rank-N). */
   manual: boolean;
-  /** `inbox`: the Inbox tasks still to clarify (`inboxTaskKeys`), which Next actions leaves out;
-   *  `onHoldSomeday`: keep tasks of on-hold and someday projects in Next actions. */
-  filter: (t: TaskRow, today: string, inbox: Set<string>, onHoldSomeday: boolean) => boolean;
+  /** `inbox`: the Inbox tasks still to clarify (`inboxTaskKeys`), which Next actions leaves out. */
+  filter: (t: TaskRow, today: string, inbox: Set<string>) => boolean;
   sort?: (a: TaskRow, b: TaskRow) => number;
   /** The tag a task added from this list gets, so it shows here; none sends it to the Inbox. */
   adds?: string;
@@ -62,14 +59,10 @@ export const VIEWS: View[] = [
     label: "Next actions",
     icon: "tasks",
     manual: true,
-    // A deferred task stays off until its day, an Inbox task until it's clarified, and an on-hold or
-    // someday project's tasks unless asked for.
-    filter: (t, today, inbox, onHoldSomeday) =>
-      !t.done &&
-      !parked(t) &&
-      !(t.scheduled && t.scheduled > today) &&
-      !inbox.has(`${t.path}:${t.line}`) &&
-      (onHoldSomeday || !inParkedProject(t)),
+    // A deferred task stays off until its day, an Inbox task until it's clarified, and a parked
+    // project's tasks until the project is active again.
+    filter: (t, today, inbox) =>
+      !t.done && !parked(t) && !projectParked(t) && !(t.scheduled && t.scheduled > today) && !inbox.has(`${t.path}:${t.line}`),
   },
   { id: "followups", label: "Follow-ups", icon: "ask", manual: true, filter: (t) => !t.done && has(t, "followup"), adds: "#followup" },
   {
@@ -114,31 +107,11 @@ export const VIEWS: View[] = [
   },
 ];
 
-/** A view's rows. Pass the Inbox (`useInbox`) for Next actions, so unclarified tasks stay out, and
- *  the `includeOnHoldSomeday` setting, so on-hold and someday projects' tasks stay out unless it's on. */
-export function viewRows(all: TaskRow[], v: View, today: string, inbox?: InboxItem[] | null, onHoldSomeday = false): TaskRow[] {
+/** A view's rows. Pass the Inbox (`useInbox`) for Next actions, so unclarified tasks stay out. */
+export function viewRows(all: TaskRow[], v: View, today: string, inbox?: InboxItem[] | null): TaskRow[] {
   const held = inboxTaskKeys(inbox);
-  const r = all.filter((t) => v.filter(t, today, held, onHoldSomeday));
+  const r = all.filter((t) => v.filter(t, today, held));
   return v.sort ? r.sort(v.sort) : r;
-}
-
-/** Says `n` tasks of on-hold or someday projects are left out of Next actions (the Tasks screen's
- *  and Weekly's empty list). */
-export const leftOutNote = (n: number) =>
-  `${n.toLocaleString("en-GB")} ${n === 1 ? "task" : "tasks"} of on-hold or someday projects ${n === 1 ? "is" : "are"} left out; Include on-hold and someday projects in Tasks shows them.`;
-
-/** What Next actions leaves out for being in an on-hold or someday project: none while
- *  `onHoldSomeday` keeps them in. The Tasks screen's "hidden" count and list_tasks' left-out line
- *  both narrow it with their own filters. */
-export function parkedLeftOut(all: TaskRow[], today: string, inbox: InboxItem[] | null | undefined, onHoldSomeday: boolean): TaskRow[] {
-  if (onHoldSomeday) return [];
-  return viewRows(
-    all,
-    VIEWS.find((v) => v.id === "next")!,
-    today,
-    inbox,
-    true,
-  ).filter(inParkedProject);
 }
 
 /** Deferred to a day after `today`: left off Today, its counts and its Waiting band (D-20261006-02). */
@@ -316,8 +289,8 @@ export function rankBetween(order: TaskRow[], moved: TaskRow): { prev: number | 
 }
 
 /** `order` (a list's rows after a drop) with the rows the list hides put back where they were in
- *  `every` (the whole list in its order on disk: Next actions with on-hold and someday projects'
- *  tasks, and without the screen's search and filters), each after the shown row it followed;
+ *  `every` (the whole list in its order on disk, without the screen's search and filters), each
+ *  after the shown row it followed;
  *  `moved` has left its old place, so it anchors nothing. A renumber of this order gives hidden
  *  rows a place among their old neighbours, rather than leaving their old ranks among the new ones
  *  (src/mcpActions.ts's move_task renumbers the same way). */

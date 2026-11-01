@@ -20,7 +20,7 @@ import { nav, openDoc, useViewState } from "./nav";
 import { samplePrep, scenePrep } from "./scene";
 import { settings, useStore } from "./store";
 import { TaskList, TasksFailed } from "./TaskList";
-import { leftOutNote, parkedLeftOut, reportEditError, tasksFailed, useAllTasks, viewRows, VIEWS } from "./taskModel";
+import { reportEditError, tasksFailed, useAllTasks, viewRows, VIEWS } from "./taskModel";
 import { toast } from "./Toast";
 import { TopBar } from "./TopBar";
 import { ago, Dialog, LayerTag, Squeeze } from "./ui";
@@ -543,7 +543,6 @@ export function Step({ id, ctx, log }: { id: string; ctx: WeeklyContext | null; 
   const all = useAllTasks();
   const projects = useProjects();
   const inbox = useInbox();
-  const onHoldSomeday = useStore(settings).includeOnHoldSomeday === true;
   const today = localToday();
   const view = (v: string) =>
     all
@@ -552,7 +551,6 @@ export function Step({ id, ctx, log }: { id: string; ctx: WeeklyContext | null; 
           VIEWS.find((x) => x.id === v)!,
           today,
           inbox,
-          onHoldSomeday,
         )
       : [];
   const flagged = useMemo(() => (projects ?? []).filter((p) => projectFlag(p)), [projects]);
@@ -614,15 +612,12 @@ export function Step({ id, ctx, log }: { id: string; ctx: WeeklyContext | null; 
           </div>
         </div>
       );
-    case "next": {
-      // An empty list says when on-hold and someday projects' tasks are why, as Tasks does.
-      const left = all ? parkedLeftOut(all, today, inbox, onHoldSomeday).length : 0;
+    case "next":
       return (
         <div className="card tcard">
-          <TaskList rows={view("next")} manual={false} keys empty={`No next actions.${left ? ` ${leftOutNote(left)}` : ""}`} />
+          <TaskList rows={view("next")} manual={false} keys empty="No next actions." />
         </div>
       );
-    }
     case "projects":
       return (
         <div className="card">
