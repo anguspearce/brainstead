@@ -9,7 +9,7 @@ import { nav, place } from "./nav";
 import { settings, useStore } from "./store";
 import { HelpButton } from "./help/HelpDrawer";
 import { SyncDot } from "./SyncDot";
-import { Popover } from "./ui";
+import { BarContext, Popover } from "./ui";
 import { dragRegion, keyLabel } from "./platform";
 
 /** Back and forward, on every screen's top bar. */
@@ -154,18 +154,15 @@ export function TopBar({ title, sub, children, ask }: { title: string; sub?: str
   return (
     <div className="top drag" {...dragRegion()}>
       <HistButtons />
+      {/* The subtitle's dot is drawn by CSS (.sub::before), so it goes with the subtitle when a narrow
+          bar squeezes that to nothing. */}
       <div className="crumbs">
         <b>{title}</b>
-        {sub && (
-          <>
-            <span>·</span>
-            <span>{sub}</span>
-          </>
-        )}
+        {sub && <span className="sub">{sub}</span>}
       </div>
       {/* The bar's empty middle drags the window too: the script acts on the pressed element only. */}
       <div className="sp" {...dragRegion()} />
-      {children}
+      <BarContext.Provider value={true}>{children}</BarContext.Provider>
       {ask && <AskButton ask={ask} />}
       <SyncDot />
       <HelpButton />

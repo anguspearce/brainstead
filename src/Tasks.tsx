@@ -21,7 +21,7 @@ import { InfoTip, TaskEditor, taskKey, TaskList, TasksFailed, useTaskListKeys } 
 import { taskDate } from "./taskDates";
 import { tasksFailed, useAllTasks, viewRows, VIEWS, ViewId } from "./taskModel";
 import { askLink, askQuote, TopBar } from "./TopBar";
-import { fmtCount, Popover, SearchBox, Seg, TableBand, useDebounced, usePinnedBar } from "./ui";
+import { fmtCount, Popover, SearchBox, Seg, Squeeze, TableBand, useDebounced, usePinnedBar } from "./ui";
 import { settings, useStore } from "./store";
 import type { SavedTaskList } from "./api";
 import { keyLabel } from "./platform";
@@ -151,7 +151,7 @@ export function TasksScreen() {
           onClick={(e) => setAdding(e.currentTarget.getBoundingClientRect())}
         >
           <Icon name="plus" size={14} />
-          New task
+          <Squeeze full="New task" narrow="New" />
         </button>
       </TopBar>
       <div className="body tasks3" {...panes.root}>

@@ -17,7 +17,7 @@ Unsaved changes in a trashed note go into the Trash with it, and come back as it
 ## Find something in the Trash
 Newest deletions come first. Each row shows the layer, name, the folder it **Was in**, when it was deleted and its size.
 - **Search the Trash** filters by name or folder.
-- **Show** in the top bar limits the list to notes, wiki pages, sources or templates.
+- **Show** in the top bar limits the list to notes, wiki pages, sources or templates, each with its count; in a narrow window the counts go, then it's a drop-down menu.
 - Click the eye button, or select one item and press `Space`, to preview a file where it lies in the Trash: Quick Look on a Mac, Preview on Windows, which draws it in the window as Explorer's preview pane does. `Space` or `Esc` closes it (after a click into the document, keys go to the document until you click the panel's bar). A type Windows can't preview, or a file downloaded from the internet, opens in its own app instead.
 
 ## Put files back
@@ -28,7 +28,7 @@ If another file now has the old path, the row says so; **Restore as…** restore
 An assistant's restores are listed in [Changes](app:review) with **Revert**; one into `Templates/`, or of a note with code that runs, waits there for you to accept.
 
 ## Delete for good
-Tick files and click **Delete forever**, or click **Empty the Trash** in the top bar to delete everything (it shows the space freed). Both ask first. No app can restore the files after this; it can't be undone.
+Tick files and click **Delete forever**, or click **Empty the Trash** in the top bar to delete everything (it shows the space freed, unless the window is narrow). Both ask first. No app can restore the files after this; it can't be undone.
 
 ## Resize the columns
 Drag the left edge of **Type**, **Was in**, **Deleted** or **Size** in the header to resize that column; **Name** takes the rest; a cut-off name or folder shows whole when you rest on it. A double-click on the edge puts the column back ([pane widths](help:settings-general)).
