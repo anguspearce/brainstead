@@ -1253,22 +1253,25 @@ describe("MCP actions", () => {
           deletedAt: `2026-09-0${i + 1}T10:00`,
           sizeBytes: 1024,
         }));
-      expect(await data("trash", { limit: 2 })).toEqual({
-        total: 3,
-        matching: 3,
-        offset: 0,
-        next_offset: 2,
-        bytes: 3072,
-        size: "3.0 KB",
-        items: [
-          { id: "t2", path: "Idea. 2.md", layer: "note", deleted: "2026-09-03T10:00", bytes: 1024, look: "app" },
-          { id: "t1", path: "Idea. 1.md", layer: "note", deleted: "2026-09-02T10:00", bytes: 1024, look: "app" },
-        ],
-      });
-      // What Space does with each, as the Trash screen decides: on Windows, Preview where a handler is.
+      // What Space does with each row (`look`) is the Trash screen's decision, by platform: a
+      // Mac says Quick Look for every file, so the platform is set rather than the host's taken.
       const was = platform();
       try {
         setPlatform("windows");
+        answers.preview_available = () => false;
+        expect(await data("trash", { limit: 2 })).toEqual({
+          total: 3,
+          matching: 3,
+          offset: 0,
+          next_offset: 2,
+          bytes: 3072,
+          size: "3.0 KB",
+          items: [
+            { id: "t2", path: "Idea. 2.md", layer: "note", deleted: "2026-09-03T10:00", bytes: 1024, look: "app" },
+            { id: "t1", path: "Idea. 1.md", layer: "note", deleted: "2026-09-02T10:00", bytes: 1024, look: "app" },
+          ],
+        });
+        // On Windows, Preview where a handler is.
         answers.preview_available = (a) => String(a?.name).endsWith("1.md");
         expect((await data("trash", { limit: 2 })) as { items: { look: string }[] }).toMatchObject({
           items: [{ look: "app" }, { look: "preview" }],
