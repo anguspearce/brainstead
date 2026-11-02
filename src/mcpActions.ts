@@ -101,16 +101,21 @@ import {
   ask,
   CLI_LABEL,
   clis,
+  cliOf,
   DEFAULT_MODEL,
   effortLabel,
+  effortSaved,
   findClis,
   installedEfforts,
   isSaved,
   keepChat,
+  jobModelOf,
+  jobOwnEffort,
   MODEL_JOBS,
   modelLabel,
   pinSaved,
   renameSaved,
+  setJobModel,
   trashSaved,
 } from "./askState";
 import { DOC_ACCENTS, DOC_STYLES, docDefaults, lookOf, withOwnLook } from "./docLook";
@@ -2397,8 +2402,8 @@ function effortSaid(cli: CliName): string {
   return level ? `${effortLabel(level)} effort` : "Default effort (the assistant's own for each model)";
 }
 
-/** The effort levels an assistant can be set to, as its menu lists them: none while it isn't
- *  installed, when the screen shows no menu. */
+/** The effort levels an assistant can be set to, as its menus list them: none while it isn't
+ *  installed, when the screens show no menu. */
 async function effortChoices(cli: CliName): Promise<[string, string][]> {
   await findClis(!clis.get()?.length);
   return installedEfforts(cli).map((l) => [l, effortLabel(l)]);
@@ -3126,10 +3131,12 @@ async function chatsTool(a: Args): Promise<string | Listing> {
     const turns = full.transcript.filter((t) => t.role === "user" || t.role === "assistant");
     return {
       text: [
-        `${c.title} (${turns.length} messages):`,
+        `${c.title} (${turns.length} messages, ${c.effort ? `${effortLabel(c.effort)} effort` : "Default effort"}):`,
         ...turns.map((t) => `\n${t.role === "user" ? "User" : "Assistant"}: ${t.text}`),
       ].join("\n"),
-      structured: { chat: { file: c.filename, title: c.title, messages: turns.map((t) => ({ role: t.role, text: t.text })) } },
+      structured: {
+        chat: { file: c.filename, title: c.title, effort: c.effort ?? null, messages: turns.map((t) => ({ role: t.role, text: t.text })) },
+      },
     };
   }
   if (action === "rename") {
@@ -3148,12 +3155,27 @@ async function chatsTool(a: Args): Promise<string | Listing> {
       ? `Pinned “${c.title}”: it's kept whatever happens.`
       : `Unpinned “${c.title}”${saved(c) ? "" : "; as it isn't saved, it's deleted once it's closed and 20 newer chats are in History"}.`;
   }
+  if (action === "effort") {
+    // As the menu beside the chat's model in Ask: its assistant's levels, by id or name.
+    const cli = cliOf(c.model ?? DEFAULT_MODEL);
+    await findClis(!clis.get()?.length);
+    const levels = installedEfforts(cli);
+    const choices = `${levels.join(", ") || "none here"}, or empty for Default effort`;
+    if (a.effort == null) throw new Error(`Give effort: for ${CLI_LABEL[cli]}, one of ${choices}.`);
+    const want = String(a.effort).trim().toLowerCase();
+    const level = want ? levels.find((l) => l === want || effortLabel(l).toLowerCase() === want) : null;
+    if (level === undefined) throw new Error(`effort for ${CLI_LABEL[cli]} is one of: ${choices}.`);
+    await effortSaved(c, level);
+    const said = level ? `${effortLabel(level)} effort` : "Default effort (the assistant's own for each model)";
+    noted(`set the chat “${c.title}” to ${said}`);
+    return `“${c.title}” runs at ${said} from its next message. New chats still start with the effort set in Settings › AI assistants.`;
+  }
   if (action === "trash") {
     await trashSaved(c);
     noted(`moved the chat “${c.title}” to the Trash`);
     return `Moved “${c.title}” to the Trash.`;
   }
-  throw new Error("action is list, read, rename, pin, unpin or trash.");
+  throw new Error("action is list, read, rename, pin, unpin, effort or trash.");
 }
 
 // ---- Tasks' saved lists
@@ -3294,10 +3316,19 @@ const settingRows = (): SettingRow[] => [
     modelChoices,
     job === "weekprep" ? "As the summaries, else as new chats" : "As new chats",
   ]),
+  ...MODEL_JOBS.map(([job, label]): SettingRow => [
+    `jobEffort.${job}`,
+    "AI assistants",
+    `Models by job › ${label} › Effort`,
+    "choice",
+    null,
+    () => effortChoices(cliOf(jobModelOf(job))),
+    "Assistant's setting, the effort set for the job's assistant",
+  ]),
   ...(Object.keys(CLI_LABEL) as CliName[]).map((cli): SettingRow => [
     `effort.${cli}`,
     "AI assistants",
-    `Found on this computer › ${CLI_LABEL[cli]}'s effort`,
+    `Found on this computer › ${CLI_LABEL[cli]} › Effort`,
     "choice",
     null,
     () => effortChoices(cli),
@@ -3356,6 +3387,7 @@ async function settingsTool(a: Args): Promise<string> {
     summaries: { ...DEFAULT_SCHEDULE, ...s.summaries },
     weeklyReview: { ...DEFAULT_WEEKLY_REVIEW, ...s.weeklyReview },
     jobModels: { ...s.jobModels },
+    jobEffort: { ...s.jobEffort },
     effort: { ...s.effort },
   };
   // Open at login is macOS's login item, not a setting in the file; null where macOS can't say
@@ -3367,6 +3399,8 @@ async function settingsTool(a: Args): Promise<string> {
   const valueOf = (key: string, def: unknown) => {
     if (key === "openAtLogin") return login;
     const [head, sub] = key.split(".");
+    // As Models by job shows it: a level the job's assistant doesn't offer is Assistant's setting.
+    if (head === "jobEffort") return jobOwnEffort(sub, s);
     const v = sub ? nested[head][sub] : (s as unknown as Record<string, unknown>)[key];
     return v ?? def;
   };
@@ -3462,8 +3496,14 @@ async function settingsTool(a: Args): Promise<string> {
     v = scriptsFolder(String(v ?? ""));
   } else v = String(v ?? "").trim() || undefined;
   const [head, sub] = key!.split(".");
+  let dropped = "";
   if (key === "openAtLogin") {
     await api.loginItemSet(v as boolean);
+  } else if (head === "jobModels") {
+    // As Models by job does: the job's own effort goes when its new model's assistant doesn't offer it.
+    const level = setJobModel(sub, (v as string | undefined) ?? null);
+    if (level)
+      dropped = ` Its effort (${effortLabel(level)}) went back to Assistant's setting: ${CLI_LABEL[cliOf(jobModelOf(sub))]} doesn't offer it.`;
   } else if (sub) {
     const next = { ...nested[head], [sub]: v };
     if (v === undefined) delete next[sub];
@@ -3492,7 +3532,7 @@ async function settingsTool(a: Args): Promise<string> {
     return `${where(pane, label)} is now ${said}, registered with the system.`;
   }
   noted(`set ${label} to ${said}`);
-  return `${where(pane, label)} is now ${said}.`;
+  return `${where(pane, label)} is now ${said}.${dropped}`;
 }
 
 // ---- a note's own look

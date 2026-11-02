@@ -16,7 +16,7 @@ import { shortcutsOpen } from "./Shortcuts";
 import { guideOffer } from "./help/GuideOffer";
 import { helpOpen, HelpView } from "./help/HelpDrawer";
 import { readingScene } from "./speech/player";
-import type { ClarifySuggestion, Reply, Theme, WeekPrepStatus } from "./api";
+import type { ClarifySuggestion, Reply, Settings, Theme, WeekPrepStatus } from "./api";
 import { ask, blankChat } from "./askState";
 import { nav, Screen, SettingsPane } from "./nav";
 import { noteDialog } from "./notes/dialogs";
@@ -66,6 +66,8 @@ export interface Scene {
   guideOffer?: boolean;
   /** Screens' remembered choices (`useViewState` keys), e.g. the selected task. */
   view?: Record<string, unknown>;
+  /** Settings shown as if set (not saved), e.g. a job's effort under Models by job. */
+  settings?: Partial<Settings>;
   /** For "ask": show a sample chat. */
   chat?: boolean | "tutorial";
   /** For "reply": a sample draft for the thread, as Draft would make it (the website tutorial's). */
@@ -257,6 +259,7 @@ export function applyScene(sc: Scene) {
     applyAccent("system");
   }
   if (sc.sideFolded) settings.update({ docSideFolded: true });
+  if (sc.settings) settings.update(sc.settings);
   if (sc.view) settings.update({ viewMemory: { ...settings.get().viewMemory, ...sc.view } });
   if (sc.screen) nav.replace({ screen: sc.screen, pane: sc.pane, path: sc.path, q: sc.q, view: sc.view });
   if (sc.focus) focusMode.set(true);

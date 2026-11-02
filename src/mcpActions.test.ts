@@ -28,7 +28,7 @@ import { nav } from "./nav";
 import { imageView } from "./ImageViewer";
 import { followUp } from "./Ingest";
 import { isMac, keyLabel, platform, setPlatform, terminalApp } from "./platform";
-import { findClis } from "./askState";
+import { clis, findClis } from "./askState";
 
 const row = (over: Partial<TaskRow>): TaskRow => ({
   path: "Me. To Do List.md",
@@ -834,7 +834,7 @@ describe("MCP actions", () => {
       });
       expect(await run("chats")).toMatch(/Orbit App plan · 2026-10-05 09:00 · not saved/);
       expect(await run("chats", { action: "read", chat: "orbit app plan" })).toBe(
-        "Orbit App plan (2 messages):\n\nUser: Hi\n\nAssistant: Hello",
+        "Orbit App plan (2 messages, Default effort):\n\nUser: Hi\n\nAssistant: Hello",
       );
       await run("chats", { action: "rename", chat: "local:a.json", title: "Launch" });
       expect(calls.find(([c]) => c === "chat_rename")![1]).toEqual({ filename: "local:a.json", title: "Launch" });
@@ -1541,6 +1541,67 @@ describe("MCP actions", () => {
       expect(await run("chats", { action: "pin", chat: "Orbit App plan" })).toMatch(/pinned already/);
       expect(await run("chats", { action: "unpin", chat: "Orbit App plan" })).toBe("Unpinned “Orbit App plan”.");
       expect(calls.filter(([x]) => x === "chat_save").at(-1)![1]!.chat).toMatchObject({ state: "archived" });
+    });
+
+    it("sets a chat's own effort, as the menu beside its model does, leaving Settings' alone", async () => {
+      const c = {
+        filename: "Chat. Orbit App plan.md",
+        id: "a",
+        title: "Orbit App plan",
+        model: "claude:sonnet",
+        updatedAt: "2026-10-05T09:00:00",
+      };
+      answers.chats_list = () => [c];
+      answers.chat_read = () => ({ ...c, transcript: [] });
+      answers.ask_clis = () => [
+        { cli: "claude", path: "/usr/local/bin/claude", version: "2", models: [], efforts: ["low", "medium", "high", "xhigh", "max"] },
+      ];
+      await findClis(true);
+      // The assistants found are kept between calls: later tests look for their own.
+      onTestFinished(() => clis.set(null));
+      expect(await run("chats", { action: "effort", chat: "Orbit App plan", effort: "Extra high" })).toMatch(
+        /^“Orbit App plan” runs at Extra high effort from its next message\./,
+      );
+      expect(calls.find(([x]) => x === "chat_save")![1]!.chat).toMatchObject({ effort: "xhigh" });
+      expect(settings.get().effort).toBeUndefined();
+      await expect(run("chats", { action: "effort", chat: "Orbit App plan", effort: "ultra" })).rejects.toThrow(/one of: low, medium/);
+      await run("chats", { action: "effort", chat: "Orbit App plan", effort: "" });
+      expect(calls.filter(([x]) => x === "chat_save").at(-1)![1]!.chat).toMatchObject({ effort: null });
+      // Left out, the effort isn't taken for Default: the chat stays as it is.
+      const saves = calls.filter(([x]) => x === "chat_save").length;
+      await expect(run("chats", { action: "effort", chat: "Orbit App plan" })).rejects.toThrow(
+        /^Give effort: for Claude Code, one of low, medium, high, xhigh, max, or empty for Default effort\.$/,
+      );
+      expect(calls.filter(([x]) => x === "chat_save")).toHaveLength(saves);
+    });
+
+    it("offers no effort for an assistant that isn't installed, as the screens show no menu", async () => {
+      answers.settings_write = (a) => a!.settings;
+      answers.login_item = () => null;
+      const c = {
+        filename: "Chat. Orbit App plan.md",
+        id: "a",
+        title: "Orbit App plan",
+        model: "agy:gemini-3",
+        updatedAt: "2026-10-05T09:00:00",
+      };
+      answers.chats_list = () => [c];
+      answers.chat_read = () => ({ ...c, transcript: [] });
+      answers.ask_clis = () => [
+        { cli: "claude", path: "/usr/local/bin/claude", version: "2", models: [], efforts: ["low", "medium", "high", "xhigh", "max"] },
+        { cli: "antigravity", path: null, version: null, models: [], efforts: ["low", "medium", "high", "xhigh", "max"] },
+      ];
+      await findClis(true);
+      onTestFinished(() => clis.set(null));
+      expect(await run("settings")).toContain(
+        "effort.antigravity · Settings › AI assistants › Found on this computer › Antigravity (Google) › Effort: null (Default effort, the assistant's own for each model) (one of: none here;",
+      );
+      await expect(run("settings", { action: "set", key: "effort.antigravity", value: "high" })).rejects.toThrow(/one of: none here/);
+      settings.update({ jobModels: { find: "agy:gemini-3" } });
+      await expect(run("settings", { action: "set", key: "jobEffort.find", value: "max" })).rejects.toThrow(/one of: none here/);
+      await expect(run("chats", { action: "effort", chat: "Orbit App plan", effort: "high" })).rejects.toThrow(/one of: none here/);
+      expect(settings.get().effort).toBeUndefined();
+      settings.update({ jobModels: undefined });
     });
 
     it("rebuilds the index, unless it's being built already", async () => {
@@ -2338,7 +2399,7 @@ describe("MCP actions", () => {
       await findClis(true);
       const all = (await run("settings")) as string;
       expect(all).toContain(
-        "effort.claude · Settings › AI assistants › Found on this computer › Claude Code's effort: null (Default effort, the assistant's own for each model) (one of: low (Low), medium (Medium), high (High), xhigh (Extra high), max (Max)",
+        "effort.claude · Settings › AI assistants › Found on this computer › Claude Code › Effort: null (Default effort, the assistant's own for each model) (one of: low (Low), medium (Medium), high (High), xhigh (Extra high), max (Max)",
       );
       expect(await run("settings", { action: "set", key: "effort.claude", value: "Extra high" })).toMatch(/is now "xhigh"/);
       expect(settings.get().effort).toEqual({ claude: "xhigh" });
@@ -2353,6 +2414,64 @@ describe("MCP actions", () => {
       expect(out).toContain("Default effort (the assistant's own for each model).");
       await run("settings", { action: "set", key: "effort.claude", value: null });
       expect(settings.get().effort).toEqual({});
+    });
+
+    it("reads and sets a job's own effort as Models by job does, leaving the assistant's alone", async () => {
+      answers.settings_write = (a) => a!.settings;
+      answers.login_item = () => null;
+      answers.ask_clis = () => [
+        {
+          cli: "claude",
+          path: "/usr/local/bin/claude",
+          version: "2.1.0",
+          models: [{ id: "claude:opus", name: "Opus" }],
+          efforts: ["low", "medium", "high", "xhigh", "max"],
+        },
+        {
+          cli: "codex",
+          path: "/usr/local/bin/codex",
+          version: null,
+          models: [{ id: "gpt-5", name: "gpt-5" }],
+          efforts: ["low", "medium", "high", "xhigh"],
+        },
+      ];
+      await findClis(true);
+      settings.update({ effort: { claude: "low" } });
+      const all = (await run("settings")) as string;
+      expect(all).toContain(
+        "jobEffort.weekprep · Settings › AI assistants › Models by job › Weekly review preparation › Effort: null (Assistant's setting, the effort set for the job's assistant) (one of: low (Low), medium (Medium), high (High), xhigh (Extra high), max (Max)",
+      );
+      expect(await run("settings", { action: "set", key: "jobEffort.weekprep", value: "Max" })).toMatch(
+        /Weekly review preparation › Effort is now "max"/,
+      );
+      expect(settings.get().jobEffort).toEqual({ weekprep: "max" });
+      expect(settings.get().effort).toEqual({ claude: "low" });
+      // A model whose assistant has no max takes the job's effort away, as the screen does, and says so.
+      expect(await run("settings", { action: "set", key: "jobModels.weekprep", value: "gpt-5" })).toMatch(
+        /is now "gpt-5"\. Its effort \(Max\) went back to Assistant's setting: ChatGPT \(Codex\) doesn't offer it\.$/,
+      );
+      expect(settings.get().jobModels).toEqual({ weekprep: "gpt-5" });
+      expect(settings.get().jobEffort).toEqual({});
+      await expect(run("settings", { action: "set", key: "jobEffort.weekprep", value: "max" })).rejects.toThrow(
+        /one of: low, medium, high, xhigh, or null for Assistant's setting/,
+      );
+      await run("settings", { action: "set", key: "jobEffort.weekprep", value: "high" });
+      await run("settings", { action: "set", key: "jobEffort.weekprep", value: null });
+      expect(settings.get().jobEffort).toEqual({});
+      // A model the job inherits (new chats', or the summaries' for weekprep) moving to an assistant
+      // without its level sets it aside: list_settings says what the screen shows, and it comes back.
+      settings.update({ askModel: "claude:opus", jobModels: {}, jobEffort: { find: "max", weekprep: "max" } });
+      await run("settings", { action: "set", key: "jobModels.summaries", value: "gpt-5" });
+      expect(await run("settings", { action: "set", key: "askModel", value: "gpt-5" })).not.toMatch(/Assistant's setting/);
+      expect(settings.get().jobEffort).toEqual({ find: "max", weekprep: "max" });
+      expect(await run("settings")).toContain(
+        "jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects › Effort: null (Assistant's setting",
+      );
+      await run("settings", { action: "set", key: "askModel", value: "claude:opus" });
+      expect(await run("settings")).toContain(
+        'jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects › Effort: "max"',
+      );
+      settings.update({ askModel: undefined, jobModels: undefined, jobEffort: undefined, effort: undefined });
     });
 
     it("names the read-aloud highlight as Settings does", async () => {

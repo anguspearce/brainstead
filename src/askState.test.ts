@@ -2,12 +2,15 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 const invoke = vi.fn(async (_cmd: string, _args?: unknown): Promise<unknown> => undefined);
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (c: string, a?: unknown) => invoke(c, a), convertFileSrc: (p: string) => p }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 
+import { listen } from "@tauri-apps/api/event";
+import cases from "../tests/fixtures/job-settings.json";
+import type { CliInfo, CliName, Settings } from "./api";
 import { groupTurns } from "./Ask";
 import {
   applyDone,
@@ -16,8 +19,15 @@ import {
   blankChat,
   type Chat,
   cliOf,
+  clis,
   effortLabel,
+  effortFor,
   exchanges,
+  followEffortSettings,
+  jobModelOf,
+  jobOwnEffort,
+  MODEL_JOBS,
+  resolveEffort,
   closeChat,
   fallbackTitle,
   keepChat,
@@ -27,9 +37,14 @@ import {
   save,
   send,
   sessionOf,
+  setEffort,
+  setJobModel,
+  setModel,
+  startAsk,
   toSaved,
   unqueue,
 } from "./askState";
+import { settings } from "./store";
 
 describe("Ask state", () => {
   beforeEach(() => {
@@ -47,6 +62,121 @@ describe("Ask state", () => {
     expect(modelLabel("claude:sonnet", found)).toBe("Claude Code · Sonnet");
     expect(modelLabel("gpt-5.5", null)).toBe("ChatGPT · gpt-5.5");
     expect(["low", "xhigh", "max"].map(effortLabel)).toEqual(["Low", "Extra high", "Max"]);
+  });
+
+  it("resolves a run's effort: the job's, else the assistant's, else none", () => {
+    // The same cases as brainstead_core::ask's effort_resolves_job_then_assistant.
+    const claude = ["low", "medium", "high", "xhigh", "max"];
+    const codex = ["low", "medium", "high", "xhigh"];
+    expect(resolveEffort(claude, "high", "low")).toBe("high");
+    expect(resolveEffort(claude, null, "low")).toBe("low");
+    expect(resolveEffort(claude, null, null)).toBeNull();
+    expect(resolveEffort(codex, "max", "medium")).toBe("medium");
+    expect(resolveEffort(codex, "max", null)).toBeNull();
+  });
+
+  it("never starts a new chat at a job's effort", () => {
+    settings.update({ effort: { claude: "low" }, jobEffort: { weekprep: "max", summaries: "high" }, askModel: "claude:sonnet" });
+    expect(jobOwnEffort("weekprep")).toBe("max");
+    expect(effortFor("claude:sonnet")).toBe("low");
+    expect(blankChat("claude:sonnet").effort).toBe("low");
+    settings.update({ effort: {} });
+    expect(blankChat("claude:sonnet").effort).toBeNull();
+    settings.update({ jobEffort: undefined, askModel: undefined });
+  });
+
+  /** The assistants found, each installed with the shared cases' levels. */
+  const found = (): CliInfo[] =>
+    (Object.keys(cases.levels) as CliName[]).map((cli) => ({
+      cli,
+      path: `/bin/${cli}`,
+      version: "1",
+      models: [],
+      efforts: cases.levels[cli],
+    }));
+
+  it("works out a job's model and effort as Rust does (tests/fixtures/job-settings.json)", () => {
+    expect(MODEL_JOBS.map(([job]) => job)).toEqual(cases.jobs);
+    clis.set(found());
+    for (const c of cases.cases) {
+      const s = c.settings as unknown as Settings;
+      const model = jobModelOf(c.job, s);
+      expect(model, c.name).toBe(c.model);
+      expect(jobOwnEffort(c.job, s), c.name).toBe(c.own);
+      // What brainstead_core::ask::job_effort gives the run.
+      const cli = cliOf(model);
+      expect(resolveEffort(cases.levels[cli], s.jobEffort?.[c.job], s.effort?.[cli]), c.name).toBe(c.effort);
+    }
+    clis.set(null);
+  });
+
+  it("drops a job's own effort only when its own model moves to an assistant without it", () => {
+    clis.set(found());
+    const levels = { weekprep: "max", find: "max", clarify: "high" };
+    settings.update({ askModel: "claude:sonnet", jobModels: {}, jobEffort: levels });
+    // A model picked for one chat is that chat's: New chats use and the jobs on it stay as they are.
+    const id = newChat("claude:sonnet");
+    setModel(id, "gpt-5.5");
+    expect(ask.get().chats.find((c) => c.id === id)!.model).toBe("gpt-5.5");
+    expect(settings.get().askModel).toBe("claude:sonnet");
+    expect(settings.get().jobEffort).toEqual(levels);
+    // A model a job inherits (the summaries', for weekprep) sets its level aside until it comes back.
+    expect(setJobModel("summaries", "gpt-5")).toBeNull();
+    expect(jobOwnEffort("weekprep")).toBeNull();
+    expect(settings.get().jobEffort).toEqual(levels);
+    setJobModel("summaries", null);
+    expect(jobOwnEffort("weekprep")).toBe("max");
+    // Its own model on an assistant without the level drops it; one with the level keeps it.
+    expect(setJobModel("find", "gpt-5")).toBe("max");
+    expect(setJobModel("clarify", "gpt-5")).toBeNull();
+    expect(settings.get().jobEffort).toEqual({ weekprep: "max", clarify: "high" });
+    setJobModel("find", null);
+    expect(jobOwnEffort("find")).toBeNull();
+    settings.update({ askModel: undefined, jobModels: undefined, jobEffort: undefined });
+    clis.set(null);
+  });
+
+  it("keeps an empty tab on the effort set for its assistant until one is picked in it", async () => {
+    clis.set(found());
+    settings.update({ effort: {} });
+    const stop = followEffortSettings();
+    const id = newChat("claude:sonnet");
+    const effort = () => ask.get().chats.find((c) => c.id === id)!.effort;
+    expect(effort()).toBeNull();
+    settings.update({ effort: { claude: "high" } });
+    expect(effort()).toBe("high");
+    await setEffort(id, "low");
+    settings.update({ effort: { claude: "max" } });
+    expect(effort()).toBe("low");
+    stop();
+    settings.update({ effort: undefined });
+    clis.set(null);
+  });
+
+  it("runs a scheduled run's tab at its job's effort, and keeps it until the run ends", async () => {
+    const handlers = new Map<string, (e: { payload: unknown }) => void>();
+    vi.mocked(listen).mockImplementation(async (name, h) => {
+      handlers.set(name, h as (e: { payload: unknown }) => void);
+      return () => {};
+    });
+    settings.update({ effort: { claude: "low" } });
+    vi.useFakeTimers();
+    const stop = await startAsk();
+    // Its listeners, its timer and its following of the effort settings end with this test.
+    onTestFinished(() => {
+      stop();
+      vi.useRealTimers();
+      vi.mocked(listen).mockImplementation(async () => () => {});
+    });
+    handlers.get("review-started")!({
+      payload: { chatId: "summary-1", title: "Daily summary", model: "claude:sonnet", effort: "high", prompt: "Daily summary for today" },
+    });
+    const run = () => ask.get().chats.find((c) => c.id === "summary-1")!;
+    expect(run().effort).toBe("high");
+    await expect(setEffort("summary-1", "max")).rejects.toThrow(/still running/);
+    expect(run().effort).toBe("high");
+    expect(invoke).not.toHaveBeenCalledWith("chat_save", expect.anything());
+    settings.update({ effort: undefined });
   });
 
   it("finishes a turn whose ask-done the window missed, with Rust's answer, once", async () => {
@@ -152,10 +282,28 @@ describe("Ask state", () => {
     ]);
   });
 
+  it("starts a chat at its assistant's effort from Settings, and changes the chat's own only", async () => {
+    settings.update({ effort: { claude: "high" } });
+    const id = newChat("claude:sonnet");
+    expect(ask.get().chats.find((c) => c.id === id)!.effort).toBe("high");
+    // Another model on the same assistant keeps the chat's level; another assistant starts from its own.
+    await setEffort(id, "low");
+    setModel(id, "claude:opus");
+    expect(ask.get().chats.find((c) => c.id === id)!.effort).toBe("low");
+    setModel(id, "gpt-5.5");
+    expect(ask.get().chats.find((c) => c.id === id)!.effort).toBeNull();
+    setModel(id, "claude:sonnet");
+    await setEffort(id, "max");
+    send(id, "first");
+    expect(invoke).toHaveBeenCalledWith("ask_send", expect.objectContaining({ chatId: id, effort: "max" }));
+    expect(settings.get().effort).toEqual({ claude: "high" });
+    settings.update({ effort: undefined });
+  });
+
   it("queues messages while it answers and sends them in order", () => {
     const id = newChat("claude:sonnet");
     send(id, "first");
-    expect(invoke).toHaveBeenCalledWith("ask_send", { chatId: id, prompt: "first", model: "claude:sonnet", session: null });
+    expect(invoke).toHaveBeenCalledWith("ask_send", { chatId: id, prompt: "first", model: "claude:sonnet", session: null, effort: null });
     send(id, "second");
     send(id, "third");
     expect(ask.get().chats[0].queue).toEqual(["second", "third"]);
