@@ -25,6 +25,8 @@ mod quick_look;
 mod single_instance_win;
 #[cfg(windows)]
 mod snap_win;
+#[cfg(windows)]
+mod snapshot_win;
 #[cfg(target_os = "macos")]
 mod speech;
 #[cfg(target_os = "macos")]
@@ -149,9 +151,12 @@ pub fn show_painted(w: &tauri::WebviewWindow, rgb: (u8, u8, u8), focus: bool) {
 }
 
 /// Makes a window invisible and click-through while it still draws, for screenshots
-/// (tools/screenshots.py captures its contents): nothing flashes on screen. macOS only; elsewhere
-/// the window shows as usual.
+/// (tools/screenshots.py captures its contents): nothing flashes on screen. On macOS the window is
+/// fully transparent; on Windows it is moved off every monitor and kept from the focus, the
+/// taskbar and Alt+Tab (`snapshot_win`). Elsewhere the window shows as usual.
 pub fn make_unseen(w: &tauri::WebviewWindow) {
+    #[cfg(windows)]
+    snapshot_win::make_unseen(w);
     #[cfg(target_os = "macos")]
     if let Ok(ns) = w.ns_window() {
         // Tauri's own NSWindow, alive as long as the window is; setup runs on the main thread.
@@ -171,13 +176,14 @@ pub fn make_unseen(w: &tauri::WebviewWindow) {
             let _: () = objc2::msg_send![webview, _setWindowOcclusionDetectionEnabled: false];
         }
     });
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     let _ = w;
 }
 
-/// Saves what the window's webview shows to `dest` as a TIFF at twice its size, for screenshots taken unseen
-/// (make_unseen: an invisible window's own capture is blank, its webview's snapshot isn't). The file
-/// appears when WebKit has drawn it. macOS only.
+/// Saves what the window's webview shows to `dest`, for screenshots taken unseen (make_unseen: an
+/// invisible window's own capture is blank, its webview's snapshot isn't). On macOS a TIFF at twice
+/// the window's size in points, as a Retina screen draws it; on Windows a PNG at the window's size
+/// in device pixels (`snapshot_win`). The file appears whole once the engine has drawn it.
 pub fn snapshot(w: &tauri::WebviewWindow, dest: &Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -205,10 +211,12 @@ pub fn snapshot(w: &tauri::WebviewWindow, dest: &Path) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    return snapshot_win::snapshot(w, dest);
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         let _ = (w, dest);
-        Err("Snapshots are macOS only.".into())
+        Err("Snapshots aren't available on this system yet.".into())
     }
 }
 

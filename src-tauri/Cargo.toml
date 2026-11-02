@@ -84,8 +84,10 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globali
 # Spelling (Windows' spell checker) and grammar (Harper, on the PC), as Two-edged Sword's journal
 # has them (platform/spell_win.rs).
 # The text in images and the copy a model is shown, through Windows' imaging and text
-# recognition (platform/image_win.rs). The accent colour (platform/accent_win.rs).
-windows = { version = "0.62", features = ["Foundation", "Foundation_Collections", "Graphics_Imaging", "Media_Ocr", "Storage_Streams", "UI_ViewManagement", "Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_Security_Credentials", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
+# recognition (platform/image_win.rs). The accent colour (platform/accent_win.rs). Screenshot
+# scenes' webview capture into a memory stream (platform/snapshot_win.rs) needs
+# Win32_System_Com_StructuredStorage.
+windows = { version = "0.62", features = ["Foundation", "Foundation_Collections", "Graphics_Imaging", "Media_Ocr", "Storage_Streams", "UI_ViewManagement", "Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_LibraryLoader", "Win32_Security_Credentials", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 windows-future = "0.3"
 harper-core = { version = "2", default-features = false, features = ["concurrent"] }
 
