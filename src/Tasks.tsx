@@ -5,7 +5,7 @@
 // Tasks: the previous app's To Do lists as views, each task live from the notes it's written in.
 
 import { FoundTasks } from "./Found";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CaptureBox } from "./Capture";
 import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from "./taskGroups";
 import { fieldIcon, fieldValue, taskFieldsOf } from "./taskFields";
@@ -65,13 +65,13 @@ export function TasksScreen() {
   const [groupBy, setGroupBy] = useViewState<GroupBy>("tasks:group", "none");
   const [adding, setAdding] = useState<DOMRect | null>(null);
   const contexts = useMemo(() => (all ? contextsInUse(all) : []), [all]);
-  const rows = useMemo(
-    () =>
-      (all ? viewRows(all, view, today, inbox) : []).filter(
-        (t) => (!ctx || (t.contexts ?? []).includes(ctx)) && withinEffort(t, effort) && matchesSearch(t, dq),
-      ),
-    [all, inbox, view, today, ctx, effort, dq],
+  const filtered = useCallback(
+    (t: TaskRow) => (!ctx || (t.contexts ?? []).includes(ctx)) && withinEffort(t, effort) && matchesSearch(t, dq),
+    [ctx, effort, dq],
   );
+  const rows = useMemo(() => (all ? viewRows(all, view, today, inbox) : []).filter(filtered), [all, inbox, view, today, filtered]);
+  // The whole manual list, with what the search and filters hide, for a drag's renumber.
+  const every = useMemo(() => (all && view.manual ? viewRows(all, view, today, inbox) : undefined), [all, inbox, view, today]);
   const groups = useMemo(() => groupTasks(rows, groupBy, today), [rows, groupBy, today]);
   // Saved lists: a view with its context, effort and grouping, by name (settings `taskLists`).
   const saved = useStore(settings).taskLists ?? [];
@@ -272,6 +272,7 @@ export function TasksScreen() {
                       table
                       rows={g.rows}
                       manual={view.manual && groupBy === "none"}
+                      every={every}
                       selected={sel}
                       onSelect={(t) => setSel(taskKey(t))}
                       onDeselect={() => setSel(null)}

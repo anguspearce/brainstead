@@ -96,6 +96,14 @@ pub struct TaskRow {
     pub(crate) mtime: i64,
 }
 
+impl TaskRow {
+    /// In a project on hold or someday, whose tasks Next actions leaves out: src/taskModel.ts's
+    /// next view and the weekly review's preparation share the rule.
+    pub fn in_parked_project(&self) -> bool {
+        matches!(self.project_status.as_deref(), Some("on-hold" | "someday"))
+    }
+}
+
 fn rows_sql() -> String {
     let own = is_project_sql("f");
     let linked = is_project_sql("pf");
