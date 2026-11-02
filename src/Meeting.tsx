@@ -313,7 +313,7 @@ export function MeetingScreen() {
           onChange={setShow}
           options={[
             ["todo", "To do", "Transcripts not yet ingested or linked from a note"],
-            ["all", `All${all ? ` · ${all.length}` : ""}`],
+            ["all", "All", undefined, all ? ` · ${all.length}` : undefined],
           ]}
         />
         {batch.length > 1 && (

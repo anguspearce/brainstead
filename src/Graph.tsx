@@ -14,7 +14,7 @@ import { nav, openDoc, place, useViewState } from "./nav";
 import { lastSeen, useVaultVersion } from "./state";
 import { useStore } from "./store";
 import { askLink, askQuote, TopBar } from "./TopBar";
-import { fmtCount, LayerTag, Popover, SearchBox, Seg } from "./ui";
+import { fmtCount, LayerTag, Popover, SearchBox, Seg, Squeeze } from "./ui";
 import { TypeDot } from "./typeTone";
 import { KIND_COLOUR, KINDS, Kind, kindLabel, kindOf, kindsIn, labelled, neighbours, pick, radius, visible } from "./graphModel";
 import { usePanes } from "./PaneResizer";
@@ -126,7 +126,7 @@ export function GraphScreen() {
         />
         <button type="button" className="btn sm" title="Fit the graph to the window" onClick={() => setFit((n) => n + 1)} disabled={!shown}>
           <Icon name="fit" size={14} />
-          Fit
+          <Squeeze full="Fit" narrow="" />
         </button>
       </TopBar>
       <div className="body graph" {...panes.root}>

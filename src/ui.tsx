@@ -4,9 +4,13 @@
 
 // Shared pieces: tooltips, popovers, dialogs, switches and segmented controls (from a sibling app's ui.tsx).
 
-import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createContext, ReactNode, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
+
+/** True inside a screen's top bar (TopBar provides it): a Seg there also draws its drop-down twin
+ *  for narrow bars. */
+export const BarContext = createContext(false);
 
 export const LAYER_LABEL: Record<string, string> = { note: "Note", wiki: "Wiki", source: "Source", template: "Template" };
 
@@ -341,6 +345,9 @@ export function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boo
   );
 }
 
+/** A segmented control. In a top bar (BarContext) it also draws a `select` with the same choices:
+ *  the bar's container query (styles.css, "Narrow top bars") shows that instead of the segments
+ *  when the bar is narrow, and hides each option's detail before that. */
 export function Seg<T extends string>({
   value,
   options,
@@ -348,27 +355,73 @@ export function Seg<T extends string>({
   label,
 }: {
   value: T;
-  /** Value, label, and a tooltip; without one the button's title is its label. */
-  options: [T, string, string?][];
+  /** Value, label, a tooltip (without one the button's title is its label), and a detail after
+   *  the label, with its own separator (" 2", " · 2"), that a narrow bar drops. */
+  options: [T, string, string?, string?][];
   onChange: (v: T) => void;
   label: string;
 }) {
+  const inBar = useContext(BarContext);
   return (
-    <div className="seg" role="radiogroup" aria-label={label}>
-      {options.map(([v, l, tip]) => (
-        <button
-          key={v}
-          type="button"
-          role="radio"
-          aria-checked={v === value}
-          title={tip ?? l}
-          className={v === value ? "on" : ""}
-          onClick={() => onChange(v)}
-        >
-          {l}
-        </button>
+    <>
+      <div className="seg" role="radiogroup" aria-label={label}>
+        {options.map(([v, l, tip, detail]) => (
+          <button
+            key={v}
+            type="button"
+            role="radio"
+            aria-checked={v === value}
+            // The name spelt out: a detail's leading space is in its span, which name computation
+            // from the content would trim ("Notes· 1").
+            aria-label={detail ? `${l}${detail}` : undefined}
+            title={tip ?? l}
+            className={v === value ? "on" : ""}
+            onClick={() => onChange(v)}
+          >
+            {l}
+            {detail && <span className="segd">{detail}</span>}
+          </button>
+        ))}
+      </div>
+      {inBar && (
+        <select className="sel segsel" aria-label={label} title={label} value={value} onChange={(e) => onChange(e.target.value as T)}>
+          <optgroup label={label}>
+            {options.map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </optgroup>
+        </select>
+      )}
+    </>
+  );
+}
+
+/** Words in a top bar that get shorter as the bar narrows: `full` while there's room, `tight` once
+ *  the bar is tight and `narrow` once it's narrow, each standing in for the ones not given. The
+ *  bar's container query (styles.css, "Narrow top bars") shows one span at a time. */
+export function Squeeze({ full, tight, narrow }: { full: string; tight?: string; narrow?: string }) {
+  const t = tight ?? full;
+  const n = narrow ?? t;
+  // One span per distinct wording, classed with the bands it serves.
+  const spans: [string, string[]][] = [[full, ["w"]]];
+  for (const [band, text] of [
+    ["t", t],
+    ["n", n],
+  ] as const) {
+    const same = spans.find(([s]) => s === text);
+    if (same) same[1].push(band);
+    else spans.push([text, [band]]);
+  }
+  return (
+    <>
+      {spans.map(([text, bands]) => (
+        <span key={text} className={["sq", ...bands.map((b) => `sq-${b}`)].join(" ")}>
+          {text}
+        </span>
       ))}
-    </div>
+    </>
   );
 }
 
