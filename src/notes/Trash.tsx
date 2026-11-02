@@ -20,6 +20,8 @@ import { folderOf } from "./filename";
 import { useFeatures } from "../features";
 import { usePanes } from "../PaneResizer";
 import { PANES } from "../panes";
+import { isMac } from "../platform";
+import { isLookKey, quickLook } from "../Preview";
 
 const LABEL: Record<Layer, string> = { note: "Note", wiki: "Wiki", source: "Source", template: "Template" };
 
@@ -90,21 +92,23 @@ export function TrashScreen() {
   );
   const total = (rows ?? []).reduce((n, r) => n + r.sizeBytes, 0);
   const picked = shown.filter((r) => sel.has(r.id));
-  const quickLook = (r: TrashEntry) => api.trashQuickLook(r.id).catch((e) => toast(errText(e), undefined, "bad"));
+  // Quick Look on a Mac; on Windows the preview panel (src/Preview.tsx), or the file's own app for a
+  // type Windows can't preview.
+  const look = (r: TrashEntry) =>
+    quickLook({
+      name: r.basename,
+      look: (frame) => api.trashQuickLook(r.id, frame),
+      openInApp: () => api.trashQuickLook(r.id, null).then(() => {}),
+    }).catch((e) => toast(errText(e), undefined, "bad"));
   // Space previews the one selected item, as in Finder (where Quick Look exists).
   const canLook = useFeatures().quickLook;
   useEffect(() => {
     if (!canLook) return;
     const k = (e: KeyboardEvent) => {
-      if (
-        e.key !== " " ||
-        e.defaultPrevented ||
-        picked.length !== 1 ||
-        (e.target as HTMLElement)?.closest?.("input, textarea, button, [contenteditable], [role=separator]")
-      )
+      if (picked.length !== 1 || e.defaultPrevented || (e.target as HTMLElement)?.closest?.("[role=separator]") || !isLookKey(e, "trash"))
         return;
       e.preventDefault();
-      void quickLook(picked[0]);
+      void look(picked[0]);
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
@@ -294,14 +298,14 @@ export function TrashScreen() {
                     {fmtBytes(r.sizeBytes)}
                   </span>
                   <span className="tracts">
-                    {/* Where there's no Quick Look (Windows), the same call opens the file in its own app. */}
+                    {/* Where there's no preview (Linux), the same call opens the file in its own app. */}
                     {canLook ? (
                       <button
                         type="button"
                         className="ibtn"
-                        aria-label={`Quick Look ${r.basename}`}
-                        title="Quick Look (Space)"
-                        onClick={() => void quickLook(r)}
+                        aria-label={`${isMac ? "Quick Look" : "Preview"} ${r.basename}`}
+                        title={isMac ? "Quick Look (Space)" : "Preview the file without opening it (Space)"}
+                        onClick={() => void look(r)}
                       >
                         <Icon name="eye" size={14} />
                       </button>
@@ -311,7 +315,7 @@ export function TrashScreen() {
                         className="ibtn"
                         aria-label={`Open ${r.basename} in its app`}
                         title="Open the file in the app the system uses for it, where it lies in the Trash"
-                        onClick={() => void quickLook(r)}
+                        onClick={() => void look(r)}
                       >
                         <Icon name="export" size={14} />
                       </button>

@@ -19,6 +19,8 @@ mod image_win;
 mod macos;
 #[cfg(target_os = "macos")]
 mod now_playing;
+#[cfg(windows)]
+mod preview_win;
 #[cfg(target_os = "macos")]
 mod quick_look;
 #[cfg(windows)]
@@ -83,11 +85,23 @@ pub fn set_max_button(w: &tauri::WebviewWindow, rect: Option<(i32, i32, i32, i32
     let _ = (w, rect);
 }
 
+/// Where the page's preview panel is and its colours (platform/preview_win.rs); nothing elsewhere.
+#[cfg(windows)]
+pub use preview_win::Frame as PreviewFrame;
+#[cfg(not(windows))]
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct PreviewFrame {}
+
 /// A quick preview of a file without opening it: the Quick Look panel over `w` on macOS (as Finder's
-/// space bar shows it), the file's default app elsewhere.
-pub fn quick_look(w: &tauri::WebviewWindow, path: &Path) -> Result<(), String> {
+/// space bar shows it); on Windows the file's own preview handler in the page's panel at `frame`,
+/// the one Explorer's preview pane would show (platform/preview_win.rs), or its default app with no
+/// frame or where Windows has no handler for the type (`preview_available` says); the default app
+/// elsewhere. On Windows, returns once the preview is drawn, or with why it couldn't be. True when
+/// the file is shown without its app (Quick Look, the panel), false when it opened in its app.
+pub fn quick_look(w: &tauri::WebviewWindow, path: &Path, frame: Option<PreviewFrame>) -> Result<bool, String> {
     #[cfg(target_os = "macos")]
     {
+        let _ = frame;
         let ns = w.ns_window().map_err(|e| e.to_string())? as usize;
         let file = path.to_path_buf();
         w.run_on_main_thread(move || {
@@ -96,13 +110,74 @@ pub fn quick_look(w: &tauri::WebviewWindow, path: &Path) -> Result<(), String> {
             let window = unsafe { &*(ns as *const objc2_app_kit::NSWindow) };
             quick_look::show(mtm, window, &file);
         })
+        .map(|_| true)
         .map_err(|e| e.to_string())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
     {
-        let _ = w;
-        imp::quick_look(path)
+        // A handler COM can't run out of process opens the file in its app, as no handler does. A
+        // file from the web opens there too, and the panel says why (`preview_win::refused`).
+        let here = match frame {
+            Some(f) => match preview_win::refused(path) {
+                Some(why) => return imp::quick_look(path).and(Err(why)),
+                None => preview_win::open(w, path, f)?,
+            },
+            None => false,
+        };
+        if here {
+            Ok(true)
+        } else {
+            imp::quick_look(path).map(|_| false)
+        }
     }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        let _ = (w, frame);
+        imp::quick_look(path).map(|_| false)
+    }
+}
+
+/// Whether `quick_look` can show a file named like `name` without opening its app: always on
+/// macOS (Quick Look has a fallback for every type); on Windows when a preview handler is
+/// registered for the type; never elsewhere.
+pub fn preview_available(name: &str) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = name;
+        true
+    }
+    #[cfg(windows)]
+    {
+        preview_win::available(name)
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        let _ = name;
+        false
+    }
+}
+
+/// The page's preview panel moved or resized (Windows only).
+pub fn preview_move(frame: PreviewFrame) {
+    #[cfg(windows)]
+    preview_win::move_to(frame);
+    #[cfg(not(windows))]
+    let _ = frame;
+}
+
+/// The page closed its preview panel `id` (Windows only): the handler is released.
+pub fn preview_close(id: u64) {
+    #[cfg(windows)]
+    preview_win::close(id);
+    #[cfg(not(windows))]
+    let _ = id;
+}
+
+/// The app is quitting (Windows only): the preview's handler lets go of its file, each call with a
+/// short deadline. On the main thread.
+pub fn preview_shutdown() {
+    #[cfg(windows)]
+    preview_win::shutdown();
 }
 
 /// Shows the window once its webview is painted in `rgb`, so no white frame flashes first (a
