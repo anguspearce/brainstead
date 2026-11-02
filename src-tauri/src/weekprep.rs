@@ -22,7 +22,10 @@ use brainstead_core::chats::{Chat, Item, Summary};
 use brainstead_core::proposals::{Kind, Origin};
 use brainstead_core::reviews::prep::{self, Suggestion};
 use brainstead_core::reviews::Weekday;
-use brainstead_core::{ask::Event, write};
+use brainstead_core::{
+    ask::{Event, Job},
+    write,
+};
 use chrono::{Local, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
@@ -155,14 +158,9 @@ fn enabled(app: &AppHandle) -> bool {
 }
 
 /// The job's model: its own in Settings › AI assistants (`jobModels.weekprep`), else the
-/// summaries'.
+/// summaries' (`brainstead_core::ask::job_model`).
 fn model(app: &AppHandle) -> String {
-    let own = {
-        let st = app.state::<AppState>();
-        let s = crate::lock(&st.settings);
-        s.ui.get("jobModels").and_then(|m| m.get("weekprep")).and_then(|v| v.as_str()).filter(|v| !v.is_empty()).map(String::from)
-    };
-    own.unwrap_or_else(|| ask::job_model(app, "summaries"))
+    ask::job_model(app, Job::Weekprep.key())
 }
 
 fn read_prep(week: &str) -> Option<Prep> {
@@ -336,6 +334,8 @@ struct Started {
     chat_id: String,
     title: String,
     model: String,
+    /// The effort the run goes at (`ask::job_effort`), for its tab's Effort menu.
+    effort: Option<String>,
     prompt: String,
 }
 
@@ -390,7 +390,11 @@ fn run(app: &AppHandle, id: &str, week: &str, model: &str) {
     let title = format!("Weekly review preparation · {week}");
     let ask_line =
         format!("Suggestions for each step of the weekly review of {week}, from the notes, tasks and Inbox Brainstead gathered.");
-    let _ = app.emit("review-started", Started { chat_id: id.into(), title: title.clone(), model: model.into(), prompt: ask_line.clone() });
+    // The run's chat keeps the job's effort, so a follow-up in it runs as the job did.
+    let effort = ask::job_effort(app, Job::Weekprep, model);
+    let started =
+        Started { chat_id: id.into(), title: title.clone(), model: model.into(), effort: effort.clone(), prompt: ask_line.clone() };
+    let _ = app.emit("review-started", started);
     let mut looked: Vec<String> = Vec::new();
     let mut answer = String::new();
     let result = prepare(app, id, week, model, &mut looked, &mut answer);
@@ -448,6 +452,7 @@ fn run(app: &AppHandle, id: &str, week: &str, model: &str) {
             id: id.into(),
             title,
             model: Some(model.into()),
+            effort,
             created_at: ts.clone(),
             updated_at: ts,
             state: "archived".into(),
@@ -486,7 +491,7 @@ fn prepare(app: &AppHandle, id: &str, week: &str, model: &str, looked: &mut Vec<
             }
         }
     };
-    let out = ask::run(app, id, &prep::prompt(&inputs, &ask::today()), model, None, &system, None, &mut on);
+    let out = ask::run(app, Job::Weekprep, id, &prep::prompt(&inputs, &ask::today()), model, None, &system, None, &mut on);
     if let Some(e) = out.error {
         return Err(e);
     }

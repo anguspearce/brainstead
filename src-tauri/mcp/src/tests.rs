@@ -881,6 +881,17 @@ fn rebuilding_the_index_and_pinning_a_chat_go_to_the_app() {
     ok(&f.ctx, "chats", json!({"action": "pin", "chat": "Orbit App plan"}));
     let req = app.join().unwrap();
     assert_eq!((req.action.as_str(), req.args["action"].as_str()), ("chats", Some("pin")));
+    // A chat's effort is a change of its own, not under chats' Trash.
+    let app = fake_app(f.ctx.data.clone(), |_| bridge::Reply { ok: true, result: json!("High"), error: None });
+    ok(&f.ctx, "chat_effort", json!({"chat": "Orbit App plan", "effort": "high", "action": "trash"}));
+    let req = app.join().unwrap();
+    assert_eq!((req.action.as_str(), req.args["action"].as_str(), req.args["effort"].as_str()), ("chats", Some("effort"), Some("high")));
+    assert!(refused(&f.ctx, "chats", json!({"action": "effort", "chat": "Orbit App plan", "effort": "high"})).contains("not effort"));
+    let effort = tools().into_iter().find(|t| t["name"] == "chat_effort").unwrap();
+    assert_eq!(
+        (effort["annotations"]["destructiveHint"].as_bool(), effort["annotations"]["readOnlyHint"].as_bool()),
+        (Some(false), Some(false))
+    );
     // The new arguments are in the schemas, so a client can pass them.
     let list = tools();
     let props = |n: &str| list.iter().find(|t| t["name"] == n).unwrap()["inputSchema"]["properties"].clone();

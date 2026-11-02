@@ -9,6 +9,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use brainstead_core::ask::Job;
 use brainstead_core::pageshape;
 use brainstead_core::proposals::{self, Kind, Origin};
 use serde::{Deserialize, Serialize};
@@ -169,6 +170,7 @@ fn one(
     }
     let out = crate::ask::run(
         app,
+        Job::Contradictions,
         &format!("current-state-{worker}"),
         &pageshape::current_state_prompt(page, &before, BUDGET),
         model,

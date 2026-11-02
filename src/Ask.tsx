@@ -22,6 +22,7 @@ import {
   clis,
   cliOf,
   DEFAULT_MODEL,
+  effortLabel,
   fallbackTitle,
   findClis,
   isSaved,
@@ -33,6 +34,8 @@ import {
   selectChat,
   shown,
   send,
+  setEffort,
+  installedEfforts,
   setModel,
   stop,
   unqueue,
@@ -766,6 +769,9 @@ function Composer({ c, found }: { c: Chat; found: CliInfo[] | null }) {
 
   const model = c.model ?? DEFAULT_MODEL;
   const locked = c.transcript.length > 0;
+  const efforts = found ? installedEfforts(cliOf(model)) : [];
+  // A scheduled run goes at its job's effort until it ends.
+  const running = !!c.review && c.busy;
   return (
     <div className="askfoot">
       <div className="askcol">
@@ -863,6 +869,31 @@ function Composer({ c, found }: { c: Chat; found: CliInfo[] | null }) {
                 {!locked && <Icon name="chevdown" size={12} />}
               </button>
             </span>
+            {!!efforts.length && (
+              <label
+                className="effortpick"
+                title={
+                  running
+                    ? "This run goes at its job's effort: the job's own under Models by job in Settings › AI assistants, else its assistant's, lowered to a level the model takes. Its chat can take another once it ends."
+                    : `How hard ${CLI_LABEL[cliOf(model)]} thinks for this chat, from the next message on. New chats start with the effort set in Settings › AI assistants.`
+                }
+              >
+                <span className="faint">Effort</span>
+                <select
+                  className="sel"
+                  value={c.effort ?? ""}
+                  disabled={running}
+                  onChange={(e) => void setEffort(c.id, e.target.value || null)}
+                >
+                  <option value="">Default</option>
+                  {efforts.map((l) => (
+                    <option key={l} value={l}>
+                      {effortLabel(l)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <button
               type="button"
               className="ibtn send"

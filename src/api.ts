@@ -65,6 +65,9 @@ export interface Settings {
   /** A model per background job (summaries, weekprep, find, ingest, meeting, clarify, contradictions, skills); a
    *  job not named uses `askModel`. */
   jobModels?: Record<string, string>;
+  /** An effort level per background job (keys as jobModels), one of its model's CLI's `efforts`; a
+   *  job not named runs at its assistant's `effort` (brainstead_core::ask::resolve_effort). */
+  jobEffort?: Record<string, string>;
   /** An effort level per assistant (Settings › AI assistants › Found on this computer), one of its
    *  CliInfo `efforts`; an assistant not named uses its CLI's own default for the model. */
   effort?: Partial<Record<CliName, string>>;
@@ -1419,8 +1422,8 @@ export const api = {
   onWeekprepChanged: (f: () => void): Promise<UnlistenFn> => listen("weekprep-changed", () => f()),
   // Ask (src-tauri/src/ask.rs, src/askState.ts).
   askClis: () => invoke<CliInfo[]>("ask_clis"),
-  askSend: (chatId: string, prompt: string, model: string, session: string | null) =>
-    invoke<void>("ask_send", { chatId, prompt, model, session }),
+  askSend: (chatId: string, prompt: string, model: string, session: string | null, effort: string | null) =>
+    invoke<void>("ask_send", { chatId, prompt, model, session, effort }),
   askCancel: (chatId: string) => invoke<void>("ask_cancel", { chatId }),
   /** How a chat's latest turn stands, for an `ask-done` the window missed. */
   askOutcome: (chatId: string) => invoke<{ running: boolean; done: AskDone | null }>("ask_outcome", { chatId }),
@@ -1447,8 +1450,8 @@ export const api = {
   reviewLatest: (kind: "daily" | "weekly") => invoke<LatestSummary | null>("review_latest", { kind }),
   onReviewsChanged: (f: () => void): Promise<UnlistenFn> => listen("reviews-changed", () => f()),
   /** A review run started: its chat id and title, to open as a tab. */
-  onReviewStarted: (f: (r: { chatId: string; title: string; model: string; prompt: string }) => void): Promise<UnlistenFn> =>
-    listen<{ chatId: string; title: string; model: string; prompt: string }>("review-started", (e) => f(e.payload)),
+  /** A review run started; `effort` is the one it runs at (its job's), null for the model's own default. */
+  onReviewStarted: (f: (r: ReviewStarted) => void): Promise<UnlistenFn> => listen<ReviewStarted>("review-started", (e) => f(e.payload)),
   /** A review run finished and its chat was saved. */
   onReviewDone: (f: (r: { chatId: string; filename: string | null }) => void): Promise<UnlistenFn> =>
     listen<{ chatId: string; filename: string | null }>("review-done", (e) => f(e.payload)),
@@ -1607,6 +1610,16 @@ export interface WeeklyState {
 
 export type CliName = "claude" | "codex" | "antigravity" | "copilot";
 
+/** A scheduled run (a summary, the weekly review's preparation) opening as a tab in Ask. */
+export interface ReviewStarted {
+  chatId: string;
+  title: string;
+  model: string;
+  /** The effort it runs at, its job's (null: the model's own default). */
+  effort: string | null;
+  prompt: string;
+}
+
 export interface CliInfo {
   cli: CliName;
   path: string | null;
@@ -1646,6 +1659,8 @@ export interface ChatSummary {
   claudeSessionId: string | null;
   sessionId: string | null;
   model: string | null;
+  /** The effort level it runs at, one of its CLI's `efforts`; none for the CLI's own default. */
+  effort?: string | null;
   createdAt: string;
   updatedAt: string;
   contextTokens: number | null;

@@ -8,7 +8,7 @@
 // (askTabs) so they come back after a restart, and writes a chat after every turn: to the app
 // data folder until Save puts it in the vault.
 
-import { api, AskDone, AskEvent, ChatItem, ChatSummary, CliInfo, CliName, SavedChat } from "./api";
+import { api, AskDone, AskEvent, ChatItem, ChatSummary, CliInfo, CliName, SavedChat, Settings } from "./api";
 import { nav, place } from "./nav";
 import { settings, Store } from "./store";
 
@@ -44,10 +44,6 @@ export function cliOf(model: string): CliName {
 }
 
 export const DEFAULT_MODEL = "claude:sonnet";
-
-/** The levels an Effort menu offers for an assistant: none while it isn't installed, as the screens
- *  show no menu then. */
-export const installedEfforts = (cli: CliName): string[] => clis.get()?.find((c) => c.cli === cli && c.path)?.efforts ?? [];
 
 /** An effort level's name, as Settings › AI assistants shows it ("xhigh" is "Extra high"). */
 export function effortLabel(level: string): string {
@@ -90,6 +86,69 @@ export function fallbackTitle(question: string): string {
 
 const uid = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
+/** The effort a run goes at: the job's own (Settings › AI assistants › Models by job,
+ *  `jobEffort`), else the assistant's (`effort`), each only when it is one of the assistant's
+ *  `levels` (unchecked while the assistants aren't found yet); null for the assistant's own default.
+ *  The same rule as brainstead_core::ask::resolve_effort, kept beside it by the same test cases. */
+export function resolveEffort(
+  levels: string[] | null,
+  job: string | null | undefined,
+  assistant: string | null | undefined,
+): string | null {
+  return [job, assistant].find((e): e is string => !!e && (!levels || levels.includes(e))) ?? null;
+}
+
+/** The levels an assistant offers, once the assistants are found (CliInfo `efforts`). */
+const levelsOf = (cli: CliName): string[] | null => clis.get()?.find((c) => c.cli === cli)?.efforts ?? null;
+
+/** The levels an Effort menu offers for an assistant: none while it isn't installed, as the screens
+ *  show no menu then (Found on this computer, Models by job, Ask). */
+export const installedEfforts = (cli: CliName): string[] => clis.get()?.find((c) => c.cli === cli && c.path)?.efforts ?? [];
+
+/** The effort a new chat on `model` starts with: the assistant's (no job's, so a job's level never
+ *  becomes a chat's), or null for the assistant's own default. */
+export function effortFor(model: string): string | null {
+  const cli = cliOf(model);
+  return resolveEffort(levelsOf(cli), null, settings.get().effort?.[cli]);
+}
+
+/** The model `job` runs on: its own, else (the weekly review's preparation) the summaries', else new
+ *  chats'; an empty one is unset. brainstead_core::ask::job_model is the same rule; both tests read
+ *  tests/fixtures/job-settings.json. */
+export function jobModelOf(job: string, s: Settings = settings.get()): string {
+  const own = s.jobModels?.[job] || (job === "weekprep" ? s.jobModels?.summaries : undefined);
+  return own || s.askModel || DEFAULT_MODEL;
+}
+
+/** The job's own effort (`jobEffort.<job>`) while its model's assistant offers it (unchecked while
+ *  the assistants aren't found yet), else null: what Models by job and list_settings show.
+ *  brainstead_core::ask::job_own_effort is the same rule. */
+export function jobOwnEffort(job: string, s: Settings = settings.get()): string | null {
+  const level = s.jobEffort?.[job];
+  const levels = levelsOf(cliOf(jobModelOf(job, s)));
+  return level && (!levels || levels.includes(level)) ? level : null;
+}
+
+/** Sets `job`'s model (null: back to its default), as Models by job does. When the assistant of the
+ *  model the job now runs on doesn't offer its own effort (once the assistants are found), that goes
+ *  back to Assistant's setting; returns the level dropped. Only the job's own model does this: while
+ *  a model it inherits (New chats use, or the summaries' for weekprep) is on such an assistant, the
+ *  level is set aside (`jobOwnEffort`) and comes back with the model. */
+export function setJobModel(job: string, model: string | null): string | null {
+  const s = settings.get();
+  const { [job]: _, ...rest } = s.jobModels ?? {};
+  const jobModels = model ? { ...rest, [job]: model } : rest;
+  const level = s.jobEffort?.[job];
+  const levels = levelsOf(cliOf(jobModelOf(job, { ...s, jobModels })));
+  if (!level || !levels || levels.includes(level)) {
+    settings.update({ jobModels });
+    return null;
+  }
+  const { [job]: __, ...jobEffort } = s.jobEffort ?? {};
+  settings.update({ jobModels, jobEffort });
+  return level;
+}
+
 export function blankChat(model: string): Chat {
   return {
     filename: "",
@@ -98,6 +157,7 @@ export function blankChat(model: string): Chat {
     claudeSessionId: null,
     sessionId: null,
     model,
+    effort: effortFor(model),
     createdAt: "",
     updatedAt: "",
     contextTokens: null,
@@ -204,12 +264,15 @@ const seeing = (id: string) => place.get().place.screen === "ask" && ask.get().a
  *  Inbox strip. Any new chat (⌘T, or asking about something else) clears it. */
 export const askedFromInbox = new Store<{ path: string; chat: string } | null>(null);
 
+/** A tab nothing has been asked in yet, which a new chat reuses. */
+const fresh = (c: Chat) => !c.filename && !c.transcript.length && !c.busy && !c.review;
+
 export function newChat(model = settings.get().askModel ?? DEFAULT_MODEL): string {
   askedFromInbox.set(null);
   // An empty new tab is reused rather than stacked.
-  const empty = ask.get().chats.find((c) => !c.filename && !c.transcript.length && !c.busy && !c.review);
+  const empty = ask.get().chats.find(fresh);
   if (empty) {
-    setChats((cs) => cs.map((c) => (c.id === empty.id ? { ...c, model } : c)), empty.id);
+    setChats((cs) => cs.map((c) => (c.id === empty.id ? { ...c, model, effort: effortFor(model) } : c)), empty.id);
     return empty.id;
   }
   const c = blankChat(model);
@@ -229,9 +292,41 @@ export function closeChat(id: string) {
   if (!ask.get().chats.length) newChat(c?.model ?? undefined);
 }
 
+/** A chat's model, before its first message. It's that chat's only: New chats use (Settings › AI
+ *  assistants) stays as set, and so do the jobs that run on it. */
 export function setModel(id: string, model: string) {
-  update(id, (c) => (c.transcript.length ? c : { ...c, model }));
-  settings.update({ askModel: model });
+  // Another assistant has its own levels, so the chat starts again from the one set for it.
+  const same = (c: Chat) => cliOf(c.model ?? DEFAULT_MODEL) === cliOf(model);
+  update(id, (c) => (c.transcript.length ? c : { ...c, model, effort: same(c) ? c.effort : effortFor(model) }));
+}
+
+/** Keeps the empty tabs on the effort set for their assistant: when Settings › AI assistants
+ *  changes it, a tab still at the level it had takes the new one (one picked in the tab stays).
+ *  Returns the unsubscribe. */
+export function followEffortSettings(): () => void {
+  let was = settings.get().effort;
+  return settings.subscribe(() => {
+    const before = was;
+    was = settings.get().effort;
+    if (was === before) return;
+    const stale = (c: Chat) => {
+      const cli = cliOf(c.model ?? DEFAULT_MODEL);
+      return fresh(c) && (c.effort ?? null) === resolveEffort(levelsOf(cli), null, before?.[cli]);
+    };
+    if (ask.get().chats.some(stale))
+      setChats((cs) => cs.map((c) => (stale(c) ? { ...c, effort: effortFor(c.model ?? DEFAULT_MODEL) } : c)));
+  });
+}
+
+/** This chat's effort from its next message on (null: the assistant's own default). Settings › AI
+ *  assistants, which new chats start from, isn't changed. A scheduled run goes at its job's effort
+ *  until it ends, when its chat (saved by Rust, with that effort) can take another. */
+export async function setEffort(id: string, effort: string | null) {
+  const c = ask.get().chats.find((x) => x.id === id);
+  if (c?.review && c.busy)
+    throw new Error(`“${c.title}” is still running at its job's effort; set the chat's effort once it has finished.`);
+  update(id, (c) => ({ ...c, effort }));
+  if (ask.get().chats.find((c) => c.id === id)?.transcript.length) await save(id);
 }
 
 /** Opens a saved chat in a tab (or goes to its tab). */
@@ -270,7 +365,7 @@ function start(id: string, text: string) {
   }));
   const c = ask.get().chats.find((x) => x.id === id)!;
   api
-    .askSend(id, text, c.model ?? DEFAULT_MODEL, sessionOf(c))
+    .askSend(id, text, c.model ?? DEFAULT_MODEL, sessionOf(c), c.effort ?? null)
     .then(() => sent.add(id))
     .catch((e) => finish({ chatId: id, text: "", session: null, error: String(e) }));
 }
@@ -427,44 +522,55 @@ export async function setPinned(id: string, pinned: boolean) {
 }
 
 /** Starts listening for answers and reopens the tabs from last time. */
-export async function startAsk() {
-  await api.onAskEvent(({ chatId, event }) => update(chatId, (c) => applyEvent(c, event)));
-  await api.onAskDone((d) => {
-    // A review run's turn is finished and saved by Rust (review-done).
-    if (ask.get().chats.find((c) => c.id === d.chatId)?.review) return;
-    void finish(d);
-  });
+/** Starts Ask's listeners and reopens its tabs; returns what stops the listeners again. */
+export async function startAsk(): Promise<() => void> {
+  const offs: (() => void)[] = [];
+  const stop = () => offs.splice(0).forEach((off) => off());
+  offs.push(await api.onAskEvent(({ chatId, event }) => update(chatId, (c) => applyEvent(c, event))));
+  offs.push(
+    await api.onAskDone((d) => {
+      // A review run's turn is finished and saved by Rust (review-done).
+      if (ask.get().chats.find((c) => c.id === d.chatId)?.review) return;
+      void finish(d);
+    }),
+  );
   // A missed ask-done doesn't leave a chat answering for ever.
-  setInterval(() => {
+  const recovering = setInterval(() => {
     for (const c of ask.get().chats) if (c.busy && !c.review) void recover(c.id);
   }, 5000);
-  // A scheduled review opens as a tab while it runs, without taking you to Ask.
-  await api.onReviewStarted((r) => {
-    const c: Chat = {
-      ...blankChat(r.model),
-      id: r.chatId,
-      title: r.title,
-      review: true,
-      busy: true,
-      streaming: "",
-      transcript: [{ id: uid(), role: "user", text: r.prompt }],
-    };
-    // Run now selects its tab; a scheduled run opens beside the one you're in.
-    const pick = wanted === c.id || !ask.get().active;
-    if (wanted === c.id) wanted = null;
-    setChats((cs) => [...cs.filter((x) => x.id !== c.id), c], pick ? c.id : ask.get().active);
-  });
-  await api.onReviewDone(async (r) => {
-    if (!r.filename) return update(r.chatId, (c) => ({ ...c, busy: false, streaming: null, status: null }));
-    try {
-      const saved = fromSaved(await api.chatRead(r.filename));
-      update(r.chatId, () => ({ ...saved, id: r.chatId, review: true, unread: !seeing(r.chatId) }));
-    } catch {
-      update(r.chatId, (c) => ({ ...c, busy: false }));
-    }
-  });
+  offs.push(() => clearInterval(recovering), followEffortSettings());
+  // A scheduled review opens as a tab while it runs, without taking you to Ask, at its job's effort.
+  offs.push(
+    await api.onReviewStarted((r) => {
+      const c: Chat = {
+        ...blankChat(r.model),
+        effort: r.effort ?? null,
+        id: r.chatId,
+        title: r.title,
+        review: true,
+        busy: true,
+        streaming: "",
+        transcript: [{ id: uid(), role: "user", text: r.prompt }],
+      };
+      // Run now selects its tab; a scheduled run opens beside the one you're in.
+      const pick = wanted === c.id || !ask.get().active;
+      if (wanted === c.id) wanted = null;
+      setChats((cs) => [...cs.filter((x) => x.id !== c.id), c], pick ? c.id : ask.get().active);
+    }),
+  );
+  offs.push(
+    await api.onReviewDone(async (r) => {
+      if (!r.filename) return update(r.chatId, (c) => ({ ...c, busy: false, streaming: null, status: null }));
+      try {
+        const saved = fromSaved(await api.chatRead(r.filename));
+        update(r.chatId, () => ({ ...saved, id: r.chatId, review: true, unread: !seeing(r.chatId) }));
+      } catch {
+        update(r.chatId, (c) => ({ ...c, busy: false }));
+      }
+    }),
+  );
   // A screenshot scene sets its own chats.
-  if (settings.frozen) return;
+  if (settings.frozen) return stop;
   const s = settings.get();
   const chats: Chat[] = [];
   for (const t of s.askTabs ?? []) {
@@ -481,6 +587,7 @@ export async function startAsk() {
   const has = (id: string | null | undefined) => !!id && all.some((c) => c.id === id);
   const active = has(s.askActive) ? s.askActive! : has(now.active) ? now.active : (all[all.length - 1]?.id ?? null);
   ask.set({ chats: all, active });
+  return stop;
 }
 
 /** Selects a review run's tab: now if it's open, else as soon as it opens. */
@@ -528,6 +635,13 @@ export async function pinSaved(c: ChatSummary, pin: boolean) {
   if (open) return setPinned(open.id, pin);
   const full = await api.chatRead(c.filename);
   await api.chatSave({ ...full, state: pin ? "pinned" : "archived" });
+}
+
+export async function effortSaved(c: ChatSummary, effort: string | null) {
+  const open = ask.get().chats.find((x) => x.filename === c.filename);
+  if (open) return setEffort(open.id, effort);
+  const full = await api.chatRead(c.filename);
+  await api.chatSave({ ...full, effort });
 }
 
 export async function keepSaved(c: ChatSummary) {

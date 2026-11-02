@@ -323,6 +323,12 @@
     "docs": true
   },
   {
+    "name": "settings-assistants-job-effort",
+    "screen": "settings",
+    "pane": "assistants",
+    "settings": { "effort": { "claude": "medium" }, "jobEffort": { "weekprep": "high" } }
+  },
+  {
     "name": "settings-jobs",
     "screen": "settings",
     "pane": "jobs",
