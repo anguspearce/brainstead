@@ -8,7 +8,9 @@
 // property its screen's grid reads (src/styles.css); a width the user set is kept per machine in app
 // settings (`paneWidths`, by key), applied before the first paint, and clamped to its range and to
 // the room the screen has, so a pane can never cover another: the flexible pane keeps MIN_FLEX at
-// least, and gives way before that. Nothing stored means the stylesheet's default, which narrows at
+// least (more on a screen whose flexible column holds more, usePanes' minFlex), and gives way before
+// that; a width an assistant sets (the settings tool) is kept within the range only, and the screen
+// fits it to its room as it draws. Nothing stored means the stylesheet's default, which narrows at
 // its own breakpoints (container queries on the main area, so a wide sidebar counts) and, where it
 // still doesn't fit, gives way before the stored ones (fitPanes). Settings › General › Appearance ›
 // Reset pane widths clears them all.
@@ -53,7 +55,8 @@ export interface PaneSpec {
 /** Arrow keys move a divider this far; with Shift, PANE_STEP_BIG. */
 export const PANE_STEP = 8;
 export const PANE_STEP_BIG = 40;
-/** The least the flexible pane keeps when the fixed ones around it are wide. */
+/** The least the flexible pane keeps when the fixed ones around it are wide, where a screen asks
+ *  for no more (usePanes' minFlex: Settings' cards, a project's detail and the like hold more). */
 export const MIN_FLEX = 240;
 
 const left = (cssVar: string, label: string, def: number, min: number, max: number, type: ResizeType = "panes"): PaneSpec => ({
@@ -213,13 +216,14 @@ export function clampPaneWidth(spec: PaneSpec, px: number | undefined, room = In
 }
 
 /** The room a screen's fixed panes share on a root `width` wide (the grid's content box), once
- *  `fixed` (gaps, and columns that never move) and the flexible pane's MIN_FLEX are taken. */
-export function paneRoom(width: number, fixed = 0): number {
-  return width - fixed - MIN_FLEX;
+ *  `fixed` (gaps, and columns that never move) and the flexible pane's least width (`minFlex`, the
+ *  screen's reserve, MIN_FLEX where it names none) are taken. */
+export function paneRoom(width: number, fixed = 0, minFlex = MIN_FLEX): number {
+  return width - fixed - minFlex;
 }
 
 /** What each of a screen's panes shows when `room` px are left for them all (the root's width less
- *  its gaps, the columns that never move and the flexible pane's MIN_FLEX): its `want` (the stored
+ *  its gaps, the columns that never move and the flexible pane's least width): its `want` (the stored
  *  width, else the stylesheet's) within its range. Where they don't all fit, the panes nobody set
  *  give way first, then the set ones, each in proportion to how far it is above its minimum, and
  *  never below it: a tiny window keeps every pane at its least and the flexible one gets what's left. */

@@ -161,6 +161,59 @@ describe("a size change", () => {
   });
 });
 
+/** Projects: the list on the left, the project beside it taking the rest. */
+function Projects({ grid, minFlex }: { grid: string; minFlex?: number }) {
+  const panes = usePanes({ "projects.list": PANES["projects.list"] }, { minFlex });
+  return (
+    <div
+      data-testid="projects"
+      {...panes.root}
+      style={{ ...panes.root.style, display: "grid", columnGap: "20px", gridTemplateColumns: grid }}
+    >
+      {panes.resizers}
+    </div>
+  );
+}
+
+describe("a stored pane wider than the main area", () => {
+  it("is fitted to the room, its divider kept, though the grid first laid the flexible pane out at 0px", () => {
+    // Projects with its list kept at 720px in a 640px main area (a 1040px window, the sidebar at
+    // 400): the grid's first measure is "720px 0px", the project squeezed to nothing. That column is
+    // still a track, so the list is no pane a breakpoint dropped: it gives way to the reserve.
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => 640);
+    settings.update({ paneWidths: { "projects.list": 720 } });
+    render(<Projects grid="720px 0px" />);
+    const list = screen.getByRole("separator", { name: "Resize the project list" });
+    expect(list.getAttribute("aria-valuenow")).toBe(String(640 - 20 - MIN_FLEX));
+    expect(screen.getByTestId("projects").style.getPropertyValue("--pane-list")).toBe(`${640 - 20 - MIN_FLEX}px`);
+    // The width kept is untouched: a wider window shows it again.
+    expect(stored()["projects.list"]).toBe(720);
+  });
+
+  it("leaves the flexible pane the screen's own reserve where it names one", () => {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => 640);
+    settings.update({ paneWidths: { "projects.list": 720 } });
+    render(<Projects grid="720px 0px" minFlex={320} />);
+    expect(screen.getByTestId("projects").style.getPropertyValue("--pane-list")).toBe(`${640 - 20 - 320}px`);
+  });
+
+  it("on a screen with two panes keeps both dividers and narrows both", () => {
+    // Tasks with its lists kept at 480 and the task's pane at 640 in a 1000px main area: the first
+    // measure is "480px 0px 640px"; both panes give way, in proportion, to leave the list MIN_FLEX.
+    settings.update({ paneWidths: { "tasks.left": 480, "tasks.side": 640 } });
+    render(<Tasks grid="480px 0px 640px" />);
+    const [lists, side] = screen.getAllByRole("separator");
+    expect([lists, side].map((s) => s.getAttribute("aria-label"))).toEqual(["Resize the task lists", "Resize the task's pane"]);
+    const left = Number(lists.getAttribute("aria-valuenow"));
+    const right = Number(side.getAttribute("aria-valuenow"));
+    expect(left).toBeLessThan(480);
+    expect(right).toBeLessThan(640);
+    expect(left).toBeGreaterThanOrEqual(PANES["tasks.left"].min);
+    expect(right).toBeGreaterThanOrEqual(PANES["tasks.side"].min);
+    expect(left + right).toBeLessThanOrEqual(1000 - 40 - MIN_FLEX);
+  });
+});
+
 describe("a breakpoint", () => {
   it("that drops one pane's column hides that pane's divider alone, and one that stacks the grid hides both", () => {
     // The Weekly review at 868px: the steps beside the step, the side column gone.

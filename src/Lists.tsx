@@ -309,7 +309,7 @@ const HEALTH_CHIP = {
 } as const;
 
 export function WikiScreen() {
-  const panes = usePanes({ "wiki.left": PANES["wiki.left"] });
+  const panes = usePanes({ "wiki.left": PANES["wiki.left"] }, { minFlex: 320 });
   const rows = useFiles(() => api.filesList("wiki"));
   const [tag, setTag] = useViewState<string | null>("wiki:tag", null);
   const [type, setType] = useViewState<string | null>("wiki:type", null);
@@ -660,7 +660,7 @@ function SyncNowButton() {
 }
 
 export function SourcesScreen() {
-  const panes = usePanes({ "sources.side": PANES["sources.side"] });
+  const panes = usePanes({ "sources.side": PANES["sources.side"] }, { minFlex: 320 });
   const rows = useFiles<SourceRow>(() => api.sourcesList());
   useEffect(startKnowledge, []);
   const h = useStore(health);
