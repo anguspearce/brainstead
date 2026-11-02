@@ -288,15 +288,35 @@ export function rankBetween(order: TaskRow[], moved: TaskRow): { prev: number | 
   return { prev, next };
 }
 
+/** `order` (a list's rows after a drop) with the rows the screen's search and filters hide put
+ *  back where they were in `every` (the whole list in its order on disk), each after the shown row
+ *  it followed; `moved` has left its old place, so it anchors nothing. A renumber of this order
+ *  gives hidden rows a place among their old neighbours, rather than leaving their old ranks among
+ *  the new ones. */
+export function withHiddenRows(order: TaskRow[], every: TaskRow[], moved: TaskRow): TaskRow[] {
+  const shown = new Set(order);
+  const after = new Map<TaskRow | null, TaskRow[]>();
+  let prev: TaskRow | null = null;
+  for (const t of every) {
+    if (t === moved) continue;
+    if (shown.has(t)) prev = t;
+    else after.set(prev, [...(after.get(prev) ?? []), t]);
+  }
+  return [...(after.get(null) ?? []), ...order.flatMap((t) => [t, ...(after.get(t) ?? [])])];
+}
+
 /** Puts `moved` between the rows that are now above and below it in `order` (the list after the
  *  drop): its nearest ranked neighbours, or the whole list renumbered when there's no room or some
- *  rows have no rank yet (the previous app's TaskQueryBlock). False (and said) when that couldn't
- *  be written. */
-export async function moveTask(order: TaskRow[], moved: TaskRow): Promise<boolean> {
-  const gap = rankBetween(order, moved);
+ *  rows have no rank yet (the previous app's TaskQueryBlock), with `every`'s hidden rows kept in
+ *  their places (`withHiddenRows`) and counted as neighbours, so the new rank ties with none.
+ *  False (and said) when that couldn't be written. */
+export async function moveTask(order: TaskRow[], moved: TaskRow, every?: TaskRow[]): Promise<boolean> {
+  // The rows the list hides are neighbours too: a rank between the shown ones could tie with one.
+  const full = every ? withHiddenRows(order, every, moved) : order;
+  const gap = rankBetween(full, moved);
   try {
     if (gap && (await api.taskRank(moved, gap.prev, gap.next))) return true;
-    await api.tasksRankAll(order);
+    await api.tasksRankAll(full);
     return true;
   } catch (e) {
     reportEditError(e);
