@@ -13,9 +13,8 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke, convertFileSrc: (p: string) => 
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ onScaleChanged: async () => () => {} }) }));
 
-import { coveredBy, frameOf, holesIn, isLookKey, nextPreviewId, PreviewHost, previewView, quickLook } from "./Preview";
+import { coveredBy, frameOf, holesIn, isLookKey, keepOpen, nextPreviewId, PreviewHost, previewView, quickLook } from "./Preview";
 import { setPlatform } from "./platform";
-import { keepOpen } from "./ui";
 
 beforeEach(() => {
   invoke.mockImplementation(async (cmd: string, a?: Record<string, unknown>) => {

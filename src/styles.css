@@ -2314,8 +2314,8 @@ details.callout[open] .callout-chev {
   padding: 16px;
 }
 
-/* On Windows a whole-window overlay (a diagram full screen, an image full size, the preview panel)
-   starts below the window's own title bar, the top bar's height, and leaves that bar uncovered: the
+/* On Windows a whole-window overlay (a diagram full screen, an image full size) starts below the
+   window's own title bar, the top bar's height, and leaves that bar uncovered: the
    window's buttons (.winctl, fixed at the top right over everything) keep their own row instead of
    sitting on the overlay's own buttons there, and the bar still drags the window (the overlay stays
    open for that press: keepOpen in src/ui.tsx). macOS and Linux keep the overlay over the whole

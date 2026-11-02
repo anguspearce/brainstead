@@ -288,12 +288,11 @@ export function rankBetween(order: TaskRow[], moved: TaskRow): { prev: number | 
   return { prev, next };
 }
 
-/** `order` (a list's rows after a drop) with the rows the list hides put back where they were in
- *  `every` (the whole list in its order on disk, without the screen's search and filters), each
- *  after the shown row it followed;
- *  `moved` has left its old place, so it anchors nothing. A renumber of this order gives hidden
- *  rows a place among their old neighbours, rather than leaving their old ranks among the new ones
- *  (src/mcpActions.ts's move_task renumbers the same way). */
+/** `order` (a list's rows after a drop) with the rows the screen's search and filters hide put
+ *  back where they were in `every` (the whole list in its order on disk), each after the shown row
+ *  it followed; `moved` has left its old place, so it anchors nothing. A renumber of this order
+ *  gives hidden rows a place among their old neighbours, rather than leaving their old ranks among
+ *  the new ones. */
 export function withHiddenRows(order: TaskRow[], every: TaskRow[], moved: TaskRow): TaskRow[] {
   const shown = new Set(order);
   const after = new Map<TaskRow | null, TaskRow[]>();
@@ -309,7 +308,8 @@ export function withHiddenRows(order: TaskRow[], every: TaskRow[], moved: TaskRo
 /** Puts `moved` between the rows that are now above and below it in `order` (the list after the
  *  drop): its nearest ranked neighbours, or the whole list renumbered when there's no room or some
  *  rows have no rank yet (the previous app's TaskQueryBlock), with `every`'s hidden rows kept in
- *  their places (`withHiddenRows`) and counted as neighbours, so the new rank ties with none. False (and said) when that couldn't be written. */
+ *  their places (`withHiddenRows`) and counted as neighbours, so the new rank ties with none.
+ *  False (and said) when that couldn't be written. */
 export async function moveTask(order: TaskRow[], moved: TaskRow, every?: TaskRow[]): Promise<boolean> {
   // The rows the list hides are neighbours too: a rank between the shown ones could tie with one.
   const full = every ? withHiddenRows(order, every, moved) : order;

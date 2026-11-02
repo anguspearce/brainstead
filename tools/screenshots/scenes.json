@@ -480,19 +480,6 @@
     "accent": "#ffb900"
   },
   {
-    "name": "settings-general-all",
-    "screen": "settings",
-    "pane": "general",
-    "accent": "#ffb900",
-    "window": [1440, 2400]
-  },
-  {
-    "name": "settings-assistants-all",
-    "screen": "settings",
-    "pane": "assistants",
-    "window": [1440, 2400]
-  },
-  {
     "name": "today-accent",
     "screen": "today",
     "accent": "#e3008c"
@@ -504,6 +491,18 @@
       "tasks:sel": "Project. Orbit App launch.md:9"
     },
     "accent": "#107c10"
+  },
+  {
+    "name": "settings-general-all",
+    "screen": "settings",
+    "pane": "general",
+    "window": [1440, 2400]
+  },
+  {
+    "name": "settings-assistants-all",
+    "screen": "settings",
+    "pane": "assistants",
+    "window": [1440, 2400]
   },
   {
     "name": "source-provenance",

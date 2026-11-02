@@ -17,7 +17,7 @@ Each list on the left shows its count:
 - **Someday / maybe**: tasks tagged `#someday-maybe`.
 - **Done this week** and **Done last week**: ticked tasks by done date, weeks starting on Monday.
 
-In Next actions, Follow-ups, Waiting for and Someday / maybe, drag rows by their grip to set your own order (not while grouped). The order is saved at the end of each line as `^rank-1024`, and the list is renumbered when it needs room. Tasks the list hides at the time (a search, a filter, or on-hold and someday projects' tasks) keep their places next to the tasks they followed. An assistant moves a task the same way.
+In Next actions, Follow-ups, Waiting for and Someday / maybe, drag rows by their grip to set your own order (not while grouped). The order is saved at the end of each line as `^rank-1024`, and the list is renumbered when it needs room. Tasks a search or filter hides at the time keep their places next to the tasks they followed. An assistant moves a task the same way.
 
 ## Use the keys
 - `↑` and `↓` choose a task, carrying on into the next list.

@@ -455,9 +455,8 @@ function AccentColour() {
         onChange={setAccent}
       />
       <p className="faint">
-        App is Brainstead's own blue. System takes the accent colour from Windows Settings › Personalisation › Colours and follows it when
-        you change it there, lighter or darker where text on it would be hard to read. It colours buttons, links, the selected row and the
-        focus ring, not the theme, and is kept for this computer, not in the vault.
+        System takes the accent colour from Windows Settings › Personalisation › Colours and follows it when it changes, lighter or darker
+        where text on it would be hard to read.
       </p>
     </div>
   );

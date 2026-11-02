@@ -389,6 +389,16 @@ pub fn watch_system_accent(app: &tauri::AppHandle) {
     let _ = app;
 }
 
+/// The main window gained focus: reads the system's accent colour again and tells every window
+/// when it changed, for a change made while the watch wasn't armed (platform/accent_win.rs).
+/// Nothing off Windows.
+pub fn system_accent_focused(app: &tauri::AppHandle) {
+    #[cfg(windows)]
+    accent_win::focused(app);
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
 /// Shows the file selected in Finder (or the system's file manager).
 /// Whether the app opens at login; None when the system can't say (Settings hides the switch).
 pub fn open_at_login() -> Option<bool> {
@@ -953,15 +963,6 @@ pub fn remove_update_installers(name: &str) {
     let _ = name;
 }
 
-/// Whether `file`, in the program's folder, is a copy of the program `exe` the installer moved
-/// aside: `<exe>.old`, or `<exe>.old-<n>` when one was still held from an earlier update. Windows'
-/// names don't go by case.
-#[cfg_attr(not(windows), allow(dead_code))]
-fn is_moved_aside(exe: &str, file: &str) -> bool {
-    let (exe, file) = (exe.to_lowercase(), file.to_lowercase());
-    file.strip_prefix(&exe).is_some_and(|rest| rest == ".old" || rest.strip_prefix(".old-").is_some_and(|n| !n.is_empty()))
-}
-
 /// WebView2's user data folder for a copy that runs beside the installed app (`data` is its own
 /// data folder, `BRAINSTEAD_DATA`): `<data>\WebView2`. Every build otherwise uses the identifier's
 /// folder in `%LOCALAPPDATA%`, and WebView2 runs one browser process per user data folder, shared
@@ -990,6 +991,14 @@ const WEBVIEW2_DATA_VAR: &str = "WEBVIEW2_USER_DATA_FOLDER";
 #[cfg_attr(not(windows), allow(dead_code))]
 fn webview_data_folder(data: &std::path::Path) -> PathBuf {
     data.join("WebView2")
+}
+/// Whether `file`, in the program's folder, is a copy of the program `exe` the installer moved
+/// aside: `<exe>.old`, or `<exe>.old-<n>` when one was still held from an earlier update. Windows'
+/// names don't go by case.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn is_moved_aside(exe: &str, file: &str) -> bool {
+    let (exe, file) = (exe.to_lowercase(), file.to_lowercase());
+    file.strip_prefix(&exe).is_some_and(|rest| rest == ".old" || rest.strip_prefix(".old-").is_some_and(|n| !n.is_empty()))
 }
 
 /// Which of the features that aren't on every system this one has: one table in core, which the
@@ -1026,6 +1035,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_copy_beside_the_app_keeps_its_webview_data_in_its_own_data_folder() {
+        let data = std::path::Path::new("scratch").join("dev-data");
+        assert_eq!(webview_data_folder(&data), data.join("WebView2"));
+        assert_eq!(WEBVIEW2_DATA_VAR, "WEBVIEW2_USER_DATA_FOLDER");
+    }
+
+    #[test]
     fn only_the_program_files_the_installer_moved_aside_are_old() {
         for old in ["Brainstead.exe.old", "brainstead.EXE.old", "Brainstead.exe.old-1234567"] {
             assert!(is_moved_aside("Brainstead.exe", old), "{old}");
@@ -1033,13 +1049,6 @@ mod tests {
         for other in ["Brainstead.exe", "Brainstead.exe.old-", "Brainstead.exe.older", "uninstall.exe.old", "Brainstead.exe.old.txt"] {
             assert!(!is_moved_aside("Brainstead.exe", other), "{other}");
         }
-    }
-
-    #[test]
-    fn a_copy_beside_the_app_keeps_its_webview_data_in_its_own_data_folder() {
-        let data = std::path::Path::new("scratch").join("dev-data");
-        assert_eq!(webview_data_folder(&data), data.join("WebView2"));
-        assert_eq!(WEBVIEW2_DATA_VAR, "WEBVIEW2_USER_DATA_FOLDER");
     }
 
     #[test]

@@ -18,7 +18,7 @@ import { api, PreviewFrame } from "./api";
 import { Icon } from "./icons";
 import { isMac, isWindows } from "./platform";
 import { Store, useStore } from "./store";
-import { keepOpen, useDismiss } from "./ui";
+import { useDismiss } from "./ui";
 
 export interface PreviewRequest {
   /** The file's name, for the title and for the type Windows previews by. */
@@ -96,6 +96,12 @@ export function isLookKey(e: KeyboardEvent, screen: "source" | "trash"): boolean
 
 /** Closes the panel; one function for the life of the page, so the panel's effects don't re-run. */
 const closePreview = () => previewView.set(null);
+
+/** A press outside the panel that leaves it open: the window's own minimise and close (.winctl,
+ *  page markup outside the panel; the preview hides and comes back with the window), and the empty
+ *  part of the top bar, which drags or maximises the window (Tauri drags only from the element
+ *  that carries the mark itself, never from a button in it). */
+export const keepOpen = (t: Element): boolean => !!t.closest?.(".winctl") || !!t.hasAttribute?.("data-tauri-drag-region");
 
 export function PreviewHost() {
   const v = useStore(previewView);

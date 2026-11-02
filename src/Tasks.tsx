@@ -70,7 +70,7 @@ export function TasksScreen() {
     [ctx, effort, dq],
   );
   const rows = useMemo(() => (all ? viewRows(all, view, today, inbox) : []).filter(filtered), [all, inbox, view, today, filtered]);
-  // The whole manual list, with what the filters hide, for a drag's renumber.
+  // The whole manual list, with what the search and filters hide, for a drag's renumber.
   const every = useMemo(() => (all && view.manual ? viewRows(all, view, today, inbox) : undefined), [all, inbox, view, today]);
   const groups = useMemo(() => groupTasks(rows, groupBy, today), [rows, groupBy, today]);
   // Saved lists: a view with its context, effort and grouping, by name (settings `taskLists`).

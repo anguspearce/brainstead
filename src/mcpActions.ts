@@ -3446,9 +3446,9 @@ async function settingsTool(a: Args): Promise<string> {
     summaries: { ...DEFAULT_SCHEDULE, ...s.summaries },
     weeklyReview: { ...DEFAULT_WEEKLY_REVIEW, ...s.weeklyReview },
     jobModels: { ...s.jobModels },
-    resizeLocks: { ...s.resizeLocks },
     jobEffort: { ...s.jobEffort },
     effort: { ...s.effort },
+    resizeLocks: { ...s.resizeLocks },
   };
   // Open at login is macOS's login item, not a setting in the file; null where macOS can't say
   // (a copy run from a folder), and then it isn't offered, as the screen hides it.
@@ -3601,14 +3601,14 @@ async function settingsTool(a: Args): Promise<string> {
   let dropped = "";
   if (key === "openAtLogin") {
     await api.loginItemSet(v as boolean);
-  } else if (head === "resizeLocks") {
-    // As the screen's checkbox sets it.
-    setResizeLock(sub as ResizeType, v as boolean);
   } else if (head === "jobModels") {
     // As Models by job does: the job's own effort goes when its new model's assistant doesn't offer it.
     const level = setJobModel(sub, (v as string | undefined) ?? null);
     if (level)
       dropped = ` Its effort (${effortLabel(level)}) went back to Default: ${CLI_LABEL[cliOf(jobModelOf(sub))]} doesn't offer it for ${modelLabel(jobModelOf(sub), clis.get())}.`;
+  } else if (head === "resizeLocks") {
+    // As the screen's checkbox sets it.
+    setResizeLock(sub as ResizeType, v as boolean);
   } else if (sub) {
     const next = { ...nested[head], [sub]: v };
     if (v === undefined) delete next[sub];
