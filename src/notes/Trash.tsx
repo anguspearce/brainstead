@@ -14,7 +14,7 @@ import { useVaultVersion } from "../state";
 import { reportEditError } from "../taskModel";
 import { toast } from "../Toast";
 import { TopBar } from "../TopBar";
-import { ago, Dialog, fmtBytes, LayerTag, SearchBox, Seg } from "../ui";
+import { ago, Dialog, fmtBytes, LayerTag, SearchBox, Seg, Squeeze } from "../ui";
 import { errText } from "./actions";
 import { folderOf } from "./filename";
 import { useFeatures } from "../features";
@@ -158,13 +158,18 @@ export function TrashScreen() {
             ["all", "All", "Everything in the Trash"],
             ...(["note", "wiki", "source", "template"] as Layer[])
               .filter((l) => count(l))
-              .map((l): [Filter, string, string] => [l, `${LABEL[l]}s · ${count(l)}`, `Only the ${LABEL[l].toLowerCase()}s in the Trash`]),
+              .map((l): [Filter, string, string, string] => [
+                l,
+                `${LABEL[l]}s`,
+                `Only the ${LABEL[l].toLowerCase()}s in the Trash`,
+                ` · ${count(l)}`,
+              ]),
           ]}
         />
         <span title={rows?.length ? "Delete everything in the Trash for good; asks first" : "The Trash is already empty"}>
           <button type="button" className="btn" disabled={!rows?.length} onClick={() => setConfirm({ what: "empty" })}>
             <Icon name="trash" size={14} />
-            Empty the Trash{total ? ` · frees ${fmtBytes(total)}` : ""}
+            <Squeeze full={`Empty the Trash${total ? ` · frees ${fmtBytes(total)}` : ""}`} tight="Empty the Trash" />
           </button>
         </span>
       </TopBar>

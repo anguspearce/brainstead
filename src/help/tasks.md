@@ -51,7 +51,7 @@ To change a task's words in any list, point at it and click the pencil after the
 **Lives in** shows the note, line and heading; click it to open the note there. **Ask about this** opens [Ask](app:ask) about the task. ⌘Z undoes any change.
 
 ## Group, filter and save lists
-**Group by** in the top bar (**None**, **Project**, **Context** or **Due**) groups the list, with a band and count per group. Grouped lists can't be dragged.
+**Group by** in the top bar (**None**, **Project**, **Context** or **Due**) groups the list, with a band and count per group; in a narrow window it's a drop-down menu instead. Grouped lists can't be dragged.
 
 **Search tasks** narrows every list to tasks with all the words you type, in their text, note, heading, project, tags or context. The counts on the left follow, and `Esc` clears it. Context chips (**All**, `@calls`, `@office`…) show one context; click the chip again, or **All**, to show all. The effort menu shows tasks of 15 minutes, 30 minutes or an hour or less.
 
