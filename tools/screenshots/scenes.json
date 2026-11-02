@@ -485,6 +485,18 @@
     "accent": "#107c10"
   },
   {
+    "name": "settings-general-all",
+    "screen": "settings",
+    "pane": "general",
+    "window": [1440, 2400]
+  },
+  {
+    "name": "settings-assistants-all",
+    "screen": "settings",
+    "pane": "assistants",
+    "window": [1440, 2400]
+  },
+  {
     "name": "source-provenance",
     "screen": "doc",
     "path": "sources/Roadmap Update 2026-09-18.md",
