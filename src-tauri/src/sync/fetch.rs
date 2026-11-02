@@ -538,7 +538,7 @@ fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
         recipients: None,
         date: Some(m.time.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string()),
         body: m.body.clone(),
-        attachments: Vec::new(),
+        attachments: m.files.iter().map(|f| Attachment { name: f.name.clone(), url: Some(f.url.clone()), ..Default::default() }).collect(),
     }));
     out
 }

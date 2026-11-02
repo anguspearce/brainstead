@@ -144,7 +144,8 @@ impl Capture {
             if t.messages.is_empty() {
                 return Err("The capture has no messages.".into());
             }
-            if t.messages.iter().any(|m| m.sender.is_empty() || (body_required && m.body.is_empty())) {
+            // A message that only shares a file has no text; its attachment stands in for it.
+            if t.messages.iter().any(|m| m.sender.is_empty() || (body_required && m.body.is_empty() && m.attachments.is_empty())) {
                 return Err("A message in the capture has no sender or no text.".into());
             }
             Ok(())
@@ -536,6 +537,9 @@ mod tests {
         let empty =
             cap(json!({"type": "teams", "url": "https://teams.microsoft.com/", "title": "T", "messages": [{"sender": "A", "body": ""}]}));
         assert!(empty.check().is_err());
+        let file_only = cap(json!({"type": "teams", "kind": "transcript", "url": "https://teams.microsoft.com/", "title": "T",
+            "messages": [{"sender": "A", "body": "x"}, {"sender": "B", "body": "", "attachments": [{"name": "Plan.docx", "url": "https://acme.example/Plan.docx"}]}]}));
+        assert!(file_only.check().is_ok());
         let nourl = cap(json!({"type": "teams", "url": "about:blank", "title": "T", "messages": [{"sender": "A", "body": "x"}]}));
         assert!(nourl.check().is_err());
     }
