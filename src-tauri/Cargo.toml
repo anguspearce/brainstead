@@ -71,6 +71,7 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 
 # The capture host's registration and Open at login (HKCU), and rich copy (platform/other.rs).
+# The tray glyph follows the taskbar's theme and scale, watched with RegNotifyChangeKeyValue (platform/tray.rs).
 # arboard is the clipboard plugin's own, at its version.
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
@@ -79,12 +80,12 @@ arboard = { version = "3.6", default-features = false }
 # size from the user's locale.
 webview2-com = "0.39"
 windows-core = "0.62"
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Security", "Win32_System_DataExchange", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Security", "Win32_System_DataExchange", "Win32_System_Registry", "Win32_System_Threading", "Win32_UI_HiDpi", "Win32_UI_WindowsAndMessaging"] }
 # Spelling (Windows' spell checker) and grammar (Harper, on the PC), as Two-edged Sword's journal
 # has them (platform/spell_win.rs).
 # The text in images and the copy a model is shown, through Windows' imaging and text
-# recognition (platform/image_win.rs).
-windows = { version = "0.62", features = ["Foundation", "Foundation_Collections", "Graphics_Imaging", "Media_Ocr", "Storage_Streams", "Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_Security_Credentials", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
+# recognition (platform/image_win.rs). The accent colour (platform/accent_win.rs).
+windows = { version = "0.62", features = ["Foundation", "Foundation_Collections", "Graphics_Imaging", "Media_Ocr", "Storage_Streams", "UI_ViewManagement", "Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_Security_Credentials", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }
 windows-future = "0.3"
 harper-core = { version = "2", default-features = false, features = ["concurrent"] }
 

@@ -279,6 +279,14 @@ html[data-platform="windows"] .tlspace {
   background: rgb(196 43 28 / 85%);
   color: #fff;
 }
+
+/* Windows 11's caption glyphs (src/WindowControls.tsx): its icon font at 10px, regular weight. */
+.winctl .wglyph {
+  font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1;
+}
 .winctl button:focus-visible {
   outline-offset: -2px;
 }
@@ -2287,7 +2295,7 @@ details.callout[open] .callout-chev {
   align-self: flex-start;
 }
 
-/* Settings › General › Appearance: Interface size */
+/* Settings › General › Appearance: Interface size and Accent colour (a label, the control, a note) */
 .ifacesize {
   margin-top: 14px;
   display: flex;
@@ -3209,6 +3217,33 @@ html.capture-view body {
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ink3);
+}
+
+/* On Windows they go as Windows 11's do: hidden until the pointer is over the scrolling pane or it
+   scrolls (attributes set by src/scrollbars.ts), then a 2px thumb that widens to 6px under the
+   pointer. The bar's own width never changes, so nothing reflows: the thumb is narrowed by a
+   transparent border instead. Scrollbar parts don't animate, so they appear and go without a
+   fade. Where Windows shows scroll bars all the time, so does the app (the data-scrollbars="always"
+   rules after these). */
+html[data-platform="windows"] ::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border: 4px solid transparent;
+}
+html[data-platform="windows"] :is([data-pointer-in], [data-scrolling])::-webkit-scrollbar-thumb {
+  background-color: var(--ink3);
+}
+html[data-platform="windows"] ::-webkit-scrollbar-thumb:hover,
+html[data-platform="windows"] ::-webkit-scrollbar-thumb:active {
+  border-width: 2px;
+  background-color: var(--ink3);
+}
+html[data-platform="windows"][data-scrollbars="always"] ::-webkit-scrollbar-thumb {
+  border-width: 2px;
+  background-color: var(--line2);
+}
+html[data-platform="windows"][data-scrollbars="always"] ::-webkit-scrollbar-thumb:hover,
+html[data-platform="windows"][data-scrollbars="always"] ::-webkit-scrollbar-thumb:active {
   background-color: var(--ink3);
 }
 

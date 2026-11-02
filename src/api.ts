@@ -36,6 +36,8 @@ export interface Settings {
   readSize?: number;
   /** The whole window's size as a percentage, 80 to 150 (Settings › General › Appearance; src/interfaceSize.ts). */
   interfaceSize?: number;
+  /** The accent colour: the app's own blue, or the system's (Windows only; src/accent.ts). */
+  accent?: "app" | "system";
   /** Back/forward history and where in it the window is, kept across restarts (src/nav.ts). */
   places?: { stack: import("./nav").Place[]; i: number };
   /** The Projects screen's order, dragged by hand: areas by name, projects by path. What isn't in
@@ -1209,6 +1211,11 @@ export const api = {
   logsReveal: () => invoke<void>("logs_reveal"),
   /** Whether Brainstead opens at login; null where the system can't say. */
   loginItem: () => invoke<boolean | null>("login_item"),
+  /** The Windows accent colour as #rrggbb; null elsewhere (src/accent.ts). */
+  systemAccent: () => invoke<string | null>("system_accent"),
+  /** Whether Windows shows scroll bars all the time (Always show scrollbars); the app then does too
+   *  (src/scrollbars.ts). False elsewhere. */
+  alwaysShowScrollbars: () => invoke<boolean>("always_show_scrollbars"),
   loginItemSet: (on: boolean) => invoke<boolean | null>("login_item_set", { on }),
   /** Open at login changed, from Settings or the menu-bar window. */
   onLoginItemChanged: (f: (on: boolean | null) => void): Promise<UnlistenFn> =>

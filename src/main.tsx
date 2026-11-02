@@ -18,12 +18,14 @@ import { ingest } from "./Ingest";
 import { nav, openDoc, restorePlaces, Screen, SettingsPane } from "./nav";
 import { applyScene, parseScene } from "./scene";
 import { recheckPermissions, startStatus } from "./state";
-import { applyReadSize, applyTheme, installFlushers, settings } from "./store";
+import { applyReadSize, installFlushers, settings } from "./store";
 import { startMoves } from "./moves";
 import { isTranscriptPath } from "./meetingFlow";
 import { loadFeatures } from "./features";
 import { applyPlatform, blockBrowserKeys } from "./platform";
 import { applyInterfaceSize } from "./interfaceSize";
+import { applyLook, startSystemAccent } from "./accent";
+import { showScrollbarsWhileScrolling } from "./scrollbars";
 
 // WebKit's own right-click menu offers Reload, which throws away the app's state. Keep it only
 // where it's useful — in text fields and on selected text — and leave custom menus to their owners.
@@ -38,9 +40,10 @@ async function start() {
   // The stylesheet reads data-platform; the backend's own report of the platform wins once it arrives.
   applyPlatform();
   blockBrowserKeys();
-  const [s, sceneJson] = await Promise.all([api.settingsRead(), api.scene().catch(() => null), loadFeatures()]);
+  showScrollbarsWhileScrolling();
+  const [s, sceneJson] = await Promise.all([api.settingsRead(), api.scene().catch(() => null), loadFeatures(), startSystemAccent()]);
   settings.loadFrom(s);
-  applyTheme(s.theme);
+  applyLook(s);
   applyReadSize(s.readSize);
   installFlushers();
   const scene = parseScene(sceneJson);

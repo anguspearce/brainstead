@@ -18,7 +18,8 @@ import { Icon, Mark } from "./icons";
 import { localToday } from "./md/taskQuery";
 import { pageName } from "./knowledge";
 import { ReadOnlyPill } from "./Sidebar";
-import { applyTheme, settings, useStore } from "./store";
+import { settings, useStore } from "./store";
+import { applyLook } from "./accent";
 import { Switch } from "./ui";
 import { deferredPast, todayRows, viewRows, VIEWS } from "./taskModel";
 import { isMod, keyLabel } from "./platform";
@@ -259,7 +260,7 @@ export function TrayWindow() {
         setLoginErr(null);
         void api.settingsRead().then((s) => {
           settings.loadFrom(s);
-          applyTheme(s.theme);
+          applyLook(s);
         });
         setCapKey((k) => k + 1);
         setDailyCheck(null);

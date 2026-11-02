@@ -12,6 +12,8 @@ use std::process::{Child, Command};
 #[cfg(target_os = "macos")]
 mod about;
 #[cfg(windows)]
+mod accent_win;
+#[cfg(windows)]
 mod image_win;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -39,7 +41,7 @@ mod other;
 use other as imp;
 
 mod tray;
-pub use tray::{place_tray_window, tray_icon, tray_window_resized};
+pub use tray::{place_tray_window, tray_icon, tray_window_resized, watch_taskbar_theme};
 
 /// Where Brainstead keeps settings.json and index.db: `~/Library/Application Support/Brainstead/`
 /// on macOS, `%APPDATA%\Brainstead` on Windows. `BRAINSTEAD_DATA` overrides it (screenshots,
@@ -273,6 +275,45 @@ pub fn activate() {
             }
         }
     }
+}
+
+/// Whether Windows shows scroll bars all the time, so the app shows every scrollbar too
+/// (src/scrollbars.ts): Settings › Accessibility › Visual effects › Always show scrollbars
+/// (UISettings' AutoHideScrollBars off, platform/accent_win.rs). False elsewhere, where the app
+/// leaves the native scrollbars alone.
+pub fn always_show_scrollbars() -> bool {
+    #[cfg(windows)]
+    return accent_win::auto_hide_scrollbars() == Some(false);
+    #[cfg(not(windows))]
+    false
+}
+
+/// The system's accent colour as `#rrggbb`, for Appearance › Accent colour's System
+/// (platform/accent_win.rs). `None` off Windows, and Settings then hides the setting.
+pub fn system_accent() -> Option<String> {
+    #[cfg(windows)]
+    return accent_win::accent();
+    #[cfg(not(windows))]
+    None
+}
+
+/// Tells every window when the system's accent colour changes (`system-accent-changed`, the new
+/// `#rrggbb`). Nothing off Windows.
+pub fn watch_system_accent(app: &tauri::AppHandle) {
+    #[cfg(windows)]
+    accent_win::watch(app.clone());
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
+/// The main window gained focus: reads the system's accent colour again and tells every window
+/// when it changed, for a change made while the watch wasn't armed (platform/accent_win.rs).
+/// Nothing off Windows.
+pub fn system_accent_focused(app: &tauri::AppHandle) {
+    #[cfg(windows)]
+    accent_win::focused(app);
+    #[cfg(not(windows))]
+    let _ = app;
 }
 
 /// Shows the file selected in Finder (or the system's file manager).

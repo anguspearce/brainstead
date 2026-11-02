@@ -22,6 +22,7 @@ import { nav, Screen, SettingsPane } from "./nav";
 import { noteDialog } from "./notes/dialogs";
 import { applyTheme, settings, Store } from "./store";
 import { vaultFile } from "./platform";
+import { applyAccent, systemAccent } from "./accent";
 
 export interface Scene {
   name?: string;
@@ -29,6 +30,9 @@ export interface Scene {
   pane?: SettingsPane;
   theme?: Exclude<Theme, "system">;
   palette?: boolean;
+  /** Accent colour on System, from this #rrggbb in place of the system's (a Mac has none), or from
+   *  the system's own for "system" (src/accent.ts). */
+  accent?: string;
   /** For "doc": the vault path to open; for "search" and "doc": the query. */
   path?: string;
   q?: string;
@@ -246,6 +250,11 @@ export function applyScene(sc: Scene) {
   if (sc.theme) {
     settings.update({ theme: sc.theme });
     applyTheme(sc.theme);
+  }
+  if (sc.accent) {
+    if (sc.accent !== "system") systemAccent.set(sc.accent);
+    settings.update({ accent: "system" });
+    applyAccent("system");
   }
   if (sc.sideFolded) settings.update({ docSideFolded: true });
   if (sc.view) settings.update({ viewMemory: { ...settings.get().viewMemory, ...sc.view } });

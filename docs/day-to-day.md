@@ -6,7 +6,7 @@ Brainstead keeps working while its window is closed: Quick capture, captures fro
 
 ## The menu bar
 
-On Windows this is a system tray icon, usually under the ^ arrow at the bottom right of the taskbar. Everything below applies to it too.
+On Windows this is a system tray icon, usually under the ^ arrow at the bottom right of the taskbar. Everything below applies to it too, except that the icon is white on a dark taskbar and black on a light one, and shows a run going or something waiting in its tooltip rather than with a dot.
 
 <a href="images/index.md#day-to-day"><picture><source media="(prefers-color-scheme: dark)" srcset="images/tray-dark.png"><img alt="The menu-bar window: one task overdue, the counts, the capture box, what waits for you, and the menu" src="images/tray-light.png" width="360"></picture></a>
 
@@ -59,6 +59,8 @@ On Windows, ⌘ is Ctrl, ⌥ is Alt and ⇧ is Shift. Press `?` on any screen, c
 Settings (⌘,) has General, Notes, Vault, AI assistants, Jobs & schedule, Capture extensions, Permissions (Mac only) and About. Press `?` on each for what's in it.
 
 **Interface size** (General › Appearance) makes everything in the window bigger or smaller together, from 80% to 150% in steps of 10: the sidebar, lists, buttons, dialogs and the text of notes. ⇧⌘= and ⇧⌘- (Ctrl+Shift+= and Ctrl+Shift+- on Windows) change it from anywhere, ⇧⌘0 puts it back to 100%, and the View menu has the three on a Mac. It's kept per computer, not in the vault. A note's **Text size** (⌘= ⌘- ⌘0, on the note's ⋯ menu) is separate and comes on top: 120% with 18 px text shows a 21.6 px body.
+
+**Accent colour** (General › Appearance, Windows only) is **App**, the app's own blue, or **System**, the accent colour from Windows Settings › Personalisation › Colours. With System the buttons, links, selected rows, focus ring and checked boxes take the Windows colour in light and dark, and follow a change in Windows within a few seconds, or when the window next gains focus. The colour is kept readable (WCAG AA): where it falls short it is made darker or lighter, keeping its hue, so a yellow shows as a deep gold and a pale or near-black one as grey. It's kept per computer; a Mac has no such setting and keeps the app's blue.
 
 ## In the background
 

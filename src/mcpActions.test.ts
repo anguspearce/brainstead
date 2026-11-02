@@ -1791,6 +1791,22 @@ describe("MCP actions", () => {
       expect(settings.get().interfaceSize).toBe(130);
       await expect(run("settings", { action: "set", key: "interfaceSize", value: 160 })).rejects.toThrow(/80 to 150/);
       await expect(run("settings", { action: "set", key: "interfaceSize", value: 70 })).rejects.toThrow(/80 to 150/);
+      // Accent colour: offered where the system has one (Windows), and put in force as the screen's setter does.
+      answers.system_accent = () => null;
+      expect(await run("settings")).not.toContain("accent ·");
+      await expect(run("settings", { action: "set", key: "accent", value: "system" })).rejects.toThrow(/only on Windows/);
+      answers.system_accent = () => "#0078d4";
+      expect(await run("settings")).toContain(
+        'accent · Settings › General › Appearance › Accent colour: "app" (one of: app (App), system (System))',
+      );
+      expect(await run("settings", { action: "set", key: "accent", value: "System" })).toBe(
+        'Settings › General › Appearance › Accent colour is now "system".',
+      );
+      expect(settings.get().accent).toBe("system");
+      expect(document.documentElement.dataset.accent).toBe("system");
+      expect(document.getElementById("system-accent")?.textContent).toContain("--accent: #0078d4;");
+      await run("settings", { action: "set", key: "accent", value: "app" });
+      expect(document.documentElement.dataset.accent).toBeUndefined();
       answers.capture_shortcut_status = () => ["Control+Shift+K", null];
       expect(await run("settings", { action: "set", key: "captureShortcut", value: "shift+control+k" })).toMatch(
         /is now "Control\+Shift\+K", registered with the system/,
@@ -1805,7 +1821,7 @@ describe("MCP actions", () => {
       expect(await run("settings", { action: "set", key: "captureShortcut", value: "Super+Space" })).toMatch(
         /set to "Super\+Space", but it isn't working: The system wouldn't give/,
       );
-      settings.update({ readSize: undefined, interfaceSize: undefined, captureShortcut: undefined });
+      settings.update({ readSize: undefined, interfaceSize: undefined, captureShortcut: undefined, accent: undefined });
     });
   });
 
