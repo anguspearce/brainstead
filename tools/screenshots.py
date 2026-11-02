@@ -334,7 +334,7 @@ def capture(scene, theme, data, settle):
         import demo_tutorial
 
         sc["path"] = demo_tutorial.fill(sc["path"], datetime.datetime.now())
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         # A TIFF from WebKit, a PNG from WebView2 (platform::snapshot); Pillow reads either.
         shot = pathlib.Path(tmp) / ("shot.png" if WINDOWS else "shot.tiff")
         app = subprocess.Popen(
@@ -361,9 +361,13 @@ def capture(scene, theme, data, settle):
             im.load()
             return to_srgb(im.convert("RGBA") if im.mode not in ("RGB", "RGBA") else im)
         finally:
-            # SIGKILL, or TerminateProcess on Windows: the app saves nothing in a scene.
-            app.kill()
-            app.wait()
+            # SIGKILL, or on Windows the whole tree: the app saves nothing in a scene, and WebView2's
+            # browser processes would otherwise outlive it holding files in this folder.
+            if WINDOWS:
+                stop(app)
+            else:
+                app.kill()
+                app.wait()
 
 
 def chrome(im, theme, s=1.0):
@@ -504,7 +508,7 @@ def main():
     CHECK.mkdir(parents=True, exist_ok=True)
     server = None if a.release else dev_server()
     try:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             if not a.release:
                 build()
             if a.fresh or not (DEMO / "data" / "settings.json").exists():
