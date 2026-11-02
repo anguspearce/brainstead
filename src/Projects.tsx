@@ -48,7 +48,7 @@ export function startNewProject() {
 const TABS: ProjectStatus[] = ["active", "on-hold", "someday", "done"];
 
 export function ProjectsScreen() {
-  const panes = usePanes({ "projects.list": PANES["projects.list"] });
+  const panes = usePanes({ "projects.list": PANES["projects.list"] }, { minFlex: 320 });
   const projects = useProjects();
   const all = useAllTasks();
   const here = useStore(place).place;

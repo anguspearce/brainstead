@@ -85,7 +85,7 @@ export function sortHits(hits: SearchHit[], sort: "best" | "newest" | "oldest"):
 }
 
 export function SearchScreen() {
-  const panes = usePanes({ "search.left": PANES["search.left"] });
+  const panes = usePanes({ "search.left": PANES["search.left"] }, { minFlex: 300 });
   const { place: here } = useStore(place);
   const [typed, setQ] = useViewState("search:q", here.q ?? "");
   const q = useDebounced(typed);

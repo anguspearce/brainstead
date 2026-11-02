@@ -142,7 +142,7 @@ export const scheduleLabel = (day: Weekday | undefined, time: string | undefined
   `${DAY_NAME[day ?? "fri"]}s at ${/^\d\d:\d\d$/.test(time ?? "") ? time : "16:00"}`;
 
 export function WeeklyScreen() {
-  const panes = usePanes({ "weekly.left": PANES["weekly.left"], "weekly.side": PANES["weekly.side"] });
+  const panes = usePanes({ "weekly.left": PANES["weekly.left"], "weekly.side": PANES["weekly.side"] }, { minFlex: 320 });
   const today = localToday();
   const [st, setSt] = useState<WeeklyState | null>(null);
   // The review is shown once it's started or carried on; till then, its start page. Each visit

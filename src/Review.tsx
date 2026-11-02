@@ -183,7 +183,7 @@ export const keyIsElsewhere = (e: KeyboardEvent) =>
 const RUNS_SHOWN = 30;
 
 export function ReviewScreen() {
-  const panes = usePanes({ "changes.list": PANES["changes.list"] });
+  const panes = usePanes({ "changes.list": PANES["changes.list"] }, { minFlex: 320 });
   useEffect(startKnowledge, []);
   const all = useStore(changes);
   // The search narrows held changes and the feed alike; ↑↓ in the box move through what it found.
