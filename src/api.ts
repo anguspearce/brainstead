@@ -1638,7 +1638,7 @@ export interface WeeklyState {
   handled?: Record<string, "accepted" | "skipped">;
 }
 
-export type CliName = "claude" | "codex" | "antigravity" | "copilot";
+export type CliName = "claude" | "codex" | "antigravity" | "copilot" | "ollama";
 
 /** A scheduled run (a summary, the weekly review's preparation) opening as a tab in Ask. */
 export interface ReviewStarted {
@@ -1652,11 +1652,18 @@ export interface ReviewStarted {
 
 export interface CliInfo {
   cli: CliName;
+  /** The program, or for Ollama its server's address; null when it can't be used (`note` says why). */
   path: string | null;
   version: string | null;
-  models: { id: string; name: string }[];
+  /** Each model, with its own effort levels where the assistant knows them per model (Ollama: the
+   *  thinking levels a model names, an empty list for one that only thinks or not); left out where
+   *  the assistant's `efforts` stand for every model. */
+  models: { id: string; name: string; efforts?: string[] }[];
   /** The effort levels it can be set to, lowest first (brainstead_core::ask::Cli::efforts). */
   efforts: string[];
+  /** A line for its row under Found on this computer (Ollama: what it runs through and the models
+   *  left out, or why it can't be used). */
+  note?: string;
 }
 
 export type AskEvent =
