@@ -12,6 +12,8 @@ While Brainstead runs, its menu-bar icon opens a small window. On Windows the ic
 - Three dots at its foot: a run is going (an ingest, a meeting note, a daily or weekly summary, the daily check, the weekly review's preparation, Find tasks and projects, a contradictions check or Knowledge health's **Write Current state**).
 - A dot at its corner: something waits for you (an overdue task, changes held for you, or items in the Inbox).
 
+On Windows the icon is white on a dark taskbar and black on a light one, and changes when you switch Windows' mode. It has no dots there: hover over it and its tooltip says a run is going or something waits.
+
 ## What the window shows
 - A headline: **All clear**, **Things need you** or how many runs are going. Counts that can't be read show "–". While the vault is read-only, a **Read-only** pill opens [Settings › Vault](app:settings/vault) to turn it off.
 - **Overdue**, **Due today** and **Waiting for** counts; click one to open [Today](app:today).

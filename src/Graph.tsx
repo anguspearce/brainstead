@@ -656,9 +656,9 @@ function GraphCanvas({
     };
     el.addEventListener("gesturestart", gs);
     el.addEventListener("gesturechange", gc);
-    // A theme change repaints with the new colours.
+    // A theme or accent change repaints with the new colours (src/accent.ts sets data-accent each time).
     const mo = new MutationObserver(draw);
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-accent"] });
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     mq.addEventListener("change", draw);
     return () => {

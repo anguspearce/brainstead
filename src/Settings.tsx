@@ -18,6 +18,7 @@ import { useDocDefaults, useDocLook } from "./docLook";
 import { Markdown } from "./md/Markdown";
 import { applyTheme, settings, settingsError, useStore } from "./store";
 import { INTERFACE_SIZE, clampInterfaceSize, stepInterfaceSize } from "./interfaceSize";
+import { Accent, setAccent, systemAccent } from "./accent";
 import { toast } from "./Toast";
 import { errText } from "./notes/actions";
 import { Switchover } from "./Switchover";
@@ -366,9 +367,36 @@ function General() {
             applyTheme(t);
           }}
         />
+        <AccentColour />
         <InterfaceSize />
       </section>
     </>
+  );
+}
+
+/** Accent colour: the app's own blue or the system's (src/accent.ts). Only where the system has one
+ *  (Windows); elsewhere there's nothing to choose. */
+function AccentColour() {
+  const accent = useStore(settings).accent ?? "app";
+  const colour = useStore(systemAccent);
+  if (!colour) return null;
+  return (
+    <div className="ifacesize">
+      <div className="eyebrow">Accent colour</div>
+      <Seg<Accent>
+        label="Accent colour"
+        value={accent}
+        options={[
+          ["app", "App"],
+          ["system", "System"],
+        ]}
+        onChange={setAccent}
+      />
+      <p className="faint">
+        System takes the accent colour from Windows Settings › Personalisation › Colours and follows it when it changes, lighter or darker
+        where text on it would be hard to read.
+      </p>
+    </div>
   );
 }
 
