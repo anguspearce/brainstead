@@ -306,6 +306,16 @@ pub fn watch_system_accent(app: &tauri::AppHandle) {
     let _ = app;
 }
 
+/// The main window gained focus: reads the system's accent colour again and tells every window
+/// when it changed, for a change made while the watch wasn't armed (platform/accent_win.rs).
+/// Nothing off Windows.
+pub fn system_accent_focused(app: &tauri::AppHandle) {
+    #[cfg(windows)]
+    accent_win::focused(app);
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
 /// Shows the file selected in Finder (or the system's file manager).
 /// Whether the app opens at login; None when the system can't say (Settings hides the switch).
 pub fn open_at_login() -> Option<bool> {

@@ -1195,8 +1195,12 @@ pub fn run() {
                             tray::main_closed(app);
                         }
                     }
-                    // An update a background check found is offered once the window has the focus.
-                    tauri::WindowEvent::Focused(true) => updates::focused(w2.app_handle()),
+                    // An update a background check found is offered once the window has the focus,
+                    // and a system accent change the watch missed is picked up (platform/accent_win.rs).
+                    tauri::WindowEvent::Focused(true) => {
+                        updates::focused(w2.app_handle());
+                        platform::system_accent_focused(w2.app_handle());
+                    }
                     // The system went light or dark: About follows when the app's theme is System.
                     tauri::WindowEvent::ThemeChanged(t) => {
                         let app = w2.app_handle();

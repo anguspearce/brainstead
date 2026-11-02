@@ -4,9 +4,9 @@
 
 // Accent colour (Settings › General › Appearance): App keeps the stylesheet's own blue; System takes
 // the Windows accent (platform/accent_win.rs), as Windows Settings and Terminal do, with the tints
-// from src/accentTints.ts, and follows it at once when it changes in Windows. Off Windows there's no
-// system colour (system_accent is null) and the setting isn't offered. Kept per machine in app
-// settings, as the theme is, and applied in every window before it's drawn.
+// from src/accentTints.ts, and follows it within a few seconds when it changes in Windows. Off
+// Windows there's no system colour (system_accent is null) and the setting isn't offered. Kept per
+// machine in app settings, as the theme is, and applied in every window before it's drawn.
 
 import { listen } from "@tauri-apps/api/event";
 import { api, type Settings } from "./api";
