@@ -14,7 +14,7 @@ Brainstead doesn't have a model of its own. It runs the AI assistants' command-l
 With **Suggest a next message** on (on by default), after each answer in [Ask](app:ask) a model reads the last few exchanges and offers a follow-up in the message box; `→` types it in. It's one more call to the assistant per answer, using the model set for **Next-message suggestions in Ask** under Models by job.
 
 ## Changes
-What assistants and runs change is made at once and listed in [Changes](app:review), where any of it can be reverted. **Keep the history of agent changes** sets how long: 90 days or 500 MB unless you change them, whichever comes first. An assistant can read or set it too, when you ask. If your vault is in a OneDrive folder, older versions of a page are also in OneDrive's version history.
+What assistants and runs change is made at once and listed in [Changes](app:review), where any of it can be reverted. **Keep the history of agent changes** sets how long: 90 days or 500 MB unless you change them, whichever comes first, and says how much space the history takes now. An assistant can read or set it too, when you ask. If your vault is in a OneDrive folder, older versions of a page are also in OneDrive's version history.
 
 ## Ingest
 The **Meeting notes** and **Ingest** groups hold the switches about ingesting.

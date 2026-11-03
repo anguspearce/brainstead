@@ -14,7 +14,7 @@ import { FileMenu, useFileMenu } from "./FileMenu";
 import { Icon } from "./icons";
 import { openDoc, useViewState } from "./nav";
 import { settings, useStore } from "./store";
-import { fmtCount, SearchBox, Seg, TableBand, useDebounced } from "./ui";
+import { fmtBytes, fmtCount, SearchBox, Seg, TableBand, useDebounced } from "./ui";
 
 /** Rows in bands, one per value of `of` (A–Z, rows with none last): Notes by type. */
 export interface Grouping<T> {
@@ -222,6 +222,8 @@ export function FileList<T extends FileSummary>({
     );
   };
   const total = rows?.length ?? 0;
+  // What the rows shown take on disk: all of them, or those the filters and search leave.
+  const shownBytes = useMemo(() => shown.reduce((n, r) => n + r.size, 0), [shown]);
 
   return (
     <div className="flist">
@@ -254,6 +256,7 @@ export function FileList<T extends FileSummary>({
           {shown.length === total
             ? `${fmtCount(total)} ${total === 1 ? noun[0] : noun[1]}`
             : `${fmtCount(shown.length)} of ${fmtCount(total)} ${noun[1]}`}
+          {rows !== null && ` · ${fmtBytes(shownBytes)}`}
         </span>
       </div>
       <div className={`ftable ${groups ? "grouped" : ""}`} ref={table} role="grid" aria-rowcount={shown.length}>

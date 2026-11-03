@@ -94,6 +94,7 @@ import { cancelled, completion, inQuote, LineChange, reopened, started, tagToggl
 import { parseTask, statusOf, type PriorityName } from "./tasksq/fields";
 import { toast } from "./Toast";
 import { fmtBytes, fmtCount } from "./ui";
+import { diskUsageText } from "./diskUsage";
 import { fresh, keepsPaused, reviewBody, reviewWeek, scheduleLabel, STEPS } from "./Weekly";
 import {
   ask,
@@ -2197,6 +2198,7 @@ async function status(): Promise<string> {
     api.permissions().catch(() => null),
     api.appInfo().catch(() => null),
   ]);
+  const disk = v.state === "ready" ? await api.diskUsage().catch(() => null) : null;
   const old = sw && (sw.skills || sw.scripts);
   const n = v.stats;
   // As Settings › Vault shows the index, its counts or why it failed.
@@ -2211,6 +2213,8 @@ async function status(): Promise<string> {
   return [
     `Vault: ${s.vaultPath ?? "none chosen"}${s.readOnly ? " (read-only: Brainstead won't change it until Settings › Vault › Read-only is off)" : ""}`,
     `Index: ${index}`,
+    // As Settings › Vault shows it.
+    disk ? `On disk: ${diskUsageText(n, disk)}` : "",
     // Settings › Permissions' Full Disk Access, where macOS asks for it.
     perm?.applies
       ? `Full Disk Access: ${perm.fullDiskAccess === true ? "granted" : perm.fullDiskAccess === false ? "not granted (Settings › Permissions says how to give it)" : `${isMac ? "macOS" : "the system"} can't say`}`

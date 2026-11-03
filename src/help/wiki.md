@@ -9,7 +9,7 @@ summary: Browse and edit the wiki, the pages about people, products and ideas th
 The wiki is the `wiki/` folder of your vault. Each page is about one entity (a person, team, product or company) or concept (an idea, process or topic), and cites its sources. Go to it with `⌘9`. A page can also hold live `tasks` and `dataview` queries, such as a project's open tasks; see [Task and Dataview queries](help:queries).
 
 ## Find a page
-The list shows each page's type, source count, health and tags, with aliases under the title as "also …". Narrow it down with:
+The list shows each page's type, source count, health and tags, with aliases under the title as "also …". On the right it counts the pages shown and what they take on disk. Narrow it down with:
 
 - The tag tree on the left: **All pages**, **Untagged**, or one tag.
 - The type chips above the list, such as entity or concept. Click a chip again to show every type.

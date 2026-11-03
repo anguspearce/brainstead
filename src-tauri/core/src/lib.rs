@@ -50,6 +50,7 @@ pub mod starter;
 pub mod taskquery;
 pub mod tasks;
 pub mod trash;
+pub mod usage;
 pub mod vault;
 pub mod watch;
 pub mod webcapture;

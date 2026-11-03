@@ -214,6 +214,12 @@ export interface IndexStats {
   openTasks: number;
   links: number;
   unresolvedLinks: number;
+  /** What the indexed files take on disk, in bytes: all of them, then each layer's. */
+  bytes: number;
+  noteBytes: number;
+  wikiBytes: number;
+  sourceBytes: number;
+  templateBytes: number;
   updatedAt: number;
   lastSyncMs: number;
 }
@@ -223,6 +229,26 @@ export interface VaultStatus {
   vaultPath: string | null;
   error: string | null;
   stats: IndexStats;
+}
+
+/** What the vault folder takes on disk (every file but those in dot folders), from src-tauri/core/src/usage.rs. */
+export interface VaultUsage {
+  files: number;
+  bytes: number;
+  images: number;
+  imageBytes: number;
+  /** In the folders excluded in Settings › Vault (counted in `files` and `bytes`). */
+  excluded: number;
+  excludedBytes: number;
+}
+
+export interface DiskUsage {
+  /** Null while no vault is open. */
+  vault: VaultUsage | null;
+  /** Brainstead's own data folder, outside the vault. */
+  appDataBytes: number;
+  /** The part of it Changes' history takes. */
+  changesBytes: number;
 }
 
 export interface Permissions {
@@ -1195,6 +1221,7 @@ export const api = {
   settingsRead: () => invoke<Settings>("settings_read"),
   settingsWrite: (settings: Settings) => invoke<Settings>("settings_write", { settings }),
   vaultStatus: () => invoke<VaultStatus>("vault_status"),
+  diskUsage: () => invoke<DiskUsage>("disk_usage"),
   rebuildIndex: () => invoke<void>("rebuild_index"),
   /** Which features this system has (src/features.ts keeps the answer). */
   platformFeatures: () => invoke<PlatformFeatures>("platform_features"),

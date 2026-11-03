@@ -60,6 +60,12 @@ pub struct IndexStats {
     pub open_tasks: i64,
     pub links: i64,
     pub unresolved_links: i64,
+    /// What the indexed files take on disk, in bytes: all of them, then each layer's.
+    pub bytes: i64,
+    pub note_bytes: i64,
+    pub wiki_bytes: i64,
+    pub source_bytes: i64,
+    pub template_bytes: i64,
     /// When the index last changed, in ms since the epoch.
     pub updated_at: i64,
     /// How long the last full pass over the vault took.
@@ -374,17 +380,23 @@ impl Index {
     pub fn stats(&self) -> Result<IndexStats> {
         let c = &self.conn;
         let one = |sql: &str| -> Result<i64> { c.query_row(sql, [], |r| r.get(0)).map_err(e) };
-        let mut by_layer: HashMap<String, i64> = HashMap::new();
+        let mut by_layer: HashMap<String, (i64, i64)> = HashMap::new();
         {
-            let mut st = c.prepare("SELECT layer, count(*) FROM files GROUP BY layer").map_err(e)?;
-            for row in st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))).map_err(e)? {
-                let (l, n) = row.map_err(e)?;
-                by_layer.insert(l, n);
+            let mut st = c.prepare("SELECT layer, count(*), coalesce(sum(size), 0) FROM files GROUP BY layer").map_err(e)?;
+            for row in st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?))).map_err(e)? {
+                let (l, n, b) = row.map_err(e)?;
+                by_layer.insert(l, (n, b));
             }
         }
-        let g = |k: &str| by_layer.get(k).copied().unwrap_or(0);
+        let g = |k: &str| by_layer.get(k).map_or(0, |v| v.0);
+        let gb = |k: &str| by_layer.get(k).map_or(0, |v| v.1);
         Ok(IndexStats {
-            files: by_layer.values().sum(),
+            files: by_layer.values().map(|v| v.0).sum(),
+            bytes: by_layer.values().map(|v| v.1).sum(),
+            note_bytes: gb("note"),
+            wiki_bytes: gb("wiki"),
+            source_bytes: gb("source"),
+            template_bytes: gb("template"),
             notes: g("note"),
             wiki: g("wiki"),
             sources: g("source"),
@@ -550,6 +562,7 @@ mod tests {
         assert!(!ch.changed.is_empty());
         let s = ix.stats().unwrap();
         assert!(s.notes > 5 && s.wiki > 0 && s.sources > 0 && s.templates > 0, "{s:?}");
+        assert!(s.note_bytes > 0 && s.bytes == s.note_bytes + s.wiki_bytes + s.source_bytes + s.template_bytes, "{s:?}");
         // System and excluded folders, schema files and conflict copies stay out.
         for p in ["CLAUDE.md", "index.md", ".trash/", ".obsidian/", "images/", "archived/", "2026-09-30 2.md"] {
             assert_eq!(count(&ix, &format!("SELECT count(*) FROM files WHERE path LIKE '%{p}%'")), 0, "{p}");

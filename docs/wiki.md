@@ -72,7 +72,7 @@ Changes lists every change assistants and runs made to the vault, newest first, 
 - A change to a template, one that adds code that runs when a note is shown, or one that changes a [system note's header](notes.md#system-notes) is always held. Renames, moves to the Trash and restores from it are made at once, unless they touch a template or bring back code that runs. An assistant can accept a held change only while you're there, and only one held for a failed check.
 - **Held for you** is at the top, each with why: **Accept** (`A`), **Reject** (`R`), **Edit before accepting**, and **Accept all** or **Reject all** for a run (`⌘↩` accepts the run). With a search on, a run's Accept all, Reject all and Revert all act only on the changes the search shows, as their confirmations count. A held change applies to the page as it is when you accept it. The sidebar counts only held changes. A held change shows one status saying why it's held; one that can't be made any more (what it changes is gone) has no Accept, only **Edit the page** and **Reject**, and shows what it asked for, before and after. While the vault is read-only, a banner says so, with **Turn off read-only**.
 - **Revert** undoes a change and keeps later edits. If its lines were edited since, it says so and offers the page as it was, to copy. **Revert all** undoes a whole run. A page's side pane lists its agent changes, with Revert.
-- History is kept 90 days or 500 MB, whichever comes first (Settings › AI assistants).
+- History is kept 90 days or 500 MB, whichever comes first (Settings › AI assistants, which also says how much space it takes now).
 
 ## Wiki pages
 

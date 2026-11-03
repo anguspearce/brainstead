@@ -25,7 +25,8 @@ import { TopBar } from "./TopBar";
 import { Jobs } from "./Jobs";
 import { CLI_LABEL, clis, DEFAULT_MODEL, findClis, MODEL_JOBS, modelLabel } from "./askState";
 import { ModelMenu } from "./Ask";
-import { ago, fmtCount, Popover, Seg, Switch } from "./ui";
+import { ago, fmtBytes, fmtCount, Popover, Seg, Switch } from "./ui";
+import { useDiskUsage, vaultBytes, vaultParts } from "./diskUsage";
 import { sayTest, speechSettingsChanged, voices } from "./speech/player";
 import { SpeedSlider, VoiceSelect } from "./speech/ReadAloud";
 import { DocButton, useIsGone } from "./docButton";
@@ -653,6 +654,8 @@ function Notes() {
 function Vault() {
   const s = useStore(settings);
   const st = useStore(vaultStatus);
+  const disk = useDiskUsage();
+  const used = disk?.vault;
   const err = useStore(settingsError);
   const [name, setName] = useState("");
   const add = () => {
@@ -746,6 +749,29 @@ function Vault() {
             </button>
           </span>
         </div>
+        {st.state === "ready" && used && disk && (
+          <div className="srow">
+            <Icon name="folder" style={{ color: "var(--accent)" }} />
+            <div className="t">
+              <div className="pt">{fmtBytes(vaultBytes(used))} on disk</div>
+              <div className="faint">
+                {[
+                  ...vaultParts(st.stats, used).map(([l, b]) => `${l} ${fmtBytes(b)}`),
+                  ...(used.excluded ? [`excluded folders ${fmtBytes(used.excludedBytes)}, not counted`] : []),
+                ].map((x, i) => (
+                  <Fragment key={x}>
+                    {i > 0 && " · "}
+                    <span className="nowrap">{x}</span>
+                  </Fragment>
+                ))}
+              </div>
+              <div className="faint">
+                Brainstead's own data (its index, the history of Changes, runs and chats) takes {fmtBytes(disk.appDataBytes)} more, outside
+                the vault.
+              </div>
+            </div>
+          </div>
+        )}
         <div className="srow">
           <Icon name="lock" style={{ color: s.readOnly ? "var(--green)" : "var(--amber)" }} />
           <div className="t">
@@ -893,6 +919,7 @@ export function foundDetail(c: CliInfo): string {
 
 function Assistants() {
   const s = useStore(settings);
+  const disk = useDiskUsage();
   const found = useStore(clis);
   const [at, setAt] = useState<DOMRect | null>(null);
   useEffect(() => void findClis(), []);
@@ -949,6 +976,7 @@ function Assistants() {
               <div className="faint">
                 Every change an assistant or a run makes can be reverted in Changes. The history is kept for this many days, or until it
                 takes this much space, whichever comes first.
+                {disk && ` It takes ${fmtBytes(disk.changesBytes)} now.`}
                 {/onedrive/i.test(s.vaultPath ?? "") &&
                   " Your vault is in a OneDrive folder, so older versions are also in OneDrive's version history."}
               </div>

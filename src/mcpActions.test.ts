@@ -1737,12 +1737,24 @@ describe("MCP actions", () => {
 
     it("gives the index, Full Disk Access, the version, the contradictions banners and a cut graph, as the screens do", async () => {
       answers.settings_read = () => ({ vaultPath: "/vault", readOnly: false });
-      const stats = { files: 120, notes: 80, wiki: 30, sources: 8, templates: 2, openTasks: 14, unresolvedLinks: 3, updatedAt: 0 };
+      const KB = 1024;
+      const stats = {
+        ...{ files: 120, notes: 80, wiki: 30, sources: 8, templates: 2, openTasks: 14, unresolvedLinks: 3, updatedAt: 0 },
+        ...{ bytes: 1324 * KB, noteBytes: 300 * KB, wikiBytes: 0, sourceBytes: 1024 * KB, templateBytes: 0 },
+      };
       answers.vault_status = () => ({ state: "ready", stats });
+      answers.disk_usage = () => ({
+        vault: { files: 131, bytes: 2049 * KB, images: 4, imageBytes: 512 * KB, excluded: 1, excludedBytes: KB },
+        appDataBytes: 3072 * KB,
+        changesBytes: 1024 * KB,
+      });
       answers.permissions = () => ({ fullDiskAccess: false, applies: true });
       answers.app_info = () => ({ version: "1.0.2", build: "abc123", dataDir: "/data/Brainstead", exe: "/x" });
       const out = (await run("status")) as string;
       expect(out).toContain("Index: 120 files indexed: 80 notes, 30 wiki, 8 sources, 2 templates, 14 open tasks, 3 unresolved links;");
+      expect(out).toContain(
+        "On disk: the vault takes 2.0 MB in 130 files (sources 1.0 MB, images 512.0 KB, notes 300.0 KB, other files 212.0 KB); excluded folders 1.0 KB more, not counted; Brainstead's own data, outside the vault, 3.0 MB, of which Changes' history 1.0 MB",
+      );
       expect(out).toContain("Full Disk Access: not granted");
       expect(out).toContain(
         "Brainstead 1.0.2 (abc123); its app data folder: /data/Brainstead; its website: https://brainstead.davies.co.za/",

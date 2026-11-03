@@ -12,6 +12,8 @@ Under **Vault folder**, click **Choose…** and pick the folder. Every `.md` and
 
 The card below counts the indexed files (notes, wiki pages, sources, templates, open tasks and unresolved links) and says when the index was last updated. **Rebuild index** reads every file again and rebuilds the index; the files aren't changed. An assistant sees the same counts, or why the index failed.
 
+Under it, **on disk** says how much space the vault takes: every file in the folder, pictures and attachments too, split into notes, wiki, sources, templates, images and other files. Folders whose names start with a dot (`.git`, `.trash`) aren't counted, and excluded folders are shown apart, not counted. Brainstead's own data (its index, the history of Changes, runs and chats) is kept outside the vault, so its size is given on its own line. The sizes follow the vault as files change, and an assistant sees the same figures.
+
 ## Make the vault editable
 A folder you choose opens with **Read-only** on: Brainstead never changes anything in it. A new vault made on the first screen opens with it off. Turn **Read-only** off to tick tasks, set dates, capture, save chats and let the summaries write.
 

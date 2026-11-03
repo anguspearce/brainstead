@@ -29,6 +29,8 @@ struct Open {
     index: Arc<Mutex<Index>>,
     /// Files by name, for embeds; built when first asked for and dropped when the vault changes.
     assets: Arc<Mutex<Option<Arc<brainstead_core::assets::Assets>>>>,
+    /// What every file in the vault folder takes, kept current by the watcher.
+    usage: Arc<Mutex<brainstead_core::usage::Usage>>,
     _watcher: Option<brainstead_core::watch::Watcher>,
 }
 
@@ -129,6 +131,13 @@ impl VaultService {
         Ok(ch)
     }
 
+    /// What the vault folder takes on disk (every file but those in dot folders), when one is open.
+    pub fn usage(&self) -> Option<brainstead_core::usage::UsageTotals> {
+        let u = crate::lock(&self.open).as_ref().map(|o| o.usage.clone())?;
+        let t = crate::lock(&u).totals();
+        Some(t)
+    }
+
     /// Where a file embedded by name is (`![[diagram.png]]`).
     pub fn find_asset(&self, name: &str) -> Result<Option<String>, String> {
         let (cell, vault) = {
@@ -189,14 +198,16 @@ fn open(app: &AppHandle, path: &str, excluded: Vec<String>, rebuild: bool) -> Re
     ix.set_text_cache(text_cache());
     let index = Arc::new(Mutex::new(ix));
     let assets: Arc<Mutex<Option<Arc<brainstead_core::assets::Assets>>>> = Default::default();
+    let usage = Arc::new(Mutex::new(brainstead_core::usage::Usage::scan(&vault)));
     let watcher = {
-        let (index, vault, app, assets) = (index.clone(), vault.clone(), app.clone(), assets.clone());
+        let (index, vault, app, assets, usage) = (index.clone(), vault.clone(), app.clone(), assets.clone(), usage.clone());
         let text = text_cache();
         brainstead_core::watch::watch(&root, move |paths| {
             // A file that makes the parser panic is logged and skipped with its batch; the watcher
             // and the app carry on (the index's transaction rolls back as the panic unwinds).
             let batch = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 *crate::lock(&assets) = None;
+                crate::lock(&usage).update(&vault, &paths);
                 // PDF, Office and image text is read before the index is locked, so the window's calls
                 // don't wait on it; the update then finds it kept by content hash.
                 extract_ahead(&text, &paths);
@@ -212,7 +223,7 @@ fn open(app: &AppHandle, path: &str, excluded: Vec<String>, rebuild: bool) -> Re
         .map_err(|e| crate::applog!("vault watcher: {e}"))
         .ok()
     };
-    Ok(Open { vault, index, assets, _watcher: watcher })
+    Ok(Open { vault, index, assets, usage, _watcher: watcher })
 }
 
 /// Reads the text of the PDF, Office and image files in a batch into the text cache, outside the index lock.

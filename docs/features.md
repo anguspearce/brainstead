@@ -23,7 +23,7 @@ The user guide to Brainstead, a Mac and Windows app for tasks, notes and an [LLM
 The Welcome screen asks for two things (one on Windows, which has no Full Disk Access step):
 
 - **Full Disk Access (Mac only).** A vault in a cloud-synced folder (OneDrive, iCloud Drive, Dropbox) needs it, or macOS asks for each protected place separately. Click **Open System Settings**, turn Brainstead on under Privacy & Security › Full Disk Access, and let macOS reopen it. You can skip this and do it later from Settings › Permissions.
-- **Your vault**: the folder of markdown notes. Brainstead opens it **read-only**: nothing changes until you turn **Read-only** off in Settings › Vault.
+- **Your vault**: the folder of markdown notes. Brainstead opens it **read-only**: nothing changes until you turn **Read-only** off in Settings › Vault, which also says how much space the vault takes, by part, and how much Brainstead's own data takes beside it.
 
 No vault yet? **Create a new vault** asks for a name and a place, and adds a few example notes: a To Do list, a project, a meeting note, a template, wiki pages and sources. Each says it's an example you can delete, and **Start here** lists them. A new vault opens writable, as nothing in it is yours yet. Settings › Vault › **Add the example notes** puts back any that are missing.
 

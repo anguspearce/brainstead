@@ -143,6 +143,30 @@ fn vault_status(svc: State<VaultService>) -> vault::Status {
     svc.status()
 }
 
+/// What the vault folder and Brainstead's own data take on disk (Settings › Vault, `app_status`).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DiskUsage {
+    /// None while no vault is open.
+    vault: Option<brainstead_core::usage::UsageTotals>,
+    /// Brainstead's data folder, outside the vault: the index, Changes, runs, chats.
+    app_data_bytes: u64,
+    /// The part of it Changes' history takes, held to Settings › AI assistants' limit.
+    changes_bytes: u64,
+}
+
+#[tauri::command]
+async fn disk_usage(app: AppHandle) -> DiskUsage {
+    let vault = app.state::<VaultService>().usage();
+    let data = platform::data_dir();
+    let (app_data_bytes, changes_bytes) = tauri::async_runtime::spawn_blocking(move || {
+        (brainstead_core::usage::dir_bytes(&data), brainstead_core::usage::dir_bytes(&data.join(brainstead_core::changes::DIR)))
+    })
+    .await
+    .unwrap_or_default();
+    DiskUsage { vault, app_data_bytes, changes_bytes }
+}
+
 #[tauri::command]
 fn rebuild_index(app: AppHandle, st: State<AppState>, svc: State<VaultService>) {
     let s = lock(&st.settings).clone();
@@ -937,6 +961,7 @@ pub fn run() {
             settings_read,
             settings_write,
             vault_status,
+            disk_usage,
             rebuild_index,
             permissions,
             open_full_disk_access,

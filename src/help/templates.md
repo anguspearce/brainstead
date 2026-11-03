@@ -6,7 +6,7 @@ order: 9
 page: Write a template
 summary: The note templates in the vault's Templates folder, to write, test and make notes from.
 ---
-Templates lists the files in the vault's `Templates/` folder. New note offers each one and runs its Templater tags when it makes the note. **Use <% and <%* tags** below explains the tags.
+Templates lists the files in the vault's `Templates/` folder, with their count and what they take on disk on the right. New note offers each one and runs its Templater tags when it makes the note. **Use <% and <%* tags** below explains the tags.
 
 ## Make a note from a template
 Press `⌘N`, or click **New note** on [Notes](app:notes). Pick a template on the left (`↑` `↓` choose). It shows a summary of its questions and lists and whether it names the note, with **Show code** for the code. Click **Create** or press `⌘↩`.

@@ -22,7 +22,7 @@ Each source has a status:
 - **Changed**: it changed after the pages citing it were written.
 - **Ingested**.
 
-Filter with **All**, **New**, **Changed** and **Ingested** above the list. **Search sources** searches their text and names with the same rules as [Search](help:search). Kind says what each file is; Folder says which folder under `sources/` it's in (hover for the full path).
+Filter with **All**, **New**, **Changed** and **Ingested** above the list. **Search sources** searches their text and names with the same rules as [Search](help:search). Kind says what each file is; Folder says which folder under `sources/` it's in (hover for the full path). On the right, the count of sources shown and what they take on disk.
 
 Markdown, text, PDF, Word, PowerPoint and Excel files and images (not SVG) can be ingested. A file that can't be ingested has no **Ingest** button.
 
