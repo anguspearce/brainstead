@@ -26,6 +26,8 @@ pub enum Cli {
 pub const CLAUDE_PREFIX: &str = "claude:";
 pub const AGY_PREFIX: &str = "agy:";
 pub const COPILOT_PREFIX: &str = "copilot:";
+/// Copilot's Auto, which picks a model per request and fails any run given a reasoning effort.
+pub const COPILOT_AUTO: &str = "copilot:auto";
 /// Antigravity's agent, written into its working folder for each run.
 pub const AGY_AGENT: &str = "brainstead-ask";
 

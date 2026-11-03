@@ -217,7 +217,7 @@ fn models(cli: Cli, bin: &platform::Program) -> Vec<Model> {
                 .map(|(id, name)| m(format!("{}{}", ask::AGY_PREFIX, id.trim()), name.trim()))
                 .collect()
         }
-        Cli::Copilot => vec![m(format!("{}auto", ask::COPILOT_PREFIX), "Copilot (Auto)")],
+        Cli::Copilot => vec![m(ask::COPILOT_AUTO.to_string(), "Copilot (Auto)")],
     }
 }
 
@@ -227,9 +227,13 @@ fn codex_models() -> Option<serde_json::Value> {
     serde_json::from_str(&std::fs::read_to_string(home.join(".codex/models_cache.json")).ok()?).ok()
 }
 
-/// The effort levels `model` takes, where its CLI lists them per model: Codex's cache does
-/// (`supported_reasoning_levels`). None for the others, and for a model the cache doesn't have.
+/// The effort levels `model` takes, where they are known per model: Codex's cache lists them
+/// (`supported_reasoning_levels`), and Copilot's Auto takes none (`ask::COPILOT_AUTO`). None for
+/// the others, and for a model the cache doesn't have.
 fn model_efforts(model: &str) -> Option<Vec<String>> {
+    if model == ask::COPILOT_AUTO {
+        return Some(Vec::new());
+    }
     if Cli::route(model) != Cli::Codex {
         return None;
     }
@@ -1060,6 +1064,15 @@ mod tests {
         r.kill_all();
         assert!(r.stopped("c2"));
         drop(turn);
+    }
+
+    #[test]
+    fn copilot_auto_runs_without_an_effort() {
+        assert_eq!(model_efforts(ask::COPILOT_AUTO), Some(Vec::new()));
+        assert_eq!(fitted(ask::COPILOT_AUTO, Some("xhigh")), None);
+        // A named Copilot model takes the level as set.
+        assert_eq!(model_efforts("copilot:claude-sonnet-5.5"), None);
+        assert_eq!(fitted("copilot:claude-sonnet-5.5", Some("max")).as_deref(), Some("max"));
     }
 
     fn refused() -> Outcome {
