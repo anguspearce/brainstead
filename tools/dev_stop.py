@@ -33,9 +33,6 @@ their processes. A worktree is live while its folder exists and either a Claude 
 changed in the last 12 hours or one of its processes still descends from a running Claude Code process; `--all` leaves
 live worktrees alone unless `--include-live` is given. The main checkout is never swept: only its own session, or `--anyone` run there,
 stops what runs in it.
-
-The `SessionEnd` hook in `.claude/settings.json` runs `tools/dev_stop.sh --session-end`: the ending session's dev
-processes, stopped (not on `/clear`, which keeps the session going), never failing the hook.
 """
 
 from __future__ import annotations
@@ -57,9 +54,6 @@ WINDOWS = sys.platform == "win32"
 LIVE_HOURS = 12
 # A Store stub younger than this may still be starting the real interpreter.
 STUB_MIN_AGE = 120
-# The longest the CIM fallback may take under `--session-end`, inside the SessionEnd hook's 30 s timeout
-# (.claude/settings.json) with time left to stop what it finds.
-HOOK_CIM_TIMEOUT = 20
 CIM_TIMEOUT = 60
 # The Claude desktop app, which runs sessions as `claude` processes below it and is never a session itself: the
 # Microsoft Store and Squirrel installs on Windows, the app bundle on macOS. Matched on the program's path, lower case.
@@ -709,40 +703,23 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--include-live", action="store_true", help="with --all: live worktrees too")
     ap.add_argument("--store-stubs", action="store_true", help="Windows: hung python3 Store aliases anywhere on the machine")
     ap.add_argument("--kill", action="store_true", help="stop them (default: only list them)")
-    ap.add_argument("--session-end", action="store_true", help="for the SessionEnd hook: this session's, stopped; never fails")
     args = ap.parse_args(argv)
     if args.include_live and not args.all:
         ap.error("--include-live needs --all")
-    if not args.session_end:
-        return run(args)
-    # The SessionEnd hook: whatever goes wrong is reported, and the hook still succeeds.
-    try:
-        return run(args)
-    except Exception as e:
-        print(f"dev_stop: {type(e).__name__}: {e}", file=sys.stderr)
-        return 0
+    return run(args)
 
 
 def run(args: argparse.Namespace) -> int:
-    hook = args.session_end
-    if hook:
-        try:
-            if json.loads(sys.stdin.read() or "{}").get("reason") == "clear":
-                return 0  # /clear keeps the session going, and what it started
-        except (ValueError, AttributeError, OSError):
-            pass
-        args.kill = True
-        args.anyone = False
     worktree = args.worktree.resolve()
     try:
-        procs = read_procs(HOOK_CIM_TIMEOUT if hook else CIM_TIMEOUT)
+        procs = read_procs(CIM_TIMEOUT)
         claude = session_of(procs, os.getpid(), claude_pid_hint())
         owners = owners_of(claude, args.anyone)
         scope = make_scope(worktree, args.all, args.include_live, args.store_stubs, owners)
         matches, left = find(procs, scope)
     except (OSError, subprocess.SubprocessError, ValueError) as e:
         print(f"dev_stop: couldn't read the processes: {e}", file=sys.stderr)
-        return 0 if hook else 1
+        return 1
     if owners is None:
         print(f"Every dev process of {worktree}" + (", and of ended worktrees:" if args.all else ":"))
     elif claude:
@@ -760,7 +737,7 @@ def run(args: argparse.Namespace) -> int:
         print(f"\nStopped {len(matches) - len(failed)} of {len(matches)}.")
         for m, why in failed:
             print(f"  {m.pid} {m.name}: {why}")
-    return 0 if hook or not failed else 1
+    return 0 if not failed else 1
 
 
 if __name__ == "__main__":

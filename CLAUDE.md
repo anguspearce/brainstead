@@ -35,4 +35,3 @@ Rules:
 - UI mocks: https://claude.ai/artifact/Trh3uwqjL2Z8juRfWokASH (read with the Artifact tool). The design tokens (the `:root` variables in `src/styles.css`, from the archived plan's §3) are authoritative.
 - The repo is public. Fixtures, docs, comments and UI text use invented names only (Orbit App, Maya, Lena, Acme…); real names, the user's employer, private projects and anything from the real vault never go in the repo.
 - `make check` must pass before committing.
-- Before reporting a task done, stop the dev processes the session started (dev server, debug app, repro copies, cargo) with `python3 tools/dev_stop.py --kill` (`python` on Windows). It stops only descendants of the session's own Claude Code process, never a developer's own runs or another session's, and with no session found stops nothing. The `SessionEnd` hook does the same when a session ends; `docs/development.md` lists the other flags.
