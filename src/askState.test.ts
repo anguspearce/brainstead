@@ -114,12 +114,13 @@ describe("Ask state", () => {
     clis.set(found());
     const levels = { weekprep: "max", find: "max", clarify: "high" };
     settings.update({ askModel: "claude:sonnet", jobModels: {}, jobEffort: levels });
-    // A model picked for one chat is that chat's: New chats use and the jobs on it stay as they are.
+    // A model picked in a chat becomes New chats use; the jobs that follow it keep their levels set.
     const id = newChat("claude:sonnet");
     setModel(id, "gpt-5.5");
     expect(ask.get().chats.find((c) => c.id === id)!.model).toBe("gpt-5.5");
-    expect(settings.get().askModel).toBe("claude:sonnet");
+    expect(settings.get().askModel).toBe("gpt-5.5");
     expect(settings.get().jobEffort).toEqual(levels);
+    settings.update({ askModel: "claude:sonnet" });
     // A model a job inherits (the summaries', for weekprep) sets its level aside until it comes back.
     expect(setJobModel("summaries", "gpt-5")).toBeNull();
     expect(jobOwnEffort("weekprep")).toBeNull();
@@ -292,12 +293,15 @@ describe("Ask state", () => {
     expect(ask.get().chats.find((c) => c.id === id)!.effort).toBe("low");
     setModel(id, "gpt-5.5");
     expect(ask.get().chats.find((c) => c.id === id)!.effort).toBeNull();
+    // The model goes to New chats use; the assistants' effort settings stay as they are.
+    expect(settings.get().askModel).toBe("gpt-5.5");
+    expect(settings.get().effort).toEqual({ claude: "high" });
     setModel(id, "claude:sonnet");
     await setEffort(id, "max");
     send(id, "first");
     expect(invoke).toHaveBeenCalledWith("ask_send", expect.objectContaining({ chatId: id, effort: "max" }));
     expect(settings.get().effort).toEqual({ claude: "high" });
-    settings.update({ effort: undefined });
+    settings.update({ effort: undefined, askModel: undefined });
   });
 
   it("queues messages while it answers and sends them in order", () => {

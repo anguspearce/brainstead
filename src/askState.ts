@@ -292,12 +292,14 @@ export function closeChat(id: string) {
   if (!ask.get().chats.length) newChat(c?.model ?? undefined);
 }
 
-/** A chat's model, before its first message. It's that chat's only: New chats use (Settings › AI
- *  assistants) stays as set, and so do the jobs that run on it. */
+/** A chat's model, before its first message. It becomes New chats use (Settings › AI assistants,
+ *  `askModel`) too, which the jobs without a model of their own follow; the assistants' effort
+ *  settings stay as they are. */
 export function setModel(id: string, model: string) {
   // Another assistant has its own levels, so the chat starts again from the one set for it.
   const same = (c: Chat) => cliOf(c.model ?? DEFAULT_MODEL) === cliOf(model);
   update(id, (c) => (c.transcript.length ? c : { ...c, model, effort: same(c) ? c.effort : effortFor(model) }));
+  settings.update({ askModel: model });
 }
 
 /** Keeps the empty tabs on the effort set for their assistant: when Settings › AI assistants
