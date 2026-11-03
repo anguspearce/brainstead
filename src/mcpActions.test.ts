@@ -2528,6 +2528,15 @@ describe("MCP actions", () => {
       );
       // Brainstead's tools' commands: Codex's covers Ollama, which gets none of its own.
       expect(none).not.toMatch(/- Ollama: ollama/);
+      // OLLAMA_HOST naming another computer: the reason, and no How to install.
+      const refusal =
+        "OLLAMA_HOST is gpu-box:11434. Brainstead reaches Ollama only at localhost, 127.0.0.1 or ::1, any port; set it to one of those.";
+      answers.ask_clis = () => [
+        { cli: "ollama", path: null, version: null, models: [], efforts: ["low", "medium", "high"], note: refusal, refused: true },
+      ];
+      const refused = (await run("assistants.found", { look_again: true })) as string;
+      expect(refused).toContain(`- Ollama: ${refusal}\n`);
+      expect(refused).not.toContain("ollama.com/download");
       clis.set(null);
     });
 

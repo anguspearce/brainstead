@@ -2,35 +2,36 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Ollama's server on this computer (or the one `OLLAMA_HOST` names): whether it answers, its
-//! version, the models it has pulled and what each can do. Read for Settings › AI assistants'
-//! Found on this computer and for a run's effort; the models themselves run through Codex
-//! (brainstead_core::ask::Cli::Ollama), which reaches the same server. The replies are read by
-//! brainstead_core::ask::ollama, which is where the tests are.
+//! Ollama's server on this computer (the one `OLLAMA_HOST` names, when that's on this computer):
+//! whether it answers, its version, the models it has pulled and what each can do. Read for
+//! Settings › AI assistants' Found on this computer and for a run's effort; the models themselves
+//! run through Codex (brainstead_core::ask::Cli::Ollama), which reaches the same server. The
+//! replies are read by brainstead_core::ask::ollama, which is where the tests are.
 
 use std::time::Duration;
 
-use brainstead_core::ask::ollama::{self, Show, Tag};
+use brainstead_core::ask::ollama::{self, Host, Show, Tag};
 
-/// The server Brainstead and Codex use: `OLLAMA_HOST` as Ollama reads it, else localhost:11434.
-pub fn host() -> String {
+/// The server Brainstead and Codex use: `OLLAMA_HOST`, else localhost:11434; or, when
+/// `OLLAMA_HOST` names another computer, why none is used (`ollama::host`).
+pub fn host() -> Result<Host, String> {
     ollama::host(std::env::var("OLLAMA_HOST").ok().as_deref())
 }
 
-/// A local server answers at once or not at all; a remote one named in `OLLAMA_HOST` gets a moment.
+/// A server on this computer answers at once or not at all.
 const TIMEOUT: Duration = Duration::from_secs(2);
 
 fn client() -> Option<reqwest::blocking::Client> {
     reqwest::blocking::Client::builder().timeout(TIMEOUT).build().ok()
 }
 
-fn get(host: &str, path: &str) -> Option<serde_json::Value> {
+fn get(host: &Host, path: &str) -> Option<serde_json::Value> {
     client()?.get(format!("{host}{path}")).send().ok()?.error_for_status().ok()?.json().ok()
 }
 
 /// What the server at `host` says: its version and the models it has pulled, in its order. None
 /// when nothing answers there (Ollama not running, or not installed).
-pub fn server(host: &str) -> Option<(Option<String>, Vec<Tag>)> {
+pub fn server(host: &Host) -> Option<(Option<String>, Vec<Tag>)> {
     let tags = get(host, "/api/tags")?;
     let version = get(host, "/api/version").as_ref().and_then(ollama::parse_version);
     Some((version, ollama::parse_tags(&tags)))
@@ -38,7 +39,7 @@ pub fn server(host: &str) -> Option<(Option<String>, Vec<Tag>)> {
 
 /// What `model` can do (`POST /api/show`): tools, and its thinking levels by name. None when the
 /// server doesn't answer or doesn't have the model.
-pub fn show(host: &str, model: &str) -> Option<Show> {
+pub fn show(host: &Host, model: &str) -> Option<Show> {
     let reply = client()?
         .post(format!("{host}/api/show"))
         .json(&serde_json::json!({"model": model}))

@@ -1667,6 +1667,9 @@ export interface CliInfo {
   /** A line for its row under Found on this computer (Ollama: what it runs through and the models
    *  left out, or why it can't be used). */
   note?: string;
+  /** Ollama: OLLAMA_HOST names a server Brainstead doesn't use, and `note` says so. Neither found
+   *  nor missing, so the row offers no How to install. */
+  refused?: boolean;
 }
 
 export type AskEvent =

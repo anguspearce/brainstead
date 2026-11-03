@@ -136,8 +136,11 @@ fn ask_model_with(model: &str, prompt: &str, cwd: &Path, mcp: Option<&Mcp>, help
         system = format!("{system}\n{h}");
     }
     let vault = cwd.to_string_lossy().into_owned();
-    // Ollama's server as the app finds it: OLLAMA_HOST, else localhost.
-    let ollama_host = ask::ollama::host(std::env::var("OLLAMA_HOST").ok().as_deref());
+    // Ollama's server as the app finds it: OLLAMA_HOST, else localhost; only one on this computer.
+    let ollama_host = match cli {
+        Cli::Ollama => Some(ask::ollama::host(std::env::var("OLLAMA_HOST").ok().as_deref())?),
+        _ => None,
+    };
     let launch = ask::args(
         cli,
         &Request {
@@ -149,7 +152,7 @@ fn ask_model_with(model: &str, prompt: &str, cwd: &Path, mcp: Option<&Mcp>, help
             mcp: mcp.filter(|_| cli.takes_mcp()),
             images: &[],
             effort: None,
-            ollama_host: &ollama_host,
+            ollama_host: ollama_host.as_ref(),
         },
     )?;
     // Antigravity runs as Ask runs it: in a folder of its own holding its read-only agent and the

@@ -2391,7 +2391,7 @@ async function assistantsFound(a: Args): Promise<string> {
     `Found on this computer (Settings › AI assistants)${a.look_again === true ? ", looked for again just now" : ""}: ${n ? `${n} assistant${n === 1 ? "" : "s"}` : "no assistants"}.`,
     ...found.map(
       (c) =>
-        `- ${CLI_LABEL[c.cli]}${c.version ? ` · ${c.version}` : ""}: ${c.path ? `${foundDetail(c).replace(/\.$/, "")}. ${effortSaid(c.cli)}.` : `${foundDetail(c)} How to install: ${INSTALL[c.cli]}`}${c.path && c.note ? ` ${c.note.replace(/\.?$/, ".")}` : ""}`,
+        `- ${CLI_LABEL[c.cli]}${c.version ? ` · ${c.version}` : ""}: ${c.path ? `${foundDetail(c).replace(/\.$/, "")}. ${effortSaid(c.cli)}.` : c.refused ? foundDetail(c) : `${foundDetail(c)} How to install: ${INSTALL[c.cli]}`}${c.path && c.note ? ` ${c.note.replace(/\.?$/, ".")}` : ""}`,
     ),
     "",
     cmds.length

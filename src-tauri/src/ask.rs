@@ -188,9 +188,14 @@ pub struct CliInfo {
     /// The effort levels Settings › AI assistants offers for it (`Cli::efforts`).
     efforts: &'static [&'static str],
     /// A line for its row under Found on this computer: for Ollama, what it runs through and the
-    /// models left out, or why it can't be used (its server not answering, Codex missing).
+    /// models left out, or why it can't be used (its server not answering, Codex missing, or
+    /// `OLLAMA_HOST` naming another computer).
     #[serde(skip_serializing_if = "Option::is_none")]
     note: Option<String>,
+    /// Ollama: `OLLAMA_HOST` names a server Brainstead doesn't use, and `note` says so. The row is
+    /// neither found nor missing, so it offers no How to install.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    refused: bool,
 }
 
 fn version(bin: &platform::Program) -> Option<String> {
@@ -236,16 +241,31 @@ fn models(cli: Cli, bin: &platform::Program) -> Vec<Model> {
     }
 }
 
-/// Ollama's row: usable when its server answers and Codex, which runs its models, is installed.
-/// The models are the ones pulled that call tools (Codex's agent loop needs them), each with the
-/// effort levels it names; the note says what it runs through and counts the models left out, or
-/// says what's missing.
+/// Ollama's row: usable when its server is on this computer and answers, and Codex, which runs its
+/// models, is installed. The models are the ones pulled that call tools (Codex's agent loop needs
+/// them), each with the effort levels it names; the note says what it runs through and counts the
+/// models left out, or says what's missing, or why `OLLAMA_HOST` isn't used.
 fn ollama_info() -> CliInfo {
-    let host = crate::ollama::host();
+    let mut info = CliInfo {
+        cli: Cli::Ollama,
+        path: None,
+        version: None,
+        models: Vec::new(),
+        efforts: Cli::Ollama.efforts(),
+        note: None,
+        refused: false,
+    };
+    let host = match crate::ollama::host() {
+        Ok(h) => h,
+        Err(why) => {
+            info.note = Some(why);
+            info.refused = true;
+            return info;
+        }
+    };
     let codex = find(Cli::Codex);
     let codex_version = codex.as_ref().and_then(version);
     let server = crate::ollama::server(&host);
-    let mut info = CliInfo { cli: Cli::Ollama, path: None, version: None, models: Vec::new(), efforts: Cli::Ollama.efforts(), note: None };
     let Some((version, tags)) = server else {
         info.note = Some(match codex {
             Some(_) => format!("Ollama isn't running at {host}, or isn't installed. Start it (or install it), then click Look again."),
@@ -273,7 +293,7 @@ fn ollama_info() -> CliInfo {
         };
         info.models.push(Model { id: format!("{}{}", ask::OLLAMA_PREFIX, t.name), name, efforts: Some(show.efforts()) });
     }
-    info.path = Some(host);
+    info.path = Some(host.to_string());
     // `codex --version` says "codex-cli 0.166.0"; the row already says Codex.
     let mut note =
         format!("Through Codex{}", codex_version.map(|v| format!(" {}", v.trim_start_matches("codex-cli "))).unwrap_or_default());
@@ -306,7 +326,7 @@ fn model_efforts(model: &str) -> Option<Vec<String>> {
         return Some(Vec::new());
     }
     if Cli::route(model) == Cli::Ollama {
-        return crate::ollama::show(&crate::ollama::host(), model.strip_prefix(ask::OLLAMA_PREFIX)?).map(|s| s.efforts());
+        return crate::ollama::show(&crate::ollama::host().ok()?, model.strip_prefix(ask::OLLAMA_PREFIX)?).map(|s| s.efforts());
     }
     if Cli::route(model) != Cli::Codex {
         return None;
@@ -332,6 +352,7 @@ pub async fn ask_clis() -> Vec<CliInfo> {
                     models: bin.as_ref().map(|b| models(cli, b)).unwrap_or_default(),
                     path: bin.map(|p| p.path.to_string_lossy().into_owned()),
                     note: None,
+                    refused: false,
                 }
             })
             .chain(std::iter::once(ollama_info()))
@@ -559,14 +580,21 @@ fn run_at(
 ) -> Outcome {
     let fail = |e: String| Outcome { error: Some(e), ..Default::default() };
     let cli = Cli::route(model);
+    // Only a server on this computer: a refused OLLAMA_HOST fails the run before Codex starts.
+    let ollama_host = match cli {
+        Cli::Ollama => match crate::ollama::host() {
+            Ok(h) => Some(h),
+            Err(refused) => return fail(refused),
+        },
+        _ => None,
+    };
     let Some(bin) = find(cli) else {
         return fail(format!("{} isn't installed, or couldn't be found. Install it and sign in, then try again.", cli.label()));
     };
     let Some(vault) = app.state::<VaultService>().root() else { return fail("No vault is open.".into()) };
     let vault_s = vault.to_string_lossy().into_owned();
     let mcp = mcp.filter(|_| cli.takes_mcp());
-    let ollama_host = crate::ollama::host();
-    let req = Request { prompt, model, session, system, vault: &vault_s, mcp, images, effort, ollama_host: &ollama_host };
+    let req = Request { prompt, model, session, system, vault: &vault_s, mcp, images, effort, ollama_host: ollama_host.as_ref() };
     let launch = match ask::args(cli, &req) {
         Ok(l) => l,
         Err(e) => return fail(e),
@@ -1091,6 +1119,27 @@ pub fn skills_list(svc: State<VaultService>) -> Vec<Skill> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Settings' Found row and the MCP assistants tool read `refused` as a warning: present only
+    /// when OLLAMA_HOST was refused, and left out of every other row.
+    #[test]
+    fn cli_info_carries_refused_only_when_set() {
+        let row = |refused| CliInfo {
+            cli: Cli::Ollama,
+            path: None,
+            version: None,
+            models: Vec::new(),
+            efforts: Cli::Ollama.efforts(),
+            note: Some("OLLAMA_HOST is gpu-box:11434.".into()),
+            refused,
+        };
+        let on = serde_json::to_value(row(true)).unwrap();
+        assert_eq!(on["refused"], serde_json::json!(true));
+        assert_eq!(on["note"], "OLLAMA_HOST is gpu-box:11434.");
+        let off = serde_json::to_value(row(false)).unwrap();
+        assert!(off.get("refused").is_none(), "{off}");
+        assert_eq!(off["cli"], "ollama");
+    }
 
     /// Claude Code installed through npm on this computer is started without cmd.exe, and answers
     /// `--version` that way. Runs only where `%APPDATA%\npm\claude.cmd` is installed.
