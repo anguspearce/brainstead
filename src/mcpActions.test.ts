@@ -820,7 +820,12 @@ describe("MCP actions", () => {
     it("prepares the paused review's week, as the screen's Prepare does", async () => {
       answers.weekly_state_read = () => ({ week: "2099-W01", step: 2, done: [0, 1], log: [], notes: "", startedAt: 1 });
       expect(await run("run.start", { run: "weekly_prep" })).toMatch(/^Preparing the review of 2099-W01 \(the paused review's week\)/);
-      expect(calls.find(([c]) => c === "weekprep_run")![1]).toEqual({ week: "2099-W01" });
+      expect(calls.find(([c]) => c === "weekprep_run")![1]).toEqual({ week: "2099-W01", unattended: false });
+      // An assistant nobody is watching: the run is told so, and never goes on an Ollama model.
+      await run("run.start", { run: "weekly_prep", unattended: true });
+      expect(calls.filter(([c]) => c === "weekprep_run").at(-1)![1]).toEqual({ week: "2099-W01", unattended: true });
+      await run("run.start", { run: "find_tasks", unattended: true });
+      expect(calls.filter(([c]) => c === "find_run").at(-1)![1]).toEqual({ unattended: true });
       answers.weekly_state_read = () => ({ week: "2001-W01", step: 2, done: [], log: [], notes: "", startedAt: 1 });
       await run("run.start", { run: "weekly_prep" });
       expect(calls.filter(([c]) => c === "weekprep_run").at(-1)![1]!.week).toMatch(/^20\d\d-W\d\d$/);
@@ -2520,13 +2525,14 @@ describe("MCP actions", () => {
       expect(all).toContain(
         "jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects › Effort: null (Default, the effort set for the job's assistant) (one of: low (Low), medium (Medium), high (High); null for Default",
       );
-      // As Models by job says under each job on it that can run scheduled: scheduled runs never go on
-      // Ollama. A job only ever started by hand says nothing of it.
+      // As Models by job says under each job on it that can run with nobody watching: those runs
+      // never go on Ollama. A job only ever started by hand says nothing of it.
       expect(all).toContain(
         "jobModels.ingest · Settings › AI assistants › Models by job › Ingest: null (Default: the model new chats use) (a model, as askModel's; null for Default: the model new chats use; scheduled runs use claude:sonnet (Claude Code · sonnet) instead)",
       );
-      expect(all).toMatch(/jobModels\.find · .*: null \(Default: the model new chats use\)/);
-      expect(all).not.toMatch(/jobModels\.find · .*scheduled runs use/);
+      expect(all).toMatch(/jobModels\.find · .*scheduled runs use claude:sonnet/);
+      expect(all).toMatch(/jobModels\.clarify · .*: null \(Default: the model new chats use\)/);
+      expect(all).not.toMatch(/jobModels\.clarify · .*scheduled runs use/);
       expect(all).toContain("effort.ollama · Settings › AI assistants › Found on this computer › Ollama › Effort: null (Default effort");
       await expect(run("settings", { action: "set", key: "jobEffort.find", value: "xhigh" })).rejects.toThrow(
         /one of: low, medium, high, or null/,

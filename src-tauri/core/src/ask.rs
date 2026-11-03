@@ -463,11 +463,12 @@ impl Job {
 
     /// Whether a run of it can start with nobody watching: the scheduler's (the summaries, the
     /// weekly review's preparation, the daily check's ingests and contradiction check, meeting notes
-    /// from synced transcripts) or an assistant's call marked `unattended`. The rest (Find, Clarify,
-    /// Triage, Draft reply and Doc check, next-message suggestions) only ever start by hand.
+    /// from synced transcripts) or an assistant's call marked `unattended` (those, and Find tasks
+    /// and projects from start_run, whose suggestions the same assistant can then accept). The rest
+    /// (Clarify, Triage, Draft reply and Doc check, next-message suggestions) only ever start by hand.
     /// src/askState.ts `MODEL_JOBS` marks the same jobs; tests/fixtures/job-settings.json holds both.
     pub fn runs_scheduled(self) -> bool {
-        matches!(self, Job::Summaries | Job::Weekprep | Job::Ingest | Job::Meeting | Job::Contradictions)
+        matches!(self, Job::Summaries | Job::Weekprep | Job::Find | Job::Ingest | Job::Meeting | Job::Contradictions)
     }
 }
 

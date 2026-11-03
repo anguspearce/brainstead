@@ -57,7 +57,7 @@ export function effortLabel(level: string): string {
 export const MODEL_JOBS: [job: string, label: string, icon: string, scheduled: boolean][] = [
   ["summaries", "Daily and weekly summaries", "calendar", true],
   ["weekprep", "Weekly review preparation", "review", true],
-  ["find", "Find tasks and projects", "zap", false],
+  ["find", "Find tasks and projects", "zap", true],
   ["ingest", "Ingest", "wiki", true],
   ["meeting", "Meeting notes from transcripts", "note", true],
   ["clarify", "Clarify suggestions", "inbox", false],

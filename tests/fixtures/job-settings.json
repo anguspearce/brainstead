@@ -1,7 +1,7 @@
 {
   "about": "A job's model and effort from the settings, as brainstead_core::ask (job_model, job_own_effort, job_effort, scheduled_fallback) and src/askState.ts (jobModelOf, jobOwnEffort, resolveEffort, scheduledFallback) work them out. Both tests read these cases. model: the model the job runs on; own: the job's own effort as Models by job and list_settings show it (null while its model's assistant doesn't offer it); effort: the effort its run on that model goes at. scheduledModel and scheduledEffort, where given, are a scheduled run's instead, for a job whose model is Ollama's; without them a scheduled run is the same as one started by hand. scheduled: the jobs that can run scheduled (brainstead_core::ask::Job::runs_scheduled, MODEL_JOBS' scheduled); the others never take a fallback.",
   "jobs": ["summaries", "weekprep", "find", "ingest", "meeting", "clarify", "contradictions", "skills", "suggest"],
-  "scheduled": ["summaries", "weekprep", "ingest", "meeting", "contradictions"],
+  "scheduled": ["summaries", "weekprep", "find", "ingest", "meeting", "contradictions"],
   "levels": {
     "claude": ["low", "medium", "high", "xhigh", "max"],
     "codex": ["low", "medium", "high", "xhigh"],
@@ -86,6 +86,20 @@
       "model": "claude:sonnet",
       "own": null,
       "effort": null
+    },
+    {
+      "name": "Find on Ollama: one an unattended assistant starts goes on new chats' model, as a scheduled run does",
+      "settings": {
+        "askModel": "gpt-5",
+        "jobModels": { "find": "ollama:gpt-oss:20b" },
+        "effort": { "codex": "low" }
+      },
+      "job": "find",
+      "model": "ollama:gpt-oss:20b",
+      "own": null,
+      "effort": null,
+      "scheduledModel": "gpt-5",
+      "scheduledEffort": "low"
     },
     {
       "name": "an Ollama model of the job's own: scheduled runs go on new chats' model at the job's level",

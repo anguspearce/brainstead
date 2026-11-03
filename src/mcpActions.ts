@@ -1487,13 +1487,13 @@ async function startRun(a: Args, r: McpRequest): Promise<string> {
       noted("started the daily check");
       return "The daily check has started; run_status shows how it's going.";
     case "find_tasks":
-      await api.findRun();
+      await api.findRun(unattended);
       noted("started looking for tasks and projects in the notes");
       return "Reading the user's notes from the last 90 days for tasks and projects; the suggestions show at the top of Tasks and Projects, and nothing changes until the user accepts one. list_suggestions lists them; run_status shows how it's going.";
     case "weekly_prep": {
       // The review's week, as the screen's Prepare is: a paused review keeps its own.
       const { week, st } = await weeklyNow();
-      await api.weekprepRun(week);
+      await api.weekprepRun(week, unattended);
       noted(`started preparing the weekly review of ${week}`);
       return `Preparing the review of ${week}${st ? " (the paused review's week)" : ""} has started; its suggestions show in the Weekly review when it finishes, and nothing changes until the user accepts one. run_status shows how it's going.`;
     }
@@ -3087,7 +3087,7 @@ async function weeklyStep(a: Args): Promise<string> {
   if (action === "start") {
     if (st) return `The review of ${week} carries on at step ${st.step + 1} of ${STEPS.length}, ${STEPS[st.step].title}.`;
     await save(fresh(week));
-    void api.weekprepEnsure(week).catch(() => false);
+    void api.weekprepEnsure(week, a.unattended === true).catch(() => false);
     noted(`started the weekly review for ${week}`);
     return `Started the weekly review for ${week}: step 1 of ${STEPS.length}, ${STEPS[0].title}. ${STEPS[0].ask}`;
   }
