@@ -298,7 +298,9 @@ fn ollama_info() -> CliInfo {
     let mut note =
         format!("Through Codex{}", codex_version.map(|v| format!(" {}", v.trim_start_matches("codex-cli "))).unwrap_or_default());
     if !info.models.is_empty() {
-        note.push_str(". Jobs do best on a model of about 14B or more (gpt-oss:20b, qwen3:14b); a small one misses things");
+        note.push_str(
+            ". For Ask and runs started by hand, never scheduled jobs; jobs do best on a model of about 14B or more (gpt-oss:20b, qwen3:14b), a small one misses things",
+        );
     }
     if !without_tools.is_empty() {
         note.push_str(&format!(
@@ -398,13 +400,22 @@ fn fitted(model: &str, level: Option<&str>) -> Option<String> {
     level.and_then(|e| ask::fit_effort(Cli::route(model), e, model_efforts(model).as_deref())).map(str::to_string)
 }
 
-/// The model a job uses (`ask::job_model`): its own from Settings › AI assistants (`jobModels`),
-/// else, for the weekly review's preparation, the summaries', else the default for new chats
-/// (`askModel`), else Claude's Sonnet.
-pub fn job_model(app: &AppHandle, job: &str) -> String {
+/// The model a run of `job` uses (`ask::job_run_model`): its own from Settings › AI assistants
+/// (`jobModels`), else, for the weekly review's preparation, the summaries', else the default for
+/// new chats (`askModel`), else Claude's Sonnet. A `scheduled` run (the scheduler started it, or an
+/// assistant nobody is watching passed `unattended`) never goes on an Ollama model, which runs only
+/// in Ask and runs started by hand: it goes on `ask::scheduled_fallback` instead, and the log says so.
+pub fn job_model(app: &AppHandle, job: &str, scheduled: bool) -> String {
     let st = app.state::<crate::AppState>();
     let s = st.settings.lock().unwrap();
-    ask::job_model(&s.ui, job)
+    let model = ask::job_run_model(&s.ui, job, scheduled);
+    let set = ask::job_model(&s.ui, job);
+    if model != set {
+        crate::applog!(
+            "ask: {job} is a scheduled run and Ollama runs only in Ask and runs started by hand, so it runs on {model} instead of {set}"
+        );
+    }
+    model
 }
 
 pub fn today() -> String {
@@ -818,7 +829,7 @@ pub async fn ask_next(app: AppHandle, title: String, turns: Vec<(String, String)
         return None;
     }
     tauri::async_runtime::spawn_blocking(move || {
-        let model = job_model(&app, "suggest");
+        let model = job_model(&app, "suggest", false);
         let id = format!("next-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos()));
         let out = run(&app, ask::Job::Suggest, &id, &ask::next_prompt(&title, &turns), &model, None, ask::NEXT_SYSTEM, None, &mut |_| {});
         if out.error.is_some() {

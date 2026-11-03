@@ -69,9 +69,10 @@ fn save(app: &AppHandle, l: &Last) {
     let _ = app.emit("current-state-changed", l);
 }
 
-/// The cheap model when Claude is the assistant (the evals rule), else the job's model.
-fn model(app: &AppHandle) -> String {
-    let m = crate::ask::job_model(app, "contradictions");
+/// The cheap model when Claude is the assistant (the evals rule), else the job's model; `unattended`
+/// counts as scheduled (`ask::job_model`).
+fn model(app: &AppHandle, unattended: bool) -> String {
+    let m = crate::ask::job_model(app, "contradictions", unattended);
     if m.starts_with("claude") {
         "claude:haiku".into()
     } else {
@@ -100,8 +101,13 @@ pub fn start(app: &AppHandle, pages: Option<Vec<String>>, limit: Option<usize>, 
     if let Some(n) = limit {
         todo.truncate(n);
     }
-    let l =
-        Last { running: true, run: format!("{RUN}{}", proposals::new_id()), total: todo.len(), model: model(app), ..Default::default() };
+    let l = Last {
+        running: true,
+        run: format!("{RUN}{}", proposals::new_id()),
+        total: todo.len(),
+        model: model(app, unattended),
+        ..Default::default()
+    };
     save(app, &l);
     let (run, model) = (l.run.clone(), l.model.clone());
     let last = std::sync::Arc::new(std::sync::Mutex::new(l));

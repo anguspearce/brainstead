@@ -119,7 +119,9 @@ fn start(app: &AppHandle) -> Result<String, String> {
     }
     let root = app.state::<VaultService>().root().ok_or("No vault is open.")?;
     let id = format!("find-{}", chrono::Local::now().format("%Y%m%d%H%M%S"));
-    let model = ask::job_model(app, "find");
+    // Never scheduled: started by Find tasks and projects' Look again or start_run, and it writes
+    // nothing until the user accepts a suggestion, so an unattended start_run keeps the job's model.
+    let model = ask::job_model(app, "find", false);
     // The index is held only for the paths and the tasks and projects; the notes are read after.
     let (mut inputs, paths) = app.state::<VaultService>().with_index(|ix, _| find::gather(ix, chrono::Local::now().date_naive()))?;
     inputs.notes = find::read_notes(&root, paths);

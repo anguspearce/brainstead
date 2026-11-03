@@ -115,6 +115,7 @@ import {
   modelLabel,
   pinSaved,
   renameSaved,
+  scheduledFallback,
   setJobModel,
   trashSaved,
 } from "./askState";
@@ -910,8 +911,9 @@ export async function clarifyChanges(
 }
 
 /** Clarifies one Inbox item as `a` says (becomes, text, project…) and returns what it became, for
- *  the caller to say: the MCP server's clarify, and the weekly review's suggestions. */
-export async function clarifyItem(i: InboxItem, a: Args): Promise<string> {
+ *  the caller to say: the MCP server's clarify, and the weekly review's suggestions. `unattended`:
+ *  nobody is watching, so an ingest it starts runs as a scheduled one. */
+export async function clarifyItem(i: InboxItem, a: Args, unattended = false): Promise<string> {
   const becomes = str(a, "becomes");
   const text = str(a, "text") ?? (i.kind === "capture" ? `Follow up on [[${i.text}]]` : i.text.trim());
   const proj = str(a, "project") ? await projectPath(str(a, "project")!) : null;
@@ -960,7 +962,7 @@ export async function clarifyItem(i: InboxItem, a: Args): Promise<string> {
     }
     case "ingest":
       if (i.kind !== "capture") throw new Error("Only a capture (an email or Teams chat in Sources) can be ingested.");
-      await api.ingestStart([i.path]);
+      await api.ingestStart([i.path], unattended);
       await markCaptureDone(i.path);
       said = "ingesting; its changes are listed in Changes";
       break;
@@ -3438,8 +3440,12 @@ async function settingsTool(a: Args): Promise<string> {
     const lines = await Promise.all(
       offered.map(async ([k, pane, label, kind, def, choices, none]) => {
         let extra = "";
-        if (kind === "model" && k !== "askModel") extra = ` (a model, as askModel's; null for ${none})`;
-        else if (choices) {
+        if (kind === "model" && k !== "askModel") {
+          // As Models by job shows under the job: where its scheduled runs go instead of an Ollama model.
+          const instead = k.startsWith("jobModels.") ? scheduledFallback(k.slice("jobModels.".length), s) : null;
+          const scheduled = instead ? `; scheduled runs use ${instead} (${modelLabel(instead, clis.get())}) instead` : "";
+          extra = ` (a model, as askModel's; null for ${none}${scheduled})`;
+        } else if (choices) {
           const cs = await Promise.resolve(choices()).catch(() => [] as [string, string][]);
           const list = cs.map(([v, l]) => (v === l ? v : `${v} (${l})`)).join(", ");
           extra = ` (one of: ${list || "none here"}${none ? `; null for ${none}` : ""})`;

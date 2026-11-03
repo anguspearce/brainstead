@@ -439,6 +439,19 @@ impl Job {
             Job::Suggest => "suggest",
         }
     }
+
+    pub fn from_key(key: &str) -> Option<Job> {
+        Job::ALL.into_iter().find(|j| j.key() == key)
+    }
+
+    /// Whether a run of it can start with nobody watching: the scheduler's (the summaries, the
+    /// weekly review's preparation, the daily check's ingests and contradiction check, meeting notes
+    /// from synced transcripts) or an assistant's call marked `unattended`. The rest (Find, Clarify,
+    /// Triage, Draft reply and Doc check, next-message suggestions) only ever start by hand.
+    /// src/askState.ts `MODEL_JOBS` marks the same jobs; tests/fixtures/job-settings.json holds both.
+    pub fn runs_scheduled(self) -> bool {
+        matches!(self, Job::Summaries | Job::Weekprep | Job::Ingest | Job::Meeting | Job::Contradictions)
+    }
 }
 
 type Ui = serde_json::Map<String, serde_json::Value>;
@@ -448,17 +461,41 @@ fn text(v: Option<&serde_json::Value>) -> Option<&str> {
     v.and_then(serde_json::Value::as_str).filter(|v| !v.is_empty())
 }
 
+/// The model new chats start on while Settings › AI assistants has none (src/askState.ts
+/// `DEFAULT_MODEL`).
+pub const DEFAULT_MODEL: &str = "claude:sonnet";
+
 /// The model `job` (a `Job` key) runs on, from the window's settings: its own (`jobModels.<job>`),
 /// else, for the weekly review's preparation, the summaries', else new chats' (`askModel`), else
-/// Claude's Sonnet. src/askState.ts `jobModelOf` is the same rule; both tests read
+/// `DEFAULT_MODEL`. src/askState.ts `jobModelOf` is the same rule; both tests read
 /// tests/fixtures/job-settings.json.
 pub fn job_model(ui: &Ui, job: &str) -> String {
     let own = |j: &str| text(ui.get("jobModels").and_then(|m| m.get(j)));
     own(job)
         .or_else(|| if job == "weekprep" { own("summaries") } else { None })
         .or_else(|| text(ui.get("askModel")))
-        .unwrap_or("claude:sonnet")
+        .unwrap_or(DEFAULT_MODEL)
         .to_string()
+}
+
+/// The model a scheduled run of `job` goes on instead of its own, when that is an Ollama model:
+/// new chats' (`askModel`) when that isn't one too, else `DEFAULT_MODEL`. None when `job` runs on
+/// another assistant, or never runs scheduled (`Job::runs_scheduled`). Ollama runs in Ask and in
+/// runs started by hand, never in a run the scheduler started (or an assistant nobody is watching,
+/// `unattended`), which writes to the vault unseen. src/askState.ts `scheduledFallback` is the same
+/// rule; both tests read tests/fixtures/job-settings.json.
+pub fn scheduled_fallback(ui: &Ui, job: &str) -> Option<String> {
+    if !Job::from_key(job).is_some_and(Job::runs_scheduled) || Cli::route(&job_model(ui, job)) != Cli::Ollama {
+        return None;
+    }
+    let chats = text(ui.get("askModel")).filter(|m| Cli::route(m) != Cli::Ollama);
+    Some(chats.unwrap_or(DEFAULT_MODEL).to_string())
+}
+
+/// The model a run of `job` goes on: `job_model`, or for a `scheduled` run on an Ollama model,
+/// `scheduled_fallback`.
+pub fn job_run_model(ui: &Ui, job: &str, scheduled: bool) -> String {
+    scheduled.then(|| scheduled_fallback(ui, job)).flatten().unwrap_or_else(|| job_model(ui, job))
 }
 
 /// The job's own effort (`jobEffort.<job>`) while its model's assistant offers it, else None, as
@@ -469,13 +506,15 @@ pub fn job_own_effort<'a>(ui: &'a Ui, job: &str) -> Option<&'a str> {
 }
 
 /// The effort `job` runs at on `model` (`resolve_effort`): its own while `model` is the job's
-/// (`job_model`), else its assistant's (`effort.<cli>`), each only when the assistant offers it. A
-/// job's level goes with the model it was picked beside: a quick pass on another model (the
-/// contradiction check's extract and Write Current state, on Claude's Haiku) runs at the
-/// assistant's. The weekly review's preparation never takes the summaries' effort, even on their model.
+/// (`job_model`) or the one its scheduled runs go on instead (`scheduled_fallback`), else its
+/// assistant's (`effort.<cli>`), each only when the assistant offers it. A job's level goes with
+/// the model it was picked beside: a quick pass on another model (the contradiction check's
+/// extract and Write Current state, on Claude's Haiku) runs at the assistant's. The weekly
+/// review's preparation never takes the summaries' effort, even on their model.
 pub fn job_effort<'a>(ui: &'a Ui, job: &str, model: &str) -> Option<&'a str> {
     let cli = Cli::route(model);
-    let own = text(ui.get("jobEffort").and_then(|m| m.get(job))).filter(|_| job_model(ui, job) == model);
+    let its_model = job_model(ui, job) == model || scheduled_fallback(ui, job).is_some_and(|m| m == model);
+    let own = text(ui.get("jobEffort").and_then(|m| m.get(job))).filter(|_| its_model);
     resolve_effort(cli, own, text(ui.get("effort").and_then(|m| m.get(cli.key()))))
 }
 
@@ -1583,6 +1622,9 @@ mod tests {
         let f: serde_json::Value = serde_json::from_str(include_str!("../../../tests/fixtures/job-settings.json")).unwrap();
         let keys: Vec<&str> = Job::ALL.iter().map(|j| j.key()).collect();
         assert_eq!(serde_json::json!(keys), f["jobs"]);
+        let scheduled: Vec<&str> = Job::ALL.iter().filter(|j| j.runs_scheduled()).map(|j| j.key()).collect();
+        assert_eq!(serde_json::json!(scheduled), f["scheduled"]);
+        assert!(keys.iter().all(|k| Job::from_key(k).is_some_and(|j| j.key() == *k)) && Job::from_key("nope").is_none());
         for cli in [Cli::Claude, Cli::Codex, Cli::Antigravity, Cli::Copilot, Cli::Ollama] {
             assert_eq!(serde_json::to_value(cli).unwrap(), cli.key());
             assert_eq!(serde_json::json!(cli.efforts()), f["levels"][cli.key()], "{cli:?}");
@@ -1591,8 +1633,14 @@ mod tests {
             let (name, ui, job) = (&c["name"], c["settings"].as_object().unwrap(), c["job"].as_str().unwrap());
             let model = job_model(ui, job);
             assert_eq!(model, c["model"], "{name}");
+            assert_eq!(job_run_model(ui, job, false), model, "{name}");
             assert_eq!(serde_json::json!(job_own_effort(ui, job)), c["own"], "{name}");
             assert_eq!(serde_json::json!(job_effort(ui, job, &model)), c["effort"], "{name}");
+            // A scheduled run: the same, unless the model is Ollama's.
+            let scheduled = job_run_model(ui, job, true);
+            assert_eq!(scheduled, *c.get("scheduledModel").unwrap_or(&c["model"]), "{name}");
+            assert_eq!(scheduled_fallback(ui, job).is_some(), c.get("scheduledModel").is_some(), "{name}");
+            assert_eq!(serde_json::json!(job_effort(ui, job, &scheduled)), *c.get("scheduledEffort").unwrap_or(&c["effort"]), "{name}");
         }
     }
 

@@ -36,6 +36,7 @@ import {
   jobOwnEffort,
   MODEL_JOBS,
   modelLabel,
+  scheduledFallback,
   setJobModel,
 } from "./askState";
 import { ModelMenu } from "./Ask";
@@ -212,6 +213,7 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
             <Icon name={icon} />
             <div className="t">
               <div className="pt">{label}</div>
+              <ScheduledOn job={job} found={found} />
             </div>
             <button
               type="button"
@@ -264,6 +266,14 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
       )}
     </section>
   );
+}
+
+/** Under a job that can run scheduled, on an Ollama model (its own or one it follows), the model its
+ *  scheduled runs go on instead (`scheduledFallback`): Ollama runs in Ask and runs started by hand only. */
+function ScheduledOn({ job, found }: { job: string; found: CliInfo[] | null }) {
+  const s = useStore(settings);
+  const model = scheduledFallback(job, s);
+  return model ? <div className="faint">Scheduled runs use {modelLabel(model, found)} instead</div> : null;
 }
 
 /** A job's own effort (`jobEffort.<job>`), the same menu as an assistant's under Found on this

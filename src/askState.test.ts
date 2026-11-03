@@ -29,6 +29,7 @@ import {
   jobOwnEffort,
   MODEL_JOBS,
   resolveEffort,
+  scheduledFallback,
   closeChat,
   fallbackTitle,
   keepChat,
@@ -138,6 +139,7 @@ describe("Ask state", () => {
 
   it("works out a job's model and effort as Rust does (tests/fixtures/job-settings.json)", () => {
     expect(MODEL_JOBS.map(([job]) => job)).toEqual(cases.jobs);
+    expect(MODEL_JOBS.filter(([, , , scheduled]) => scheduled).map(([job]) => job)).toEqual(cases.scheduled);
     clis.set(found());
     for (const c of cases.cases) {
       const s = c.settings as unknown as Settings;
@@ -147,6 +149,15 @@ describe("Ask state", () => {
       // What brainstead_core::ask::job_effort gives the run.
       const cli = cliOf(model);
       expect(resolveEffort(cases.levels[cli], s.jobEffort?.[c.job], s.effort?.[cli]), c.name).toBe(c.effort);
+      // A scheduled run: the same, unless the model is Ollama's (brainstead_core::ask::job_run_model).
+      const fallback = scheduledFallback(c.job, s);
+      expect(fallback !== null, c.name).toBe("scheduledModel" in c);
+      const scheduled = fallback ?? model;
+      expect(scheduled, c.name).toBe("scheduledModel" in c ? c.scheduledModel : c.model);
+      const sc = cliOf(scheduled);
+      expect(resolveEffort(cases.levels[sc], s.jobEffort?.[c.job], s.effort?.[sc]), c.name).toBe(
+        "scheduledEffort" in c ? c.scheduledEffort : c.effort,
+      );
     }
     clis.set(null);
   });

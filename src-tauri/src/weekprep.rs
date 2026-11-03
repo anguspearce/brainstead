@@ -158,9 +158,10 @@ fn enabled(app: &AppHandle) -> bool {
 }
 
 /// The job's model: its own in Settings › AI assistants (`jobModels.weekprep`), else the
-/// summaries' (`brainstead_core::ask::job_model`).
-fn model(app: &AppHandle) -> String {
-    ask::job_model(app, Job::Weekprep.key())
+/// summaries' (`brainstead_core::ask::job_model`); for a `scheduled` run, never an Ollama model
+/// (`crate::ask::job_model`).
+fn model(app: &AppHandle, scheduled: bool) -> String {
+    crate::ask::job_model(app, Job::Weekprep.key(), scheduled)
 }
 
 fn read_prep(week: &str) -> Option<Prep> {
@@ -284,7 +285,7 @@ pub fn weekprep_link(
         origin,
         brainstead_core::changes::from_texts(Some(&before), &after),
     );
-    s.model = Some(model(&app));
+    s.model = Some(model(&app, false));
     crate::changes::submit(&app, s).map_err(|e| e.message().to_string())
 }
 
@@ -358,7 +359,7 @@ fn start(app: &AppHandle, week: &str, trigger: &str) -> Result<String, String> {
         }
         *g = Some((id.clone(), week.into()));
     }
-    let model = model(app);
+    let model = model(app, trigger == "schedule");
     {
         let mut s = crate::lock(&wp.state);
         s.runs.push(Run {

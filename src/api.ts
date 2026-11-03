@@ -1563,7 +1563,7 @@ export type WeekPrepAction =
   | {
       do: "clarify";
       item: WeekPrepInboxItem;
-      becomes: "next" | "project" | "waiting" | "done" | "someday" | "reference" | "delete";
+      becomes: "next" | "project" | "waiting" | "done" | "someday" | "reference" | "delete" | "ingest";
       text: string | null;
       project: string | null;
       context: string | null;

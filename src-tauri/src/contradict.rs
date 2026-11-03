@@ -113,8 +113,8 @@ fn save_last(app: &AppHandle, l: &Last) {
     let _ = app.emit("contradictions-changed", l);
 }
 
-fn models(app: &AppHandle) -> (String, String) {
-    let m = crate::ask::job_model(app, "contradictions");
+fn models(app: &AppHandle, scheduled: bool) -> (String, String) {
+    let m = crate::ask::job_model(app, "contradictions", scheduled);
     // Reading pages is a cheap job: Claude's smallest model when Claude is the assistant.
     let extract = if m.starts_with("claude") { "claude:haiku".to_string() } else { m.clone() };
     (extract, m)
@@ -164,7 +164,7 @@ fn run(app: &AppHandle, l: &mut Last, trigger: Option<&str>, group: &str) -> Res
     let pages = c::pages(&root);
     let texts: HashMap<String, String> = pages.iter().map(|(r, t, _)| (r.clone(), t.clone())).collect();
     l.pages = pages.len();
-    let (extract_model, judge_model) = models(app);
+    let (extract_model, judge_model) = models(app, trigger == Some("scheduled"));
 
     // 1. Read the pages that changed.
     let (_, missing) = c::current(&st, &pages);

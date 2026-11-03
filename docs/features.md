@@ -15,7 +15,7 @@ The user guide to Brainstead, a Mac and Windows app for tasks, notes and an [LLM
 ## Requirements
 
 - A Mac with Apple silicon (M1 or later) and macOS 14 or later, or a PC with Windows 10 or 11 (64-bit).
-- For Ask and the AI features: Claude Code, Codex, GitHub Copilot's CLI or Antigravity, installed and signed in; or Ollama on this computer with a model that calls tools (about 14B parameters or more does jobs well; smaller ones miss things), and Codex to run it. Everything else works without them.
+- For Ask and the AI features: Claude Code, Codex, GitHub Copilot's CLI or Antigravity, installed and signed in; or Ollama on this computer with a model that calls tools (about 14B parameters or more does jobs well; smaller ones miss things), and Codex to run it, for Ask and runs you start by hand (scheduled runs use another assistant). Everything else works without them.
 - For the capture extensions: Chrome, Edge, Brave, Vivaldi or Chromium.
 
 ## First run
