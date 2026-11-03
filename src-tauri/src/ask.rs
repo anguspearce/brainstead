@@ -28,49 +28,133 @@ use crate::platform;
 use crate::vault::VaultService;
 use crate::AppState;
 
-/// The CLIs answering now, by chat id and process id.
+/// The turns in flight and the CLIs answering them, by chat id (an Ask chat's, or a job run's),
+/// under one lock. A Stop while a turn is in flight (for an Ask chat, from the moment `ask_send`
+/// takes the message) is noted, and a CLI that registers after it (`admit`) is stopped at once.
 #[derive(Default)]
-pub struct Running {
-    children: Mutex<Vec<(String, u32)>>,
-    /// The chats Stop was pressed on while a CLI answered, so a refused effort isn't run again.
-    stopped: Mutex<HashSet<String>>,
+pub struct Running(Mutex<Runs>);
+
+#[derive(Default)]
+struct Runs {
+    /// Each CLI answering now, by chat id and process id.
+    children: Vec<(String, u32)>,
+    /// The chats with a turn in flight, counted: an Ask chat's from `ask_send` taking the message
+    /// (`try_begin`), and each run's from before it starts (`fitted_turn`), until after its last, so
+    /// also between a refused run and its retry, when no CLI is answering.
+    turns: HashMap<String, usize>,
+    /// The chats Stop was pressed on during the turn in flight: no further run of it starts, and
+    /// a CLI it starts after the Stop is stopped at once. Forgotten when the turn ends.
+    stopped: HashSet<String>,
+}
+
+impl Runs {
+    /// Whether `chat` has a turn in flight or a CLI answering it.
+    fn busy(&self, chat: &str) -> bool {
+        self.turns.contains_key(chat) || self.children.iter().any(|(c, _)| c == chat)
+    }
+}
+
+/// A turn in flight on a chat (`Running::begin`), ended when dropped: on every return, and on a
+/// panic, so a chat never stays busy.
+struct Turn {
+    running: Arc<Running>,
+    chat: String,
+}
+
+impl Drop for Turn {
+    fn drop(&mut self) {
+        self.running.end(&self.chat);
+    }
 }
 
 impl Running {
-    fn add(&self, chat: &str, pid: u32) {
-        self.children.lock().unwrap().push((chat.to_string(), pid));
+    /// The state, also after a panic elsewhere held the lock (a `Turn` ends while unwinding).
+    fn lock(&self) -> std::sync::MutexGuard<'_, Runs> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner())
+    }
+    /// Starts a turn on `chat`: it reads busy, and a Stop on it is noted, until the `Turn` drops.
+    /// Turns nest: the chat stays busy until the last one drops.
+    fn begin(self: &Arc<Self>, chat: &str) -> Turn {
+        *self.lock().turns.entry(chat.to_string()).or_default() += 1;
+        Turn { running: self.clone(), chat: chat.to_string() }
+    }
+    /// `begin`, unless `chat` is busy (a turn in flight or a CLI answering it); checked and begun
+    /// under one lock, so two sends to a chat can't both start a turn.
+    fn try_begin(self: &Arc<Self>, chat: &str) -> Option<Turn> {
+        let mut r = self.lock();
+        if r.busy(chat) {
+            return None;
+        }
+        *r.turns.entry(chat.to_string()).or_default() += 1;
+        Some(Turn { running: self.clone(), chat: chat.to_string() })
+    }
+    fn end(&self, chat: &str) {
+        let mut r = self.lock();
+        let left = r.turns.get_mut(chat).map(|n| {
+            *n -= 1;
+            *n
+        });
+        if left == Some(0) {
+            r.turns.remove(chat);
+            r.stopped.remove(chat);
+        }
+    }
+    /// Registers a CLI answering `chat`; true when Stop was already pressed on its turn, and the
+    /// caller stops it at once.
+    fn add(&self, chat: &str, pid: u32) -> bool {
+        let mut r = self.lock();
+        r.children.push((chat.to_string(), pid));
+        r.stopped.contains(chat)
+    }
+    /// Registers the CLI `pid` answering `chat` (`add`), and stops it with `stop` (its process
+    /// group) at once when Stop was already pressed on the turn.
+    fn admit(&self, chat: &str, pid: u32, stop: impl FnOnce(u32)) {
+        if self.add(chat, pid) {
+            stop(pid);
+        }
     }
     fn remove(&self, pid: u32) {
-        self.children.lock().unwrap().retain(|(_, p)| *p != pid);
+        self.lock().children.retain(|(_, p)| *p != pid);
     }
-    pub fn busy(&self, chat: &str) -> bool {
-        self.children.lock().unwrap().iter().any(|(c, _)| c == chat)
+    /// Whether `chat` has a turn in flight or a CLI answering it (`try_begin` checks the same).
+    #[cfg(test)]
+    fn busy(&self, chat: &str) -> bool {
+        self.lock().busy(chat)
     }
     pub fn cancel(&self, chat: &str) {
         for pid in self.stopping(chat) {
             platform::stop_group(pid);
         }
     }
-    /// The processes answering `chat`, which is noted as stopped when there are any.
+    /// The processes answering `chat`. The chat is noted as stopped when it is busy, with a CLI
+    /// answering or between runs of its turn.
     fn stopping(&self, chat: &str) -> Vec<u32> {
-        let pids: Vec<u32> = self.children.lock().unwrap().iter().filter(|(c, _)| c == chat).map(|(_, p)| *p).collect();
-        if !pids.is_empty() {
-            self.stopped.lock().unwrap().insert(chat.to_string());
+        let mut r = self.lock();
+        let pids: Vec<u32> = r.children.iter().filter(|(c, _)| c == chat).map(|(_, p)| *p).collect();
+        if !pids.is_empty() || r.turns.contains_key(chat) {
+            r.stopped.insert(chat.to_string());
         }
         pids
     }
-    /// Whether Stop was pressed on `chat` since this was last asked.
+    /// Whether Stop was pressed on `chat` during its turn in flight.
     fn stopped(&self, chat: &str) -> bool {
-        self.stopped.lock().unwrap().remove(chat)
+        self.lock().stopped.contains(chat)
     }
-    /// Whether any CLI is answering (an Ask chat, or a run's model call).
+    /// Whether any turn is in flight or any CLI is answering (an Ask chat, or a run's model call).
     pub fn any(&self) -> bool {
-        !self.children.lock().unwrap().is_empty()
+        let r = self.lock();
+        !r.children.is_empty() || !r.turns.is_empty()
     }
-    /// On quit: nothing is left running once the app has gone.
+    /// On quit: nothing is left running once the app has gone, and no turn starts another run.
     pub fn kill_all(&self) {
-        for (_, pid) in self.children.lock().unwrap().iter() {
-            platform::stop_group(*pid);
+        let pids: Vec<u32> = {
+            let mut r = self.lock();
+            let chats: Vec<String> = r.turns.keys().cloned().collect();
+            r.stopped.extend(chats);
+            r.children.iter().map(|(_, p)| *p).collect()
+        };
+        for pid in pids {
+            platform::stop_group(pid);
         }
     }
 }
@@ -333,10 +417,32 @@ fn run_fitted(
     set: Option<&str>,
     on: &mut dyn FnMut(&Event),
 ) -> Outcome {
-    let effort = fitted(model, set);
     let running = app.state::<Arc<Running>>().inner().clone();
-    // A Stop from an earlier turn of this chat doesn't count.
-    running.stopped(chat_id);
+    fitted_turn(
+        &running,
+        what,
+        chat_id,
+        model,
+        set,
+        || fitted(model, set),
+        |effort| run_at(app, chat_id, prompt, model, session, system, mcp, images, effort, &mut *on),
+    )
+}
+
+/// `run_fitted`'s turn on `chat_id`: `run` at the level `fit` gives, and once more without one when
+/// that level is refused. The chat reads busy, and a Stop on it is noted, for the whole turn, so a
+/// Stop between the two runs means the second never starts.
+fn fitted_turn(
+    running: &Arc<Running>,
+    what: &str,
+    chat_id: &str,
+    model: &str,
+    set: Option<&str>,
+    fit: impl FnOnce() -> Option<String>,
+    mut run: impl FnMut(Option<&str>) -> Outcome,
+) -> Outcome {
+    let _turn = running.begin(chat_id);
+    let effort = fit();
     if set != effort.as_deref() {
         crate::applog!(
             "ask: {what} on {model}: the model doesn't take {} effort, so it runs at {}",
@@ -344,14 +450,14 @@ fn run_fitted(
             effort.as_deref().unwrap_or("its default")
         );
     }
-    let out = run_at(app, chat_id, prompt, model, session, system, mcp, images, effort.as_deref(), &mut *on);
+    let out = run(effort.as_deref());
     // A level the CLI or model refused (one the models cache doesn't cover, or an older CLI without
     // the option): once more at the model's own default, rather than failing every time. A run the
     // user stopped isn't started again, whatever its error says.
     match effort {
         Some(e) if ask::effort_refused(&out) && !running.stopped(chat_id) => {
             crate::applog!("ask: {what} on {model} refused {e} effort, so it ran again without one: {}", out.error.unwrap_or_default());
-            run_at(app, chat_id, prompt, model, session, system, mcp, images, None, on)
+            run(None)
         }
         _ => out,
     }
@@ -417,7 +523,8 @@ fn run_at(
     };
     let fed = feed_stdin(&mut child, launch.stdin);
     let running = app.state::<Arc<Running>>().inner().clone();
-    running.add(chat_id, child.id());
+    // A Stop pressed during this turn before the CLI was registered stops it now.
+    running.admit(chat_id, child.id(), platform::stop_group);
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     // Read on a thread from the start: a full pipe would stall the CLI.
@@ -487,9 +594,11 @@ pub fn ask_send(
     session: Option<String>,
     effort: Option<String>,
 ) -> Result<(), String> {
-    if app.state::<Arc<Running>>().busy(&chat_id) {
+    // The turn starts here, before the thread does: a Stop pressed from now on is noted, and the
+    // run it would start is stopped at once (`Running::admit`).
+    let Some(turn) = app.state::<Arc<Running>>().try_begin(&chat_id) else {
         return Err("This chat is still answering.".into());
-    }
+    };
     let turns = app.state::<Arc<Turns>>().inner().clone();
     turns.start(&chat_id);
     std::thread::spawn(move || {
@@ -522,6 +631,8 @@ pub fn ask_send(
             error: Some("Brainstead stopped this answer because something went wrong; its log has the details (Settings › About).".into()),
             ..Default::default()
         });
+        // The turn ends before the window hears of it, so the chat takes its next message at once.
+        drop(turn);
         let done = DoneMsg { chat_id, outcome };
         turns.finish(&done);
         let how = done.outcome.error.as_deref().map(|e| format!(" with an error: {e}")).unwrap_or_default();
@@ -911,17 +1022,163 @@ mod tests {
     }
 
     #[test]
-    fn stop_is_noted_only_while_a_cli_answers() {
-        let r = Running::default();
+    fn stop_is_noted_only_while_a_turn_is_in_flight() {
+        let r = Arc::new(Running::default());
+        // Nothing in flight: a Stop has nothing to note, and nothing is busy.
         assert!(r.stopping("c1").is_empty());
         assert!(!r.stopped("c1"));
-        r.add("c1", 41);
-        r.add("c2", 42);
+        assert!(!r.busy("c1") && !r.any());
+        let (t1, t2) = (r.begin("c1"), r.begin("c2"));
+        assert!(!r.add("c1", 41));
+        assert!(!r.add("c2", 42));
         assert_eq!(r.stopping("c1"), [41]);
-        assert!(r.stopped("c1"));
-        // Asking forgets it, so the chat's next turn starts afresh.
+        assert!(r.stopped("c1") && !r.stopped("c2"));
+        r.remove(41);
+        r.remove(42);
+        drop((t1, t2));
+        // The turn over: not busy, and its Stop doesn't carry to the chat's next turn.
+        assert!(!r.busy("c1") && !r.any());
         assert!(!r.stopped("c1"));
-        assert!(!r.stopped("c2"));
+    }
+
+    #[test]
+    fn a_turn_between_runs_is_busy_and_takes_a_stop() {
+        let r = Arc::new(Running::default());
+        let turn = r.begin("c1");
+        // No CLI answering (the refused run gone, the retry not yet started): still busy.
+        assert!(r.busy("c1") && r.any() && !r.busy("c2"));
+        assert!(r.stopping("c1").is_empty());
+        assert!(r.stopped("c1"));
+        // A CLI the turn starts after the Stop is told to stop at once.
+        assert!(r.add("c1", 41));
+        r.remove(41);
+        assert!(r.busy("c1"));
+        drop(turn);
+        assert!(!r.busy("c1") && !r.any() && !r.stopped("c1"));
+        // On quit, a turn between runs is noted as stopped too.
+        let turn = r.begin("c2");
+        r.kill_all();
+        assert!(r.stopped("c2"));
+        drop(turn);
+    }
+
+    fn refused() -> Outcome {
+        Outcome { error: Some("error: unsupported reasoning effort 'max'".into()), ..Default::default() }
+    }
+
+    #[test]
+    fn a_refused_effort_runs_once_more_without_it() {
+        let r = Arc::new(Running::default());
+        let mut levels = Vec::new();
+        let out = fitted_turn(
+            &r,
+            "chat",
+            "c1",
+            "gpt-5",
+            Some("max"),
+            || Some("max".into()),
+            |e| {
+                levels.push(e.map(str::to_string));
+                assert!(r.busy("c1"));
+                if e.is_some() {
+                    refused()
+                } else {
+                    Outcome { text: "Done.".into(), ..Default::default() }
+                }
+            },
+        );
+        assert_eq!(levels, [Some("max".to_string()), None]);
+        assert_eq!(out.text, "Done.");
+        assert!(!r.busy("c1"));
+    }
+
+    #[test]
+    fn a_stop_between_a_refused_run_and_its_retry_ends_the_turn() {
+        let r = Arc::new(Running::default());
+        let mut runs = 0;
+        let out = fitted_turn(
+            &r,
+            "chat",
+            "c1",
+            "gpt-5",
+            Some("max"),
+            || Some("max".into()),
+            |_| {
+                runs += 1;
+                assert!(r.busy("c1"));
+                // The refused run's CLI has exited when Stop is pressed: no process to stop.
+                assert!(r.stopping("c1").is_empty());
+                refused()
+            },
+        );
+        assert_eq!(runs, 1);
+        assert!(ask::effort_refused(&out));
+        // The turn over, the chat takes the next send.
+        assert!(!r.busy("c1") && !r.stopped("c1"));
+    }
+
+    #[test]
+    fn a_stop_after_a_send_and_before_its_first_run_stops_that_run() {
+        let r = Arc::new(Running::default());
+        // ask_send has taken the message: the chat is busy and a second send is refused.
+        let sent = r.try_begin("c1").expect("the chat is free");
+        assert!(r.try_begin("c1").is_none() && r.busy("c1"));
+        // Stop before the thread reaches the turn's first run: nothing to stop yet, but noted.
+        r.cancel("c1");
+        let mut stopped_at_once = Vec::new();
+        let out = fitted_turn(
+            &r,
+            "chat",
+            "c1",
+            "gpt-5",
+            None,
+            || None,
+            |_| {
+                r.admit("c1", 41, |pid| stopped_at_once.push(pid));
+                r.remove(41);
+                Outcome::default()
+            },
+        );
+        assert_eq!(stopped_at_once, [41]);
+        assert!(out.error.is_none());
+        // Still the send's turn until its thread ends; then the chat is free and the Stop forgotten.
+        assert!(r.busy("c1") && r.stopped("c1"));
+        drop(sent);
+        assert!(!r.busy("c1") && !r.stopped("c1"));
+        assert!(r.try_begin("c1").is_some());
+    }
+
+    /// A real process group, as run_at registers a CLI: started after a Stop on its turn, it is
+    /// stopped rather than left to answer.
+    #[test]
+    fn a_cli_registered_after_a_stop_is_stopped() {
+        // Exercises platform::stop_group on a real process, not a stand-in.
+        let r = Arc::new(Running::default());
+        let turn = r.begin("c1");
+        r.cancel("c1");
+        let mut cmd = if cfg!(windows) {
+            let mut c = std::process::Command::new("cmd");
+            c.args(["/C", "ping -n 60 127.0.0.1"]);
+            c
+        } else {
+            let mut c = std::process::Command::new("sleep");
+            c.arg("60");
+            c
+        };
+        cmd.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+        let mut child = platform::spawn_group(&mut cmd).unwrap();
+        let started = std::time::Instant::now();
+        r.admit("c1", child.id(), platform::stop_group);
+        let status = child.wait().unwrap();
+        assert!(started.elapsed() < std::time::Duration::from_secs(30), "{:?}", started.elapsed());
+        assert!(!status.success());
+        r.remove(child.id());
+        drop(turn);
+        // Without a Stop, a CLI registers and runs on.
+        let turn = r.begin("c2");
+        r.admit("c2", 42, |_| panic!("stopped without a Stop"));
+        r.remove(42);
+        drop(turn);
     }
 
     #[test]
