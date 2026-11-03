@@ -106,6 +106,28 @@ describe("Ask state", () => {
     clis.set(null);
   });
 
+  it("offers Copilot's Auto model no level, so its Effort menus are hidden", () => {
+    // As ask_clis lists it: Copilot's levels, and none of Auto's own (src-tauri/src/ask.rs model_efforts).
+    clis.set([
+      {
+        cli: "copilot",
+        path: "/bin/copilot",
+        version: "1",
+        efforts: ["low", "medium", "high", "xhigh", "max"],
+        models: [{ id: "copilot:auto", name: "Copilot (Auto)", efforts: [] }],
+      },
+    ]);
+    expect(installedEfforts("copilot")).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(installedEfforts("copilot", "copilot:auto")).toEqual([]);
+    // A new chat on it starts at no level, and a job's own level isn't shown or kept.
+    settings.update({ effort: { copilot: "high" }, jobModels: { find: "claude:sonnet" }, jobEffort: { find: "high" } });
+    expect(effortFor("copilot:auto")).toBeNull();
+    expect(setJobModel("find", "copilot:auto")).toBe("high");
+    expect(jobOwnEffort("find")).toBeNull();
+    settings.update({ effort: undefined, jobModels: undefined, jobEffort: undefined });
+    clis.set(null);
+  });
+
   it("resolves a run's effort: the job's, else the assistant's, else none", () => {
     // The same cases as brainstead_core::ask's effort_resolves_job_then_assistant.
     const claude = ["low", "medium", "high", "xhigh", "max"];

@@ -235,7 +235,8 @@ fn models(cli: Cli, bin: &platform::Program) -> Vec<Model> {
                 .map(|(id, name)| m(format!("{}{}", ask::AGY_PREFIX, id.trim()), name.trim()))
                 .collect()
         }
-        Cli::Copilot => vec![m(ask::COPILOT_AUTO.to_string(), "Copilot (Auto)")],
+        // Auto takes no level (`model_efforts`), so the Effort menus are hidden for it.
+        Cli::Copilot => vec![Model { efforts: model_efforts(ask::COPILOT_AUTO), ..m(ask::COPILOT_AUTO.to_string(), "Copilot (Auto)") }],
         // Ollama's come from its server, not a program (`ollama_info`).
         Cli::Ollama => Vec::new(),
     }
