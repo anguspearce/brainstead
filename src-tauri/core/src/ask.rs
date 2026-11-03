@@ -240,6 +240,23 @@ pub mod ollama {
     pub const INSTALL_URL: &str = "https://ollama.com/download";
     /// The host Ollama's own tools use when `OLLAMA_HOST` is unset.
     pub const DEFAULT_HOST: &str = "http://localhost:11434";
+    /// The folder in the app's data folder that Codex uses as its home (`CODEX_HOME`) for an
+    /// Ollama run. Signed in to ChatGPT, Codex 0.166 calls chatgpt.com on every turn (its world
+    /// state, the plugin catalog) even with Ollama as the provider; a home without that sign-in,
+    /// with `CODEX_LOCAL_ONLY`, leaves it only the Ollama server. Its sessions live here too, so
+    /// an Ollama chat resumes from it.
+    pub const CODEX_HOME_DIR: &str = "codex-ollama";
+    /// Codex settings (`-c`) for an Ollama run that turn off what calls OpenAI without a sign-in:
+    /// remote plugins and apps, analytics, and the metrics it sends to ab.chatgpt.com. Brainstead's
+    /// own tools are an MCP server and stay on.
+    pub const CODEX_LOCAL_ONLY: [&str; 6] = [
+        "features.plugins=false",
+        "features.remote_plugin=false",
+        "features.plugin_discovery_prefetch=false",
+        "features.apps=false",
+        "analytics.enabled=false",
+        "otel.metrics_exporter=\"none\"",
+    ];
 
     /// An Ollama server on this computer, as `host` accepted it: its base URL, never ending in a
     /// slash. Only `host` makes one, so a run on Ollama can't be pointed anywhere else.
@@ -630,6 +647,10 @@ pub struct Request<'a> {
     /// Ollama's server, for `Cli::Ollama` (`ollama::host`, so only one on this computer); the
     /// others ignore it. A run on Ollama without one fails.
     pub ollama_host: Option<&'a ollama::Host>,
+    /// Codex's home for `Cli::Ollama` (`CODEX_HOME`, an existing folder of Brainstead's,
+    /// `ollama::CODEX_HOME_DIR` in its data folder), holding no ChatGPT sign-in; the others ignore
+    /// it. A run on Ollama without one fails.
+    pub codex_home: Option<&'a str>,
 }
 
 fn strip<'a>(model: &'a str, prefix: &str) -> &'a str {
@@ -688,8 +709,9 @@ pub fn claude_edit_rule(dir: &str) -> String {
 /// `exec` with no prompt argument, or `-`), so its length is never limited by the command line;
 /// Antigravity and Copilot take it as an argument. An Ollama model is Codex's launch with its
 /// Ollama provider picked (`--oss --local-provider ollama`, and `model_provider`, without which
-/// Codex 0.166 starts the thread on Ollama but runs the turn on OpenAI) and the server's address in
-/// `CODEX_OSS_BASE_URL`, the one variable its provider reads.
+/// Codex 0.166 starts the thread on Ollama but runs the turn on OpenAI), the server's address in
+/// `CODEX_OSS_BASE_URL`, the one variable its provider reads, and Codex's home set to one without
+/// a ChatGPT sign-in, with `ollama::CODEX_LOCAL_ONLY`, so it reaches nothing but that server.
 pub fn args(cli: Cli, r: &Request) -> Result<Launch, String> {
     let instructions = format!("{}\n\n{}", r.system, cli.tools_hint());
     let s = |x: &str| x.to_string();
@@ -750,10 +772,15 @@ pub fn args(cli: Cli, r: &Request) -> Result<Launch, String> {
             a.extend(["--json", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules"].map(s));
             if cli == Cli::Ollama {
                 let host = r.ollama_host.ok_or("Ollama isn't available on this computer.")?;
+                let home = r.codex_home.ok_or("Brainstead couldn't make Codex's folder for Ollama.")?;
                 a.extend(
                     ["--oss", "--local-provider", "ollama", "-c", "model_provider=\"ollama\"", "-m", strip(r.model, OLLAMA_PREFIX)].map(s),
                 );
+                for c in ollama::CODEX_LOCAL_ONLY {
+                    a.extend([s("-c"), s(c)]);
+                }
                 env.push(("CODEX_OSS_BASE_URL".to_string(), ollama::codex_base_url(host)));
+                env.push(("CODEX_HOME".to_string(), s(home)));
             } else {
                 a.extend(["-m", r.model].map(s));
             }
@@ -1191,6 +1218,7 @@ mod tests {
             images: &[],
             effort: None,
             ollama_host: None,
+            codex_home: None,
         }
     }
 
@@ -1219,7 +1247,7 @@ mod tests {
     #[test]
     fn ollama_args() {
         let host = ollama::host(None).unwrap();
-        let on = |model: &'static str| Request { ollama_host: Some(&host), ..req(model, None) };
+        let on = |model: &'static str| Request { ollama_host: Some(&host), codex_home: Some("/data/codex-ollama"), ..req(model, None) };
         let l = args(Cli::Ollama, &on("ollama:gpt-oss:20b")).unwrap();
         let a = &l.args;
         assert_eq!(a[0], "exec");
@@ -1233,15 +1261,22 @@ mod tests {
         assert!(a.iter().any(|x| x.starts_with("developer_instructions=\"SYS\\n\\n")));
         assert_eq!(a[a.len() - 2..], ["--", "-"]);
         assert_eq!(l.stdin.as_deref(), Some("What's due?"));
-        // The server's address reaches Codex in the one variable its provider reads.
-        assert_eq!(l.env, vec![("CODEX_OSS_BASE_URL".to_string(), "http://localhost:11434/v1".to_string())]);
+        // The server's address reaches Codex in the one variable its provider reads, and Codex runs
+        // from a home of Brainstead's, without the ChatGPT sign-in.
+        let env = |k: &str, v: &str| (k.to_string(), v.to_string());
+        assert_eq!(l.env, vec![env("CODEX_OSS_BASE_URL", "http://localhost:11434/v1"), env("CODEX_HOME", "/data/codex-ollama")]);
+        // Nothing that calls OpenAI: no remote plugins or apps, no analytics, no metrics.
+        for c in ollama::CODEX_LOCAL_ONLY {
+            assert!(a.windows(2).any(|w| w == ["-c", c]), "{c} in {a:?}");
+        }
         let v6 = ollama::host(Some("[::1]:11435")).unwrap();
-        let resumed = args(Cli::Ollama, &Request { ollama_host: Some(&v6), ..req("ollama:qwen3:4b", Some("t1")) }).unwrap();
+        let resumed = args(Cli::Ollama, &Request { ollama_host: Some(&v6), session: Some("t1"), ..on("ollama:qwen3:4b") }).unwrap();
         assert_eq!(resumed.env[0].1, "http://[::1]:11435/v1");
         assert_eq!(resumed.args[..2], ["exec", "resume"]);
         assert_eq!(resumed.args[resumed.args.len() - 3..], ["--", "t1", "-"]);
-        // Without a server on this computer there's nothing to run on.
+        // Without a server on this computer, or Codex's folder for it, there's nothing to run on.
         assert!(args(Cli::Ollama, &req("ollama:gpt-oss:20b", None)).is_err());
+        assert!(args(Cli::Ollama, &Request { codex_home: None, ..on("ollama:gpt-oss:20b") }).is_err());
         // Codex's own launch has none of it.
         let c = args(Cli::Codex, &req("gpt-5", None)).unwrap();
         assert!(c.env.is_empty() && !c.args.iter().any(|x| x == "--oss"));

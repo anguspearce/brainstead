@@ -141,6 +141,8 @@ fn ask_model_with(model: &str, prompt: &str, cwd: &Path, mcp: Option<&Mcp>, help
         Cli::Ollama => Some(ask::ollama::host(std::env::var("OLLAMA_HOST").ok().as_deref())?),
         _ => None,
     };
+    // Codex's home for Ollama, as the app gives it one: without the ChatGPT sign-in.
+    let codex_home = tempfile::tempdir().map_err(|e| e.to_string())?;
     let launch = ask::args(
         cli,
         &Request {
@@ -153,6 +155,7 @@ fn ask_model_with(model: &str, prompt: &str, cwd: &Path, mcp: Option<&Mcp>, help
             images: &[],
             effort: None,
             ollama_host: ollama_host.as_ref(),
+            codex_home: codex_home.path().to_str(),
         },
     )?;
     // Antigravity runs as Ask runs it: in a folder of its own holding its read-only agent and the

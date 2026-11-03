@@ -606,7 +606,29 @@ fn run_at(
     let Some(vault) = app.state::<VaultService>().root() else { return fail("No vault is open.".into()) };
     let vault_s = vault.to_string_lossy().into_owned();
     let mcp = mcp.filter(|_| cli.takes_mcp());
-    let req = Request { prompt, model, session, system, vault: &vault_s, mcp, images, effort, ollama_host: ollama_host.as_ref() };
+    // Codex's home for Ollama, without the user's ChatGPT sign-in (`ask::ollama::CODEX_HOME_DIR`).
+    let codex_home = match cli {
+        Cli::Ollama => {
+            let d = platform::data_dir().join(ask::ollama::CODEX_HOME_DIR);
+            if let Err(e) = std::fs::create_dir_all(&d) {
+                return fail(format!("Couldn't set up Codex for Ollama: {e}"));
+            }
+            Some(d.to_string_lossy().into_owned())
+        }
+        _ => None,
+    };
+    let req = Request {
+        prompt,
+        model,
+        session,
+        system,
+        vault: &vault_s,
+        mcp,
+        images,
+        effort,
+        ollama_host: ollama_host.as_ref(),
+        codex_home: codex_home.as_deref(),
+    };
     let launch = match ask::args(cli, &req) {
         Ok(l) => l,
         Err(e) => return fail(e),
