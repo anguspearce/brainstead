@@ -17,7 +17,7 @@ updates:
     directory: /src-tauri
     schedule:
       interval: monthly
-    # Kept at the versions webview2-com (and so tauri) uses, or pdf.rs doesn't build on Windows.
+    # Kept at the versions webview2-com (and so tauri) uses, or the Windows build breaks.
     ignore:
       - dependency-name: windows-core
       - dependency-name: webview2-com
