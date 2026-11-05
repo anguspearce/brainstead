@@ -7,13 +7,13 @@ license = "GPL-3.0-or-later"
 edition = "2021"
 
 [dependencies]
-rusqlite = { version = "0.40", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 serde_yaml_ng = "0.10"
 regex = "1"
 aho-corasick = "1"
-sha2 = "0.10"
+sha2 = "0.11"
 hex = "0.4"
 unicode-normalization = "0.1"
 walkdir = "2"
@@ -21,12 +21,12 @@ rayon = "1"
 notify = "8"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 base64 = "0.23.1"
-similar = "2"
+similar = "3"
 flate2 = "1"
 strsim = "0.11"
 zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 dunce = "1"
-dirs = "6"
+dirs = "7"
 
 # The 8.3 short name of a folder (paths::short_name), one of the spellings a path is read back
 # from, for this crate's tests and the MCP server's.

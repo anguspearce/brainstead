@@ -2,20 +2,18 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Spelling and grammar from macOS's own checker (the one TextEdit and Mail use), as the sibling
-//! journal app does it: the misspelled words in a text, its grammar problems, the guesses for a
-//! word, and learning or ignoring one. Offsets are UTF-16, as in NSString and JavaScript strings.
-//! Called on the main thread (the commands aren't async), where AppKit wants it.
+//! Spelling from macOS's own checker (the one TextEdit and Mail use), as the sibling journal app
+//! does it: the misspelled words in a text, the guesses for a word, and learning or ignoring one.
+//! Grammar is Harper's (grammar.rs), as on Windows. Offsets are UTF-16, as in NSString and
+//! JavaScript strings. Called on the main thread (the commands aren't async), where AppKit wants it.
 
 use std::sync::OnceLock;
 
-use objc2::runtime::AnyObject;
 use objc2_app_kit::NSSpellChecker;
-use objc2_foundation::{NSArray, NSDictionary, NSRange, NSString, NSValue};
+use objc2_foundation::{NSRange, NSString};
 
-/// At most this many problems from one call.
+/// At most this many misspellings from one call.
 const MAX_SPELLING: usize = 1000;
-const MAX_GRAMMAR: usize = 500;
 
 /// The language to check in: `lang` when it's an English macOS has, else macOS's own spelling
 /// language when that's English, else plain English. Always an English.
@@ -82,64 +80,15 @@ pub fn check(text: &str, lang: Option<&str>) -> Vec<(usize, usize)> {
     out
 }
 
-/// A grammar problem: where it is (UTF-16, as for spelling), macOS's explanation, and its fixes.
-pub struct GrammarIssue {
-    pub start: usize,
-    pub len: usize,
-    pub description: String,
-    pub corrections: Vec<String>,
+/// The grammar problems: Harper's, in the spelling language (grammar.rs), as macOS's own checker
+/// caught little more than a doubled word.
+pub fn grammar(text: &str, lang: Option<&str>) -> Vec<super::grammar::GrammarIssue> {
+    super::grammar::check(text, &grammar_language(lang))
 }
 
-/// The grammar problems, a sentence at a time. macOS needs the language named to check grammar
-/// at all; a problem inside another is left to the outer one, and one that is the whole sentence
-/// (a fragment, which notes are full of) is left out.
-pub fn grammar(text: &str, lang: Option<&str>) -> Vec<GrammarIssue> {
-    let sc = NSSpellChecker::sharedSpellChecker();
-    let s = NSString::from_str(text);
-    let lang = language(&sc, lang);
-    let key = |k: &str, d: &NSDictionary<NSString, AnyObject>| d.objectForKey(&NSString::from_str(k));
-    let (len, mut at, mut out) = (s.length(), 0usize, Vec::<GrammarIssue>::new());
-    while at < len && out.len() < MAX_GRAMMAR {
-        let mut details: Option<objc2::rc::Retained<NSArray<NSDictionary<NSString, AnyObject>>>> = None;
-        let r = unsafe {
-            sc.checkGrammarOfString_startingAt_language_wrap_inSpellDocumentWithTag_details(
-                &s,
-                at as isize,
-                Some(&lang),
-                false,
-                tag(),
-                Some(&mut details),
-            )
-        };
-        if r.length == 0 || r.location >= len {
-            break;
-        }
-        let first = out.len();
-        for d in details.iter().flat_map(|ds| (0..ds.count()).map(move |i| ds.objectAtIndex(i))) {
-            // The range is from the start of the sentence.
-            let Some(g) = key("NSGrammarRange", &d).and_then(|v| v.downcast::<NSValue>().ok()).and_then(|v| v.get_range()) else {
-                continue;
-            };
-            let (start, glen) = (r.location + g.location, g.length);
-            let whole = s.substringWithRange(r).to_string();
-            let body = whole.trim_end_matches(|c: char| c.is_whitespace() || ".!?".contains(c)).encode_utf16().count();
-            if g.location == 0 && glen >= body {
-                continue;
-            }
-            if glen == 0 || out[first..].iter().any(|o| o.start <= start && start + glen <= o.start + o.len) {
-                continue;
-            }
-            let description =
-                key("NSGrammarUserDescription", &d).and_then(|v| v.downcast::<NSString>().ok()).map(|v| v.to_string()).unwrap_or_default();
-            let corrections = key("NSGrammarCorrections", &d)
-                .and_then(|v| v.downcast::<NSArray>().ok())
-                .map(|a| (0..a.count()).filter_map(|i| a.objectAtIndex(i).downcast::<NSString>().ok().map(|x| x.to_string())).collect())
-                .unwrap_or_default();
-            out.push(GrammarIssue { start, len: glen, description, corrections });
-        }
-        at = r.location + r.length;
-    }
-    out
+/// The language grammar is checked in: the spelling language.
+pub fn grammar_language(lang: Option<&str>) -> String {
+    language(&NSSpellChecker::sharedSpellChecker(), lang).to_string()
 }
 
 pub fn guesses(word: &str, lang: Option<&str>) -> Vec<String> {
@@ -197,15 +146,10 @@ mod tests {
     }
 
     #[test]
-    fn grammar_finds_a_doubled_word_and_skips_fragments() {
+    fn grammar_is_harpers_in_the_spelling_language() {
         let _g = CHECKER.lock().unwrap_or_else(|e| e.into_inner());
-        let text = "This is fine. He went to the the store.";
-        let u: Vec<u16> = text.encode_utf16().collect();
-        let doubled = |g: &super::GrammarIssue| String::from_utf16_lossy(&u[g.start..g.start + g.len]) == "the the";
-        let found = settled(|| super::grammar(text, None), |f| f.iter().any(doubled));
-        let g = found.iter().find(|g| doubled(g)).expect("the doubled word");
-        assert_eq!(g.corrections, vec!["the".to_string()]);
-        assert!(super::grammar("A full week behind me and a fuller one ahead.", None).is_empty());
+        let found = super::grammar("He went to the the store.", Some("en_GB"));
+        assert!(found.iter().any(|g| g.corrections == ["the"]));
         let en = super::english_languages();
         assert!(en.iter().all(|l| l == "en" || l.starts_with("en_")) && !en.is_empty(), "{en:?}");
     }

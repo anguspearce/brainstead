@@ -13,6 +13,8 @@ use std::process::{Child, Command};
 mod about;
 #[cfg(windows)]
 mod accent_win;
+#[cfg(any(target_os = "macos", windows))]
+mod grammar;
 #[cfg(windows)]
 mod image_win;
 #[cfg(target_os = "macos")]
@@ -625,8 +627,8 @@ fn locate(name: &str, extra: &[&str]) -> Option<PathBuf> {
     }
 }
 
-/// Spelling and grammar (the editor's marks): macOS's checker, or on Windows its spell checker
-/// with Harper's grammar (spell_win.rs); nothing elsewhere yet.
+/// Spelling and grammar (the editor's marks): the system's spell checker (spell.rs, spell_win.rs)
+/// with Harper's grammar (grammar.rs) on both; nothing elsewhere yet.
 #[derive(serde::Serialize)]
 pub struct GrammarIssue {
     pub start: usize,
@@ -676,14 +678,22 @@ pub fn spell_guesses(word: &str, lang: Option<&str>) -> Vec<String> {
     }
 }
 
-/// Gets grammar ready off the main thread, where the window asks for it: on Windows, Harper's
-/// checks take a few seconds to make the first time. Nothing elsewhere.
+/// Gets grammar ready off the main thread, where the window asks for it: Harper's checks take a
+/// few seconds to make the first time. Nothing elsewhere.
 pub fn spell_warm(lang: Option<String>) {
     #[cfg(windows)]
     std::thread::spawn(move || {
         let _ = spell::grammar("", lang.as_deref());
     });
-    #[cfg(not(windows))]
+    // macOS's spell checker wants the main thread, so its language is settled here first.
+    #[cfg(target_os = "macos")]
+    {
+        let l = spell::grammar_language(lang.as_deref());
+        std::thread::spawn(move || {
+            let _ = grammar::check("", &l);
+        });
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
     let _ = lang;
 }
 

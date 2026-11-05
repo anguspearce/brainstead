@@ -17,9 +17,11 @@ updates:
     directory: /src-tauri
     schedule:
       interval: monthly
-    # Kept at the versions webview2-com (and so tauri) uses, or the Windows build breaks.
+    # Kept at the versions webview2-com (and so tauri) uses, or the Windows build breaks:
+    # windows-future follows windows-core (0.3 goes with 0.62).
     ignore:
       - dependency-name: windows-core
+      - dependency-name: windows-future
       - dependency-name: webview2-com
     groups:
       cargo:

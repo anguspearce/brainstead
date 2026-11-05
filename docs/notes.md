@@ -31,7 +31,7 @@ Choose **Read aloud** on the top bar's ⋯, or press ⇧⌘P, to hear the note o
 - Paste or drop an image to save it in `images/` and embed it. In Edit, hover it to resize by a corner (written as `![[pic.png|400]]`) or remove it from the note; the file stays. Double-click an image to edit its markdown.
 - Click an image in View, or its expand button in Edit, to see it fitted to the window. Click for actual size; Escape closes it.
 - In a task, `due:`, `defer:`, `start:` and `created:` followed by a word (tomorrow, fri, +3d) become dates. A date picker opens when you type the colon.
-- Spelling and grammar are checked as you type, in the English you choose.
+- Spelling and grammar are checked as you type, in the English you choose: spelling by the system's own spell checker, grammar by Harper, which runs on the computer.
 - ⌘F finds, and in Edit and Source replaces, one match or all.
 
 **New note** (⌘N) names the note from its type, title and date (`Meeting. Orbit App Steerco - 2026-09-30.md`), or makes it from a template.
