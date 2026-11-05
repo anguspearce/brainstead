@@ -147,7 +147,7 @@ describe("the preparation's line", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     });
-    expect(invoke).toHaveBeenCalledWith("weekprep_run", { week: "2026-W40" });
+    expect(invoke).toHaveBeenCalledWith("weekprep_run", { week: "2026-W40", unattended: false });
   });
 
   it("shows a bar while it runs", () => {

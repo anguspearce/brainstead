@@ -374,7 +374,7 @@ pub fn ingest_start(app: AppHandle, paths: Vec<String>, unattended: Option<bool>
 pub fn ingest_start_for(app: &AppHandle, paths: Vec<String>, trigger: Option<&str>, group: Option<&str>) -> Res<Vec<String>> {
     let app = app.clone();
     let root = root(&app)?;
-    let model = crate::ask::job_model(&app, "ingest");
+    let model = crate::ask::job_model(&app, "ingest", trigger == Some("scheduled"));
     let mut runs = Vec::new();
     for p in paths {
         brainstead_core::trash::safe_rel(&p).map_err(EditError::from)?;
@@ -829,7 +829,7 @@ pub async fn meeting_transcripts(app: AppHandle) -> Res<Vec<Transcript>> {
 pub fn meeting_draft(app: AppHandle, items: Vec<(String, NoteSpec)>, unattended: Option<bool>) -> Res<Vec<String>> {
     let trigger = unattended.unwrap_or(false).then(|| "scheduled".to_string());
     let root = root(&app)?;
-    let model = crate::ask::job_model(&app, "meeting");
+    let model = crate::ask::job_model(&app, "meeting", trigger.is_some());
     let mut runs = Vec::new();
     // A note already being drafted from a transcript isn't drafted twice.
     let busy: Vec<String> = all_runs()

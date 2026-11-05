@@ -1,6 +1,7 @@
 {
-  "about": "A job's model and effort from the settings, as brainstead_core::ask (job_model, job_own_effort, job_effort) and src/askState.ts (jobModelOf, jobOwnEffort, resolveEffort) work them out. Both tests read these cases. model: the model the job runs on; own: the job's own effort as Models by job and list_settings show it (null while its model's assistant doesn't offer it); effort: the effort its run on that model goes at.",
+  "about": "A job's model and effort from the settings, as brainstead_core::ask (job_model, job_own_effort, job_effort, scheduled_fallback) and src/askState.ts (jobModelOf, jobOwnEffort, resolveEffort, scheduledFallback) work them out. Both tests read these cases. model: the model the job runs on; own: the job's own effort as Models by job and list_settings show it (null while its model's assistant doesn't offer it); effort: the effort its run on that model goes at. scheduledModel and scheduledEffort, where given, are a scheduled run's instead, for a job whose model is Ollama's; without them a scheduled run is the same as one started by hand. scheduled: the jobs that can run scheduled (brainstead_core::ask::Job::runs_scheduled, MODEL_JOBS' scheduled); the others never take a fallback.",
   "jobs": ["summaries", "weekprep", "find", "ingest", "meeting", "clarify", "contradictions", "skills", "suggest"],
+  "scheduled": ["summaries", "weekprep", "find", "ingest", "meeting", "contradictions"],
   "levels": {
     "claude": ["low", "medium", "high", "xhigh", "max"],
     "codex": ["low", "medium", "high", "xhigh"],
@@ -85,6 +86,110 @@
       "model": "claude:sonnet",
       "own": null,
       "effort": null
+    },
+    {
+      "name": "Find on Ollama: one an unattended assistant starts goes on new chats' model, as a scheduled run does",
+      "settings": {
+        "askModel": "gpt-5",
+        "jobModels": { "find": "ollama:gpt-oss:20b" },
+        "effort": { "codex": "low" }
+      },
+      "job": "find",
+      "model": "ollama:gpt-oss:20b",
+      "own": null,
+      "effort": null,
+      "scheduledModel": "gpt-5",
+      "scheduledEffort": "low"
+    },
+    {
+      "name": "an Ollama model of the job's own: scheduled runs go on new chats' model at the job's level",
+      "settings": {
+        "askModel": "gpt-5",
+        "jobModels": { "ingest": "ollama:gpt-oss:20b" },
+        "jobEffort": { "ingest": "high" },
+        "effort": { "codex": "low", "ollama": "medium" }
+      },
+      "job": "ingest",
+      "model": "ollama:gpt-oss:20b",
+      "own": "high",
+      "effort": "high",
+      "scheduledModel": "gpt-5",
+      "scheduledEffort": "high"
+    },
+    {
+      "name": "new chats on Ollama: scheduled runs go on the default model, where a level Ollama lacks comes back",
+      "settings": {
+        "askModel": "ollama:qwen3:14b",
+        "jobEffort": { "contradictions": "max" },
+        "effort": { "claude": "medium", "ollama": "low" }
+      },
+      "job": "contradictions",
+      "model": "ollama:qwen3:14b",
+      "own": null,
+      "effort": "low",
+      "scheduledModel": "claude:sonnet",
+      "scheduledEffort": "max"
+    },
+    {
+      "name": "weekprep on the summaries' Ollama model: scheduled runs go on new chats' model, never at the summaries' effort",
+      "settings": {
+        "askModel": "claude:opus",
+        "jobModels": { "summaries": "ollama:gpt-oss:20b" },
+        "jobEffort": { "summaries": "high" },
+        "effort": { "claude": "low" }
+      },
+      "job": "weekprep",
+      "model": "ollama:gpt-oss:20b",
+      "own": null,
+      "effort": null,
+      "scheduledModel": "claude:opus",
+      "scheduledEffort": "low"
+    },
+    {
+      "name": "new chats on Ollama leave a job with its own model alone",
+      "settings": { "askModel": "ollama:qwen3:14b", "jobModels": { "summaries": "gpt-5" }, "effort": { "codex": "medium" } },
+      "job": "summaries",
+      "model": "gpt-5",
+      "own": null,
+      "effort": "medium"
+    },
+    {
+      "name": "the job's own Ollama model with new chats on Ollama too: scheduled runs go on the default model at the job's level",
+      "settings": {
+        "askModel": "ollama:qwen3:14b",
+        "jobModels": { "meeting": "ollama:gpt-oss:20b" },
+        "jobEffort": { "meeting": "high" },
+        "effort": { "claude": "low", "ollama": "medium" }
+      },
+      "job": "meeting",
+      "model": "ollama:gpt-oss:20b",
+      "own": "high",
+      "effort": "high",
+      "scheduledModel": "claude:sonnet",
+      "scheduledEffort": "high"
+    },
+    {
+      "name": "a job level the fallback's assistant lacks: scheduled runs go at that assistant's effort",
+      "settings": {
+        "askModel": "gpt-5",
+        "jobModels": { "summaries": "ollama:gpt-oss:20b" },
+        "jobEffort": { "summaries": "max" },
+        "effort": { "codex": "medium", "ollama": "low" }
+      },
+      "job": "summaries",
+      "model": "ollama:gpt-oss:20b",
+      "own": null,
+      "effort": "low",
+      "scheduledModel": "gpt-5",
+      "scheduledEffort": "medium"
+    },
+    {
+      "name": "a job that never runs scheduled keeps its Ollama model, with no fallback",
+      "settings": { "askModel": "ollama:qwen3:14b", "effort": { "claude": "high", "ollama": "low" } },
+      "job": "clarify",
+      "model": "ollama:qwen3:14b",
+      "own": null,
+      "effort": "low"
     }
   ]
 }

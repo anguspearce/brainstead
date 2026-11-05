@@ -158,9 +158,10 @@ fn enabled(app: &AppHandle) -> bool {
 }
 
 /// The job's model: its own in Settings › AI assistants (`jobModels.weekprep`), else the
-/// summaries' (`brainstead_core::ask::job_model`).
-fn model(app: &AppHandle) -> String {
-    ask::job_model(app, Job::Weekprep.key())
+/// summaries' (`brainstead_core::ask::job_model`); for a `scheduled` run, never an Ollama model
+/// (`crate::ask::job_model`).
+fn model(app: &AppHandle, scheduled: bool) -> String {
+    crate::ask::job_model(app, Job::Weekprep.key(), scheduled)
 }
 
 fn read_prep(week: &str) -> Option<Prep> {
@@ -225,25 +226,26 @@ pub fn weekprep_stop(app: AppHandle) {
 /// Prepares `week` now (Run now, Prepare again, Retry); without one, the week a review started
 /// today is for. Returns the run's chat id.
 #[tauri::command]
-pub fn weekprep_run(app: AppHandle, week: Option<String>) -> Result<String, String> {
+pub fn weekprep_run(app: AppHandle, week: Option<String>, unattended: Option<bool>) -> Result<String, String> {
     let week = week.filter(|w| !w.trim().is_empty()).unwrap_or_else(|| prep::review_week(Local::now().date_naive()));
     prep::week_window(&week)?;
-    start(&app, &week, "manual")
+    start(&app, &week, "manual", unattended.unwrap_or(false))
 }
 
 /// The review was started: prepares its week when there's no preparation for it, or the vault has
 /// changed since. Returns whether a run started.
 #[tauri::command]
-pub async fn weekprep_ensure(app: AppHandle, week: String) -> Result<bool, String> {
+pub async fn weekprep_ensure(app: AppHandle, week: String, unattended: Option<bool>) -> Result<bool, String> {
     prep::week_window(&week)?;
     // Screenshot mode runs no assistant.
     if crate::scene().is_some() {
         return Ok(false);
     }
-    tauri::async_runtime::spawn_blocking(move || ensure(&app, &week, "start")).await.map_err(|e| e.to_string())?
+    let unattended = unattended.unwrap_or(false);
+    tauri::async_runtime::spawn_blocking(move || ensure(&app, &week, "start", unattended)).await.map_err(|e| e.to_string())?
 }
 
-fn ensure(app: &AppHandle, week: &str, trigger: &str) -> Result<bool, String> {
+fn ensure(app: &AppHandle, week: &str, trigger: &str, unattended: bool) -> Result<bool, String> {
     if app.state::<WeekPrep>().running() {
         return Ok(false);
     }
@@ -255,7 +257,7 @@ fn ensure(app: &AppHandle, week: &str, trigger: &str) -> Result<bool, String> {
             return Ok(false);
         }
     }
-    start(app, week, trigger).map(|_| true)
+    start(app, week, trigger, unattended).map(|_| true)
 }
 
 /// An accepted link suggestion: the note with the words linked, made as an agent change (in
@@ -284,7 +286,7 @@ pub fn weekprep_link(
         origin,
         brainstead_core::changes::from_texts(Some(&before), &after),
     );
-    s.model = Some(model(&app));
+    s.model = Some(model(&app, false));
     crate::changes::submit(&app, s).map_err(|e| e.message().to_string())
 }
 
@@ -316,7 +318,7 @@ fn tick(app: &AppHandle) {
     wp.stamp_now();
     // The week the review that's due is for, prepared unless it's prepared already as it is.
     let week = prep::review_week(prep::last_due(now(), day, &time).date());
-    if let Err(e) = ensure(app, &week, "schedule") {
+    if let Err(e) = ensure(app, &week, "schedule", false) {
         crate::applog!("weekly review preparation: {e}");
     }
 }
@@ -346,8 +348,10 @@ struct Finished {
     filename: Option<String>,
 }
 
-/// Starts a run on its own thread; returns its chat id.
-fn start(app: &AppHandle, week: &str, trigger: &str) -> Result<String, String> {
+/// Starts a run on its own thread; returns its chat id. `unattended`: an assistant nobody is
+/// watching started it (start_run, weekly_step start), so, as a scheduled run, it never goes on an
+/// Ollama model (`crate::ask::job_model`).
+fn start(app: &AppHandle, week: &str, trigger: &str, unattended: bool) -> Result<String, String> {
     let wp = app.state::<WeekPrep>();
     let t = now();
     let id = format!("weekprep-{}", t.format("%Y%m%d%H%M%S"));
@@ -358,7 +362,7 @@ fn start(app: &AppHandle, week: &str, trigger: &str) -> Result<String, String> {
         }
         *g = Some((id.clone(), week.into()));
     }
-    let model = model(app);
+    let model = model(app, trigger == "schedule" || unattended);
     {
         let mut s = crate::lock(&wp.state);
         s.runs.push(Run {

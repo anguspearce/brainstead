@@ -1287,7 +1287,7 @@ export const api = {
   automatedList: () => invoke<Automation[]>("automated_list"),
   /** Find tasks and projects: the last scan and its suggestions, a new scan, stopping it, and accepting or skipping one. */
   findStatus: () => invoke<FindState>("find_status"),
-  findRun: () => invoke<string>("find_run"),
+  findRun: (unattended = false) => invoke<string>("find_run", { unattended }),
   findStop: () => invoke<void>("find_stop"),
   /** `unattended` (an assistant nobody is watching): an accepted suggestion is held when a check fails. */
   findDecide: (id: string, action: "accept" | "skip", edit: Record<string, unknown> | null, unattended = false) =>
@@ -1465,9 +1465,9 @@ export const api = {
   // The weekly review's preparation (src-tauri/src/weekprep.rs).
   weekprepStatus: (week: string) => invoke<WeekPrepStatus>("weekprep_status", { week }),
   /** Prepares the week now (without one, the week a review started today is for); returns the run's chat id. */
-  weekprepRun: (week?: string) => invoke<string>("weekprep_run", { week: week ?? null }),
+  weekprepRun: (week?: string, unattended = false) => invoke<string>("weekprep_run", { week: week ?? null, unattended }),
   /** Prepares the week if it has no preparation or the vault has changed since; true when a run started. */
-  weekprepEnsure: (week: string) => invoke<boolean>("weekprep_ensure", { week }),
+  weekprepEnsure: (week: string, unattended = false) => invoke<boolean>("weekprep_ensure", { week, unattended }),
   /** An accepted link suggestion, made as an agent change (revertable in Changes), or held there.
    *  `unattended` (an assistant nobody is watching): held when a check fails. */
   weekprepLink: (week: string, path: string, phrase: string, target: string, unattended = false) =>
@@ -1587,7 +1587,7 @@ export type WeekPrepAction =
   | {
       do: "clarify";
       item: WeekPrepInboxItem;
-      becomes: "next" | "project" | "waiting" | "done" | "someday" | "reference" | "delete";
+      becomes: "next" | "project" | "waiting" | "done" | "someday" | "reference" | "delete" | "ingest";
       text: string | null;
       project: string | null;
       context: string | null;
@@ -1691,6 +1691,9 @@ export interface CliInfo {
   /** A line for its row under Found on this computer (Ollama: what it runs through and the models
    *  left out, or why it can't be used). */
   note?: string;
+  /** Ollama: OLLAMA_HOST names a server Brainstead doesn't use, and `note` says so. Neither found
+   *  nor missing, so the row offers no How to install. */
+  refused?: boolean;
 }
 
 export type AskEvent =

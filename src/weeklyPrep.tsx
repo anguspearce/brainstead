@@ -52,6 +52,7 @@ const BECOMES: Record<string, string> = {
   delete: "deleted",
   project: "a project",
   reference: "reference",
+  ingest: "ingested",
 };
 
 /** The task an action is on, as it is now. */
@@ -89,7 +90,8 @@ export function addLine(a: Extract<WeekPrepAction, { do: "add" }>, project: Proj
 }
 
 /** What a suggestion offers; none for a prompt. `unattended`: an assistant nobody is watching
- *  accepts it, so a link (a change in Changes) is held when a check fails. */
+ *  accepts it, so a link (a change in Changes) is held when a check fails, and an ingest a clarify
+ *  starts runs as a scheduled one (never on an Ollama model, brainstead_core::ask::job_run_model). */
 export function choice(s: WeekPrepSuggestion, week: string, projects: ProjectRow[], unattended = false): Choice | null {
   const a = s.action;
   if (!a) return null;
@@ -174,7 +176,7 @@ export function choice(s: WeekPrepSuggestion, week: string, projects: ProjectRow
                     context: a.context ?? undefined,
                     due: a.due ?? undefined,
                   };
-          const as = await clarifyItem(i, args);
+          const as = await clarifyItem(i, args, unattended);
           toast(`Clarified as ${as}`, undoAction, "ok");
           return `Clarified “${i.text.slice(0, 60)}” as ${as}`;
         },

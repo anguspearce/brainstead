@@ -106,12 +106,15 @@ pub fn find_status(app: AppHandle) -> State {
 }
 
 /// Starts a scan; returns its id. Off the main thread: the notes are read once the index is let go.
+/// `unattended`: an assistant nobody is watching started it (start_run), so it never goes on an
+/// Ollama model (`ask::job_model`): the same assistant could accept what it suggests unseen.
 #[tauri::command]
-pub async fn find_run(app: AppHandle) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || start(&app)).await.map_err(|e| e.to_string())?
+pub async fn find_run(app: AppHandle, unattended: Option<bool>) -> Result<String, String> {
+    let unattended = unattended.unwrap_or(false);
+    tauri::async_runtime::spawn_blocking(move || start(&app, unattended)).await.map_err(|e| e.to_string())?
 }
 
-fn start(app: &AppHandle) -> Result<String, String> {
+fn start(app: &AppHandle, unattended: bool) -> Result<String, String> {
     const BUSY: &str = "Brainstead is already looking for tasks and projects.";
     let f = app.state::<Find>();
     if f.running() {
@@ -119,7 +122,9 @@ fn start(app: &AppHandle) -> Result<String, String> {
     }
     let root = app.state::<VaultService>().root().ok_or("No vault is open.")?;
     let id = format!("find-{}", chrono::Local::now().format("%Y%m%d%H%M%S"));
-    let model = ask::job_model(app, "find");
+    // Never scheduled: started by Find tasks and projects' Look again or start_run. One started by
+    // an unattended start_run goes on the fallback for an Ollama model, as a scheduled job does.
+    let model = ask::job_model(app, "find", unattended);
     // The index is held only for the paths and the tasks and projects; the notes are read after.
     let (mut inputs, paths) = app.state::<VaultService>().with_index(|ix, _| find::gather(ix, chrono::Local::now().date_naive()))?;
     inputs.notes = find::read_notes(&root, paths);

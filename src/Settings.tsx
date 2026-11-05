@@ -36,6 +36,7 @@ import {
   jobOwnEffort,
   MODEL_JOBS,
   modelLabel,
+  scheduledFallback,
   setJobModel,
 } from "./askState";
 import { ModelMenu } from "./Ask";
@@ -212,6 +213,7 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
             <Icon name={icon} />
             <div className="t">
               <div className="pt">{label}</div>
+              <ScheduledOn job={job} found={found} />
             </div>
             <button
               type="button"
@@ -264,6 +266,14 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
       )}
     </section>
   );
+}
+
+/** Under a job that can run scheduled, on an Ollama model (its own or one it follows), the model its
+ *  scheduled runs go on instead (`scheduledFallback`): Ollama runs in Ask and runs started by hand only. */
+function ScheduledOn({ job, found }: { job: string; found: CliInfo[] | null }) {
+  const s = useStore(settings);
+  const model = scheduledFallback(job, s);
+  return model ? <div className="faint">Scheduled runs use {modelLabel(model, found)} instead</div> : null;
 }
 
 /** A job's own effort (`jobEffort.<job>`), the same menu as an assistant's under Found on this
@@ -1043,7 +1053,8 @@ export const INSTALL: Record<string, string> = {
 };
 
 /** An assistant's line under Found on this computer: its models and where it is, or what to do.
- *  Ollama's "where" is its server; Rust's note says why it can't be used (not running, Codex missing). */
+ *  Ollama's "where" is its server; Rust's note says why it can't be used (not running, Codex
+ *  missing, or OLLAMA_HOST naming another computer, `refused`). */
 export function foundDetail(c: CliInfo): string {
   if (c.cli === "ollama") {
     if (!c.path) return c.note ?? "Ollama isn't running, or isn't installed.";
@@ -1240,7 +1251,11 @@ function Assistants() {
           {!found && <div className="srow faint">Looking…</div>}
           {found?.map((c) => (
             <div key={c.cli} className="srow">
-              <Icon name={c.path ? "check" : "x"} style={{ color: c.path ? "var(--green)" : "var(--ink3)" }} />
+              {/* A refused OLLAMA_HOST is neither found nor missing: a warning, and no How to install. */}
+              <Icon
+                name={c.path ? "check" : c.refused ? "alert" : "x"}
+                style={{ color: c.path ? "var(--green)" : c.refused ? "var(--amber)" : "var(--ink3)" }}
+              />
               <div className="t">
                 <div className="pt">
                   {CLI_LABEL[c.cli]} {c.version && <span className="faint">· {c.version}</span>}
@@ -1272,7 +1287,7 @@ function Assistants() {
                   </select>
                 </label>
               )}
-              {!c.path && (
+              {!c.path && !c.refused && (
                 <button
                   type="button"
                   className="btn sm"

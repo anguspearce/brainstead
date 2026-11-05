@@ -88,7 +88,8 @@ pub fn parse_suggestions(answer: &str, ids: &[String]) -> Result<Vec<Suggestion>
 }
 
 fn model(app: &AppHandle) -> String {
-    crate::ask::job_model(app, "clarify")
+    // Only ever started by hand, from the Inbox.
+    crate::ask::job_model(app, "clarify", false)
 }
 
 /// What each Inbox item could become, by the default model. Slow; off the main thread.

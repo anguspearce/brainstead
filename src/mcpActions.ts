@@ -115,6 +115,7 @@ import {
   modelLabel,
   pinSaved,
   renameSaved,
+  scheduledFallback,
   setJobModel,
   trashSaved,
 } from "./askState";
@@ -911,8 +912,9 @@ export async function clarifyChanges(
 }
 
 /** Clarifies one Inbox item as `a` says (becomes, text, project…) and returns what it became, for
- *  the caller to say: the MCP server's clarify, and the weekly review's suggestions. */
-export async function clarifyItem(i: InboxItem, a: Args): Promise<string> {
+ *  the caller to say: the MCP server's clarify, and the weekly review's suggestions. `unattended`:
+ *  nobody is watching, so an ingest it starts runs as a scheduled one. */
+export async function clarifyItem(i: InboxItem, a: Args, unattended = false): Promise<string> {
   const becomes = str(a, "becomes");
   const text = str(a, "text") ?? (i.kind === "capture" ? `Follow up on [[${i.text}]]` : i.text.trim());
   const proj = str(a, "project") ? await projectPath(str(a, "project")!) : null;
@@ -961,7 +963,7 @@ export async function clarifyItem(i: InboxItem, a: Args): Promise<string> {
     }
     case "ingest":
       if (i.kind !== "capture") throw new Error("Only a capture (an email or Teams chat in Sources) can be ingested.");
-      await api.ingestStart([i.path]);
+      await api.ingestStart([i.path], unattended);
       await markCaptureDone(i.path);
       said = "ingesting; its changes are listed in Changes";
       break;
@@ -1486,13 +1488,13 @@ async function startRun(a: Args, r: McpRequest): Promise<string> {
       noted("started the daily check");
       return "The daily check has started; run_status shows how it's going.";
     case "find_tasks":
-      await api.findRun();
+      await api.findRun(unattended);
       noted("started looking for tasks and projects in the notes");
       return "Reading the user's notes from the last 90 days for tasks and projects; the suggestions show at the top of Tasks and Projects, and nothing changes until the user accepts one. list_suggestions lists them; run_status shows how it's going.";
     case "weekly_prep": {
       // The review's week, as the screen's Prepare is: a paused review keeps its own.
       const { week, st } = await weeklyNow();
-      await api.weekprepRun(week);
+      await api.weekprepRun(week, unattended);
       noted(`started preparing the weekly review of ${week}`);
       return `Preparing the review of ${week}${st ? " (the paused review's week)" : ""} has started; its suggestions show in the Weekly review when it finishes, and nothing changes until the user accepts one. run_status shows how it's going.`;
     }
@@ -2424,7 +2426,7 @@ async function assistantsFound(a: Args): Promise<string> {
     `Found on this computer (Settings › AI assistants)${a.look_again === true ? ", looked for again just now" : ""}: ${n ? `${n} assistant${n === 1 ? "" : "s"}` : "no assistants"}.`,
     ...found.map(
       (c) =>
-        `- ${CLI_LABEL[c.cli]}${c.version ? ` · ${c.version}` : ""}: ${c.path ? `${foundDetail(c).replace(/\.$/, "")}. ${effortSaid(c.cli)}.` : `${foundDetail(c)} How to install: ${INSTALL[c.cli]}`}${c.path && c.note ? ` ${c.note.replace(/\.?$/, ".")}` : ""}`,
+        `- ${CLI_LABEL[c.cli]}${c.version ? ` · ${c.version}` : ""}: ${c.path ? `${foundDetail(c).replace(/\.$/, "")}. ${effortSaid(c.cli)}.` : c.refused ? foundDetail(c) : `${foundDetail(c)} How to install: ${INSTALL[c.cli]}`}${c.path && c.note ? ` ${c.note.replace(/\.?$/, ".")}` : ""}`,
     ),
     "",
     cmds.length
@@ -3118,7 +3120,7 @@ async function weeklyStep(a: Args): Promise<string> {
   if (action === "start") {
     if (st) return `The review of ${week} carries on at step ${st.step + 1} of ${STEPS.length}, ${STEPS[st.step].title}.`;
     await save(fresh(week));
-    void api.weekprepEnsure(week).catch(() => false);
+    void api.weekprepEnsure(week, a.unattended === true).catch(() => false);
     noted(`started the weekly review for ${week}`);
     return `Started the weekly review for ${week}: step 1 of ${STEPS.length}, ${STEPS[0].title}. ${STEPS[0].ask}`;
   }
@@ -3471,8 +3473,12 @@ async function settingsTool(a: Args): Promise<string> {
     const lines = await Promise.all(
       offered.map(async ([k, pane, label, kind, def, choices, none]) => {
         let extra = "";
-        if (kind === "model" && k !== "askModel") extra = ` (a model, as askModel's; null for ${none})`;
-        else if (choices) {
+        if (kind === "model" && k !== "askModel") {
+          // As Models by job shows under the job: where its scheduled runs go instead of an Ollama model.
+          const instead = k.startsWith("jobModels.") ? scheduledFallback(k.slice("jobModels.".length), s) : null;
+          const scheduled = instead ? `; scheduled runs use ${instead} (${modelLabel(instead, clis.get())}) instead` : "";
+          extra = ` (a model, as askModel's; null for ${none}${scheduled})`;
+        } else if (choices) {
           const cs = await Promise.resolve(choices()).catch(() => [] as [string, string][]);
           const list = cs.map(([v, l]) => (v === l ? v : `${v} (${l})`)).join(", ");
           extra = ` (one of: ${list || "none here"}${none ? `; null for ${none}` : ""})`;

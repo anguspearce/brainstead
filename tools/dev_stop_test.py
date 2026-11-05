@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import contextlib
 import io
-import json
 import os
 import pathlib
 import subprocess
@@ -19,7 +18,6 @@ import unittest.mock
 
 import dev_stop
 from dev_stop import (
-    HOOK_CIM_TIMEOUT,
     Proc,
     Scope,
     find,
@@ -361,7 +359,7 @@ class Session(unittest.TestCase):
         self.assertEqual(pids(find(procs, session(sweep=True))[0]), set(range(10, 20)))
 
 
-class Hooks(unittest.TestCase):
+class Owners(unittest.TestCase):
     SHELL = Proc(8, 2, r"C:\Program Files\Git\usr\bin\bash.exe", "bash", name="bash.exe", started=NOW - 100)
     ME = Proc(9, 8, r"C:\Python\python.exe", "python tools/dev_stop.py", name="python.exe", started=NOW - 99)
 
@@ -388,18 +386,6 @@ class Hooks(unittest.TestCase):
         self.assertIsNone(owners_of(SESSION[1], True))
         self.assertIsNone(owners_of(None, True))
 
-    def test_only_the_session_end_hook_and_its_cim_fallback_finishes_inside_it(self):
-        settings = json.loads((pathlib.Path(__file__).parent.parent / ".claude" / "settings.json").read_text(encoding="utf-8"))
-        hooks = {
-            (event, h["command"].split("dev_stop.sh", 1)[1].strip(' "')): h.get("timeout", 60)
-            for event, groups in settings["hooks"].items()
-            for g in groups
-            for h in g["hooks"]
-            if "dev_stop.sh" in h["command"]
-        }
-        self.assertEqual(list(hooks), [("SessionEnd", "--session-end")])
-        self.assertGreaterEqual(hooks[("SessionEnd", "--session-end")], HOOK_CIM_TIMEOUT + 5)
-
 
 class Main(unittest.TestCase):
     """main() over a fake process table for a checkout in a temp folder: the session's run, a developer's own
@@ -419,54 +405,62 @@ class Main(unittest.TestCase):
         self.foreign = tauri_dev + dev_tree(root, 30, 61) + make_check(root, 40, 301)
         self.mine = dev_tree(root, 10, 3)
 
-    def run_main(self, procs, *argv, stdin="", fail=""):
-        """main() with `argv`; `fail` names a function of dev_stop's that raises instead."""
+    def run_main(self, procs, *argv, read_error=None, stop_fails=False):
+        """main() with `argv`: the process table is `procs`, or reading it raises `read_error`; `stop_fails` makes
+        stopping each process fail. Returns the exit code, what was stopped, stdout and stderr."""
         stopped = []
+
+        def read_procs(timeout):
+            if read_error:
+                raise read_error
+            return procs
 
         def stop(matches):
             stopped.extend(m.pid for m in matches)
-            return []
+            return [(m, "Access is denied.") for m in matches] if stop_fails else []
 
-        out = io.StringIO()
+        out, err = io.StringIO(), io.StringIO()
         with contextlib.ExitStack() as stack:
-            stack.enter_context(unittest.mock.patch.object(dev_stop, "read_procs", lambda timeout: procs))
+            stack.enter_context(unittest.mock.patch.object(dev_stop, "read_procs", read_procs))
             stack.enter_context(unittest.mock.patch.object(dev_stop, "stop", stop))
-            if fail:
-                stack.enter_context(unittest.mock.patch.object(dev_stop, fail, side_effect=KeyError("pid")))
-                stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
             stack.enter_context(unittest.mock.patch("os.getpid", return_value=9))
             stack.enter_context(unittest.mock.patch.dict(os.environ, {"CLAUDE_PID": ""}))
-            stack.enter_context(unittest.mock.patch("sys.stdin", io.StringIO(stdin)))
             stack.enter_context(contextlib.redirect_stdout(out))
+            stack.enter_context(contextlib.redirect_stderr(err))
             code = dev_stop.main(["--worktree", self.repo, *argv])
-        return code, set(stopped), out.getvalue()
+        return code, set(stopped), out.getvalue(), err.getvalue()
 
     def test_a_session_stops_only_its_own_never_a_developers_tauri_dev(self):
         me = [Proc(8, 2, "bash.exe", "bash", name="bash.exe"), Proc(9, 8, "python.exe", "python tools/dev_stop.py", name="python.exe")]
         procs = SESSION + me + TERMINAL + self.mine + self.foreign
-        code, stopped, _ = self.run_main(procs, "--kill")
-        self.assertEqual((code, stopped), (0, set(range(10, 20))))
-        code, stopped, _ = self.run_main(procs, "--session-end", stdin='{"reason": "logout"}')
+        code, stopped, _, _ = self.run_main(procs, "--kill")
         self.assertEqual((code, stopped), (0, set(range(10, 20))))
 
     def test_no_session_stops_nothing_and_says_why(self):
         me = [Proc(9, 301, "python.exe", "python tools/dev_stop.py", name="python.exe")]
         procs = TERMINAL + me + self.foreign
-        for argv in (["--kill"], ["--session-end"]):
-            code, stopped, out = self.run_main(procs, *argv)
-            self.assertEqual((code, stopped), (0, set()), argv)
-            self.assertIn("No Claude Code process is above this script", out)
+        code, stopped, out, _ = self.run_main(procs, "--kill")
+        self.assertEqual((code, stopped), (0, set()))
+        self.assertIn("No Claude Code process is above this script", out)
         # --anyone is the explicit way to stop every dev process of the checkout.
-        code, stopped, _ = self.run_main(procs, "--anyone", "--kill")
+        code, stopped, _, _ = self.run_main(procs, "--anyone", "--kill")
         self.assertLessEqual(set(range(30, 40)) | {42, 43, 60, 61}, stopped)
 
-    def test_the_session_end_hook_never_fails(self):
-        procs = SESSION + [Proc(9, 2, "python.exe", "python tools/dev_stop.py", name="python.exe")] + self.mine
-        for where in ("read_procs", "find", "stop"):
-            self.assertEqual(self.run_main(procs, "--session-end", fail=where)[0], 0, where)
-            # Run by hand, the same error is not hidden.
-            with self.assertRaises(KeyError):
-                self.run_main(procs, "--kill", fail=where)
+    def test_a_process_table_that_cant_be_read_fails_the_run(self):
+        for error in (OSError("CreateToolhelp32Snapshot failed"), subprocess.TimeoutExpired("powershell", 60)):
+            code, stopped, _, err = self.run_main([], "--kill", read_error=error)
+            self.assertEqual((code, stopped), (1, set()), error)
+            self.assertIn("dev_stop: couldn't read the processes", err)
+
+    def test_a_process_that_wont_stop_fails_the_run_and_is_named(self):
+        me = [Proc(8, 2, "bash.exe", "bash", name="bash.exe"), Proc(9, 8, "python.exe", "python tools/dev_stop.py", name="python.exe")]
+        procs = SESSION + me + self.mine
+        code, stopped, out, _ = self.run_main(procs, "--kill", stop_fails=True)
+        self.assertEqual((code, stopped), (1, set(range(10, 20))))
+        self.assertIn("Stopped 0 of 10.", out)
+        self.assertIn("Access is denied.", out)
+        # Listing alone stops nothing, so nothing can fail.
+        self.assertEqual(self.run_main(procs, stop_fails=True)[:2], (0, set()))
 
 
 class Folders(unittest.TestCase):

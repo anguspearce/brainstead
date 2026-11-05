@@ -21,7 +21,8 @@ use crate::ask;
 use crate::vault::VaultService;
 
 fn model(app: &AppHandle) -> String {
-    crate::ask::job_model(app, "skills")
+    // Only ever started by hand.
+    crate::ask::job_model(app, "skills", false)
 }
 
 fn root(app: &AppHandle) -> Result<PathBuf, String> {

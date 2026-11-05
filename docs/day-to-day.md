@@ -36,6 +36,8 @@ The summaries split what you did into **Work done** and **Personal** by your pro
 
 A run missed while the computer slept catches up when Brainstead next runs.
 
+A scheduled run, or one an assistant starts with nobody watching (Find tasks and projects and the weekly review's preparation included), never goes on one of Ollama's models, which run only in Ask and in runs you start by hand: a job set to one runs on the model new chats use instead (Claude Code's Sonnet when that is Ollama's too), and Settings › AI assistants › Models by job says so under the job.
+
 To keep sessions started by your own tools (a script, another app) out of the daily summary, list them under **Your tools that start Claude Code sessions** in Settings › Jobs & schedule. Each has a name, and the folder its sessions run in, the words their first message starts with, or both. Their sessions then count as automated, not as your work. **Add a tool** adds one by hand; folders whose sessions look like a tool's are offered in one click. Assistants can list, add and remove them too.
 
 The ingest switches (ingest new sources as they arrive, refresh pages whose sources changed) are under **Ingest** in Settings › AI assistants.

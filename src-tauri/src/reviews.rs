@@ -369,7 +369,7 @@ fn start_for(app: &AppHandle, kind: ReviewKind, target: Target, trigger: &str) -
     let t = now();
     let id = format!("summary-{}-{}", t.format("%Y%m%d%H%M%S"), kind_name(kind).to_lowercase());
     let window = reviews::target::window(target);
-    let model = crate::ask::job_model(app, "summaries");
+    let model = crate::ask::job_model(app, "summaries", trigger != "manual");
     rv.running.lock().unwrap().push(kind);
     {
         let mut s = rv.state.lock().unwrap();

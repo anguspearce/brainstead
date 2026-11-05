@@ -32,6 +32,8 @@ pub enum Cli {
 pub const CLAUDE_PREFIX: &str = "claude:";
 pub const AGY_PREFIX: &str = "agy:";
 pub const COPILOT_PREFIX: &str = "copilot:";
+/// Copilot's Auto, which picks a model per request and fails any run given a reasoning effort.
+pub const COPILOT_AUTO: &str = "copilot:auto";
 pub const OLLAMA_PREFIX: &str = "ollama:";
 /// Antigravity's agent, written into its working folder for each run.
 pub const AGY_AGENT: &str = "brainstead-ask";
@@ -238,37 +240,119 @@ pub mod ollama {
     pub const INSTALL_URL: &str = "https://ollama.com/download";
     /// The host Ollama's own tools use when `OLLAMA_HOST` is unset.
     pub const DEFAULT_HOST: &str = "http://localhost:11434";
+    /// The folder in the app's data folder that Codex uses as its home (`CODEX_HOME`) for an
+    /// Ollama run. Signed in to ChatGPT, Codex 0.166 calls chatgpt.com on every turn (its world
+    /// state, the plugin catalog) even with Ollama as the provider; a home without that sign-in,
+    /// with `CODEX_LOCAL_ONLY`, leaves it only the Ollama server. Its sessions live here too, so
+    /// an Ollama chat resumes from it.
+    pub const CODEX_HOME_DIR: &str = "codex-ollama";
+    /// Codex settings (`-c`) for an Ollama run that turn off what calls OpenAI without a sign-in:
+    /// remote plugins and apps, analytics, and the metrics it sends to ab.chatgpt.com. Brainstead's
+    /// own tools are an MCP server and stay on.
+    pub const CODEX_LOCAL_ONLY: [&str; 6] = [
+        "features.plugins=false",
+        "features.remote_plugin=false",
+        "features.plugin_discovery_prefetch=false",
+        "features.apps=false",
+        "analytics.enabled=false",
+        "otel.metrics_exporter=\"none\"",
+    ];
 
-    /// The server's base URL from `OLLAMA_HOST` (the variable Ollama's own tools read), as Ollama
-    /// reads it: the scheme is optional (http), so is the port (11434), and a bare port or
-    /// `0.0.0.0` (the server listening on every interface) means this computer. None or an empty
-    /// value is the default host. Never ends in a slash.
-    pub fn host(var: Option<&str>) -> String {
+    /// An Ollama server on this computer, as `host` accepted it: its base URL, never ending in a
+    /// slash. Only `host` makes one, so a run on Ollama can't be pointed anywhere else.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct Host(String);
+
+    impl Host {
+        pub fn as_str(&self) -> &str {
+            &self.0
+        }
+    }
+
+    impl std::fmt::Display for Host {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(&self.0)
+        }
+    }
+
+    /// Where Brainstead reaches Ollama, the end of both of `host`'s refusals.
+    const ONLY_HERE: &str = "Brainstead reaches Ollama only at localhost, 127.0.0.1 or ::1, any port; set it to one of those";
+
+    /// The server from `OLLAMA_HOST` (the variable Ollama's own tools read), or the message the
+    /// screens show for one Brainstead doesn't use. The whole value must read
+    /// `[scheme://][userinfo@]host[:port][/]`: the scheme http or https (any case; http when none is
+    /// given), a user name and password before the last `@` dropped, a port from 1 to 65535 (11434
+    /// when none is given) and one trailing slash ignored. Only a server on this computer is used:
+    /// `localhost`, `127.0.0.1` or `::1` (any case; `[::1]` with a port). None or an empty value is
+    /// the default host.
+    ///
+    /// The message reaches the log, a run's error and a model reading the assistants, so the value
+    /// is quoted only when all of it parsed, and then only its host and port: another host name or
+    /// address (`0.0.0.0` too) is named. A value of any other shape (a path, a query, a fragment, an
+    /// empty host, a bad or empty port, another scheme, stray characters) gets a message that quotes
+    /// nothing from it, since a password holding `/`, `?` or `#` can't be told from a path.
+    pub fn host(var: Option<&str>) -> Result<Host, String> {
         let v = var.map(str::trim).unwrap_or_default();
         if v.is_empty() {
-            return DEFAULT_HOST.to_string();
+            return Ok(Host(DEFAULT_HOST.to_string()));
         }
+        let not_plain = || format!("OLLAMA_HOST is not a plain host and port. {ONLY_HERE}, as host:port.");
         let (scheme, rest) = match v.split_once("://") {
-            Some((s, r)) => (s.to_string(), r),
+            Some((s, r)) if s.eq_ignore_ascii_case("http") || s.eq_ignore_ascii_case("https") => (s.to_ascii_lowercase(), r),
+            Some(_) => return Err(not_plain()),
             None => ("http".to_string(), v),
         };
-        let rest = rest.trim_end_matches('/');
-        // `host:port`, `:port`, `host`, `[::1]:port`.
-        let (mut h, p) = match rest.rsplit_once(':') {
-            Some((h, p)) if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => (h, Some(p)),
-            _ => (rest, None),
-        };
-        if h.is_empty() || h == "0.0.0.0" {
-            h = "localhost";
+        let rest = rest.strip_suffix('/').unwrap_or(rest);
+        if rest.contains(['/', '?', '#']) {
+            return Err(not_plain());
         }
-        let port = p.unwrap_or("11434");
-        format!("{scheme}://{h}:{port}")
+        let authority = rest.rsplit_once('@').map_or(rest, |(_, a)| a);
+        // `host:port`, `host`, `[v6]:port`, `[v6]`, and a bare `v6` (its colons aren't a port).
+        let (h, port, bracketed) = if let Some(r) = authority.strip_prefix('[') {
+            match r.split_once(']') {
+                Some((h, "")) => (h, None, true),
+                Some((h, p)) => (h, Some(p.strip_prefix(':').ok_or_else(not_plain)?), true),
+                None => return Err(not_plain()),
+            }
+        } else if authority.matches(':').count() > 1 {
+            (authority, None, false)
+        } else {
+            match authority.split_once(':') {
+                Some((h, p)) => (h, Some(p), false),
+                None => (authority, None, false),
+            }
+        };
+        let v6 = bracketed || h.contains(':');
+        let host_chars =
+            |c: char| if v6 { c.is_ascii_hexdigit() || c == ':' || c == '.' } else { c.is_ascii_alphanumeric() || ".-_".contains(c) };
+        if h.is_empty() || (bracketed && !h.contains(':')) || !h.chars().all(host_chars) {
+            return Err(not_plain());
+        }
+        let number = match port {
+            None => 11434,
+            Some(p) if p.bytes().all(|b| b.is_ascii_digit()) => p.parse::<u16>().ok().filter(|n| *n > 0).ok_or_else(not_plain)?,
+            Some(_) => return Err(not_plain()),
+        };
+        let here = match h.to_ascii_lowercase().as_str() {
+            "localhost" => "localhost",
+            "127.0.0.1" => "127.0.0.1",
+            "::1" => "[::1]",
+            _ => {
+                let h = if bracketed { format!("[{h}]") } else { h.to_string() };
+                let shown = match port {
+                    Some(p) => format!("{h}:{p}"),
+                    None => h,
+                };
+                return Err(format!("OLLAMA_HOST is {shown}. {ONLY_HERE}."));
+            }
+        };
+        Ok(Host(format!("{scheme}://{here}:{number}")))
     }
 
     /// Codex's base URL for the Ollama provider at `host` (`CODEX_OSS_BASE_URL`): its
     /// OpenAI-compatible endpoint.
-    pub fn codex_base_url(host: &str) -> String {
-        format!("{}/v1", host.trim_end_matches('/'))
+    pub fn codex_base_url(host: &Host) -> String {
+        format!("{}/v1", host.0)
     }
 
     /// A model Ollama has pulled, from `GET /api/tags`.
@@ -372,6 +456,20 @@ impl Job {
             Job::Suggest => "suggest",
         }
     }
+
+    pub fn from_key(key: &str) -> Option<Job> {
+        Job::ALL.into_iter().find(|j| j.key() == key)
+    }
+
+    /// Whether a run of it can start with nobody watching: the scheduler's (the summaries, the
+    /// weekly review's preparation, the daily check's ingests and contradiction check, meeting notes
+    /// from synced transcripts) or an assistant's call marked `unattended` (those, and Find tasks
+    /// and projects from start_run, whose suggestions the same assistant can then accept). The rest
+    /// (Clarify, Triage, Draft reply and Doc check, next-message suggestions) only ever start by hand.
+    /// src/askState.ts `MODEL_JOBS` marks the same jobs; tests/fixtures/job-settings.json holds both.
+    pub fn runs_scheduled(self) -> bool {
+        matches!(self, Job::Summaries | Job::Weekprep | Job::Find | Job::Ingest | Job::Meeting | Job::Contradictions)
+    }
 }
 
 type Ui = serde_json::Map<String, serde_json::Value>;
@@ -381,17 +479,41 @@ fn text(v: Option<&serde_json::Value>) -> Option<&str> {
     v.and_then(serde_json::Value::as_str).filter(|v| !v.is_empty())
 }
 
+/// The model new chats start on while Settings › AI assistants has none (src/askState.ts
+/// `DEFAULT_MODEL`).
+pub const DEFAULT_MODEL: &str = "claude:sonnet";
+
 /// The model `job` (a `Job` key) runs on, from the window's settings: its own (`jobModels.<job>`),
 /// else, for the weekly review's preparation, the summaries', else new chats' (`askModel`), else
-/// Claude's Sonnet. src/askState.ts `jobModelOf` is the same rule; both tests read
+/// `DEFAULT_MODEL`. src/askState.ts `jobModelOf` is the same rule; both tests read
 /// tests/fixtures/job-settings.json.
 pub fn job_model(ui: &Ui, job: &str) -> String {
     let own = |j: &str| text(ui.get("jobModels").and_then(|m| m.get(j)));
     own(job)
         .or_else(|| if job == "weekprep" { own("summaries") } else { None })
         .or_else(|| text(ui.get("askModel")))
-        .unwrap_or("claude:sonnet")
+        .unwrap_or(DEFAULT_MODEL)
         .to_string()
+}
+
+/// The model a scheduled run of `job` goes on instead of its own, when that is an Ollama model:
+/// new chats' (`askModel`) when that isn't one too, else `DEFAULT_MODEL`. None when `job` runs on
+/// another assistant, or never runs scheduled (`Job::runs_scheduled`). Ollama runs in Ask and in
+/// runs started by hand, never in a run the scheduler started (or an assistant nobody is watching,
+/// `unattended`), which writes to the vault unseen. src/askState.ts `scheduledFallback` is the same
+/// rule; both tests read tests/fixtures/job-settings.json.
+pub fn scheduled_fallback(ui: &Ui, job: &str) -> Option<String> {
+    if !Job::from_key(job).is_some_and(Job::runs_scheduled) || Cli::route(&job_model(ui, job)) != Cli::Ollama {
+        return None;
+    }
+    let chats = text(ui.get("askModel")).filter(|m| Cli::route(m) != Cli::Ollama);
+    Some(chats.unwrap_or(DEFAULT_MODEL).to_string())
+}
+
+/// The model a run of `job` goes on: `job_model`, or for a `scheduled` run on an Ollama model,
+/// `scheduled_fallback`.
+pub fn job_run_model(ui: &Ui, job: &str, scheduled: bool) -> String {
+    scheduled.then(|| scheduled_fallback(ui, job)).flatten().unwrap_or_else(|| job_model(ui, job))
 }
 
 /// The job's own effort (`jobEffort.<job>`) while its model's assistant offers it, else None, as
@@ -402,13 +524,15 @@ pub fn job_own_effort<'a>(ui: &'a Ui, job: &str) -> Option<&'a str> {
 }
 
 /// The effort `job` runs at on `model` (`resolve_effort`): its own while `model` is the job's
-/// (`job_model`), else its assistant's (`effort.<cli>`), each only when the assistant offers it. A
-/// job's level goes with the model it was picked beside: a quick pass on another model (the
-/// contradiction check's extract and Write Current state, on Claude's Haiku) runs at the
-/// assistant's. The weekly review's preparation never takes the summaries' effort, even on their model.
+/// (`job_model`) or the one its scheduled runs go on instead (`scheduled_fallback`), else its
+/// assistant's (`effort.<cli>`), each only when the assistant offers it. A job's level goes with
+/// the model it was picked beside: a quick pass on another model (the contradiction check's
+/// extract and Write Current state, on Claude's Haiku) runs at the assistant's. The weekly
+/// review's preparation never takes the summaries' effort, even on their model.
 pub fn job_effort<'a>(ui: &'a Ui, job: &str, model: &str) -> Option<&'a str> {
     let cli = Cli::route(model);
-    let own = text(ui.get("jobEffort").and_then(|m| m.get(job))).filter(|_| job_model(ui, job) == model);
+    let its_model = job_model(ui, job) == model || scheduled_fallback(ui, job).is_some_and(|m| m == model);
+    let own = text(ui.get("jobEffort").and_then(|m| m.get(job))).filter(|_| its_model);
     resolve_effort(cli, own, text(ui.get("effort").and_then(|m| m.get(cli.key()))))
 }
 
@@ -521,8 +645,13 @@ pub struct Request<'a> {
     /// The effort level set for this CLI in Settings › AI assistants. None, or a level not in
     /// `Cli::efforts`, passes none, so the CLI uses its own default for the model.
     pub effort: Option<&'a str>,
-    /// Ollama's server, for `Cli::Ollama` (`ollama::host`); the others ignore it.
-    pub ollama_host: &'a str,
+    /// Ollama's server, for `Cli::Ollama` (`ollama::host`, so only one on this computer); the
+    /// others ignore it. A run on Ollama without one fails.
+    pub ollama_host: Option<&'a ollama::Host>,
+    /// Codex's home for `Cli::Ollama` (`CODEX_HOME`, an existing folder of Brainstead's,
+    /// `ollama::CODEX_HOME_DIR` in its data folder), holding no ChatGPT sign-in; the others ignore
+    /// it. A run on Ollama without one fails.
+    pub codex_home: Option<&'a str>,
 }
 
 fn strip<'a>(model: &'a str, prefix: &str) -> &'a str {
@@ -581,8 +710,9 @@ pub fn claude_edit_rule(dir: &str) -> String {
 /// `exec` with no prompt argument, or `-`), so its length is never limited by the command line;
 /// Antigravity and Copilot take it as an argument. An Ollama model is Codex's launch with its
 /// Ollama provider picked (`--oss --local-provider ollama`, and `model_provider`, without which
-/// Codex 0.166 starts the thread on Ollama but runs the turn on OpenAI) and the server's address in
-/// `CODEX_OSS_BASE_URL`, the one variable its provider reads.
+/// Codex 0.166 starts the thread on Ollama but runs the turn on OpenAI), the server's address in
+/// `CODEX_OSS_BASE_URL`, the one variable its provider reads, and Codex's home set to one without
+/// a ChatGPT sign-in, with `ollama::CODEX_LOCAL_ONLY`, so it reaches nothing but that server.
 pub fn args(cli: Cli, r: &Request) -> Result<Launch, String> {
     let instructions = format!("{}\n\n{}", r.system, cli.tools_hint());
     let s = |x: &str| x.to_string();
@@ -642,10 +772,16 @@ pub fn args(cli: Cli, r: &Request) -> Result<Launch, String> {
             }
             a.extend(["--json", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules"].map(s));
             if cli == Cli::Ollama {
+                let host = r.ollama_host.ok_or("Ollama isn't available on this computer.")?;
+                let home = r.codex_home.ok_or("Brainstead couldn't make Codex's folder for Ollama.")?;
                 a.extend(
                     ["--oss", "--local-provider", "ollama", "-c", "model_provider=\"ollama\"", "-m", strip(r.model, OLLAMA_PREFIX)].map(s),
                 );
-                env.push(("CODEX_OSS_BASE_URL".to_string(), ollama::codex_base_url(r.ollama_host)));
+                for c in ollama::CODEX_LOCAL_ONLY {
+                    a.extend([s("-c"), s(c)]);
+                }
+                env.push(("CODEX_OSS_BASE_URL".to_string(), ollama::codex_base_url(host)));
+                env.push(("CODEX_HOME".to_string(), s(home)));
             } else {
                 a.extend(["-m", r.model].map(s));
             }
@@ -1082,7 +1218,8 @@ mod tests {
             mcp: None,
             images: &[],
             effort: None,
-            ollama_host: ollama::DEFAULT_HOST,
+            ollama_host: None,
+            codex_home: None,
         }
     }
 
@@ -1110,8 +1247,9 @@ mod tests {
 
     #[test]
     fn ollama_args() {
-        let host = "http://localhost:11434";
-        let l = args(Cli::Ollama, &Request { ollama_host: host, ..req("ollama:gpt-oss:20b", None) }).unwrap();
+        let host = ollama::host(None).unwrap();
+        let on = |model: &'static str| Request { ollama_host: Some(&host), codex_home: Some("/data/codex-ollama"), ..req(model, None) };
+        let l = args(Cli::Ollama, &on("ollama:gpt-oss:20b")).unwrap();
         let a = &l.args;
         assert_eq!(a[0], "exec");
         // Codex's own Ollama provider, told to use it for the turn too, with the model as Ollama names it.
@@ -1124,41 +1262,112 @@ mod tests {
         assert!(a.iter().any(|x| x.starts_with("developer_instructions=\"SYS\\n\\n")));
         assert_eq!(a[a.len() - 2..], ["--", "-"]);
         assert_eq!(l.stdin.as_deref(), Some("What's due?"));
-        // The server's address reaches Codex in the one variable its provider reads.
-        assert_eq!(l.env, vec![("CODEX_OSS_BASE_URL".to_string(), "http://localhost:11434/v1".to_string())]);
-        let far = args(Cli::Ollama, &Request { ollama_host: "http://gpu-box:11434", ..req("ollama:qwen3:4b", Some("t1")) }).unwrap();
-        assert_eq!(far.env[0].1, "http://gpu-box:11434/v1");
-        assert_eq!(far.args[..2], ["exec", "resume"]);
-        assert_eq!(far.args[far.args.len() - 3..], ["--", "t1", "-"]);
+        // The server's address reaches Codex in the one variable its provider reads, and Codex runs
+        // from a home of Brainstead's, without the ChatGPT sign-in.
+        let env = |k: &str, v: &str| (k.to_string(), v.to_string());
+        assert_eq!(l.env, vec![env("CODEX_OSS_BASE_URL", "http://localhost:11434/v1"), env("CODEX_HOME", "/data/codex-ollama")]);
+        // Nothing that calls OpenAI: no remote plugins or apps, no analytics, no metrics.
+        for c in ollama::CODEX_LOCAL_ONLY {
+            assert!(a.windows(2).any(|w| w == ["-c", c]), "{c} in {a:?}");
+        }
+        let v6 = ollama::host(Some("[::1]:11435")).unwrap();
+        let resumed = args(Cli::Ollama, &Request { ollama_host: Some(&v6), session: Some("t1"), ..on("ollama:qwen3:4b") }).unwrap();
+        assert_eq!(resumed.env[0].1, "http://[::1]:11435/v1");
+        assert_eq!(resumed.args[..2], ["exec", "resume"]);
+        assert_eq!(resumed.args[resumed.args.len() - 3..], ["--", "t1", "-"]);
+        // Without a server on this computer, or Codex's folder for it, there's nothing to run on.
+        assert!(args(Cli::Ollama, &req("ollama:gpt-oss:20b", None)).is_err());
+        assert!(args(Cli::Ollama, &Request { codex_home: None, ..on("ollama:gpt-oss:20b") }).is_err());
         // Codex's own launch has none of it.
         let c = args(Cli::Codex, &req("gpt-5", None)).unwrap();
         assert!(c.env.is_empty() && !c.args.iter().any(|x| x == "--oss"));
         // An Ollama model gets its level as Codex's model_reasoning_effort, from Ollama's names only.
-        let e = args(Cli::Ollama, &Request { effort: Some("high"), ..req("ollama:gpt-oss:20b", None) }).unwrap().args;
+        let e = args(Cli::Ollama, &Request { effort: Some("high"), ..on("ollama:gpt-oss:20b") }).unwrap().args;
         assert!(e.windows(2).any(|w| w == ["-c", "model_reasoning_effort=\"high\""]), "{e:?}");
-        let x = args(Cli::Ollama, &Request { effort: Some("xhigh"), ..req("ollama:gpt-oss:20b", None) }).unwrap().args.join(" ");
+        let x = args(Cli::Ollama, &Request { effort: Some("xhigh"), ..on("ollama:gpt-oss:20b") }).unwrap().args.join(" ");
         assert!(!x.contains("effort"), "{x}");
         // Images aren't attached: the model may not see them, and Codex fails the turn if it doesn't.
         assert!(!Cli::Ollama.sees_images());
     }
 
     #[test]
-    fn ollama_host_as_ollama_reads_it() {
+    fn ollama_host_is_this_computer_only() {
         for (var, host) in [
             (None, "http://localhost:11434"),
             (Some(""), "http://localhost:11434"),
-            (Some("0.0.0.0"), "http://localhost:11434"),
-            (Some("0.0.0.0:11435"), "http://localhost:11435"),
-            (Some(":11435"), "http://localhost:11435"),
-            (Some("gpu-box"), "http://gpu-box:11434"),
-            (Some("gpu-box:8080"), "http://gpu-box:8080"),
-            (Some("https://ollama.example.com"), "https://ollama.example.com:11434"),
+            (Some("  "), "http://localhost:11434"),
+            (Some("localhost"), "http://localhost:11434"),
+            (Some("LOCALHOST"), "http://localhost:11434"),
+            (Some("HTTP://LocalHost"), "http://localhost:11434"),
+            (Some("localhost:8080"), "http://localhost:8080"),
             (Some("http://127.0.0.1:11434/"), "http://127.0.0.1:11434"),
+            (Some("https://127.0.0.1:11435/"), "https://127.0.0.1:11435"),
             (Some("[::1]:11434"), "http://[::1]:11434"),
+            (Some("[::1]:11434/"), "http://[::1]:11434"),
+            (Some("[::1]"), "http://[::1]:11434"),
+            (Some("::1"), "http://[::1]:11434"),
+            // A user name and password are dropped; Brainstead's own requests never carry them.
+            (Some("http://maya:s3cret@localhost:11434"), "http://localhost:11434"),
         ] {
-            assert_eq!(ollama::host(var), host, "{var:?}");
+            assert_eq!(ollama::host(var).map(|h| h.to_string()), Ok(host.to_string()), "{var:?}");
         }
-        assert_eq!(ollama::codex_base_url("http://localhost:11434"), "http://localhost:11434/v1");
+        // Another computer or every interface, in a value that parsed: named by its host and port
+        // only, never a user name or password.
+        for (var, shown) in [
+            ("gpu-box", "gpu-box"),
+            ("gpu-box:8080", "gpu-box:8080"),
+            ("http://gpu-box:11434", "gpu-box:11434"),
+            ("http://user:token@gpu-box:11434", "gpu-box:11434"),
+            ("https://ollama.example.com", "ollama.example.com"),
+            ("192.168.1.20:11434", "192.168.1.20:11434"),
+            ("0.0.0.0", "0.0.0.0"),
+            ("0.0.0.0:11435", "0.0.0.0:11435"),
+            ("localhost.example.com", "localhost.example.com"),
+            ("localhost@evil.com", "evil.com"),
+            ("[fe80::2]:11434", "[fe80::2]:11434"),
+        ] {
+            let e = ollama::host(Some(var)).unwrap_err();
+            assert_eq!(
+                e,
+                format!("OLLAMA_HOST is {shown}. Brainstead reaches Ollama only at localhost, 127.0.0.1 or ::1, any port; set it to one of those."),
+                "{var}"
+            );
+            assert!(!e.contains("token") && !e.contains("user") && !e.contains("localhost@"), "{e}");
+        }
+        // Anything else quotes nothing from the value: a password holding `/`, `?` or `#`, a path, a
+        // query, a fragment, another scheme, an empty host, a bad or empty port, stray characters.
+        for var in [
+            "http://maya:s3c#ret@localhost:11434",
+            "http://maya:p/ss@gpu-box:11434",
+            "https://lena:pw@ollama.example.com/api?key=abc",
+            "localhost:11434/x?u=http://a",
+            "localhost:11434?x=1",
+            "localhost:11434#top",
+            "localhost:11434/api",
+            "localhost//",
+            "ftp://localhost",
+            "http://",
+            "http:///api",
+            "http://maya@",
+            ":11435",
+            "localhost:",
+            "localhost:0",
+            "localhost:99999",
+            "localhost:+80",
+            "local host",
+            "[::1",
+            "[::1]x",
+            "[localhost]:11434",
+            "[127.0.0.1]",
+        ] {
+            let e = ollama::host(Some(var)).unwrap_err();
+            assert_eq!(
+                e,
+                "OLLAMA_HOST is not a plain host and port. Brainstead reaches Ollama only at localhost, 127.0.0.1 or ::1, any port; set it to one of those, as host:port.",
+                "{var}"
+            );
+        }
+        assert_eq!(ollama::codex_base_url(&ollama::host(None).unwrap()), "http://localhost:11434/v1");
     }
 
     #[test]
@@ -1191,6 +1400,28 @@ mod tests {
         assert!(!odd.tools);
         assert_eq!(odd.efforts(), ["high"]);
         assert_eq!(ollama::parse_show(&serde_json::json!({})), ollama::Show::default());
+    }
+
+    #[test]
+    fn ollama_show_thinking_as_the_server_reports_it() {
+        // gpt-oss (Ollama's harmony renderer): named levels and a default.
+        let named = ollama::parse_show(&serde_json::json!({
+            "capabilities": ["completion", "tools", "thinking"],
+            "thinking": {"values": ["low", "medium", "high"], "default": "medium"}
+        }));
+        assert_eq!(named, ollama::Show { tools: true, levels: vec!["low".into(), "medium".into(), "high".into()] });
+        assert_eq!(named.efforts(), ["low", "medium", "high"]);
+        // Thinking on or off only: no named level, so no Effort menu.
+        let on_off = ollama::parse_show(&serde_json::json!({
+            "capabilities": ["completion", "tools", "thinking"],
+            "thinking": {"values": [false, true]}
+        }));
+        assert_eq!(on_off, ollama::Show { tools: true, levels: vec![] });
+        assert!(on_off.efforts().is_empty());
+        // An Ollama that doesn't report thinking levels at all: no `thinking` key, no Effort menu.
+        let unreported = ollama::parse_show(&serde_json::json!({"capabilities": ["completion", "tools", "thinking"]}));
+        assert_eq!(unreported, ollama::Show { tools: true, levels: vec![] });
+        assert!(unreported.efforts().is_empty());
     }
 
     #[test]
@@ -1427,6 +1658,9 @@ mod tests {
         let f: serde_json::Value = serde_json::from_str(include_str!("../../../tests/fixtures/job-settings.json")).unwrap();
         let keys: Vec<&str> = Job::ALL.iter().map(|j| j.key()).collect();
         assert_eq!(serde_json::json!(keys), f["jobs"]);
+        let scheduled: Vec<&str> = Job::ALL.iter().filter(|j| j.runs_scheduled()).map(|j| j.key()).collect();
+        assert_eq!(serde_json::json!(scheduled), f["scheduled"]);
+        assert!(keys.iter().all(|k| Job::from_key(k).is_some_and(|j| j.key() == *k)) && Job::from_key("nope").is_none());
         for cli in [Cli::Claude, Cli::Codex, Cli::Antigravity, Cli::Copilot, Cli::Ollama] {
             assert_eq!(serde_json::to_value(cli).unwrap(), cli.key());
             assert_eq!(serde_json::json!(cli.efforts()), f["levels"][cli.key()], "{cli:?}");
@@ -1435,8 +1669,14 @@ mod tests {
             let (name, ui, job) = (&c["name"], c["settings"].as_object().unwrap(), c["job"].as_str().unwrap());
             let model = job_model(ui, job);
             assert_eq!(model, c["model"], "{name}");
+            assert_eq!(job_run_model(ui, job, false), model, "{name}");
             assert_eq!(serde_json::json!(job_own_effort(ui, job)), c["own"], "{name}");
             assert_eq!(serde_json::json!(job_effort(ui, job, &model)), c["effort"], "{name}");
+            // A scheduled run: the same, unless the model is Ollama's.
+            let scheduled = job_run_model(ui, job, true);
+            assert_eq!(scheduled, *c.get("scheduledModel").unwrap_or(&c["model"]), "{name}");
+            assert_eq!(scheduled_fallback(ui, job).is_some(), c.get("scheduledModel").is_some(), "{name}");
+            assert_eq!(serde_json::json!(job_effort(ui, job, &scheduled)), *c.get("scheduledEffort").unwrap_or(&c["effort"]), "{name}");
         }
     }
 

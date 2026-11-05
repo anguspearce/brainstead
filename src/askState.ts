@@ -54,16 +54,16 @@ export function effortLabel(level: string): string {
 }
 
 /** The background jobs that can each have a model (Settings › AI assistants › Models by job): id, label, icon. */
-export const MODEL_JOBS: [job: string, label: string, icon: string][] = [
-  ["summaries", "Daily and weekly summaries", "calendar"],
-  ["weekprep", "Weekly review preparation", "review"],
-  ["find", "Find tasks and projects", "zap"],
-  ["ingest", "Ingest", "wiki"],
-  ["meeting", "Meeting notes from transcripts", "note"],
-  ["clarify", "Clarify suggestions", "inbox"],
-  ["contradictions", "Contradiction checks", "shield"],
-  ["skills", "Triage, Draft reply and Doc check", "send"],
-  ["suggest", "Next-message suggestions in Ask", "ask"],
+export const MODEL_JOBS: [job: string, label: string, icon: string, scheduled: boolean][] = [
+  ["summaries", "Daily and weekly summaries", "calendar", true],
+  ["weekprep", "Weekly review preparation", "review", true],
+  ["find", "Find tasks and projects", "zap", true],
+  ["ingest", "Ingest", "wiki", true],
+  ["meeting", "Meeting notes from transcripts", "note", true],
+  ["clarify", "Clarify suggestions", "inbox", false],
+  ["contradictions", "Contradiction checks", "shield", true],
+  ["skills", "Triage, Draft reply and Doc check", "send", false],
+  ["suggest", "Next-message suggestions in Ask", "ask", false],
 ];
 
 /** "Claude Code · Sonnet" for a model id, from the CLIs found. */
@@ -128,6 +128,17 @@ export function effortFor(model: string): string | null {
 export function jobModelOf(job: string, s: Settings = settings.get()): string {
   const own = s.jobModels?.[job] || (job === "weekprep" ? s.jobModels?.summaries : undefined);
   return own || s.askModel || DEFAULT_MODEL;
+}
+
+/** The model a scheduled run of `job` goes on instead of its own when that is an Ollama model: New
+ *  chats use when that isn't one too, else DEFAULT_MODEL; null when the job runs on another
+ *  assistant, or never runs scheduled (MODEL_JOBS' `scheduled`, brainstead_core::ask::Job's
+ *  runs_scheduled). Ollama runs in Ask and in runs started by hand, never in a scheduled one.
+ *  brainstead_core::ask::scheduled_fallback is the same rule; both tests read
+ *  tests/fixtures/job-settings.json. */
+export function scheduledFallback(job: string, s: Settings = settings.get()): string | null {
+  if (!MODEL_JOBS.some(([j, , , scheduled]) => j === job && scheduled) || cliOf(jobModelOf(job, s)) !== "ollama") return null;
+  return s.askModel && cliOf(s.askModel) !== "ollama" ? s.askModel : DEFAULT_MODEL;
 }
 
 /** The job's own effort (`jobEffort.<job>`) while its model's assistant offers it (unchecked while
@@ -304,12 +315,14 @@ export function closeChat(id: string) {
   if (!ask.get().chats.length) newChat(c?.model ?? undefined);
 }
 
-/** A chat's model, before its first message. It's that chat's only: New chats use (Settings › AI
- *  assistants) stays as set, and so do the jobs that run on it. */
+/** A chat's model, before its first message. It becomes New chats use (Settings › AI assistants,
+ *  `askModel`) too, which the jobs without a model of their own follow; the assistants' effort
+ *  settings stay as they are. */
 export function setModel(id: string, model: string) {
   // Another assistant has its own levels, so the chat starts again from the one set for it.
   const same = (c: Chat) => cliOf(c.model ?? DEFAULT_MODEL) === cliOf(model);
   update(id, (c) => (c.transcript.length ? c : { ...c, model, effort: same(c) ? c.effort : effortFor(model) }));
+  settings.update({ askModel: model });
 }
 
 /** Keeps the empty tabs on the effort set for their assistant: when Settings › AI assistants

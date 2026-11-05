@@ -29,6 +29,7 @@ import {
   jobOwnEffort,
   MODEL_JOBS,
   resolveEffort,
+  scheduledFallback,
   closeChat,
   fallbackTitle,
   keepChat,
@@ -105,6 +106,28 @@ describe("Ask state", () => {
     clis.set(null);
   });
 
+  it("offers Copilot's Auto model no level, so its Effort menus are hidden", () => {
+    // As ask_clis lists it: Copilot's levels, and none of Auto's own (src-tauri/src/ask.rs model_efforts).
+    clis.set([
+      {
+        cli: "copilot",
+        path: "/bin/copilot",
+        version: "1",
+        efforts: ["low", "medium", "high", "xhigh", "max"],
+        models: [{ id: "copilot:auto", name: "Copilot (Auto)", efforts: [] }],
+      },
+    ]);
+    expect(installedEfforts("copilot")).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(installedEfforts("copilot", "copilot:auto")).toEqual([]);
+    // A new chat on it starts at no level, and a job's own level isn't shown or kept.
+    settings.update({ effort: { copilot: "high" }, jobModels: { find: "claude:sonnet" }, jobEffort: { find: "high" } });
+    expect(effortFor("copilot:auto")).toBeNull();
+    expect(setJobModel("find", "copilot:auto")).toBe("high");
+    expect(jobOwnEffort("find")).toBeNull();
+    settings.update({ effort: undefined, jobModels: undefined, jobEffort: undefined });
+    clis.set(null);
+  });
+
   it("resolves a run's effort: the job's, else the assistant's, else none", () => {
     // The same cases as brainstead_core::ask's effort_resolves_job_then_assistant.
     const claude = ["low", "medium", "high", "xhigh", "max"];
@@ -138,6 +161,7 @@ describe("Ask state", () => {
 
   it("works out a job's model and effort as Rust does (tests/fixtures/job-settings.json)", () => {
     expect(MODEL_JOBS.map(([job]) => job)).toEqual(cases.jobs);
+    expect(MODEL_JOBS.filter(([, , , scheduled]) => scheduled).map(([job]) => job)).toEqual(cases.scheduled);
     clis.set(found());
     for (const c of cases.cases) {
       const s = c.settings as unknown as Settings;
@@ -147,6 +171,15 @@ describe("Ask state", () => {
       // What brainstead_core::ask::job_effort gives the run.
       const cli = cliOf(model);
       expect(resolveEffort(cases.levels[cli], s.jobEffort?.[c.job], s.effort?.[cli]), c.name).toBe(c.effort);
+      // A scheduled run: the same, unless the model is Ollama's (brainstead_core::ask::job_run_model).
+      const fallback = scheduledFallback(c.job, s);
+      expect(fallback !== null, c.name).toBe("scheduledModel" in c);
+      const scheduled = fallback ?? model;
+      expect(scheduled, c.name).toBe("scheduledModel" in c ? c.scheduledModel : c.model);
+      const sc = cliOf(scheduled);
+      expect(resolveEffort(cases.levels[sc], s.jobEffort?.[c.job], s.effort?.[sc]), c.name).toBe(
+        "scheduledEffort" in c ? c.scheduledEffort : c.effort,
+      );
     }
     clis.set(null);
   });
@@ -155,12 +188,13 @@ describe("Ask state", () => {
     clis.set(found());
     const levels = { weekprep: "max", find: "max", clarify: "high" };
     settings.update({ askModel: "claude:sonnet", jobModels: {}, jobEffort: levels });
-    // A model picked for one chat is that chat's: New chats use and the jobs on it stay as they are.
+    // A model picked in a chat becomes New chats use; the jobs that follow it keep their levels set.
     const id = newChat("claude:sonnet");
     setModel(id, "gpt-5.5");
     expect(ask.get().chats.find((c) => c.id === id)!.model).toBe("gpt-5.5");
-    expect(settings.get().askModel).toBe("claude:sonnet");
+    expect(settings.get().askModel).toBe("gpt-5.5");
     expect(settings.get().jobEffort).toEqual(levels);
+    settings.update({ askModel: "claude:sonnet" });
     // A model a job inherits (the summaries', for weekprep) sets its level aside until it comes back.
     expect(setJobModel("summaries", "gpt-5")).toBeNull();
     expect(jobOwnEffort("weekprep")).toBeNull();
@@ -333,12 +367,15 @@ describe("Ask state", () => {
     expect(ask.get().chats.find((c) => c.id === id)!.effort).toBe("low");
     setModel(id, "gpt-5.5");
     expect(ask.get().chats.find((c) => c.id === id)!.effort).toBeNull();
+    // The model goes to New chats use; the assistants' effort settings stay as they are.
+    expect(settings.get().askModel).toBe("gpt-5.5");
+    expect(settings.get().effort).toEqual({ claude: "high" });
     setModel(id, "claude:sonnet");
     await setEffort(id, "max");
     send(id, "first");
     expect(invoke).toHaveBeenCalledWith("ask_send", expect.objectContaining({ chatId: id, effort: "max" }));
     expect(settings.get().effort).toEqual({ claude: "high" });
-    settings.update({ effort: undefined });
+    settings.update({ effort: undefined, askModel: undefined });
   });
 
   it("queues messages while it answers and sends them in order", () => {
