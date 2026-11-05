@@ -9,11 +9,103 @@ import { forceParsing } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { merge3 } from "./merge";
 import { frontmatterEnd, frontmatterKeys, lineSeparator, toggledLine } from "./text";
+import { linkAt } from "./live";
+import { settings } from "../store";
 
 let ed: CMEditor | null = null;
 afterEach(() => {
   ed?.destroy();
   ed = null;
+});
+
+describe("reference keys in Edit", () => {
+  const text = "---\ntickets: ORBIT-1\n---\nSee ORBIT-12, `ORBIT-99`, [[ORBIT-98]], XORBIT-97 and [ORBIT-96](https://example.com/x).\n";
+  const open = () => {
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    ed = new CMEditor(parent);
+    ed.load(text);
+    ed.view.dispatch({ selection: { anchor: text.length } });
+    return parent;
+  };
+  afterEach(() => settings.update({ referenceLinks: [] }));
+
+  it("mark a configured key as a link, outside code, wikilinks, other words and links", () => {
+    settings.update({ referenceLinks: [{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }] });
+    const parent = open();
+    const refs = [...parent.querySelectorAll<HTMLElement>(".cm-link.cm-ref")];
+    expect(refs.map((r) => r.textContent)).toEqual(["ORBIT-12"]);
+    expect(refs[0].getAttribute("data-ref")).toBe("ORBIT-12");
+  });
+
+  it("resolve a key under the cursor to its address, for Ctrl+click", () => {
+    settings.update({ referenceLinks: [{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }] });
+    open();
+    const state = ed!.view.state;
+    const at = (s: string, off = 2) => state.doc.toString().indexOf(s) + off;
+    expect(linkAt(state, at("ORBIT-12"))).toEqual({ target: "https://tickets.example.com/browse/ORBIT-12", wiki: false });
+    // Not in code, a wikilink, the properties or another word; a link keeps its own address.
+    expect(linkAt(state, at("`ORBIT-99`", 4))).toBeNull();
+    expect(linkAt(state, at("[[ORBIT-98]]", 5))).toEqual({ target: "ORBIT-98", wiki: true });
+    expect(linkAt(state, at("tickets: ORBIT-1", 8))).toBeNull();
+    expect(linkAt(state, at("XORBIT-97", 4))).toBeNull();
+    expect(linkAt(state, at("[ORBIT-96]", 3))).toEqual({ target: "https://example.com/x", wiki: false });
+  });
+
+  it("mark nothing with no pattern set", () => {
+    const parent = open();
+    expect(parent.querySelector(".cm-ref")).toBeNull();
+    expect(linkAt(ed!.view.state, text.indexOf("ORBIT-12") + 2)).toBeNull();
+  });
+
+  it("leave a key inside any markdown link alone, as View does, and prefer the link to it", () => {
+    settings.update({ referenceLinks: [{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }] });
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    ed = new CMEditor(parent);
+    const doc =
+      "A [ORBIT-1](Note.md), [ORBIT-2](#top), [ORBIT-3][ref], ![ORBIT-4](pic.png), [ORBIT-5] and ORBIT-6.\n\n[ref]: https://example.com/r\n";
+    ed.load(doc);
+    ed.view.dispatch({ selection: { anchor: doc.length } });
+    // A bare [label] is text, so its key is one, in View and here.
+    expect([...parent.querySelectorAll(".cm-ref")].map((r) => r.textContent)).toEqual(["ORBIT-5", "ORBIT-6"]);
+    const state = ed.view.state;
+    expect(linkAt(state, doc.indexOf("ORBIT-1") + 2)).toEqual({ target: "Note.md", wiki: false });
+    expect(linkAt(state, doc.indexOf("ORBIT-2") + 2)).toEqual({ target: "#top", wiki: false });
+    expect(linkAt(state, doc.indexOf("ORBIT-3") + 2)).toBeNull();
+    expect(linkAt(state, doc.indexOf("ORBIT-6") + 2)).toEqual({ target: "https://tickets.example.com/browse/ORBIT-6", wiki: false });
+  });
+
+  it("leave a shortcut reference alone when the note defines it, as View draws a link there", () => {
+    settings.update({ referenceLinks: [{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }] });
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    ed = new CMEditor(parent);
+    const doc =
+      "A [ORBIT-5] and [orbit-6 x] and [ORBIT-7] and ORBIT-8.\n\n[ORBIT-5]: https://example.com/five\n[Orbit-6   X]: https://example.com/six\n";
+    ed.load(doc);
+    ed.view.dispatch({ selection: { anchor: doc.length } });
+    // ORBIT-5 is defined (a link in View), ORBIT-7 is not (text, so its key is one), and a
+    // definition's own label is never a key.
+    expect([...parent.querySelectorAll(".cm-ref")].map((r) => r.textContent)).toEqual(["ORBIT-7", "ORBIT-8"]);
+    // Ctrl+click on the defined one follows no ticket.
+    expect(linkAt(ed.view.state, doc.indexOf("ORBIT-5") + 2)).toBeNull();
+    expect(linkAt(ed.view.state, doc.indexOf("ORBIT-7") + 2)).toEqual({
+      target: "https://tickets.example.com/browse/ORBIT-7",
+      wiki: false,
+    });
+  });
+
+  it("are marked again when the patterns change, and the marks go with them", async () => {
+    const parent = open();
+    expect(parent.querySelector(".cm-ref")).toBeNull();
+    settings.update({ referenceLinks: [{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect([...parent.querySelectorAll(".cm-ref")].map((r) => r.textContent)).toEqual(["ORBIT-12"]);
+    settings.update({ referenceLinks: [] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(parent.querySelector(".cm-ref")).toBeNull();
+  });
 });
 
 describe("Editor interface", () => {

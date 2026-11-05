@@ -11,6 +11,7 @@ import { api } from "../api";
 import { imageView } from "../ImageViewer";
 import { suggest } from "../Capture";
 import { imageSource, safeDecode } from "../md/Markdown";
+import { isExternalHref } from "../md/refs";
 import { localToday } from "../md/taskQuery";
 import { openDoc } from "../nav";
 import { reportEditError } from "../taskModel";
@@ -57,7 +58,7 @@ export function appHooks(path: string, root: string, pickDate?: EditorHooks["pic
     },
     openLink(target, wiki) {
       if (!wiki) {
-        if (/^(https?:|mailto:)/.test(target)) void openUrl(target);
+        if (isExternalHref(target)) void openUrl(target);
         else void api.linksResolve([safeDecode(target.split("#")[0])]).then(([p]) => p && openDoc(p));
         return;
       }

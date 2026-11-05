@@ -25,7 +25,9 @@ Click a project to open it. Edit its name, **Done looks like** (the outcome) and
 
 When the project has a tracker, **Current state** under its name shows the tracker's `## Current state` section (the first tracker by title, when there are several); the tracker's name beside it opens it.
 
-The side shows the project note, its **Documents**, the other notes that link it (**Show all** when there are more than 12), wiki pages it links, recent activity and what's done (cancelled tasks struck through).
+The side shows the project note, its **Documents**, **Tickets and links**, the other notes that link it (**Show all** when there are more than 12), wiki pages it links, recent activity and what's done (cancelled tasks struck through).
+
+**Tickets and links** appears once a prefix is set under **Reference links** in [Settings › Notes](app:settings/notes). It gathers each ticket key and link written in the project note's properties, its documents' properties and the project's open tasks, once each. Each says where it appears: **Project note**, a document's title, **Next action**, **Waiting for** or **Someday / maybe**. Click one to open it in your browser. It isn't shown when there are none. Write a key where it belongs, on the task or in a note's `tickets:` property, and the card collects it.
 
 ## Documents
 A note belongs to a project when a line near its top, within its first 15 lines after the properties, says `Project: [[Project. <name>]]` (an alias such as `[[Project. <name>|<name>]]` is fine). Only the first such line counts. The line can be indented, but it must start with `Project:` and the link: a Dataview field (`Project:: [[…]]`), a bold label (`**Project:**`) and a line in a code block or an HTML comment don't count. Only notes belong to projects, not wiki pages, sources or templates. **Documents** lists these notes by type: Tracker, Plan, Findings, Review, Ticket, Prompt, then Other, each with its `summary` property when it has one.

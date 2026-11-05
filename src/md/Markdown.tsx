@@ -39,6 +39,8 @@ import { chipOf } from "../taskFields";
 import { Icon } from "../icons";
 import { remarkHighlights } from "./marks";
 import { remarkTags } from "./tags";
+import { remarkRefs } from "./remarkRefs";
+import { isExternalHref, useRefPatterns } from "./refs";
 import { calloutLook, defaultTitle, remarkCallouts } from "./callouts";
 import { imageSize, parseWikilink, remarkWikilinks, WikiTarget } from "./wikilinks";
 import { ErrorBoundary } from "../ErrorBoundary";
@@ -294,6 +296,7 @@ function MarkdownView({ content, path, root, q, onTick, cites, onCites, scripts 
     return { body: templater ? templaterHtml(raw) : raw, offset: before.split("\n").length - 1, raw };
   }, [content, templater]);
   const tip = useTemplateHover(templater ? raw : null);
+  const patterns = useRefPatterns();
   const tickRef = useRef(onTick);
   useEffect(() => {
     tickRef.current = onTick;
@@ -362,11 +365,13 @@ function MarkdownView({ content, path, root, q, onTick, cites, onCites, scripts 
             </a>
           );
         }
-        if (href && /^(https?:|mailto:)/.test(href)) {
+        if (href && isExternalHref(href)) {
           return (
             <a
               href={href}
               title={href}
+              className={node?.properties?.dataRef ? "mdref" : undefined}
+              data-ref={node?.properties?.dataRef as string | undefined}
               onClick={(e) => {
                 e.preventDefault();
                 void openUrl(href);
@@ -488,6 +493,7 @@ function MarkdownView({ content, path, root, q, onTick, cites, onCites, scripts 
           remarkTaskDates,
           remarkFieldEmoji,
           remarkTags,
+          [remarkRefs, patterns],
           remarkHighlights,
         ]}
         rehypePlugins={[

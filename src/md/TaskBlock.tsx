@@ -32,7 +32,7 @@ export function taskLabel(text: string): string {
 // Every task, fetched once per change in the vault and shared by the blocks on screen. A failed
 // fetch isn't kept, so the next draw asks again.
 let allTasks: { version: number; rows: Promise<TaskRow[]> } | null = null;
-function tasksAt(version: number) {
+export function tasksAt(version: number) {
   if (!allTasks || allTasks.version !== version) {
     const entry = { version, rows: api.tasksAll() };
     allTasks = entry;

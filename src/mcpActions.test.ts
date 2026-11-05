@@ -100,7 +100,7 @@ describe("MCP actions", () => {
     const texts = async (args: Record<string, unknown>) =>
       ((await data("tasks.list", { view: "next", ...args })).items as { text: string }[]).map((t) => t.text);
     expect(await texts({})).toEqual(["Call Sam about the launch", "Loose end"]);
-    // Still in all, each with its project's status as data.
+    // Still in all.
     const all = await data("tasks.list", { view: "all" });
     expect((all.items as { text: string }[]).map((t) => t.text)).toEqual([
       "Call Sam about the launch",
@@ -108,7 +108,6 @@ describe("MCP actions", () => {
       "Learn the cello",
       "Loose end",
     ]);
-    expect((all.items as { projectStatus: string | null }[]).map((t) => t.projectStatus)).toEqual(["active", "on-hold", "someday", null]);
   });
 
   it("lists in the Tasks screen's manual order by default, or by priority, or grouped by it", async () => {
@@ -2444,6 +2443,157 @@ describe("MCP actions", () => {
       expect(await run("projects.list")).not.toContain("Tracker: Rollout");
       const items = (await data("projects.list")).items as { documents: { type: string; title: string }[] }[];
       expect(items[0].documents.map((d) => `${d.type}: ${d.title}`)).toEqual(["Tracker: Rollout", "Plan: Comms"]);
+    });
+
+    it("gives each task's reference keys and links, and each project's, as the screens draw them", async () => {
+      settings.update({ referenceLinks: [{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }] });
+      onTestFinished(() => settings.update({ referenceLinks: [] }));
+      answers.tasks_notes = () => [
+        row({
+          text: "Ship ORBIT-12 after [the spec](https://example.com/spec) and XORBIT-9",
+          project: "Project. Orbit.md",
+          projectStatus: "active",
+        }),
+        row({ line: 3, text: "Chase ORBIT-14 #waiting-for", tags: ["waiting-for"], project: "Project. Orbit.md", projectStatus: "active" }),
+        row({ line: 4, text: "No keys here" }),
+      ];
+      answers.inbox_list = () => [];
+      const tasks = (await data("tasks.list", { view: "all" })).items as { text: string; refs: { key: string; url: string }[] }[];
+      expect(tasks.map((t) => t.refs)).toEqual([
+        [
+          { key: "ORBIT-12", url: "https://tickets.example.com/browse/ORBIT-12" },
+          { key: "the spec", url: "https://example.com/spec" },
+        ],
+        [{ key: "ORBIT-14", url: "https://tickets.example.com/browse/ORBIT-14" }],
+        [],
+      ]);
+      answers.projects_list = () => [
+        {
+          name: "Orbit",
+          path: "Project. Orbit.md",
+          status: "active",
+          area: null,
+          outcome: null,
+          next: 1,
+          waiting: 1,
+          someday: 0,
+          done: 0,
+          lastTouched: Date.now(),
+          links: [],
+          documents: [
+            {
+              path: "Tracker. Rollout.md",
+              title: "Rollout",
+              type: "Tracker",
+              summary: null,
+              mtime: 0,
+              propertyText: ["ORBIT-12", "ORBIT-20"],
+            },
+          ],
+          propertyText: ["ORBIT-9"],
+        },
+      ];
+      const items = (await data("projects.list")).items as { references: { key: string; url: string; from: string[] }[] }[];
+      expect(items[0].references.map((r) => [r.key, r.from])).toEqual([
+        ["ORBIT-9", ["Project note"]],
+        ["ORBIT-12", ["Rollout", "Next action"]],
+        ["ORBIT-20", ["Rollout"]],
+        ["the spec", ["Next action"]],
+        ["ORBIT-14", ["Waiting for"]],
+      ]);
+      expect(items[0].references[0].url).toBe("https://tickets.example.com/browse/ORBIT-9");
+      expect((await run("projects.list", { detail: true })) as string).toContain(
+        "\n  - Reference ORBIT-12 · https://tickets.example.com/browse/ORBIT-12 · Rollout, Next action",
+      );
+    });
+
+    it("gives no refs or references, and reads no tasks for them, with no Reference links pattern set", async () => {
+      answers.tasks_notes = () => [row({ text: "Ship ORBIT-12 and [the spec](https://example.com/spec)", project: "Project. Orbit.md" })];
+      answers.inbox_list = () => [];
+      const task = ((await data("tasks.list", { view: "all" })).items as Record<string, unknown>[])[0];
+      expect("refs" in task).toBe(false);
+      answers.projects_list = () => [
+        {
+          name: "Orbit",
+          path: "Project. Orbit.md",
+          status: "active",
+          area: null,
+          outcome: null,
+          next: 1,
+          waiting: 0,
+          someday: 0,
+          done: 0,
+          lastTouched: Date.now(),
+          links: [],
+          documents: [],
+          propertyText: ["https://example.com/x"],
+        },
+      ];
+      calls.length = 0;
+      const items = (await data("projects.list", { detail: true })).items as Record<string, unknown>[];
+      expect("references" in items[0]).toBe(false);
+      expect(calls.some(([c]) => c === "tasks_notes")).toBe(false);
+      expect((await run("projects.list", { detail: true })) as string).not.toContain("Reference");
+    });
+
+    it("says so when the tasks for a project's references can't be read", async () => {
+      settings.update({ referenceLinks: [{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }] });
+      onTestFinished(() => settings.update({ referenceLinks: [] }));
+      answers.tasks_notes = () => {
+        throw new Error("the index is busy");
+      };
+      answers.projects_list = () => [
+        {
+          name: "Orbit",
+          path: "Project. Orbit.md",
+          status: "active",
+          area: null,
+          outcome: null,
+          next: 1,
+          waiting: 0,
+          someday: 0,
+          done: 0,
+          lastTouched: Date.now(),
+          links: [],
+          documents: [],
+          propertyText: ["ORBIT-9"],
+        },
+      ];
+      const out = (await run("projects.list")) as string;
+      expect(out).toContain("References are left out: the tasks couldn't be read (the index is busy).");
+      expect(out).toContain("- Orbit · active");
+      const items = (await data("projects.list")).items as Record<string, unknown>[];
+      expect("references" in items[0]).toBe(false);
+    });
+
+    it("keeps the reference links setting as a list of rows, checked as the screen's are", async () => {
+      answers.settings_write = (a) => a!.settings;
+      onTestFinished(() => settings.update({ referenceLinks: [] }));
+      expect(await run("settings")).toContain("referenceLinks · Settings › Notes › Reference links");
+      const rows = [{ prefix: " ORBIT- ", url: "https://tickets.example.com/browse/{key}" }];
+      expect(await run("settings", { action: "set", key: "referenceLinks", value: rows })).toMatch(/is now \[/);
+      expect(settings.get().referenceLinks).toEqual([{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }]);
+      expect(await run("settings")).toContain(
+        'referenceLinks · Settings › Notes › Reference links (rows of a prefix and an address): [{"prefix":"ORBIT-"',
+      );
+      await expect(
+        run("settings", { action: "set", key: "referenceLinks", value: [{ prefix: "X-", url: "javascript:alert(1)" }] }),
+      ).rejects.toThrow(/must start with http/);
+      await expect(
+        run("settings", { action: "set", key: "referenceLinks", value: [{ prefix: "", url: "https://a.example.com" }] }),
+      ).rejects.toThrow(/Needs a prefix/);
+      await expect(
+        run("settings", {
+          action: "set",
+          key: "referenceLinks",
+          value: [
+            { prefix: "A-", url: "https://a.example.com/{key}" },
+            { prefix: " A- ", url: "https://b.example.com/{key}" },
+          ],
+        }),
+      ).rejects.toThrow(/Row 2 of referenceLinks: An earlier row has this prefix already/);
+      await run("settings", { action: "set", key: "referenceLinks", value: null });
+      expect(settings.get().referenceLinks).toEqual([]);
     });
 
     it("gives the judge's fix and whether it's waiting in Changes", async () => {

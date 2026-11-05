@@ -40,6 +40,9 @@ import { PANES } from "./panes";
 import { Markdown } from "./md/Markdown";
 import { TypeDot } from "./typeTone";
 import { documentGroups } from "./projectDocs";
+import { RefsCard } from "./notes/SideCards";
+import { projectRefs } from "./md/refUses";
+import { useRefPatterns } from "./md/refs";
 
 /** ⌘K's New project: the Projects screen opens with New project showing. */
 export const newProjectAsked = new Store<boolean>(false);
@@ -395,6 +398,8 @@ function AreaBand({
 function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAllTasks> }) {
   const side = usePanes({ "project.side": PANES["project.side"] });
   const t = useMemo(() => projectTasks(all ?? [], p.path), [all, p.path]);
+  const patterns = useRefPatterns();
+  const refs = useMemo(() => projectRefs(p, all ?? [], patterns), [p, all, patterns]);
   const [adding, setAdding] = useState("");
   const [editing, setEditing] = useState<"name" | "outcome" | "area" | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -621,6 +626,7 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
           </button>
         </div>
         <ProjectDocuments p={p} />
+        <RefsCard title="Tickets and links" uses={refs} />
         <ProjectWiki path={p.path} />
         <RecentActivity links={p.links} done={t.done} />
         {!!t.done.length && (

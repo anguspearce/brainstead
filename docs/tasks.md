@@ -77,6 +77,8 @@ A note is one of a project's documents when one of its first 15 lines after the 
 
 An active project with no next action says **No next action** in red, and one where nothing has moved for two weeks says **Quiet** in amber. Add next actions, edit the outcome, area and status, and draft nudges for waiting-fors. **New project** writes the note with its headings.
 
+A project's page also has a **Tickets and links** card: each ticket key and link written in the project note's properties, its documents' properties and its open tasks, once each, with where it appears (**Project note**, a document's title, **Next action**, **Waiting for** or **Someday / maybe**). It appears only once a reference prefix is set, and is left out when there is nothing to list. `list_projects` gives the same as its `references`, and none without a prefix.
+
 - Click an area to fold its projects away; what's folded is remembered. Its pencil renames the area on every project under it; it keeps its place in the order, and undoing the rename (the toast's Undo, ⌘Z, Revert in Changes) puts it back where it was.
 - Drag an area, or a project within its area, by its grip to put them in order. The order is a Brainstead setting, not written to your notes; ones never moved come after, A to Z.
 - Click the project's name on its page to rename it; its note is renamed and links to it follow.
@@ -116,5 +118,6 @@ Tasks follow the widely used Tasks format, so other markdown editors read them:
 - `#followup`, `#waiting-for` and `#someday-maybe` put a task on those lists.
 - A task belongs to a project when it's in the project's note, links it, or is in one of its documents (a note whose `Project:` line names it) without linking another project.
 - Tasks inside quotes and callouts (`> - [ ] …`) count too.
+- A link is `[label](https://example.com)` and a bare web address works too. A row shows the label (or the domain) as a link that opens in your browser; a click doesn't select the row. In an Inbox list row it is plain text, since the row is itself a button. A ticket key such as `ORBIT-12` is a link when its prefix is set under Reference links in Settings › Notes ([Notes](notes.md#reference-links)). Write each key once, on the task or the note it belongs to.
 
 The app shows dates and fields as icons and plain text under the task, never the emoji.

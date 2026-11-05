@@ -1000,5 +1000,41 @@
     },
     "window": [1040, 760],
     "width": 1040
+  },
+  {
+    "name": "reference-links",
+    "data": "refs",
+    "screen": "projects",
+    "path": "Project. Office move.md",
+    "settings": {
+      "referenceLinks": [{ "prefix": "FAC-", "url": "https://tickets.example.com/browse/{key}" }]
+    }
+  },
+  {
+    "name": "reference-links-note",
+    "data": "refs",
+    "screen": "doc",
+    "path": "Tracker. Office move rollout.md",
+    "settings": {
+      "referenceLinks": [{ "prefix": "FAC-", "url": "https://tickets.example.com/browse/{key}" }]
+    }
+  },
+  {
+    "name": "reference-links-tasks",
+    "data": "refs",
+    "screen": "tasks",
+    "settings": {
+      "referenceLinks": [{ "prefix": "FAC-", "url": "https://tickets.example.com/browse/{key}" }]
+    }
+  },
+  {
+    "name": "reference-links-settings",
+    "data": "refs",
+    "screen": "settings",
+    "pane": "notes",
+    "window": [1440, 2400],
+    "settings": {
+      "referenceLinks": [{ "prefix": "FAC-", "url": "https://tickets.example.com/browse/{key}" }]
+    }
   }
 ]

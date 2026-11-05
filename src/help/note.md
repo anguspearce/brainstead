@@ -19,7 +19,7 @@ A note made from a template opens in Edit, with the caret where the template put
 ## Write in Edit
 The toolbar formats text: style and headings, bold, italic, strikethrough, highlight (`⇧⌘H`, colour from the chevron), inline code, lists, task list, quote, code block, divider, link, link to a note, image, table, today's date, and **Insert a query**.
 
-Type `[[` to link a note and `#` for a tag; both suggest from the vault as you type (`[[` alone lists your newest notes, and `#calls` finds `#context/calls`). `⌘`-click a link to open it. Paste or drop an image and it's saved in the vault's `images/` folder and embedded.
+Type `[[` to link a note and `#` for a tag; both suggest from the vault as you type (`[[` alone lists your newest notes, and `#calls` finds `#context/calls`). `⌘`-click a link to open it; a ticket key such as `ORBIT-12` is a link too, once its prefix is set under **Reference links** in [Settings › Notes](app:settings/notes). Paste or drop an image and it's saved in the vault's `images/` folder and embedded.
 
 Images stay drawn in Edit, including `<img>` tags from other apps. Hover one for its controls:
 
@@ -96,6 +96,7 @@ Beside the note:
 - **Linked from**: the notes and pages that link here, with the linking line.
 - **Agent changes**: what an assistant or a run changed, each with **Revert**; click one to see it in [Changes](help:review).
 - **Open tasks in this note**, to tick from the side.
+- **References**, once a prefix is set under **Reference links** in [Settings › Notes](app:settings/notes) and the note has any: each ticket key or link written in its properties (not `tags` or `aliases`), its text (as View draws it, so not code, comments or images) and its open tasks, once, with where it appears. Click one to open it in your browser. A property that is one ticket key, such as `tickets: [ORBIT-12]`, is a link chip in View; one that is a web address is a link showing the address, with or without a prefix.
 - **Outline**: the note's headings; click one to jump to it.
 - On a 1-1 note named like `1-1. Maya - 2026-10-02.md`, **Last time with Maya**: the previous 1-1 and open follow-ups with them (tasks tagged `#followup/maya`).
 
