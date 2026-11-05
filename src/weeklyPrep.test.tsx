@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const task = { path: "Me. To Do List.md", line: 3, lineText: "- [ ] Book the venue", text: "Book the venue" };
 const invoke = vi.hoisted(() =>
   vi.fn(async (cmd: string, ..._a: unknown[]): Promise<unknown> => {
-    if (cmd === "tasks_all") return [{ ...task, tags: [], done: false }];
+    if (cmd === "tasks_notes") return [{ ...task, tags: [], done: false }];
     return { line: 9, lineText: "", undo: `Did ${cmd}` };
   }),
 );

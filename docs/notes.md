@@ -71,7 +71,7 @@ A new vault comes with example templates: Meeting, Daily note (date offsets and 
 
 - **⌘K** finds notes, wiki pages, sources, open tasks, screens and commands from any screen, with **Search everything**, **Ask** and **Capture … as a task**.
 - **Search** (⌘⇧F) searches the text of every note, wiki page and source. Words match in any form. `+word`, `-word`, `"exact phrase"`, `tag:hiring`, `since:2026-09` and `before:2026-10-01` narrow it. Choose the layers, a date range and the order. **Save search** keeps one under Saved searches, where its x deletes it.
-- **Notes**, **Wiki** and **Sources** list their files, sorted and filtered as you type. Notes can also be grouped by type. Each list counts what it shows and how much space those files take.
+- **Notes**, **Wiki** and **Sources** list their files, sorted and filtered as you type. Notes can also be grouped by type or by project, and **Hide project working notes** leaves out the Plans, Trackers, Tickets and Prompts that belong to a project (Findings and Reviews stay). A note belongs to a project when a line near its top says `Project: [[Project. <name>]]` ([Projects](tasks.md#projects)). Each list counts what it shows and how much space those files take.
 
 ## System notes
 

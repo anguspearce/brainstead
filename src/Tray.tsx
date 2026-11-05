@@ -157,7 +157,7 @@ export function runningOf({ ingests, dailyCheck, reviews, contradictions, weekpr
 
 async function load(): Promise<TrayData> {
   const [tasks, inbox, changes, ingests, dailyCheck, reviews, contra, weekprep, find, currentState] = await Promise.all([
-    api.tasksAll().catch(() => null as TaskRow[] | null),
+    api.tasksNotes().catch(() => null as TaskRow[] | null),
     api.inboxList().catch(() => null),
     api.changesList().catch(() => null),
     api.ingestRuns().catch(() => []),

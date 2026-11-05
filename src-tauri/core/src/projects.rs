@@ -3,11 +3,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Projects: a `Project. <name>.md` note whose properties hold `status` (active, on-hold, someday,
-//! done), `area` and `outcome`. Its tasks are those written in it and any task elsewhere whose line
-//! links it (see `taskquery`). A missing or unknown status reads as active.
+//! done), `area` and `outcome`. Its tasks are those written in it, those in its member notes, and
+//! any task elsewhere whose line links it (see `taskquery`). A missing or unknown status reads as
+//! active.
+//!
+//! A member note (a Tracker, Plan, Findings… note) says which project it belongs to with a
+//! `Project: [[Project. <name>]]` line near its top (`project_line`). Its tasks count for that
+//! project unless a task's own line links another one.
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::LazyLock;
 
 use rusqlite::params;
 use serde::Serialize;
@@ -35,6 +41,50 @@ pub fn is_project_path(rel: &str) -> bool {
 /// The same test in SQL, for the `files` row aliased `f`. Notes only, so templates don't count.
 pub(crate) fn is_project_sql(f: &str) -> String {
     format!("({f}.layer = 'note' AND substr({f}.path, length(rtrim({f}.path, replace({f}.path, '/', ''))) + 1) GLOB 'Project. ?*.md')")
+}
+
+/// How many body lines (after the frontmatter) a `Project:` line may be down: further down it's
+/// prose that mentions a project, not the note saying where it belongs.
+pub const PROJECT_LINE_WITHIN: usize = 15;
+
+static PROJECT_LINE: LazyLock<regex::Regex> = LazyLock::new(|| regex::Regex::new(r"(?i)^\s*project:\s*\\?\[\\?\[").unwrap());
+
+/// The 0-based file line of a note's `Project: [[…]]` line: the first line among its first
+/// `PROJECT_LINE_WITHIN` body lines (outside code and HTML comments) that starts, after any indent,
+/// with `Project:` and a wikilink (`Project::`, a Dataview field, and `**Project:**` aren't one).
+/// Which project it names is the first link on that line that resolves to a project note
+/// (`member_project_sql`), so an alias (`[[Project. X|X]]`) or a renamed note works as any link
+/// does.
+pub fn project_line(body: &[crate::markdown::Line]) -> Option<usize> {
+    let mut comment = false;
+    for l in body.iter().take(PROJECT_LINE_WITHIN) {
+        let text = l.text.trim_start_matches('\u{feff}');
+        let skip = l.code || comment || text.contains("<!--");
+        if !l.code {
+            let mut rest = text;
+            loop {
+                let (mark, open) = if comment { ("-->", false) } else { ("<!--", true) };
+                let Some(i) = rest.find(mark) else { break };
+                comment = open;
+                rest = &rest[i + mark.len()..];
+            }
+        }
+        if !skip && PROJECT_LINE.is_match(text) {
+            return Some(l.no);
+        }
+    }
+    None
+}
+
+/// In SQL, the id of the project note the `files` row aliased `f` belongs to by its `Project:`
+/// line, or NULL. Only notes belong to a project, not wiki pages, sources or templates. Correlated
+/// on `f`; a note with no such line costs nothing.
+pub(crate) fn member_project_sql(f: &str) -> String {
+    let p = is_project_sql("mp");
+    format!(
+        "(CASE WHEN {f}.project_line IS NULL OR {f}.layer != 'note' THEN NULL ELSE (SELECT ml.target_id FROM links ml JOIN files mp ON mp.id = ml.target_id
+           WHERE ml.src = {f}.id AND ml.line = {f}.project_line AND ml.kind = 'link' AND {p} ORDER BY ml.rowid LIMIT 1) END)"
+    )
 }
 
 /// A project's name: its file name without `Project. ` and `.md`.
@@ -76,6 +126,24 @@ pub struct ProjectRow {
     pub last_touched: i64,
     /// Notes that link it, by path.
     pub links: Vec<String>,
+    /// Its member notes, those whose `Project:` line names it, by path.
+    pub documents: Vec<ProjectDoc>,
+}
+
+/// A note that belongs to a project by its `Project: [[…]]` line.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDoc {
+    pub path: String,
+    pub title: String,
+    /// The type in its file name (Tracker, Plan, Findings…).
+    #[serde(rename = "type")]
+    pub kind: Option<String>,
+    /// Its `summary` property, when it has one.
+    pub summary: Option<String>,
+    pub mtime: i64,
+    /// A tracker's Current state text, when it has one.
+    pub current_state: Option<String>,
 }
 
 impl Index {
@@ -90,7 +158,9 @@ impl Index {
             rows.collect::<std::result::Result<_, _>>().map_err(e)?
         };
         let mut by_project: HashMap<String, Vec<crate::taskquery::TaskRow>> = HashMap::new();
-        for t in self.all_tasks()? {
+        // The notes' tasks only, as the Tasks screen counts them: a task quoted in a wiki page or a
+        // source isn't the project's to do.
+        for t in self.note_tasks()? {
             if let Some(p) = t.project.clone() {
                 by_project.entry(p).or_default().push(t);
             }
@@ -102,6 +172,7 @@ impl Index {
                  WHERE l.target_id = ?1 AND l.kind = 'link' AND l.src != ?1 ORDER BY s.path",
             )
             .map_err(e)?;
+        let mut documents = self.documents()?;
         let mut out = Vec::new();
         for (id, path, fm, mtime) in notes {
             let fm: serde_json::Value = fm.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
@@ -124,10 +195,49 @@ impl Index {
                 done: tasks.iter().filter(|t| t.done && t.status != "-").count(),
                 last_touched: tasks.iter().map(|t| t.mtime).fold(mtime, i64::max),
                 links,
+                documents: documents.remove(&id).unwrap_or_default(),
                 path,
             });
         }
         out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then(a.path.cmp(&b.path)));
+        Ok(out)
+    }
+}
+
+impl Index {
+    /// Every member note, by the id of the project note it belongs to, by path.
+    fn documents(&self) -> Result<HashMap<i64, Vec<ProjectDoc>>> {
+        let sql = format!(
+            "SELECT pid, path, title, type, frontmatter, mtime, current_state FROM
+               (SELECT {} AS pid, f.path, f.title, f.type, f.frontmatter, f.mtime, f.current_state FROM files f
+                WHERE f.project_line IS NOT NULL AND NOT {})
+             WHERE pid IS NOT NULL ORDER BY path",
+            member_project_sql("f"),
+            is_project_sql("f")
+        );
+        let mut st = self.conn().prepare(&sql).map_err(e)?;
+        let rows = st
+            .query_map([], |r| {
+                let fm: Option<String> = r.get(4)?;
+                let fm: serde_json::Value = fm.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    ProjectDoc {
+                        path: r.get(1)?,
+                        title: r.get(2)?,
+                        kind: r.get(3)?,
+                        summary: crate::frontmatter::string(&fm, "summary"),
+                        mtime: r.get(5)?,
+                        current_state: r.get(6)?,
+                    },
+                ))
+            })
+            .map_err(e)?;
+        let mut out: HashMap<i64, Vec<ProjectDoc>> = HashMap::new();
+        for r in rows {
+            let (pid, d) = r.map_err(e)?;
+            out.entry(pid).or_default().push(d);
+        }
         Ok(out)
     }
 }
@@ -252,5 +362,170 @@ mod tests {
             std::fs::read_to_string(d.path().join(rel)).unwrap(),
             "---\nstatus: active\n---\n\n## Next actions\n\n## Waiting for\n\n## Notes\n"
         );
+    }
+
+    fn body_lines(src: &str) -> Vec<crate::markdown::Line<'_>> {
+        crate::markdown::lines(src, crate::frontmatter::split(src).body_start)
+    }
+
+    #[test]
+    fn reads_the_project_line() {
+        let at = |src: &str| project_line(&body_lines(src));
+        assert_eq!(at("---\ntags: [x]\n---\n\nProject: [[Project. Orbit]]\n"), Some(4));
+        // An alias, an indent, any case.
+        assert_eq!(at("Project: [[Project. Orbit|Orbit]]\n"), Some(0));
+        assert_eq!(at("\n   Project:   [[Project. Orbit]]\n"), Some(1));
+        assert_eq!(at("project: [[Project. Orbit]]\n"), Some(0));
+        // Only the first counts; a line without a link isn't one.
+        assert_eq!(at("Project: none yet\nProject: [[Project. A]]\nProject: [[Project. B]]\n"), Some(1));
+        // Not in a code block, and not past the first lines of the body.
+        assert_eq!(at("```\nProject: [[Project. A]]\n```\n"), None);
+        let far = format!("---\na: 1\n---\n{}Project: [[Project. A]]\n", "text\n".repeat(PROJECT_LINE_WITHIN));
+        assert_eq!(at(&far), None);
+        let near = format!("---\na: 1\n---\n{}Project: [[Project. A]]\n", "text\n".repeat(PROJECT_LINE_WITHIN - 1));
+        assert_eq!(at(&near), Some(3 + PROJECT_LINE_WITHIN - 1));
+        // Mentioned in a sentence, it isn't the note's project.
+        assert_eq!(at("We moved this to Project: [[Project. A]]\n"), None);
+    }
+
+    /// A vault with two projects and member notes of each kind the rule has to tell apart.
+    fn member_vault() -> (tempfile::TempDir, Index) {
+        let d = tempfile::tempdir().unwrap();
+        let w = |name: &str, text: &str| std::fs::write(d.path().join(name), text).unwrap();
+        w("Project. Orbit.md", "---\nstatus: active\n---\n\n## Next actions\n\n- [ ] In the project note\n");
+        w("Project. Hub.md", "---\nstatus: on hold\n---\n\n## Next actions\n");
+        w(
+            "Tracker. Orbit rollout.md",
+            "---\nsummary: Where the rollout stands.\n---\n\nProject: [[Project. Orbit|Orbit]]\n\n## Next\n\n- [ ] Inherited from the tracker\n- [ ] Belongs to Hub instead [[Project. Hub]]\n- [x] Done in the tracker\n",
+        );
+        w("Plan. Orbit comms.md", "  Project: [[Project. Orbit]]\n\n- [ ] Write the comms\n");
+        w("Findings. Orbit outage.md", "Project: [[Project. Orbit]]\n\nWhat we found.\n");
+        w("Plan. Far down.md", &format!("{}Project: [[Project. Orbit]]\n\n- [ ] Not inherited\n", "line\n".repeat(PROJECT_LINE_WITHIN)));
+        w("Ticket. Ghost.md", "Project: [[Project. Nowhere]]\n\n- [ ] No project\n");
+        w("Idea. Mentions it.md", "Some idea about [[Project. Orbit]].\n\n- [ ] Not inherited either\n");
+        let mut ix = Index::open_in_memory().unwrap();
+        ix.sync(&Vault::new(d.path().to_path_buf(), vec![])).unwrap();
+        (d, ix)
+    }
+
+    #[test]
+    fn member_notes_lend_their_tasks_their_project() {
+        let (_d, ix) = member_vault();
+        let tasks = ix.all_tasks().unwrap();
+        let project = |text: &str| tasks.iter().find(|t| t.text.starts_with(text)).unwrap().project.clone();
+        for (text, want) in [
+            ("In the project note", Some("Project. Orbit.md")),
+            ("Inherited from the tracker", Some("Project. Orbit.md")),
+            ("Belongs to Hub instead", Some("Project. Hub.md")),
+            ("Write the comms", Some("Project. Orbit.md")),
+            ("Not inherited", None),
+            ("No project", None),
+            ("Not inherited either", None),
+        ] {
+            assert_eq!(project(text).as_deref(), want, "{text}");
+        }
+        let hub = tasks.iter().find(|t| t.text.starts_with("Belongs to Hub")).unwrap();
+        assert_eq!(hub.project_status.as_deref(), Some("on-hold"));
+        // The Tasks screen's query agrees with the whole list.
+        let q = ix.tasks(&Default::default()).unwrap();
+        assert!(q.iter().all(|t| tasks.iter().any(|a| a.path == t.path && a.line == t.line && a.project == t.project)));
+
+        // The Projects screen counts them, and lists the member notes.
+        let ps = ix.projects().unwrap();
+        let orbit = ps.iter().find(|p| p.name == "Orbit").unwrap();
+        assert_eq!((orbit.next, orbit.done), (3, 1));
+        let docs: Vec<(&str, Option<&str>)> = orbit.documents.iter().map(|d| (d.path.as_str(), d.kind.as_deref())).collect();
+        assert_eq!(
+            docs,
+            [
+                ("Findings. Orbit outage.md", Some("Findings")),
+                ("Plan. Orbit comms.md", Some("Plan")),
+                ("Tracker. Orbit rollout.md", Some("Tracker"))
+            ]
+        );
+        let tracker = orbit.documents.iter().find(|d| d.kind.as_deref() == Some("Tracker")).unwrap();
+        assert_eq!(tracker.summary.as_deref(), Some("Where the rollout stands."));
+        let hub = ps.iter().find(|p| p.name == "Hub").unwrap();
+        assert_eq!(hub.next, 1);
+        assert!(hub.documents.is_empty());
+    }
+
+    #[test]
+    fn file_summaries_carry_their_project() {
+        let (_d, ix) = member_vault();
+        let notes = ix.list(Some("note")).unwrap();
+        let project = |path: &str| notes.iter().find(|n| n.path == path).unwrap().project.clone();
+        for (path, want) in [
+            ("Project. Orbit.md", Some("Project. Orbit.md")),
+            ("Tracker. Orbit rollout.md", Some("Project. Orbit.md")),
+            ("Plan. Orbit comms.md", Some("Project. Orbit.md")),
+            ("Findings. Orbit outage.md", Some("Project. Orbit.md")),
+            ("Plan. Far down.md", None),
+            ("Ticket. Ghost.md", None),
+            ("Idea. Mentions it.md", None),
+        ] {
+            assert_eq!(project(path).as_deref(), want, "{path}");
+        }
+        assert_eq!(ix.summary("Plan. Orbit comms.md").unwrap().unwrap().project.as_deref(), Some("Project. Orbit.md"));
+    }
+
+    #[test]
+    fn a_vault_without_project_lines_is_unchanged() {
+        let v = Vault::new(fixture(), vec![]);
+        let mut ix = Index::open_in_memory().unwrap();
+        ix.sync(&v).unwrap();
+        assert!(ix.projects().unwrap().iter().all(|p| p.documents.is_empty()));
+        assert!(ix.list(Some("note")).unwrap().iter().all(|n| n.project.is_none() || is_project_path(&n.path)));
+    }
+
+    #[test]
+    fn reads_the_project_line_past_a_bom_and_not_in_comments() {
+        let at = |src: &str| project_line(&body_lines(src));
+        assert_eq!(at("\u{feff}Project: [[Project. Orbit]]\n"), Some(0));
+        // Inside an HTML comment, on its opening line or within it, it isn't one.
+        assert_eq!(at("<!--\nProject: [[Project. A]]\n-->\nProject: [[Project. B]]\n"), Some(3));
+        assert_eq!(at("<!-- Project: [[Project. A]] -->\n"), None);
+        assert_eq!(at("<!-- note -->\nProject: [[Project. B]]\n"), Some(1));
+        // A Dataview field and a bold label aren't the line.
+        assert_eq!(at("Project:: [[Project. A]]\n"), None);
+        assert_eq!(at("**Project:** [[Project. A]]\n"), None);
+    }
+
+    #[test]
+    fn membership_is_for_notes_and_a_missing_project_link_is_the_tasks_own() {
+        let (d, mut ix) = member_vault();
+        std::fs::create_dir_all(d.path().join("sources")).unwrap();
+        std::fs::create_dir_all(d.path().join("wiki/concepts")).unwrap();
+        std::fs::write(d.path().join("sources/Capture. Orbit.md"), "Project: [[Project. Orbit]]\n\n- [ ] In a source\n").unwrap();
+        std::fs::write(d.path().join("wiki/concepts/Orbit.md"), "Project: [[Project. Orbit]]\n\n- [ ] In the wiki\n").unwrap();
+        std::fs::write(
+            d.path().join("Tracker. Orbit rollout.md"),
+            "Project: [[Project. Orbit]]\n\n## Current state\n\nStaged.\n\n## Next\n\n- [ ] Inherited\n- [ ] Links a missing one [[Project. Gone]]\n- [ ] Links Orbit too [[Project. Orbit]]\n- [ ] Links Hub [[Project. Hub]]\n",
+        )
+        .unwrap();
+        ix.sync(&Vault::new(d.path().to_path_buf(), vec![])).unwrap();
+        let tasks = ix.all_tasks().unwrap();
+        let of = |text: &str| {
+            let t = tasks.iter().find(|t| t.text.starts_with(text)).unwrap();
+            (t.project.clone(), t.project_from.clone())
+        };
+        let orbit = Some("Project. Orbit.md".to_string());
+        assert_eq!(of("In the project note"), (orbit.clone(), Some("note".into())));
+        assert_eq!(of("Inherited"), (orbit.clone(), Some("member".into())));
+        // Linking its note's own project changes nothing when unlinked: still inherited.
+        assert_eq!(of("Links Orbit too"), (orbit.clone(), Some("member".into())));
+        assert_eq!(of("Links Hub"), (Some("Project. Hub.md".into()), Some("line".into())));
+        assert_eq!(of("Links a missing one"), (None, None));
+        assert_eq!(of("In a source"), (None, None));
+        assert_eq!(of("In the wiki"), (None, None));
+        let ps = ix.projects().unwrap();
+        let o = ps.iter().find(|p| p.name == "Orbit").unwrap();
+        assert!(o.documents.iter().all(|x| !x.path.starts_with("sources/") && !x.path.starts_with("wiki/")));
+        // The tracker's Current state comes with it, for the project page.
+        let t = o.documents.iter().find(|x| x.kind.as_deref() == Some("Tracker")).unwrap();
+        assert_eq!(t.current_state.as_deref(), Some("Staged."));
+        assert!(o.documents.iter().filter(|x| x.kind.as_deref() != Some("Tracker")).all(|x| x.current_state.is_none()));
+        let all = ix.list(None).unwrap();
+        assert!(all.iter().filter(|f| f.layer != "note").all(|f| f.project.is_none()));
     }
 }

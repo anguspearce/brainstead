@@ -31,6 +31,8 @@ import { TypeDot, TypePill } from "./typeTone";
 import { keyLabel } from "./platform";
 import { usePanes } from "./PaneResizer";
 import { ListTable, listColumn, PANES } from "./panes";
+import { projectName } from "./gtd";
+import { isWorkingNote } from "./projectDocs";
 
 function useFiles<T = FileSummary>(load: () => Promise<T[]>): T[] | null {
   const [rows, setRows] = useState<T[] | null>(null);
@@ -116,11 +118,25 @@ const BY_TYPE: Grouping<FileSummary> = {
   tip: (n, t) => `${fmtCount(n)} ${n === 1 ? "note" : "notes"} ${t ? "of this type" : "with no type"}`,
 };
 
+/** Notes in bands by the project they belong to (a project note, or a note whose `Project:` line
+ *  names one), when "Group by project" is on. */
+const BY_PROJECT: Grouping<FileSummary> = {
+  of: (r) => (r.project ? projectName(r.project) : null),
+  none: "No project",
+  icon: "project",
+  tip: (n, p) => `${fmtCount(n)} ${n === 1 ? "note" : "notes"} ${p ? "of this project" : "in no project"}`,
+};
+
 export function NotesScreen() {
-  const rows = useFiles(() => api.filesList("note"));
+  const all = useFiles(() => api.filesList("note"));
   const drafts = useDraftPaths();
   const [type, setType] = useViewState<string | null>("notes:type", null);
   const [byType, setByType] = useViewState("notes:group", false);
+  const [byProject, setByProject] = useViewState("notes:groupProject", false);
+  const [hideWorking, setHideWorking] = useViewState("notes:hideWorking", false);
+  // A project's working notes (its Plans, Trackers, Tickets and Prompts) left out when asked.
+  const rows = useMemo(() => (all && hideWorking ? all.filter((r) => !isWorkingNote(r)) : all), [all, hideWorking]);
+  const working = useMemo(() => (all ?? []).filter(isWorkingNote).length, [all]);
   const chips = useMemo(() => typeChips(rows ?? [], type), [rows, type]);
   const shown = useMemo(() => {
     if (!rows || !type) return rows;
@@ -161,7 +177,7 @@ export function NotesScreen() {
           table="notes"
           defaultSort={["mtime", -1]}
           placeholder="Search notes"
-          group={byType ? BY_TYPE : undefined}
+          group={byType ? BY_TYPE : byProject ? BY_PROJECT : undefined}
           filters={
             <div className="chips">
               <button
@@ -195,11 +211,47 @@ export function NotesScreen() {
                 className={`chip f ${byType ? "on" : ""}`}
                 aria-pressed={byType}
                 title={byType ? "Show the notes as one list again" : "Show the notes in a band per type, each with its count"}
-                onClick={() => setByType(!byType)}
+                onClick={() => {
+                  setByType(!byType);
+                  setByProject(false);
+                }}
               >
                 <Icon name="folder" size={11} />
                 Group by type
               </button>
+              <button
+                type="button"
+                className={`chip f ${byProject && !byType ? "on" : ""}`}
+                aria-pressed={byProject && !byType}
+                title={
+                  byProject && !byType
+                    ? "Show the notes as one list again"
+                    : "Show the notes in a band per project: a project's note and the notes whose Project: line names it"
+                }
+                onClick={() => {
+                  setByProject(!(byProject && !byType));
+                  setByType(false);
+                }}
+              >
+                <Icon name="project" size={11} />
+                Group by project
+              </button>
+              {(hideWorking || working > 0) && (
+                <button
+                  type="button"
+                  className={`chip f ${hideWorking ? "on" : ""}`}
+                  aria-pressed={hideWorking}
+                  title={
+                    hideWorking
+                      ? "Show every note again, the projects' working notes too"
+                      : "Hide the Plans, Trackers, Tickets and Prompts that belong to a project; Findings and Reviews stay"
+                  }
+                  onClick={() => setHideWorking(!hideWorking)}
+                >
+                  <Icon name="eye" size={11} />
+                  Hide project working notes {!hideWorking && <span className="faint">{fmtCount(working)}</span>}
+                </button>
+              )}
             </div>
           }
         />

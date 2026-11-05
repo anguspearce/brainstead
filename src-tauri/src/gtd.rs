@@ -220,7 +220,8 @@ pub async fn task_set_effort(app: AppHandle, path: String, line: usize, line_tex
 }
 
 /// Links a task to a project note (`[[Project. Name]]`), in place of any project it links now, or
-/// with None unlinks it. A task written in a project note belongs to it whatever it links.
+/// with None unlinks it. A task written in a project note belongs to it whatever it links, and one
+/// in a project's member note (its `Project:` line) falls back to that project once unlinked.
 #[tauri::command]
 pub async fn task_set_project(app: AppHandle, path: String, line: usize, line_text: String, project_path: Option<String>) -> Res<Edited> {
     writing(move || {

@@ -248,7 +248,8 @@ fn ingest_once(s: &Scenario, root: &Path, model: &str) -> Result<(ingest::Source
     let read = |r: &str| std::fs::read_to_string(root.join(r)).ok();
     let resolve =
         |n: &str| m.iter().find(|x| brainstead_core::lint::stem(brainstead_core::lint::name_of(&x.page)) == n).map(|x| x.page.clone());
-    let (planned, dropped) = ingest::plan(&src, &answer, read, resolve, "2026-10-02", ingest::page_budget(pages.len()));
+    let (planned, dropped) =
+        ingest::plan(&src, &answer, read, resolve, &ingest::SummaryCheck::NONE, "2026-10-02", ingest::page_budget(pages.len()));
     Ok((src, planned, dropped))
 }
 

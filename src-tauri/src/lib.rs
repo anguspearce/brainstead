@@ -254,6 +254,15 @@ async fn tasks_all(app: AppHandle) -> Result<Vec<brainstead_core::taskquery::Tas
         .map_err(|e| e.to_string())?
 }
 
+/// Every task in the notes, in the Tasks screen's manual order, for the counts and lists that
+/// must agree with that screen (the tray, `list_tasks`): not the wiki, sources or templates.
+#[tauri::command]
+async fn tasks_notes(app: AppHandle) -> Result<Vec<brainstead_core::taskquery::TaskRow>, String> {
+    tauri::async_runtime::spawn_blocking(move || app.state::<VaultService>().with_index(|ix, _| ix.note_tasks()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 async fn tasks_query(
     app: AppHandle,
@@ -1045,6 +1054,7 @@ pub fn run() {
             edits::task_set_date,
             edits::task_replace,
             tasks_all,
+            tasks_notes,
             edits::task_rank,
             edits::tasks_rank_all,
             edits::undo,

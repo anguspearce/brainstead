@@ -39,4 +39,14 @@ describe("tasks in quotes and callouts", () => {
     expect(inQuote("> - [ ] Plain", (l) => completion(l, today))).toBeNull();
     expect(inQuote("- [ ] Outside", waitingToggled).lines).toEqual(["- [ ] Outside #waiting-for"]);
   });
+  it("leaves a priority emoji inside a code span alone when it sets or clears the priority", () => {
+    const doc = "- [ ] Document the `⏫` marker";
+    expect(withPriority(doc, "high").lines).toEqual(["- [ ] Document the `⏫` marker ⏫"]);
+    // Its real priority changes; the one in the code stays.
+    expect(withPriority(`${doc} 🔽`, "highest").lines).toEqual(["- [ ] Document the `⏫` marker 🔺"]);
+    expect(withPriority(`${doc} 🔽`, "none").lines).toEqual([doc]);
+    expect(withPriority(doc, "none").lines).toEqual([doc]);
+    // A field emoji in code isn't where the fields start.
+    expect(withPriority("- [ ] Use `📅` here 📅 2026-10-09", "low").lines).toEqual(["- [ ] Use `📅` here 🔽 📅 2026-10-09"]);
+  });
 });
