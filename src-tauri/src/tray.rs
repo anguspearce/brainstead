@@ -69,6 +69,17 @@ fn build(app: &AppHandle) -> tauri::Result<()> {
             }
         })
         .build(app)?;
+    // On Windows the glyph is drawn in the taskbar's colour and size: redraw it when the theme or the
+    // display scale changes. The redraw reads the state and draws on the main thread, where
+    // `tray_set_state` also runs, so a state stored there is never overwritten by an older one.
+    let handle = app.clone();
+    platform::watch_taskbar_theme(move || {
+        let app = handle.clone();
+        let _ = handle.run_on_main_thread(move || {
+            let (busy, attention) = *app.state::<TrayState>().0.lock().unwrap();
+            show(&app, busy, attention);
+        });
+    });
     Ok(())
 }
 
@@ -146,6 +157,11 @@ pub fn tray_set_state(app: AppHandle, busy: bool, attention: bool) {
         return;
     }
     *now = (busy, attention);
+    show(&app, busy, attention);
+}
+
+/// Draws the icon and its tooltip for the state, when the icon is showing.
+fn show(app: &AppHandle, busy: bool, attention: bool) {
     if let Some(t) = app.tray_by_id(ID) {
         let look = platform::tray_icon(busy, attention);
         if let Ok(img) = tauri::image::Image::from_bytes(look.png) {

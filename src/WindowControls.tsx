@@ -14,17 +14,40 @@
 // system's hit-test there, which the page can't: src-tauri/src/platform/snap_win.rs puts a window
 // of its own over the button, told where it is here, and reports when the pointer is on it (the
 // page gets no hover of its own there) and does the click.
+//
+// The glyphs are the ones Windows 11 draws in its own caption buttons: Segoe Fluent Icons at 10px
+// (Segoe MDL2 Assets on Windows 10, the same code points), with drawn paths where neither is installed.
 
 import { useEffect, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { api } from "./api";
 import { isWindows } from "./platform";
 
-const Glyph = ({ d }: { d: string }) => (
-  <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" shapeRendering="crispEdges">
-    <path d={d} fill="none" stroke="currentColor" strokeWidth="1" />
-  </svg>
-);
+// Whether either icon font is installed: a missing font measures as the fallback does.
+let hasIconFont: boolean | null = null;
+function iconFont(): boolean {
+  if (hasIconFont !== null) return hasIconFont;
+  const c = document.createElement("canvas").getContext("2d");
+  if (!c) return (hasIconFont = false);
+  const width = (font: string) => {
+    c.font = font;
+    return c.measureText("").width;
+  };
+  const fallback = width("10px monospace");
+  hasIconFont = ["Segoe Fluent Icons", "Segoe MDL2 Assets"].some((f) => width(`10px "${f}", monospace`) !== fallback);
+  return hasIconFont;
+}
+
+const Glyph = ({ code, d }: { code: string; d: string }) =>
+  iconFont() ? (
+    <span className="wglyph" aria-hidden="true">
+      {code}
+    </span>
+  ) : (
+    <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true" shapeRendering="crispEdges">
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  );
 
 export function WindowControls() {
   const [maximised, setMaximised] = useState(false);
@@ -63,7 +86,7 @@ export function WindowControls() {
   return (
     <div className="winctl" role="group" aria-label="Window">
       <button type="button" tabIndex={-1} title="Minimise" aria-label="Minimise" onClick={() => void w().minimize()}>
-        <Glyph d="M0 5.5h10" />
+        <Glyph code={""} d="M0 5.5h10" />
       </button>
       <button
         ref={max}
@@ -74,10 +97,10 @@ export function WindowControls() {
         aria-label={maximised ? "Restore" : "Maximise"}
         onClick={() => void w().toggleMaximize()}
       >
-        {maximised ? <Glyph d="M0.5 2.5h7v7h-7zM2.5 2.5v-2h7v7h-2" /> : <Glyph d="M0.5 0.5h9v9h-9z" />}
+        {maximised ? <Glyph code={""} d="M0.5 2.5h7v7h-7zM2.5 2.5v-2h7v7h-2" /> : <Glyph code={""} d="M0.5 0.5h9v9h-9z" />}
       </button>
       <button type="button" tabIndex={-1} className="close" title="Close" aria-label="Close" onClick={() => void w().close()}>
-        <Glyph d="M0 0l10 10M10 0L0 10" />
+        <Glyph code={""} d="M0 0l10 10M10 0L0 10" />
       </button>
     </div>
   );

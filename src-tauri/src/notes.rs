@@ -264,15 +264,19 @@ pub async fn trash_move(app: AppHandle, path: String) -> Res<TrashEntry> {
     .await
 }
 
-/// Previews a file in the trash with Quick Look, where it lies in `.trash/<id>/`; on Windows,
-/// which has none, opens it in its own app there.
+/// Previews a file in the trash where it lies in `.trash/<id>/`: Quick Look on a Mac; on Windows
+/// its preview handler in the page's panel at `frame`, or its own app with no frame or no handler
+/// (`file_quick_look` in lib.rs says more). On a blocking thread, as it waits for the preview.
 #[tauri::command]
-pub fn trash_quick_look(app: AppHandle, svc: State<VaultService>, id: String) -> Res<()> {
-    let root = root(&svc)?;
-    let e = trash::list(&root).into_iter().find(|e| e.id == id).ok_or_else(|| "That item isn't in the trash any more.".to_string())?;
-    let file = root.join(trash::TRASH_DIR).join(&e.id).join(&e.basename);
-    let w = app.get_webview_window("main").ok_or_else(|| "No window to show Quick Look over.".to_string())?;
-    Ok(crate::platform::quick_look(&w, &file)?)
+pub async fn trash_quick_look(app: AppHandle, id: String, frame: Option<crate::platform::PreviewFrame>) -> Res<bool> {
+    crate::blocking(move || {
+        let root = root(&app.state::<VaultService>())?;
+        let e = trash::list(&root).into_iter().find(|e| e.id == id).ok_or_else(|| "That item isn't in the trash any more.".to_string())?;
+        let file = root.join(trash::TRASH_DIR).join(&e.id).join(&e.basename);
+        let w = app.get_webview_window("main").ok_or_else(|| "No window to show the preview over.".to_string())?;
+        Ok(crate::platform::quick_look(&w, &file, frame)?)
+    })
+    .await
 }
 
 #[tauri::command]

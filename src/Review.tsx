@@ -23,6 +23,8 @@ import { offerFollowUp } from "./Ingest";
 import { DocButton, useGone } from "./docButton";
 import { iconizeEmoji } from "./md/fieldEmoji";
 import { vaultFile, isMod, keyLabel } from "./platform";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 /** A line of the page as the diff shows it: task fields as their icons, never the file's emoji. */
 export function DiffText({ text }: { text: string }) {
@@ -181,6 +183,7 @@ export const keyIsElsewhere = (e: KeyboardEvent) =>
 const RUNS_SHOWN = 30;
 
 export function ReviewScreen() {
+  const panes = usePanes({ "changes.list": PANES["changes.list"] }, { minFlex: 320 });
   useEffect(startKnowledge, []);
   const all = useStore(changes);
   // The search narrows held changes and the feed alike; ↑↓ in the box move through what it found.
@@ -363,7 +366,8 @@ export function ReviewScreen() {
           </div>
         </Dialog>
       )}
-      <div className="body queue">
+      <div className="body queue" {...panes.root}>
+        {panes.resizers}
         <div className="ilist tb" role="table" aria-label="Changes">
           <div className="qsearch">
             <SearchBox value={q} onChange={setQ} onKeyDown={key} placeholder="Search changes">

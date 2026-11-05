@@ -22,6 +22,7 @@ import {
   clis,
   cliOf,
   DEFAULT_MODEL,
+  effortLabel,
   fallbackTitle,
   findClis,
   isSaved,
@@ -33,6 +34,8 @@ import {
   selectChat,
   shown,
   send,
+  setEffort,
+  installedEfforts,
   setModel,
   stop,
   unqueue,
@@ -411,7 +414,7 @@ function AskEmpty({ c, found }: { c: Chat; found: CliInfo[] | null }) {
     return (
       <div className="askempty">
         <h1 className="h2">No assistant found</h1>
-        <p className="muted">Install Claude Code, Codex, Antigravity or Copilot, sign in, then open Ask again.</p>
+        <p className="muted">Install Claude Code, Codex, Antigravity or Copilot (or Ollama with Codex), sign in, then open Ask again.</p>
       </div>
     );
   return (
@@ -766,6 +769,9 @@ function Composer({ c, found }: { c: Chat; found: CliInfo[] | null }) {
 
   const model = c.model ?? DEFAULT_MODEL;
   const locked = c.transcript.length > 0;
+  const efforts = found ? installedEfforts(cliOf(model), model) : [];
+  // A scheduled run goes at its job's effort until it ends.
+  const running = !!c.review && c.busy;
   return (
     <div className="askfoot">
       <div className="askcol">
@@ -863,6 +869,31 @@ function Composer({ c, found }: { c: Chat; found: CliInfo[] | null }) {
                 {!locked && <Icon name="chevdown" size={12} />}
               </button>
             </span>
+            {!!efforts.length && (
+              <label
+                className="effortpick"
+                title={
+                  running
+                    ? "This run goes at its job's effort: the job's own under Models by job in Settings › AI assistants, else its assistant's, lowered to a level the model takes. Its chat can take another once it ends."
+                    : `How hard ${CLI_LABEL[cliOf(model)]} thinks for this chat, from the next message on. New chats start with the effort set in Settings › AI assistants.`
+                }
+              >
+                <span className="faint">Effort</span>
+                <select
+                  className="sel"
+                  value={c.effort ?? ""}
+                  disabled={running}
+                  onChange={(e) => void setEffort(c.id, e.target.value || null)}
+                >
+                  <option value="">Default</option>
+                  {efforts.map((l) => (
+                    <option key={l} value={l}>
+                      {effortLabel(l)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <button
               type="button"
               className="ibtn send"
@@ -900,7 +931,7 @@ export function ModelMenu({ found, value, onPick }: { found: CliInfo[] | null; v
     <div className="menu modelmenu" role="menu">
       {!there.length && (
         <div className="faint mpad">
-          No assistant found. Install Claude Code, Codex, Antigravity or Copilot, sign in, then open Ask again.
+          No assistant found. Install Claude Code, Codex, Antigravity or Copilot (or Ollama with Codex), sign in, then open Ask again.
         </div>
       )}
       {there.map((c) => (
@@ -908,7 +939,11 @@ export function ModelMenu({ found, value, onPick }: { found: CliInfo[] | null; v
           <div className="mg">
             {CLI_LABEL[c.cli]} {c.version && <span className="v">· {c.version}</span>}
           </div>
-          {!c.models.length && <div className="faint mpad">No models listed: is it signed in?</div>}
+          {!c.models.length && (
+            <div className="faint mpad">
+              {c.cli === "ollama" ? "No models pulled: ollama pull one first." : "No models listed: is it signed in?"}
+            </div>
+          )}
           {c.models.map((m) => (
             <button
               key={m.id}

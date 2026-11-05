@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Ask: runs an AI CLI already installed and signed in on this computer (Claude Code, Codex,
-//! Antigravity or GitHub Copilot) in the vault, read-only, and streams its answer to the window
+//! Antigravity or GitHub Copilot, or Codex on a model Ollama serves) in the vault, read-only, and
+//! streams its answer to the window
 //! as `ask-event` and `ask-done` events keyed by chat id. The command lines and the stream reading
 //! are in brainstead_core::ask; this side finds the programs, runs them and keeps the chats.
 //!
@@ -11,7 +12,7 @@
 //! previous app saves them (brainstead_core::chats), or, while Brainstead is read-only, in `chats/` in
 //! the app data folder until a save can reach the vault.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -32,6 +33,8 @@ use crate::AppState;
 #[derive(Default)]
 pub struct Running {
     children: Mutex<Vec<(String, u32)>>,
+    /// The chats Stop was pressed on while a CLI answered, so a refused effort isn't run again.
+    stopped: Mutex<HashSet<String>>,
 }
 
 impl Running {
@@ -45,9 +48,21 @@ impl Running {
         self.children.lock().unwrap().iter().any(|(c, _)| c == chat)
     }
     pub fn cancel(&self, chat: &str) {
-        for (_, pid) in self.children.lock().unwrap().iter().filter(|(c, _)| c == chat) {
-            platform::stop_group(*pid);
+        for pid in self.stopping(chat) {
+            platform::stop_group(pid);
         }
+    }
+    /// The processes answering `chat`, which is noted as stopped when there are any.
+    fn stopping(&self, chat: &str) -> Vec<u32> {
+        let pids: Vec<u32> = self.children.lock().unwrap().iter().filter(|(c, _)| c == chat).map(|(_, p)| *p).collect();
+        if !pids.is_empty() {
+            self.stopped.lock().unwrap().insert(chat.to_string());
+        }
+        pids
+    }
+    /// Whether Stop was pressed on `chat` since this was last asked.
+    fn stopped(&self, chat: &str) -> bool {
+        self.stopped.lock().unwrap().remove(chat)
     }
     /// Whether any CLI is answering (an Ask chat, or a run's model call).
     pub fn any(&self) -> bool {
@@ -69,15 +84,29 @@ pub fn find(cli: Cli) -> Option<platform::Program> {
 pub struct Model {
     id: String,
     name: String,
+    /// The model's own effort levels, where its assistant knows them per model (Ollama: the
+    /// thinking levels a model names, none for one that only thinks or not); None where the
+    /// assistant's list stands for every model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    efforts: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
 pub struct CliInfo {
     cli: Cli,
+    /// Where it is: the program, or for Ollama its server's address. None when it can't be used,
+    /// and `note` says why.
     path: Option<String>,
     version: Option<String>,
-    /// Codex's and Antigravity's come from the signed-in account; Claude's are its aliases.
+    /// Codex's and Antigravity's come from the signed-in account; Claude's are its aliases;
+    /// Ollama's are the models it has pulled that call tools.
     models: Vec<Model>,
+    /// The effort levels Settings › AI assistants offers for it (`Cli::efforts`).
+    efforts: &'static [&'static str],
+    /// A line for its row under Found on this computer: for Ollama, what it runs through and the
+    /// models left out, or why it can't be used (its server not answering, Codex missing).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<String>,
 }
 
 fn version(bin: &platform::Program) -> Option<String> {
@@ -87,17 +116,14 @@ fn version(bin: &platform::Program) -> Option<String> {
 }
 
 fn models(cli: Cli, bin: &platform::Program) -> Vec<Model> {
-    let m = |id: String, name: &str| Model { id, name: name.to_string() };
+    let m = |id: String, name: &str| Model { id, name: name.to_string(), efforts: None };
     match cli {
         Cli::Claude => [("fable", "Fable"), ("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku")]
             .into_iter()
             .map(|(a, n)| m(format!("{}{a}", ask::CLAUDE_PREFIX), n))
             .collect(),
         Cli::Codex => {
-            // The list Codex caches for the signed-in account; empty until Codex has run once.
-            let home = dirs::home_dir().unwrap_or_default();
-            let Ok(s) = std::fs::read_to_string(home.join(".codex/models_cache.json")) else { return Vec::new() };
-            let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else { return Vec::new() };
+            let Some(v) = codex_models() else { return Vec::new() };
             let mut ms: Vec<(i64, Model)> = v["models"]
                 .as_array()
                 .into_iter()
@@ -106,7 +132,7 @@ fn models(cli: Cli, bin: &platform::Program) -> Vec<Model> {
                 .filter_map(|x| {
                     let id = x["slug"].as_str()?.to_string();
                     let name = x["display_name"].as_str().unwrap_or(&id).to_string();
-                    Some((x["priority"].as_i64().unwrap_or(i64::MAX), Model { id, name }))
+                    Some((x["priority"].as_i64().unwrap_or(i64::MAX), Model { id, name, efforts: None }))
                 })
                 .collect();
             ms.sort_by_key(|(p, _)| *p);
@@ -121,7 +147,87 @@ fn models(cli: Cli, bin: &platform::Program) -> Vec<Model> {
                 .collect()
         }
         Cli::Copilot => vec![m(format!("{}auto", ask::COPILOT_PREFIX), "Copilot (Auto)")],
+        // Ollama's come from its server, not a program (`ollama_info`).
+        Cli::Ollama => Vec::new(),
     }
+}
+
+/// Ollama's row: usable when its server answers and Codex, which runs its models, is installed.
+/// The models are the ones pulled that call tools (Codex's agent loop needs them), each with the
+/// effort levels it names; the note says what it runs through and counts the models left out, or
+/// says what's missing.
+fn ollama_info() -> CliInfo {
+    let host = crate::ollama::host();
+    let codex = find(Cli::Codex);
+    let codex_version = codex.as_ref().and_then(version);
+    let server = crate::ollama::server(&host);
+    let mut info = CliInfo { cli: Cli::Ollama, path: None, version: None, models: Vec::new(), efforts: Cli::Ollama.efforts(), note: None };
+    let Some((version, tags)) = server else {
+        info.note = Some(match codex {
+            Some(_) => format!("Ollama isn't running at {host}, or isn't installed. Start it (or install it), then click Look again."),
+            None => format!(
+                "Ollama isn't running at {host}, or isn't installed, and its models run through Codex, which isn't installed either."
+            ),
+        });
+        return info;
+    };
+    info.version = version;
+    if codex.is_none() {
+        info.note = Some(format!("Ollama is running at {host}, but its models run through Codex, which isn't installed."));
+        return info;
+    }
+    let mut without_tools = Vec::new();
+    for t in tags {
+        let show = crate::ollama::show(&host, &t.name).unwrap_or_default();
+        if !show.tools {
+            without_tools.push(t.name);
+            continue;
+        }
+        let name = match &t.parameters {
+            Some(p) => format!("{} ({p})", t.name),
+            None => t.name.clone(),
+        };
+        info.models.push(Model { id: format!("{}{}", ask::OLLAMA_PREFIX, t.name), name, efforts: Some(show.efforts()) });
+    }
+    info.path = Some(host);
+    // `codex --version` says "codex-cli 0.166.0"; the row already says Codex.
+    let mut note =
+        format!("Through Codex{}", codex_version.map(|v| format!(" {}", v.trim_start_matches("codex-cli "))).unwrap_or_default());
+    if !info.models.is_empty() {
+        note.push_str(". Jobs do best on a model of about 14B or more (gpt-oss:20b, qwen3:14b); a small one misses things");
+    }
+    if !without_tools.is_empty() {
+        note.push_str(&format!(
+            ". Not listed, as {} can't call tools, which Codex's agent loop needs: {}",
+            if without_tools.len() == 1 { "it" } else { "they" },
+            without_tools.join(", ")
+        ));
+    }
+    info.note = Some(note);
+    info
+}
+
+/// The list Codex caches for the signed-in account; None until Codex has run once.
+fn codex_models() -> Option<serde_json::Value> {
+    let home = dirs::home_dir().unwrap_or_default();
+    serde_json::from_str(&std::fs::read_to_string(home.join(".codex/models_cache.json")).ok()?).ok()
+}
+
+/// The effort levels `model` takes, where its CLI lists them per model: Codex's cache does
+/// (`supported_reasoning_levels`), and Ollama's server says which levels a model names (none, so
+/// no level, for one that only thinks or not). None for the others, and for a model the cache or
+/// the server doesn't have.
+fn model_efforts(model: &str) -> Option<Vec<String>> {
+    if Cli::route(model) == Cli::Ollama {
+        return crate::ollama::show(&crate::ollama::host(), model.strip_prefix(ask::OLLAMA_PREFIX)?).map(|s| s.efforts());
+    }
+    if Cli::route(model) != Cli::Codex {
+        return None;
+    }
+    let v = codex_models()?;
+    let m = v["models"].as_array()?.iter().find(|x| x["slug"] == model)?;
+    let levels = m["supported_reasoning_levels"].as_array()?;
+    Some(levels.iter().filter_map(|l| l["effort"].as_str().or(l.as_str()).map(str::to_string)).collect())
 }
 
 /// Which CLIs are installed, their versions and models. Slow (it runs each one), so off the main thread.
@@ -134,11 +240,14 @@ pub async fn ask_clis() -> Vec<CliInfo> {
                 let bin = find(cli);
                 CliInfo {
                     cli,
+                    efforts: cli.efforts(),
                     version: bin.as_ref().and_then(version),
                     models: bin.as_ref().map(|b| models(cli, b)).unwrap_or_default(),
                     path: bin.map(|p| p.path.to_string_lossy().into_owned()),
+                    note: None,
                 }
             })
+            .chain(std::iter::once(ollama_info()))
             .collect()
     })
     .await
@@ -160,19 +269,34 @@ pub struct DoneMsg {
     pub outcome: Outcome,
 }
 
-/// The model a job uses: its own from Settings › AI assistants (`jobModels`), else the default
-/// for new chats (`askModel`), else Claude's Sonnet. Jobs: reviews, ingest, meeting, clarify,
-/// contradictions, skills, suggest (weekprep defaults to the reviews' model: src-tauri/src/weekprep.rs).
+/// The effort `job` runs at on `model`: the one set for it (`set_effort`), as the model takes it
+/// (`fitted`). An Ask chat runs at its own instead, which starts as the assistant's, fitted alike.
+pub fn job_effort(app: &AppHandle, job: ask::Job, model: &str) -> Option<String> {
+    fitted(model, set_effort(app, job, model).as_deref())
+}
+
+/// The effort set for `job` on `model` (`ask::job_effort`): its own from Settings › AI assistants ›
+/// Models by job (`jobEffort.<job>`), else the assistant's (`effort.<cli>`), else none.
+fn set_effort(app: &AppHandle, job: ask::Job, model: &str) -> Option<String> {
+    let st = app.state::<crate::AppState>();
+    let s = st.settings.lock().unwrap();
+    ask::job_effort(&s.ui, job.key(), model).map(str::to_string)
+}
+
+/// `level` as `model` takes it: a level the model doesn't list (Codex's models cache says which it
+/// takes) runs at the highest below it that it has (`ask::fit_effort`), so an assistant-wide level
+/// can't fail every chat and scheduled job on that model.
+fn fitted(model: &str, level: Option<&str>) -> Option<String> {
+    level.and_then(|e| ask::fit_effort(Cli::route(model), e, model_efforts(model).as_deref())).map(str::to_string)
+}
+
+/// The model a job uses (`ask::job_model`): its own from Settings › AI assistants (`jobModels`),
+/// else, for the weekly review's preparation, the summaries', else the default for new chats
+/// (`askModel`), else Claude's Sonnet.
 pub fn job_model(app: &AppHandle, job: &str) -> String {
     let st = app.state::<crate::AppState>();
     let s = st.settings.lock().unwrap();
-    s.ui.get("jobModels")
-        .and_then(|m| m.get(job))
-        .and_then(|v| v.as_str())
-        .filter(|v| !v.is_empty())
-        .or_else(|| s.ui.get("askModel").and_then(|v| v.as_str()))
-        .unwrap_or("claude:sonnet")
-        .to_string()
+    ask::job_model(&s.ui, job)
 }
 
 pub fn today() -> String {
@@ -235,11 +359,12 @@ pub fn mcp_server(chat_id: &str, model: &str) -> Option<ask::Mcp> {
     })
 }
 
-/// Runs one turn and waits for it, calling `on` with each event (the window gets them too). With
-/// `mcp`, a CLI that takes MCP servers gets Brainstead's.
+/// Runs one turn of `job` and waits for it, calling `on` with each event (the window gets them
+/// too). With `mcp`, a CLI that takes MCP servers gets Brainstead's.
 #[allow(clippy::too_many_arguments)]
 pub fn run(
     app: &AppHandle,
+    job: ask::Job,
     chat_id: &str,
     prompt: &str,
     model: &str,
@@ -248,12 +373,70 @@ pub fn run(
     mcp: Option<&ask::Mcp>,
     on: &mut dyn FnMut(&Event),
 ) -> Outcome {
-    run_with_images(app, chat_id, prompt, model, session, system, mcp, &[], on)
+    run_with_images(app, job, chat_id, prompt, model, session, system, mcp, &[], on)
 }
 
 /// `run`, showing the model these images when its CLI sees images (`Cli::sees_images`).
 #[allow(clippy::too_many_arguments)]
 pub fn run_with_images(
+    app: &AppHandle,
+    job: ask::Job,
+    chat_id: &str,
+    prompt: &str,
+    model: &str,
+    session: Option<&str>,
+    system: &str,
+    mcp: Option<&ask::Mcp>,
+    images: &[PathBuf],
+    on: &mut dyn FnMut(&Event),
+) -> Outcome {
+    let set = set_effort(app, job, model);
+    run_fitted(app, job.key(), chat_id, prompt, model, session, system, mcp, images, set.as_deref(), on)
+}
+
+/// Runs a turn of `what` (a job's key, or "chat") at `set` as the model takes it (`fitted`), for a
+/// background job and an Ask chat alike.
+#[allow(clippy::too_many_arguments)]
+fn run_fitted(
+    app: &AppHandle,
+    what: &str,
+    chat_id: &str,
+    prompt: &str,
+    model: &str,
+    session: Option<&str>,
+    system: &str,
+    mcp: Option<&ask::Mcp>,
+    images: &[PathBuf],
+    set: Option<&str>,
+    on: &mut dyn FnMut(&Event),
+) -> Outcome {
+    let effort = fitted(model, set);
+    let running = app.state::<Arc<Running>>().inner().clone();
+    // A Stop from an earlier turn of this chat doesn't count.
+    running.stopped(chat_id);
+    if set != effort.as_deref() {
+        crate::applog!(
+            "ask: {what} on {model}: the model doesn't take {} effort, so it runs at {}",
+            set.unwrap_or_default(),
+            effort.as_deref().unwrap_or("its default")
+        );
+    }
+    let out = run_at(app, chat_id, prompt, model, session, system, mcp, images, effort.as_deref(), &mut *on);
+    // A level the CLI or model refused (one the models cache doesn't cover, or an older CLI without
+    // the option): once more at the model's own default, rather than failing every time. A run the
+    // user stopped isn't started again, whatever its error says.
+    match effort {
+        Some(e) if ask::effort_refused(&out) && !running.stopped(chat_id) => {
+            crate::applog!("ask: {what} on {model} refused {e} effort, so it ran again without one: {}", out.error.unwrap_or_default());
+            run_at(app, chat_id, prompt, model, session, system, mcp, images, None, on)
+        }
+        _ => out,
+    }
+}
+
+/// One run of the CLI at exactly `effort` (None: the CLI's own default).
+#[allow(clippy::too_many_arguments)]
+fn run_at(
     app: &AppHandle,
     chat_id: &str,
     prompt: &str,
@@ -262,6 +445,7 @@ pub fn run_with_images(
     system: &str,
     mcp: Option<&ask::Mcp>,
     images: &[PathBuf],
+    effort: Option<&str>,
     on: &mut dyn FnMut(&Event),
 ) -> Outcome {
     let fail = |e: String| Outcome { error: Some(e), ..Default::default() };
@@ -272,7 +456,8 @@ pub fn run_with_images(
     let Some(vault) = app.state::<VaultService>().root() else { return fail("No vault is open.".into()) };
     let vault_s = vault.to_string_lossy().into_owned();
     let mcp = mcp.filter(|_| cli.takes_mcp());
-    let req = Request { prompt, model, session, system, vault: &vault_s, mcp, images };
+    let ollama_host = crate::ollama::host();
+    let req = Request { prompt, model, session, system, vault: &vault_s, mcp, images, effort, ollama_host: &ollama_host };
     let launch = match ask::args(cli, &req) {
         Ok(l) => l,
         Err(e) => return fail(e),
@@ -294,7 +479,12 @@ pub fn run_with_images(
     };
     let mut cmd = bin.command();
     let stdin = if launch.stdin.is_some() { Stdio::piped() } else { Stdio::null() };
-    cmd.current_dir(&cwd).args(&launch.args).stdin(stdin).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.current_dir(&cwd)
+        .args(&launch.args)
+        .envs(launch.env.iter().map(|(k, v)| (k, v)))
+        .stdin(stdin)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     let mut child = match platform::spawn_group(&mut cmd) {
         Ok(c) => c,
         // Through cmd.exe (a `.cmd` that isn't an npm shim it can read), std refuses an argument
@@ -369,9 +559,17 @@ fn feed_stdin(child: &mut std::process::Child, input: Option<String>) -> Option<
 /// The longest a model run may take before it's stopped.
 const RUN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 * 60);
 
-/// Asks in the background; the answer comes as events.
+/// Asks in the background; the answer comes as events. `effort` is the chat's own (None: the CLI's
+/// own default), whatever is set for the CLI in Settings, fitted to the model as a job's is.
 #[tauri::command]
-pub fn ask_send(app: AppHandle, chat_id: String, prompt: String, model: String, session: Option<String>) -> Result<(), String> {
+pub fn ask_send(
+    app: AppHandle,
+    chat_id: String,
+    prompt: String,
+    model: String,
+    session: Option<String>,
+    effort: Option<String>,
+) -> Result<(), String> {
     if app.state::<Arc<Running>>().busy(&chat_id) {
         return Err("This chat is still answering.".into());
     }
@@ -389,7 +587,19 @@ pub fn ask_send(app: AppHandle, chat_id: String, prompt: String, model: String, 
                 system = format!("{system}\n{h}");
             }
             let prompt = brainstead_core::workflows::expand(&prompt).unwrap_or(prompt);
-            run(&app, &chat_id, &prompt, &model, session.as_deref(), &system, mcp.as_ref(), &mut |_| {})
+            run_fitted(
+                &app,
+                "chat",
+                &chat_id,
+                &prompt,
+                &model,
+                session.as_deref(),
+                &system,
+                mcp.as_ref(),
+                &[],
+                effort.as_deref(),
+                &mut |_| {},
+            )
         }))
         .unwrap_or_else(|_| Outcome {
             error: Some("Brainstead stopped this answer because something went wrong; its log has the details (Settings › About).".into()),
@@ -468,7 +678,7 @@ pub async fn ask_next(app: AppHandle, title: String, turns: Vec<(String, String)
     tauri::async_runtime::spawn_blocking(move || {
         let model = job_model(&app, "suggest");
         let id = format!("next-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos()));
-        let out = run(&app, &id, &ask::next_prompt(&title, &turns), &model, None, ask::NEXT_SYSTEM, None, &mut |_| {});
+        let out = run(&app, ask::Job::Suggest, &id, &ask::next_prompt(&title, &turns), &model, None, ask::NEXT_SYSTEM, None, &mut |_| {});
         if out.error.is_some() {
             return None;
         }
@@ -781,6 +991,20 @@ mod tests {
         }
         let v = version(&p).unwrap_or_default();
         assert!(v.contains("Claude Code"), "{v}");
+    }
+
+    #[test]
+    fn stop_is_noted_only_while_a_cli_answers() {
+        let r = Running::default();
+        assert!(r.stopping("c1").is_empty());
+        assert!(!r.stopped("c1"));
+        r.add("c1", 41);
+        r.add("c2", 42);
+        assert_eq!(r.stopping("c1"), [41]);
+        assert!(r.stopped("c1"));
+        // Asking forgets it, so the chat's next turn starts afresh.
+        assert!(!r.stopped("c1"));
+        assert!(!r.stopped("c2"));
     }
 
     #[test]

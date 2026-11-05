@@ -14,9 +14,11 @@ import { nav, openDoc, place, useViewState } from "./nav";
 import { lastSeen, useVaultVersion } from "./state";
 import { useStore } from "./store";
 import { askLink, askQuote, TopBar } from "./TopBar";
-import { fmtCount, LayerTag, Popover, SearchBox, Seg } from "./ui";
+import { fmtCount, LayerTag, Popover, SearchBox, Seg, Squeeze } from "./ui";
 import { TypeDot } from "./typeTone";
 import { KIND_COLOUR, KINDS, Kind, kindLabel, kindOf, kindsIn, labelled, neighbours, pick, radius, visible } from "./graphModel";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 type Mode = "around" | "wiki";
 
@@ -28,6 +30,7 @@ const isGhost = (id: string) => id.startsWith("ghost:");
 export const openGraph = (path: string) => nav.go({ screen: "graph", path });
 
 export function GraphScreen() {
+  const panes = usePanes({ "graph.side": PANES["graph.side"] });
   const here = useStore(place).place;
   const version = useVaultVersion();
   const [lastCenter, setLastCenter] = useViewState<string | null>("graph.center", null);
@@ -123,10 +126,11 @@ export function GraphScreen() {
         />
         <button type="button" className="btn sm" title="Fit the graph to the window" onClick={() => setFit((n) => n + 1)} disabled={!shown}>
           <Icon name="fit" size={14} />
-          Fit
+          <Squeeze full="Fit" narrow="" />
         </button>
       </TopBar>
-      <div className="body graph">
+      <div className="body graph" {...panes.root}>
+        {panes.resizers}
         <div className="gstage">
           {shown && shown.nodes.length > 0 ? (
             <GraphCanvas
@@ -656,9 +660,9 @@ function GraphCanvas({
     };
     el.addEventListener("gesturestart", gs);
     el.addEventListener("gesturechange", gc);
-    // A theme change repaints with the new colours.
+    // A theme or accent change repaints with the new colours (src/accent.ts sets data-accent each time).
     const mo = new MutationObserver(draw);
-    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-accent"] });
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     mq.addEventListener("change", draw);
     return () => {

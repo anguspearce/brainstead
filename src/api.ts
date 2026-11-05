@@ -24,6 +24,24 @@ export interface PlatformFeatures {
   imageText: boolean;
 }
 
+/** Where the preview panel's body is, in the window's physical pixels, and its colours as `#rrggbb` (src/Preview.tsx). */
+export interface PreviewFrame {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  bg: string;
+  fg: string;
+  /** The panel's bottom corner radius, in physical pixels: the native window is cut to it. */
+  radius: number;
+  /** Which panel this is (`nextPreviewId`), so a close or move from one that has gone can't touch the next. */
+  id: number;
+  /** The page shows a dialog of its own over the panel: the native window hides meanwhile. */
+  hidden: boolean;
+  /** Where the page shows a message over the body ([x, y, width, height] in physical pixels from its top left): cut out of the native window. */
+  holes: number[][];
+}
+
 export interface Settings {
   vaultPath: string | null;
   excluded: string[];
@@ -36,6 +54,8 @@ export interface Settings {
   readSize?: number;
   /** The whole window's size as a percentage, 80 to 150 (Settings › General › Appearance; src/interfaceSize.ts). */
   interfaceSize?: number;
+  /** The accent colour: the app's own blue, or the system's (Windows only; src/accent.ts). */
+  accent?: "app" | "system";
   /** Back/forward history and where in it the window is, kept across restarts (src/nav.ts). */
   places?: { stack: import("./nav").Place[]; i: number };
   /** The Projects screen's order, dragged by hand: areas by name, projects by path. What isn't in
@@ -63,6 +83,12 @@ export interface Settings {
   /** A model per background job (summaries, weekprep, find, ingest, meeting, clarify, contradictions, skills); a
    *  job not named uses `askModel`. */
   jobModels?: Record<string, string>;
+  /** An effort level per background job (keys as jobModels), one of its model's CLI's `efforts`; a
+   *  job not named runs at its assistant's `effort` (brainstead_core::ask::resolve_effort). */
+  jobEffort?: Record<string, string>;
+  /** An effort level per assistant (Settings › AI assistants › Found on this computer), one of its
+   *  CliInfo `efforts`; an assistant not named uses its CLI's own default for the model. */
+  effort?: Partial<Record<CliName, string>>;
   /** Prompts sent in Ask, oldest first, for ↑ in the message box (the last 200). */
   askHistory?: string[];
   /** Tasks' saved lists (a view with its filters), by name. */
@@ -131,6 +157,12 @@ export interface Settings {
   hlColour?: "red" | "orange" | "yellow" | "green" | "teal" | "blue" | "purple" | "grey";
   /** A note's side pane (Linked from) folded away, for the full width. */
   docSideFolded?: boolean;
+  /** Pane and table column widths the user dragged, in px by pane key (src/panes.ts); a pane not
+   *  in it has the stylesheet's width. Per machine, as interfaceSize is. */
+  paneWidths?: Record<string, number>;
+  /** Types of pane locked against resizing (src/panes.ts), by name; a type not here is unlocked, so
+   *  a further type needs only a further key. Per machine, as paneWidths is. */
+  resizeLocks?: { panes?: boolean; columns?: boolean };
 }
 
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
@@ -1156,6 +1188,10 @@ export const api = {
     listen<{ title: string; text: string }>("update-message", (e) => f(e.payload)),
   /** The offer waiting for an answer, if one is (for a window that loaded after it was made). */
   updateOffered: () => invoke<UpdateOffer | null>("update_offered"),
+  /** A message made before the window was listening (an update that didn't install), once. */
+  updateUnshown: () => invoke<{ title: string; text: string } | null>("update_unshown"),
+  /** The update this copy was started after, if it didn't install, while this copy runs (app_status). */
+  updateFailed: () => invoke<{ title: string; text: string } | null>("update_failed"),
   updateInstall: () => invoke<void>("update_install"),
   updateLater: () => invoke<void>("update_later"),
   updateCheck: () => invoke<void>("update_check"),
@@ -1232,6 +1268,11 @@ export const api = {
   logsReveal: () => invoke<void>("logs_reveal"),
   /** Whether Brainstead opens at login; null where the system can't say. */
   loginItem: () => invoke<boolean | null>("login_item"),
+  /** The Windows accent colour as #rrggbb; null elsewhere (src/accent.ts). */
+  systemAccent: () => invoke<string | null>("system_accent"),
+  /** Whether Windows shows scroll bars all the time (Always show scrollbars); the app then does too
+   *  (src/scrollbars.ts). False elsewhere. */
+  alwaysShowScrollbars: () => invoke<boolean>("always_show_scrollbars"),
   loginItemSet: (on: boolean) => invoke<boolean | null>("login_item_set", { on }),
   /** Open at login changed, from Settings or the menu-bar window. */
   onLoginItemChanged: (f: (on: boolean | null) => void): Promise<UnlistenFn> =>
@@ -1319,10 +1360,16 @@ export const api = {
   renamePreview: (path: string, to: string) => invoke<RenamePlan>("rename_preview", { path, to }),
   renameCommit: (plan: RenamePlan) => invoke<string>("rename_commit", { plan }),
   trashMove: (path: string) => invoke<TrashEntry>("trash_move", { path }),
-  /** Quick Look on a trashed file, where it lies. */
-  trashQuickLook: (id: string) => invoke<void>("trash_quick_look", { id }),
-  /** A vault file in the system's Quick Look panel, as Finder's space bar shows it. */
-  fileQuickLook: (path: string) => invoke<void>("file_quick_look", { path }),
+  /** Quick Look on a trashed file, where it lies; on Windows in the preview panel at `frame`, or its own app with none. */
+  trashQuickLook: (id: string, frame: PreviewFrame | null = null) => invoke<boolean>("trash_quick_look", { id, frame }),
+  /** A vault file in the system's Quick Look panel, as Finder's space bar shows it; on Windows as `trashQuickLook`.
+   *  False when it opened in its own app instead (a handler Windows can't run out of process). */
+  fileQuickLook: (path: string, frame: PreviewFrame | null = null) => invoke<boolean>("file_quick_look", { path, frame }),
+  /** Whether a file named like this can be previewed in the window (src/Preview.tsx) rather than opened in its app. */
+  previewAvailable: (name: string) => invoke<boolean>("preview_available", { name }),
+  previewMove: (frame: PreviewFrame) => invoke<void>("preview_move", { frame }),
+  /** The panel `id` closed; sent even before its open has reached the window, which then never shows it. */
+  previewClose: (id: number) => invoke<void>("preview_close", { id }),
   trashList: () => invoke<TrashEntry[]>("trash_list"),
   /** Puts it back where it was, or at `as` (vault-relative); refuses with `exists`. */
   trashRestore: (id: string, as: string | null) => invoke<string>("trash_restore", { id, as }),
@@ -1432,8 +1479,8 @@ export const api = {
   onWeekprepChanged: (f: () => void): Promise<UnlistenFn> => listen("weekprep-changed", () => f()),
   // Ask (src-tauri/src/ask.rs, src/askState.ts).
   askClis: () => invoke<CliInfo[]>("ask_clis"),
-  askSend: (chatId: string, prompt: string, model: string, session: string | null) =>
-    invoke<void>("ask_send", { chatId, prompt, model, session }),
+  askSend: (chatId: string, prompt: string, model: string, session: string | null, effort: string | null) =>
+    invoke<void>("ask_send", { chatId, prompt, model, session, effort }),
   askCancel: (chatId: string) => invoke<void>("ask_cancel", { chatId }),
   /** How a chat's latest turn stands, for an `ask-done` the window missed. */
   askOutcome: (chatId: string) => invoke<{ running: boolean; done: AskDone | null }>("ask_outcome", { chatId }),
@@ -1460,8 +1507,8 @@ export const api = {
   reviewLatest: (kind: "daily" | "weekly") => invoke<LatestSummary | null>("review_latest", { kind }),
   onReviewsChanged: (f: () => void): Promise<UnlistenFn> => listen("reviews-changed", () => f()),
   /** A review run started: its chat id and title, to open as a tab. */
-  onReviewStarted: (f: (r: { chatId: string; title: string; model: string; prompt: string }) => void): Promise<UnlistenFn> =>
-    listen<{ chatId: string; title: string; model: string; prompt: string }>("review-started", (e) => f(e.payload)),
+  /** A review run started; `effort` is the one it runs at (its job's), null for the model's own default. */
+  onReviewStarted: (f: (r: ReviewStarted) => void): Promise<UnlistenFn> => listen<ReviewStarted>("review-started", (e) => f(e.payload)),
   /** A review run finished and its chat was saved. */
   onReviewDone: (f: (r: { chatId: string; filename: string | null }) => void): Promise<UnlistenFn> =>
     listen<{ chatId: string; filename: string | null }>("review-done", (e) => f(e.payload)),
@@ -1618,13 +1665,32 @@ export interface WeeklyState {
   handled?: Record<string, "accepted" | "skipped">;
 }
 
-export type CliName = "claude" | "codex" | "antigravity" | "copilot";
+export type CliName = "claude" | "codex" | "antigravity" | "copilot" | "ollama";
+
+/** A scheduled run (a summary, the weekly review's preparation) opening as a tab in Ask. */
+export interface ReviewStarted {
+  chatId: string;
+  title: string;
+  model: string;
+  /** The effort it runs at, its job's (null: the model's own default). */
+  effort: string | null;
+  prompt: string;
+}
 
 export interface CliInfo {
   cli: CliName;
+  /** The program, or for Ollama its server's address; null when it can't be used (`note` says why). */
   path: string | null;
   version: string | null;
-  models: { id: string; name: string }[];
+  /** Each model, with its own effort levels where the assistant knows them per model (Ollama: the
+   *  thinking levels a model names, an empty list for one that only thinks or not); left out where
+   *  the assistant's `efforts` stand for every model. */
+  models: { id: string; name: string; efforts?: string[] }[];
+  /** The effort levels it can be set to, lowest first (brainstead_core::ask::Cli::efforts). */
+  efforts: string[];
+  /** A line for its row under Found on this computer (Ollama: what it runs through and the models
+   *  left out, or why it can't be used). */
+  note?: string;
 }
 
 export type AskEvent =
@@ -1657,6 +1723,8 @@ export interface ChatSummary {
   claudeSessionId: string | null;
   sessionId: string | null;
   model: string | null;
+  /** The effort level it runs at, one of its CLI's `efforts`; none for the CLI's own default. */
+  effort?: string | null;
   createdAt: string;
   updatedAt: string;
   contextTokens: number | null;

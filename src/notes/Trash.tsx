@@ -14,10 +14,14 @@ import { useVaultVersion } from "../state";
 import { reportEditError } from "../taskModel";
 import { toast } from "../Toast";
 import { TopBar } from "../TopBar";
-import { ago, Dialog, fmtBytes, LayerTag, SearchBox, Seg } from "../ui";
+import { ago, Dialog, fmtBytes, LayerTag, SearchBox, Seg, Squeeze } from "../ui";
 import { errText } from "./actions";
 import { folderOf } from "./filename";
 import { useFeatures } from "../features";
+import { usePanes } from "../PaneResizer";
+import { PANES } from "../panes";
+import { isMac } from "../platform";
+import { isLookKey, quickLook } from "../Preview";
 
 const LABEL: Record<Layer, string> = { note: "Note", wiki: "Wiki", source: "Source", template: "Template" };
 
@@ -52,6 +56,17 @@ export function deletedWhen(iso: string, now = new Date()): string {
 type Confirm = { what: "delete"; ids: string[] } | { what: "empty" } | { what: "restore-as"; entry: TrashEntry };
 
 export function TrashScreen() {
+  // The columns with a divider, each at its left edge (Name takes the rest); the checkbox
+  // (28px), the buttons (190px), the row's padding (32px) and its six gaps never move.
+  const panes = usePanes(
+    {
+      "trash.type": PANES["trash.type"],
+      "trash.folder": PANES["trash.folder"],
+      "trash.deleted": PANES["trash.deleted"],
+      "trash.size": PANES["trash.size"],
+    },
+    { mode: "column", fixed: 28 + 190 + 32 + 6 * 12 },
+  );
   const v = useVaultVersion();
   const [rows, setRows] = useState<TrashEntry[] | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
@@ -77,16 +92,23 @@ export function TrashScreen() {
   );
   const total = (rows ?? []).reduce((n, r) => n + r.sizeBytes, 0);
   const picked = shown.filter((r) => sel.has(r.id));
-  const quickLook = (r: TrashEntry) => api.trashQuickLook(r.id).catch((e) => toast(errText(e), undefined, "bad"));
+  // Quick Look on a Mac; on Windows the preview panel (src/Preview.tsx), or the file's own app for a
+  // type Windows can't preview.
+  const look = (r: TrashEntry) =>
+    quickLook({
+      name: r.basename,
+      look: (frame) => api.trashQuickLook(r.id, frame),
+      openInApp: () => api.trashQuickLook(r.id, null).then(() => {}),
+    }).catch((e) => toast(errText(e), undefined, "bad"));
   // Space previews the one selected item, as in Finder (where Quick Look exists).
   const canLook = useFeatures().quickLook;
   useEffect(() => {
     if (!canLook) return;
     const k = (e: KeyboardEvent) => {
-      if (e.key !== " " || picked.length !== 1 || (e.target as HTMLElement)?.closest?.("input, textarea, button, [contenteditable]"))
+      if (picked.length !== 1 || e.defaultPrevented || (e.target as HTMLElement)?.closest?.("[role=separator]") || !isLookKey(e, "trash"))
         return;
       e.preventDefault();
-      void quickLook(picked[0]);
+      void look(picked[0]);
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
@@ -140,13 +162,18 @@ export function TrashScreen() {
             ["all", "All", "Everything in the Trash"],
             ...(["note", "wiki", "source", "template"] as Layer[])
               .filter((l) => count(l))
-              .map((l): [Filter, string, string] => [l, `${LABEL[l]}s · ${count(l)}`, `Only the ${LABEL[l].toLowerCase()}s in the Trash`]),
+              .map((l): [Filter, string, string, string] => [
+                l,
+                `${LABEL[l]}s`,
+                `Only the ${LABEL[l].toLowerCase()}s in the Trash`,
+                ` · ${count(l)}`,
+              ]),
           ]}
         />
         <span title={rows?.length ? "Delete everything in the Trash for good; asks first" : "The Trash is already empty"}>
           <button type="button" className="btn" disabled={!rows?.length} onClick={() => setConfirm({ what: "empty" })}>
             <Icon name="trash" size={14} />
-            Empty the Trash{total ? ` · frees ${fmtBytes(total)}` : ""}
+            <Squeeze full={`Empty the Trash${total ? ` · frees ${fmtBytes(total)}` : ""}`} tight="Empty the Trash" />
           </button>
         </span>
       </TopBar>
@@ -203,7 +230,7 @@ export function TrashScreen() {
             <p className="muted">The Trash is empty.</p>
           </div>
         ) : (
-          <div className="trlist" role="table" aria-label="Trash">
+          <div className="trlist" role="table" aria-label="Trash" {...panes.root}>
             <div className="trrow tb-head" role="row">
               <button
                 type="button"
@@ -216,11 +243,23 @@ export function TrashScreen() {
               >
                 {allOn && <Icon name="check" size={11} />}
               </button>
-              <span>Name</span>
-              <span>Type</span>
-              <span>Was in</span>
-              <span>Deleted</span>
-              <span className="r">Size</span>
+              <span role="columnheader">Name</span>
+              <span role="columnheader" aria-label={PANES["trash.type"].heading}>
+                {PANES["trash.type"].heading}
+                {panes.resizer("trash.type")}
+              </span>
+              <span role="columnheader" aria-label={PANES["trash.folder"].heading}>
+                {PANES["trash.folder"].heading}
+                {panes.resizer("trash.folder")}
+              </span>
+              <span role="columnheader" aria-label={PANES["trash.deleted"].heading}>
+                {PANES["trash.deleted"].heading}
+                {panes.resizer("trash.deleted")}
+              </span>
+              <span role="columnheader" aria-label={PANES["trash.size"].heading} className="r">
+                {PANES["trash.size"].heading}
+                {panes.resizer("trash.size")}
+              </span>
               <span />
             </div>
             {shown.length === 0 && <p className="muted trnone">Nothing in the Trash matches “{q.trim()}”.</p>}
@@ -241,7 +280,9 @@ export function TrashScreen() {
                     {on && <Icon name="check" size={11} />}
                   </button>
                   <div className="ell">
-                    <div className="ell trname">{r.basename.replace(/\.md$/i, "")}</div>
+                    <div className="ell trname" title={r.basename.replace(/\.md$/i, "")}>
+                      {r.basename.replace(/\.md$/i, "")}
+                    </div>
                     {stuck && (
                       <div className="trwarn">
                         <Icon name="info" size={12} />
@@ -252,20 +293,24 @@ export function TrashScreen() {
                   <span>
                     <LayerTag layer={r.layer} />
                   </span>
-                  <span className="mono faint ell">{folderOf(r.originalRel) || "/"}</span>
-                  <span className="faint" title={ago(new Date(r.deletedAt).getTime())}>
+                  <span className="mono faint ell" title={folderOf(r.originalRel) || "/"}>
+                    {folderOf(r.originalRel) || "/"}
+                  </span>
+                  <span className="faint ell" title={`${deletedWhen(r.deletedAt)}: ${ago(new Date(r.deletedAt).getTime())}`}>
                     {deletedWhen(r.deletedAt)}
                   </span>
-                  <span className="faint r">{fmtBytes(r.sizeBytes)}</span>
+                  <span className="faint r ell" title={fmtBytes(r.sizeBytes)}>
+                    {fmtBytes(r.sizeBytes)}
+                  </span>
                   <span className="tracts">
-                    {/* Where there's no Quick Look (Windows), the same call opens the file in its own app. */}
+                    {/* Where there's no preview (Linux), the same call opens the file in its own app. */}
                     {canLook ? (
                       <button
                         type="button"
                         className="ibtn"
-                        aria-label={`Quick Look ${r.basename}`}
-                        title="Quick Look (Space)"
-                        onClick={() => void quickLook(r)}
+                        aria-label={`${isMac ? "Quick Look" : "Preview"} ${r.basename}`}
+                        title={isMac ? "Quick Look (Space)" : "Preview the file without opening it (Space)"}
+                        onClick={() => void look(r)}
                       >
                         <Icon name="eye" size={14} />
                       </button>
@@ -275,7 +320,7 @@ export function TrashScreen() {
                         className="ibtn"
                         aria-label={`Open ${r.basename} in its app`}
                         title="Open the file in the app the system uses for it, where it lies in the Trash"
-                        onClick={() => void quickLook(r)}
+                        onClick={() => void look(r)}
                       >
                         <Icon name="export" size={14} />
                       </button>

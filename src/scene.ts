@@ -16,12 +16,13 @@ import { shortcutsOpen } from "./Shortcuts";
 import { guideOffer } from "./help/GuideOffer";
 import { helpOpen, HelpView } from "./help/HelpDrawer";
 import { readingScene } from "./speech/player";
-import type { ClarifySuggestion, Reply, Theme, WeekPrepStatus } from "./api";
+import type { ClarifySuggestion, Reply, Settings, Theme, WeekPrepStatus } from "./api";
 import { ask, blankChat } from "./askState";
 import { nav, Screen, SettingsPane } from "./nav";
 import { noteDialog } from "./notes/dialogs";
 import { applyTheme, settings, Store } from "./store";
 import { vaultFile } from "./platform";
+import { applyAccent, systemAccent } from "./accent";
 
 export interface Scene {
   name?: string;
@@ -29,6 +30,9 @@ export interface Scene {
   pane?: SettingsPane;
   theme?: Exclude<Theme, "system">;
   palette?: boolean;
+  /** Accent colour on System, from this #rrggbb in place of the system's (a Mac has none), or from
+   *  the system's own for "system" (src/accent.ts). */
+  accent?: string;
   /** For "doc": the vault path to open; for "search" and "doc": the query. */
   path?: string;
   q?: string;
@@ -62,6 +66,12 @@ export interface Scene {
   guideOffer?: boolean;
   /** Screens' remembered choices (`useViewState` keys), e.g. the selected task. */
   view?: Record<string, unknown>;
+  /** Settings shown as if set (not saved), e.g. a job's effort under Models by job. */
+  settings?: Partial<Settings>;
+  /** Pane widths as if dragged (src/panes.ts keys), e.g. a wider sidebar. */
+  paneWidths?: Record<string, number>;
+  /** Resize locks on, by type (src/panes.ts), e.g. `{ "columns": true }`. */
+  resizeLocks?: Settings["resizeLocks"];
   /** For "ask": show a sample chat. */
   chat?: boolean | "tutorial";
   /** For "reply": a sample draft for the thread, as Draft would make it (the website tutorial's). */
@@ -78,8 +88,9 @@ export interface Scene {
   toast?: string;
   /** The top bar's Teams and Outlook dot, with the sync on: connected, mail gone stale, or not signed in. */
   syncDot?: "ok" | "stale" | "off";
-  /** The update dialog: offering a sample version, downloading it, or saying it's up to date. */
-  update?: "offer" | "downloading" | "message";
+  /** The update dialog: offering a sample version, downloading it, saying it's up to date, or
+   * saying the last update didn't install (src-tauri/src/updates.rs, after_install). */
+  update?: "offer" | "downloading" | "message" | "failed";
 }
 
 /** The Ask scene's chat: a question about the fixture vault and an answer with links. */
@@ -246,7 +257,15 @@ export function applyScene(sc: Scene) {
     settings.update({ theme: sc.theme });
     applyTheme(sc.theme);
   }
+  if (sc.accent) {
+    if (sc.accent !== "system") systemAccent.set(sc.accent);
+    settings.update({ accent: "system" });
+    applyAccent("system");
+  }
   if (sc.sideFolded) settings.update({ docSideFolded: true });
+  if (sc.settings) settings.update(sc.settings);
+  if (sc.paneWidths) settings.update({ paneWidths: sc.paneWidths });
+  if (sc.resizeLocks) settings.update({ resizeLocks: sc.resizeLocks });
   if (sc.view) settings.update({ viewMemory: { ...settings.get().viewMemory, ...sc.view } });
   if (sc.screen) nav.replace({ screen: sc.screen, pane: sc.pane, path: sc.path, q: sc.q, view: sc.view });
   if (sc.focus) focusMode.set(true);
@@ -280,8 +299,16 @@ export function applyScene(sc: Scene) {
 }
 
 /** The update scenes' dialog: a made-up next version with notes as tools/update_files.py writes them. */
-function sampleUpdate(kind: "offer" | "downloading" | "message"): UpdateView {
+function sampleUpdate(kind: "offer" | "downloading" | "message" | "failed"): UpdateView {
   if (kind === "message") return { kind, title: "You're up to date", text: "Brainstead 1.1.3 is the newest version." };
+  if (kind === "failed")
+    return {
+      kind: "message",
+      title: "The update didn't install",
+      text:
+        "Brainstead 1.2.0 didn't install, so this is still 1.1.3. The installer stopped before it finished, " +
+        "usually because something still had Brainstead's program open. Choose Check for Updates… to try again.",
+    };
   const offer = {
     name: "Brainstead",
     version: "1.2.0",

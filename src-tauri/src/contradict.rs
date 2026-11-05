@@ -10,6 +10,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use brainstead_core::ask::Job;
 use brainstead_core::changes::from_texts;
 use brainstead_core::contradictions::{self as c, Claim, Clash, State, Verdict};
 use brainstead_core::proposals::{self, Origin, Patch, Quote};
@@ -177,6 +178,7 @@ fn run(app: &AppHandle, l: &mut Last, trigger: Option<&str>, group: &str) -> Res
         let prompt = c::extract_prompt(b, &texts, &pages);
         let out = crate::ask::run(
             app,
+            Job::Contradictions,
             "contradictions",
             &prompt,
             &extract_model,
@@ -235,6 +237,7 @@ fn run(app: &AppHandle, l: &mut Last, trigger: Option<&str>, group: &str) -> Res
         save_last(app, l);
         let out = crate::ask::run(
             app,
+            Job::Contradictions,
             "contradictions",
             &c::judge_prompt(chunk),
             &judge_model,

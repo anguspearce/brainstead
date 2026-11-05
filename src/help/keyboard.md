@@ -7,7 +7,7 @@ summary: Every key the app answers to, by where it works.
 ---
 Each key works where its heading says; opened from a screen, this topic unfolds that screen's keys. Quick capture's shortcut is set in [Settings › General](app:settings/general); `⌃⌥Space` is the default.
 
-Keys are shown for this computer: Windows uses Ctrl, Alt and Shift where the Mac uses its own modifier keys, so the screen shortcuts are Ctrl+1 to 0 and a note's View, Edit and Source are Ctrl+Shift+1 to 3 on Windows. Windows has no Quick Look: there, the same button opens the file in its own app.
+Keys are shown for this computer: Windows uses Ctrl, Alt and Shift where the Mac uses its own modifier keys, so the screen shortcuts are Ctrl+1 to 0 and a note's View, Edit and Source are Ctrl+Shift+1 to 3 on Windows. Where a Mac has Quick Look, Windows has Preview, on the same key: the file drawn in the window by its own preview handler, or opened in its app for a type Windows can't preview.
 
 ## Anywhere
 - `⌘K` — Search or jump anywhere
@@ -20,6 +20,8 @@ Keys are shown for this computer: Windows uses Ctrl, Alt and Shift where the Mac
 - `⌘,` — Settings
 - `⇧⌘=` `⇧⌘-` `⇧⌘0` — Bigger, smaller, usual interface size (everything in the window; [Settings › General](app:settings/general))
 - `?` — Help for this screen
+- `←` `→` `⇧←` `⇧→` `↩` — On a pane's divider (`Tab` reaches it): move it 8 px, 40 px, or put the pane back ([Settings › General](app:settings/general))
+- `Home` `End` — On a pane's divider: the pane at its least or greatest width
 - `Esc` — Clear the screen's search box
 - `⇧⌘?` — Brainstead Help (Help menu)
 - `⌘Q` — Quit (asks first, and about unsaved changes before that). Mac only: on Windows, which has no menu bar, quit from the tray icon's window (**Quit Brainstead**, or `⌘Q` there)
@@ -67,7 +69,7 @@ Keys are shown for this computer: Windows uses Ctrl, Alt and Shift where the Mac
 ## Lists
 - `↑` `↓` — Move between rows
 - `↩` — Open
-- `Space` — Quick Look (Trash; Word, PowerPoint or Excel sources; on a Mac)
+- `Space` — Quick Look on a Mac, Preview on Windows (Trash; Word, PowerPoint or Excel sources); again to close it
 
 ## Task lists
 - `↑` `↓` — Choose a task, across lists

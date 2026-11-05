@@ -19,6 +19,7 @@ import { RevertConflict, ReviewScreen } from "./Review";
 import { FollowUp } from "./Ingest";
 import { FixNameHost } from "./FixName";
 import { ImageViewerHost } from "./ImageViewer";
+import { PreviewHost } from "./Preview";
 import { ShortcutsHost } from "./Shortcuts";
 import { QuitDialog } from "./Quit";
 import { GuideOfferHost } from "./help/GuideOffer";
@@ -56,6 +57,8 @@ import { Toasts } from "./Toast";
 import { startUpdates, UpdateHost, updateView } from "./Update";
 import { Tooltips } from "./ui";
 import { isMod, strayCtrl } from "./platform";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 const SCREENS: Partial<Record<Screen, () => React.ReactElement>> = {
   settings: SettingsScreen,
@@ -91,6 +94,7 @@ export function ready(s: { vaultPath: string | null; skippedFullDiskAccess: bool
 }
 
 export default function App({ scene }: { scene: Scene | null }) {
+  const panes = usePanes({ sidebar: PANES.sidebar });
   const s = useStore(settings);
   const p = useStore(permissions);
   const { place: here } = useStore(place);
@@ -191,8 +195,9 @@ export default function App({ scene }: { scene: Scene | null }) {
     );
   }
   return (
-    <div className={`shell${focused ? " focus" : ""}`}>
+    <div className={`shell${focused ? " focus" : ""}`} {...panes.root}>
       {!focused && <Sidebar onSearch={() => setPalette(true)} />}
+      {!focused && panes.resizers}
       {(() => {
         const S = SCREENS[here.screen];
         return (
@@ -209,6 +214,7 @@ export default function App({ scene }: { scene: Scene | null }) {
       <FixNameHost />
       <ShortcutsHost />
       <ImageViewerHost />
+      <PreviewHost />
       <HelpDrawer />
       <GuideOfferHost />
       <QueryBuilderHost />

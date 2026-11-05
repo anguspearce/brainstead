@@ -23,9 +23,11 @@ import { TaskList, TasksFailed } from "./TaskList";
 import { reportEditError, tasksFailed, useAllTasks, viewRows, VIEWS } from "./taskModel";
 import { toast } from "./Toast";
 import { TopBar } from "./TopBar";
-import { ago, Dialog, LayerTag } from "./ui";
+import { ago, Dialog, LayerTag, Squeeze } from "./ui";
 import { PrepHeader, PrepRows, prepStep, WEEKLY_STATE_CHANGED, when } from "./weeklyPrep";
 import { keyLabel } from "./platform";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 /** The ISO week a local date is in: "2026-W40". */
 export function isoWeek(day: string): string {
@@ -140,6 +142,7 @@ export const scheduleLabel = (day: Weekday | undefined, time: string | undefined
   `${DAY_NAME[day ?? "fri"]}s at ${/^\d\d:\d\d$/.test(time ?? "") ? time : "16:00"}`;
 
 export function WeeklyScreen() {
+  const panes = usePanes({ "weekly.left": PANES["weekly.left"], "weekly.side": PANES["weekly.side"] }, { minFlex: 320 });
   const today = localToday();
   const [st, setSt] = useState<WeeklyState | null>(null);
   // The review is shown once it's started or carried on; till then, its start page. Each visit
@@ -253,8 +256,10 @@ export function WeeklyScreen() {
         ask={{ about: `this week's review: ${step.title.toLowerCase()}`, prompt: `For my weekly review, ${step.title.toLowerCase()}: ` }}
       >
         <span className="faint small wprog">
-          Step {st.step + 1} of {STEPS.length}
-          {left > 0 ? ` · about ${left * 3} min left` : ""}
+          <Squeeze
+            full={`Step ${st.step + 1} of ${STEPS.length}${left > 0 ? ` · about ${left * 3} min left` : ""}`}
+            tight={`Step ${st.step + 1} of ${STEPS.length}`}
+          />
         </span>
         <span className="pbar">
           <i style={{ width: `${(st.done.length / STEPS.length) * 100}%` }} />
@@ -263,7 +268,8 @@ export function WeeklyScreen() {
           Pause
         </button>
       </TopBar>
-      <div className="body weekly">
+      <div className="body weekly" {...panes.root}>
+        {panes.resizers}
         <nav className="wsteps" aria-label="Steps">
           {STEPS.map((s, i) => (
             <div key={s.id}>

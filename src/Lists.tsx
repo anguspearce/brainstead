@@ -29,6 +29,8 @@ import { hasSync } from "./platform";
 import { Dialog, fmtBytes, fmtCount, Popover, Seg } from "./ui";
 import { TypeDot, TypePill } from "./typeTone";
 import { keyLabel } from "./platform";
+import { usePanes } from "./PaneResizer";
+import { ListTable, listColumn, PANES } from "./panes";
 
 function useFiles<T = FileSummary>(load: () => Promise<T[]>): T[] | null {
   const [rows, setRows] = useState<T[] | null>(null);
@@ -76,22 +78,19 @@ const titleCol = <T extends FileSummary>(drafts?: Set<string>): Column<T> => ({
 });
 const dateCol = <T extends FileSummary>(): Column<T> => ({
   key: "date",
-  label: "Date",
-  width: "0 0 96px",
+  ...listColumn("notes.date"),
   value: (r) => r.date,
   render: (r) => <span className="faint">{r.date ?? "—"}</span>,
 });
-const modCol = <T extends FileSummary>(): Column<T> => ({
+const modCol = <T extends FileSummary>(table: ListTable): Column<T> => ({
   key: "mtime",
-  label: "Modified",
-  width: "0 0 110px",
+  ...listColumn(`${table}.mtime`),
   value: (r) => r.mtime,
   render: (r) => <span className="faint">{fmtDay(r.mtime)}</span>,
 });
-const sizeCol = <T extends FileSummary>(): Column<T> => ({
+const sizeCol = <T extends FileSummary>(table: Exclude<ListTable, "wiki">): Column<T> => ({
   key: "size",
-  label: "Size",
-  width: "0 0 76px",
+  ...listColumn(`${table}.size`),
   align: "right",
   value: (r) => r.size,
   render: (r) => <span className="faint">{fmtBytes(r.size)}</span>,
@@ -132,14 +131,13 @@ export function NotesScreen() {
     titleCol(drafts),
     {
       key: "type",
-      label: "Type",
-      width: "0 0 110px",
+      ...listColumn("notes.type"),
       value: (r) => r.type,
       render: (r) => (r.type ? <TypePill type={r.type} /> : <span className="faint">—</span>),
     },
     dateCol(),
-    modCol(),
-    sizeCol(),
+    modCol("notes"),
+    sizeCol("notes"),
   ];
   return (
     <main className="main">
@@ -160,6 +158,7 @@ export function NotesScreen() {
           columns={columns}
           layers={["note"]}
           noun={["note", "notes"]}
+          table="notes"
           defaultSort={["mtime", -1]}
           placeholder="Search notes"
           group={byType ? BY_TYPE : undefined}
@@ -310,6 +309,7 @@ const HEALTH_CHIP = {
 } as const;
 
 export function WikiScreen() {
+  const panes = usePanes({ "wiki.left": PANES["wiki.left"] }, { minFlex: 320 });
   const rows = useFiles(() => api.filesList("wiki"));
   const [tag, setTag] = useViewState<string | null>("wiki:tag", null);
   const [type, setType] = useViewState<string | null>("wiki:type", null);
@@ -357,23 +357,20 @@ export function WikiScreen() {
     },
     {
       key: "type",
-      label: "Type",
-      width: "0 0 110px",
+      ...listColumn("wiki.type"),
       value: (r) => r.type,
       render: (r) => (r.type ? <TypePill type={r.type} wiki /> : <span className="faint">—</span>),
     },
     {
       key: "sources",
-      label: "Sources",
-      width: "0 0 72px",
+      ...listColumn("wiki.sources"),
       align: "right",
       value: (r) => meta.get(r.path)?.sources ?? 0,
       render: (r) => <span className="faint">{meta.get(r.path)?.sources ?? 0}</span>,
     },
     {
       key: "health",
-      label: "Health",
-      width: "0 0 96px",
+      ...listColumn("wiki.health"),
       value: (r) => wikiHealth(r.path, pendingPages, report),
       render: (r) => {
         const [label, tone, tip] = HEALTH_CHIP[wikiHealth(r.path, pendingPages, report)];
@@ -386,8 +383,8 @@ export function WikiScreen() {
     },
     {
       key: "tags",
-      label: "Tags",
-      width: "2",
+      // Fixed, as every column but Title is, so Title alone takes the rest (src/FileList.tsx).
+      ...listColumn("wiki.tags"),
       value: (r) => r.tags.join(" "),
       render: (r) => (
         <span className="chips ell">
@@ -399,7 +396,7 @@ export function WikiScreen() {
         </span>
       ),
     },
-    modCol(),
+    modCol("wiki"),
   ];
   return (
     <main className="main">
@@ -423,7 +420,8 @@ export function WikiScreen() {
         </button>
       </TopBar>
       {creating && <NewWikiPage at={creating} onClose={() => setCreating(null)} />}
-      <div className="body split">
+      <div className="body split" {...panes.root}>
+        {panes.resizers}
         <nav className="tagtree" aria-label="Tags">
           <button type="button" className={`tnode ${tag === null ? "on" : ""}`} title="Show every wiki page" onClick={() => setTag(null)}>
             <Icon name="wiki" size={13} />
@@ -450,6 +448,7 @@ export function WikiScreen() {
           columns={columns}
           layers={["wiki"]}
           noun={["wiki page", "wiki pages"]}
+          table="wiki"
           defaultSort={["title", 1]}
           placeholder="Search the wiki"
           filters={
@@ -661,6 +660,7 @@ function SyncNowButton() {
 }
 
 export function SourcesScreen() {
+  const panes = usePanes({ "sources.side": PANES["sources.side"] }, { minFlex: 320 });
   const rows = useFiles<SourceRow>(() => api.sourcesList());
   useEffect(startKnowledge, []);
   const h = useStore(health);
@@ -683,15 +683,13 @@ export function SourcesScreen() {
     // A pill as Notes and Wiki show a type, after the title.
     {
       key: "kind",
-      label: "Kind",
-      width: "0 0 64px",
+      ...listColumn("sources.kind"),
       value: (r) => sourceBadge(r.path),
       render: (r) => <span className="chip">{sourceBadge(r.path)}</span>,
     },
     {
       key: "ingested",
-      label: "Status",
-      width: "0 0 88px",
+      ...listColumn("sources.ingested"),
       value: (r) => sourceStatus(r, changed),
       render: (r) => {
         const [label, tone] = STATUS_CHIP[sourceStatus(r, changed)];
@@ -708,8 +706,7 @@ export function SourcesScreen() {
     {
       // Only the folder: the title already names the file.
       key: "path",
-      label: "Folder",
-      width: "0 0 90px",
+      ...listColumn("sources.path"),
       value: (r) => sourceFolder(r.path),
       render: (r) => (
         <span className="faint ell" title={r.path}>
@@ -717,8 +714,8 @@ export function SourcesScreen() {
         </span>
       ),
     },
-    modCol(),
-    sizeCol(),
+    modCol("sources"),
+    sizeCol("sources"),
   ];
   return (
     <main className="main">
@@ -745,12 +742,14 @@ export function SourcesScreen() {
           </button>
         </span>
       </TopBar>
-      <div className="body sources">
+      <div className="body sources" {...panes.root}>
+        {panes.resizers}
         <FileList
           rows={shown}
           columns={columns}
           layers={["source"]}
           noun={["source", "sources"]}
+          table="sources"
           defaultSort={["mtime", -1]}
           placeholder="Search sources"
           filters={
@@ -928,8 +927,8 @@ export function TemplatesScreen() {
           </span>
         ) : null,
     },
-    modCol(),
-    sizeCol(),
+    modCol("templates"),
+    sizeCol("templates"),
   ];
   return (
     <main className="main">
@@ -946,6 +945,7 @@ export function TemplatesScreen() {
           columns={columns}
           layers={["template" as Layer]}
           noun={["template", "templates"]}
+          table="templates"
           defaultSort={["title", 1]}
           placeholder="Search templates"
         />

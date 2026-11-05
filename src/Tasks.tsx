@@ -5,7 +5,7 @@
 // Tasks: the previous app's To Do lists as views, each task live from the notes it's written in.
 
 import { FoundTasks } from "./Found";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CaptureBox } from "./Capture";
 import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from "./taskGroups";
 import { fieldIcon, fieldValue, taskFieldsOf } from "./taskFields";
@@ -21,10 +21,12 @@ import { InfoTip, TaskEditor, taskKey, TaskList, TasksFailed, useTaskListKeys } 
 import { taskDate } from "./taskDates";
 import { tasksFailed, useAllTasks, viewRows, VIEWS, ViewId } from "./taskModel";
 import { askLink, askQuote, TopBar } from "./TopBar";
-import { fmtCount, Popover, SearchBox, Seg, TableBand, useDebounced, usePinnedBar } from "./ui";
+import { fmtCount, Popover, SearchBox, Seg, Squeeze, TableBand, useDebounced, usePinnedBar } from "./ui";
 import { settings, useStore } from "./store";
 import type { SavedTaskList } from "./api";
 import { keyLabel } from "./platform";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 /** Each grouping's band icon, and what its count's tooltip says. */
 const GROUP_ICON: Record<GroupBy, string> = { none: "", project: "project", context: "tag", due: taskDate("due").icon };
@@ -44,6 +46,7 @@ const groupTip = (by: GroupBy, label: string) =>
           : `due ${label.toLowerCase()}`;
 
 export function TasksScreen() {
+  const panes = usePanes({ "tasks.left": PANES["tasks.left"], "tasks.side": PANES["tasks.side"] }, { minFlex: 320 });
   const all = useAllTasks();
   const inbox = useInbox();
   const [viewId, setViewId] = useViewState("tasks:view", "next");
@@ -62,13 +65,13 @@ export function TasksScreen() {
   const [groupBy, setGroupBy] = useViewState<GroupBy>("tasks:group", "none");
   const [adding, setAdding] = useState<DOMRect | null>(null);
   const contexts = useMemo(() => (all ? contextsInUse(all) : []), [all]);
-  const rows = useMemo(
-    () =>
-      (all ? viewRows(all, view, today, inbox) : []).filter(
-        (t) => (!ctx || (t.contexts ?? []).includes(ctx)) && withinEffort(t, effort) && matchesSearch(t, dq),
-      ),
-    [all, inbox, view, today, ctx, effort, dq],
+  const filtered = useCallback(
+    (t: TaskRow) => (!ctx || (t.contexts ?? []).includes(ctx)) && withinEffort(t, effort) && matchesSearch(t, dq),
+    [ctx, effort, dq],
   );
+  const rows = useMemo(() => (all ? viewRows(all, view, today, inbox) : []).filter(filtered), [all, inbox, view, today, filtered]);
+  // The whole manual list, with what the search and filters hide, for a drag's renumber.
+  const every = useMemo(() => (all && view.manual ? viewRows(all, view, today, inbox) : undefined), [all, inbox, view, today]);
   const groups = useMemo(() => groupTasks(rows, groupBy, today), [rows, groupBy, today]);
   // Saved lists: a view with its context, effort and grouping, by name (settings `taskLists`).
   const saved = useStore(settings).taskLists ?? [];
@@ -148,10 +151,11 @@ export function TasksScreen() {
           onClick={(e) => setAdding(e.currentTarget.getBoundingClientRect())}
         >
           <Icon name="plus" size={14} />
-          New task
+          <Squeeze full="New task" narrow="New" />
         </button>
       </TopBar>
-      <div className="body tasks3">
+      <div className="body tasks3" {...panes.root}>
+        {panes.resizers}
         <nav className="tagtree" aria-label="Task lists">
           {VIEWS.map((v) => (
             <button
@@ -268,6 +272,7 @@ export function TasksScreen() {
                       table
                       rows={g.rows}
                       manual={view.manual && groupBy === "none"}
+                      every={every}
                       selected={sel}
                       onSelect={(t) => setSel(taskKey(t))}
                       onDeselect={() => setSel(null)}

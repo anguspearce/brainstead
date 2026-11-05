@@ -1,6 +1,6 @@
 # Ask and assistants
 
-Ask chats with the AI assistants already on your computer, Claude Code, Codex, Copilot and Antigravity, signed in with your own accounts, inside your vault.
+Ask chats with the AI assistants already on your computer, Claude Code, Codex, Copilot and Antigravity, signed in with your own accounts, inside your vault; and with the models you run yourself with Ollama, which Codex runs for it (so both must be installed).
 
 [Ask](#ask) · [What an assistant can do](#what-an-assistant-can-do) · [Sessions outside the app](#sessions-outside-the-app) · [Questions about Brainstead](#questions-about-brainstead)
 
@@ -14,7 +14,7 @@ Ask (⌘6) keeps each chat in a tab (⌘T for a new one). A chat stays in Brains
 
 **History** finds, renames, pins, saves or moves old chats to the Trash. Closed chats that aren't saved or pinned are deleted once 20 newer ones are in History.
 
-Pick the assistant and model before the first message. New chats start with the model set in **Settings › AI assistants**, where each background job can have its own model too.
+Pick the assistant and model before the first message. New chats start with the model set in **Settings › AI assistants**, where each background job can have its own model too. There each assistant found can also have an effort level (Low to Max): a new chat starts with it and its jobs run at it. **Default** leaves it to the assistant, which picks one per model. Under **Models by job** a job can have its own effort (it reads **Default** until you set one), which never changes what a new chat starts with. An Ollama model offers only the thinking levels it names (gpt-oss: Low, Medium, High); for one that names none the menu is hidden and the model runs at its own default. The **Effort** menu beside the model in a chat changes that chat only, from its next message, even once the model is fixed. A model picked in a chat is that chat's only, never **New chats use**. Giving a job a model whose assistant lacks its level puts it back to **Default**; while a model it only follows (**New chats use**, or the summaries' for the weekly review's preparation) is on such an assistant, it runs at **Default** and gets its level back with the model. A level the model lacks falls back: a Codex model runs at the highest level below it that it takes (from Codex's models cache), and a run that stops before answering with an error naming the effort runs once more at the model's own default. The log notes both and the **Effort** menu still shows the level set; any other error still fails the run. A scheduled run's chat keeps its job's effort.
 
 - An empty chat offers example questions and Brainstead's skills to click, or says **No assistant found** and what to install.
 - Keys: ↩ sends, ⇧↩ adds a line, ↑ and ↓ recall earlier messages, Esc (or **Stop**) stops an answer.
@@ -27,7 +27,7 @@ Pick the assistant and model before the first message. New chats start with the 
 
 ## What an assistant can do
 
-The assistant never edits a file itself. Claude Code, Codex and Copilot get Brainstead's tools, which ask the app to do what its screens do, with the same checks. So ⌘Z, `log.md` and the rest work just as if you'd done it yourself. Antigravity takes no outside tools in the mode Ask runs it, so it only reads, with its own tools.
+The assistant never edits a file itself. Claude Code, Codex, Copilot and an Ollama model (run by Codex) get Brainstead's tools, which ask the app to do what its screens do, with the same checks. So ⌘Z, `log.md` and the rest work just as if you'd done it yourself. Antigravity takes no outside tools in the mode Ask runs it, so it only reads, with its own tools.
 
 In short, an assistant can do whatever the screens do. The help tool, and the in-app help, have the details of each.
 
@@ -58,7 +58,7 @@ An assistant can list, reject or revert changes when you ask. It accepts a held 
 
 - the Weekly review's **Start over** (what it changed in the vault stays) and Moving over's ticks and **Retire them** (the previous app's skills and scripts go to the Trash). Neither works in a session nobody is watching;
 - going through the Weekly review, marking contradictions resolved or ignored, Knowledge health's **Ignore**, **Ignore all** and **Show again**;
-- Ask's chats (rename, pin, move to the Trash), Tasks' saved lists, a note's own look, and settings (all but the vault, Read-only and the folders left out);
+- Ask's chats (rename, pin, set a chat's effort, move to the Trash), Tasks' saved lists, a note's own look, and settings (all but the vault, Read-only and the folders left out);
 - how long Changes keeps its history, **Rebuild index**, and your tools that start Claude Code sessions;
 - runs, with their progress and **Stop**: an ingest, the daily or weekly summary, the weekly review's preparation, the daily check, Find tasks and projects, a contradictions check, a meeting note from a transcript, **Write Current state**, bookmark triage, a drafted reply (revised when you ask for a change), a doc check and a comparison of two documents. What a run changes is listed in Changes, with Revert.
 

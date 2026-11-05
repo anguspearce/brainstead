@@ -28,6 +28,7 @@ import { nav } from "./nav";
 import { imageView } from "./ImageViewer";
 import { followUp } from "./Ingest";
 import { isMac, keyLabel, platform, setPlatform, terminalApp } from "./platform";
+import { clis, findClis } from "./askState";
 
 const row = (over: Partial<TaskRow>): TaskRow => ({
   path: "Me. To Do List.md",
@@ -833,7 +834,7 @@ describe("MCP actions", () => {
       });
       expect(await run("chats")).toMatch(/Orbit App plan · 2026-10-05 09:00 · not saved/);
       expect(await run("chats", { action: "read", chat: "orbit app plan" })).toBe(
-        "Orbit App plan (2 messages):\n\nUser: Hi\n\nAssistant: Hello",
+        "Orbit App plan (2 messages, Default effort):\n\nUser: Hi\n\nAssistant: Hello",
       );
       await run("chats", { action: "rename", chat: "local:a.json", title: "Launch" });
       expect(calls.find(([c]) => c === "chat_rename")![1]).toEqual({ filename: "local:a.json", title: "Launch" });
@@ -1252,18 +1253,35 @@ describe("MCP actions", () => {
           deletedAt: `2026-09-0${i + 1}T10:00`,
           sizeBytes: 1024,
         }));
-      expect(await data("trash", { limit: 2 })).toEqual({
-        total: 3,
-        matching: 3,
-        offset: 0,
-        next_offset: 2,
-        bytes: 3072,
-        size: "3.0 KB",
-        items: [
-          { id: "t2", path: "Idea. 2.md", layer: "note", deleted: "2026-09-03T10:00", bytes: 1024 },
-          { id: "t1", path: "Idea. 1.md", layer: "note", deleted: "2026-09-02T10:00", bytes: 1024 },
-        ],
-      });
+      // The look depends on the platform (macOS says quick look for everything), so the test picks
+      // one: on Windows, each file opens in its app until a preview handler says otherwise.
+      const was = platform();
+      try {
+        setPlatform("windows");
+        expect(await data("trash", { limit: 2 })).toEqual({
+          total: 3,
+          matching: 3,
+          offset: 0,
+          next_offset: 2,
+          bytes: 3072,
+          size: "3.0 KB",
+          items: [
+            { id: "t2", path: "Idea. 2.md", layer: "note", deleted: "2026-09-03T10:00", bytes: 1024, look: "app" },
+            { id: "t1", path: "Idea. 1.md", layer: "note", deleted: "2026-09-02T10:00", bytes: 1024, look: "app" },
+          ],
+        });
+        // What Space does with each, as the Trash screen decides: on Windows, Preview where a handler is.
+        answers.preview_available = (a) => String(a?.name).endsWith("1.md");
+        expect((await data("trash", { limit: 2 })) as { items: { look: string }[] }).toMatchObject({
+          items: [{ look: "app" }, { look: "preview" }],
+        });
+        expect(await run("trash", { limit: 2 })).toContain("- Idea. 1.md · deleted 2026-09-02 · Preview shows it in the window  (id t1)");
+        setPlatform("macos");
+        expect(await run("trash", { limit: 1 })).toContain("· Quick Look shows it  (id t2)");
+      } finally {
+        setPlatform(was);
+        delete answers.preview_available;
+      }
       answers.trash_list = () => [];
       expect(await data("trash")).toMatchObject({ total: 0, items: [] });
       answers.projects_list = () => [];
@@ -1542,6 +1560,67 @@ describe("MCP actions", () => {
       expect(calls.filter(([x]) => x === "chat_save").at(-1)![1]!.chat).toMatchObject({ state: "archived" });
     });
 
+    it("sets a chat's own effort, as the menu beside its model does, leaving Settings' alone", async () => {
+      const c = {
+        filename: "Chat. Orbit App plan.md",
+        id: "a",
+        title: "Orbit App plan",
+        model: "claude:sonnet",
+        updatedAt: "2026-10-05T09:00:00",
+      };
+      answers.chats_list = () => [c];
+      answers.chat_read = () => ({ ...c, transcript: [] });
+      answers.ask_clis = () => [
+        { cli: "claude", path: "/usr/local/bin/claude", version: "2", models: [], efforts: ["low", "medium", "high", "xhigh", "max"] },
+      ];
+      await findClis(true);
+      // The assistants found are kept between calls: later tests look for their own.
+      onTestFinished(() => clis.set(null));
+      expect(await run("chats", { action: "effort", chat: "Orbit App plan", effort: "Extra high" })).toMatch(
+        /^“Orbit App plan” runs at Extra high effort from its next message\./,
+      );
+      expect(calls.find(([x]) => x === "chat_save")![1]!.chat).toMatchObject({ effort: "xhigh" });
+      expect(settings.get().effort).toBeUndefined();
+      await expect(run("chats", { action: "effort", chat: "Orbit App plan", effort: "ultra" })).rejects.toThrow(/one of: low, medium/);
+      await run("chats", { action: "effort", chat: "Orbit App plan", effort: "" });
+      expect(calls.filter(([x]) => x === "chat_save").at(-1)![1]!.chat).toMatchObject({ effort: null });
+      // Left out, the effort isn't taken for Default: the chat stays as it is.
+      const saves = calls.filter(([x]) => x === "chat_save").length;
+      await expect(run("chats", { action: "effort", chat: "Orbit App plan" })).rejects.toThrow(
+        /^Give effort: for Claude Code, one of low, medium, high, xhigh, max, or empty for Default effort\.$/,
+      );
+      expect(calls.filter(([x]) => x === "chat_save")).toHaveLength(saves);
+    });
+
+    it("offers no effort for an assistant that isn't installed, as the screens show no menu", async () => {
+      answers.settings_write = (a) => a!.settings;
+      answers.login_item = () => null;
+      const c = {
+        filename: "Chat. Orbit App plan.md",
+        id: "a",
+        title: "Orbit App plan",
+        model: "agy:gemini-3",
+        updatedAt: "2026-10-05T09:00:00",
+      };
+      answers.chats_list = () => [c];
+      answers.chat_read = () => ({ ...c, transcript: [] });
+      answers.ask_clis = () => [
+        { cli: "claude", path: "/usr/local/bin/claude", version: "2", models: [], efforts: ["low", "medium", "high", "xhigh", "max"] },
+        { cli: "antigravity", path: null, version: null, models: [], efforts: ["low", "medium", "high", "xhigh", "max"] },
+      ];
+      await findClis(true);
+      onTestFinished(() => clis.set(null));
+      expect(await run("settings")).toContain(
+        "effort.antigravity · Settings › AI assistants › Found on this computer › Antigravity (Google) › Effort: null (Default effort, the assistant's own for each model) (one of: none here;",
+      );
+      await expect(run("settings", { action: "set", key: "effort.antigravity", value: "high" })).rejects.toThrow(/one of: none here/);
+      settings.update({ jobModels: { find: "agy:gemini-3" } });
+      await expect(run("settings", { action: "set", key: "jobEffort.find", value: "max" })).rejects.toThrow(/one of: none here/);
+      await expect(run("chats", { action: "effort", chat: "Orbit App plan", effort: "high" })).rejects.toThrow(/one of: none here/);
+      expect(settings.get().effort).toBeUndefined();
+      settings.update({ jobModels: undefined });
+    });
+
     it("rebuilds the index, unless it's being built already", async () => {
       answers.vault_status = () => ({ state: "ready" });
       expect(await run("index.rebuild")).toMatch(/^Rebuilding the index/);
@@ -1696,7 +1775,7 @@ describe("MCP actions", () => {
         /askModel · Settings › AI assistants › New chats use: "claude:sonnet" \(one of: claude:haiku \(Claude Code · Haiku\), claude:sonnet/,
       );
       expect(all).toContain(
-        "jobModels.summaries · Settings › AI assistants › Models by job › Daily and weekly summaries: null (As new chats)",
+        "jobModels.summaries · Settings › AI assistants › Models by job › Daily and weekly summaries: null (Default: the model new chats use)",
       );
       const none = isMac ? "As macOS" : "As the system";
       expect(all).toContain(
@@ -1759,8 +1838,30 @@ describe("MCP actions", () => {
       expect(out).toContain(
         "Brainstead 1.0.2 (abc123); its app data folder: /data/Brainstead; its website: https://brainstead.davies.co.za/",
       );
+      expect(out).not.toContain("didn't install");
       answers.vault_status = () => ({ state: "error", error: "The index file is damaged.", stats });
       expect(await run("status")).toContain("Index: Index failed: The index file is damaged.");
+      // An update that didn't install, as the update dialog said at this start.
+      answers.update_failed = () => ({
+        title: "The update didn't install",
+        text: "Brainstead 1.0.3 didn't install, so this is still 1.0.2.",
+      });
+      expect(await run("status")).toContain("The update didn't install: Brainstead 1.0.3 didn't install, so this is still 1.0.2.");
+      delete answers.update_failed;
+      // Which types Preview shows in the window, as the screens decide it: Windows only.
+      const was = platform();
+      try {
+        setPlatform("macos");
+        expect(await run("status")).not.toContain("Preview (");
+        setPlatform("windows");
+        answers.preview_available = (a) => /\.(docx|pptx)$/.test(String(a?.name));
+        expect(await run("status")).toContain(
+          "Preview (Sources' Preview button and Space, and the Trash's): shows .docx, .pptx files in the window; any other type, and a file downloaded from the internet, opens in its app.",
+        );
+      } finally {
+        setPlatform(was);
+        delete answers.preview_available;
+      }
       answers.contradictions_report = () => ({
         last: {
           finished: "2026-10-06T09:00:00",
@@ -1795,6 +1896,96 @@ describe("MCP actions", () => {
       expect(settings.get().interfaceSize).toBe(130);
       await expect(run("settings", { action: "set", key: "interfaceSize", value: 160 })).rejects.toThrow(/80 to 150/);
       await expect(run("settings", { action: "set", key: "interfaceSize", value: 70 })).rejects.toThrow(/80 to 150/);
+      // Accent colour: offered where the system has one (Windows), and put in force as the screen's setter does.
+      answers.system_accent = () => null;
+      expect(await run("settings")).not.toContain("accent ·");
+      await expect(run("settings", { action: "set", key: "accent", value: "system" })).rejects.toThrow(/only on Windows/);
+      answers.system_accent = () => "#0078d4";
+      expect(await run("settings")).toContain(
+        'accent · Settings › General › Appearance › Accent colour: "app" (one of: app (App), system (System))',
+      );
+      expect(await run("settings", { action: "set", key: "accent", value: "System" })).toBe(
+        'Settings › General › Appearance › Accent colour is now "system".',
+      );
+      expect(settings.get().accent).toBe("system");
+      expect(document.documentElement.dataset.accent).toBe("system");
+      expect(document.getElementById("system-accent")?.textContent).toContain("--accent: #0078d4;");
+      await run("settings", { action: "set", key: "accent", value: "app" });
+      expect(document.documentElement.dataset.accent).toBeUndefined();
+      // Pane widths: one pane by key, clamped as its divider clamps it; null puts one or all back.
+      expect(await run("settings")).toMatch(
+        /paneWidths · Settings › General › Appearance › Pane widths [^\n]*: \{\} \(panes: sidebar \(the sidebar, 180 to 400, usually 232\), tasks\.left \(Tasks › the task lists, /,
+      );
+      expect(await run("settings", { action: "set", key: "paneWidths.tasks.left", value: 320 })).toBe(
+        "Settings › General › Appearance › Pane widths › tasks.left is now 320 px.",
+      );
+      expect(await run("settings", { action: "set", key: "paneWidths.sidebar", value: 900 })).toBe(
+        "Settings › General › Appearance › Pane widths › sidebar is now 400 px (180 to 400).",
+      );
+      expect(settings.get().paneWidths).toEqual({ "tasks.left": 320, sidebar: 400 });
+      expect(await run("settings")).toContain(
+        'paneWidths · Settings › General › Appearance › Pane widths (px by pane; paneWidths.<pane> sets one, null puts them all back): {"tasks.left":320,"sidebar":400}',
+      );
+      await expect(run("settings", { action: "set", key: "paneWidths.nowhere", value: 300 })).rejects.toThrow(
+        /No pane “nowhere”. Panes: sidebar, tasks.left/,
+      );
+      await expect(run("settings", { action: "set", key: "paneWidths.sidebar", value: "wide" })).rejects.toThrow(
+        /width in px, from 180 to 400/,
+      );
+      await expect(run("settings", { action: "set", key: "paneWidths", value: 300 })).rejects.toThrow(/takes null/);
+      expect(await run("settings", { action: "set", key: "paneWidths.sidebar", value: null })).toBe(
+        "Settings › General › Appearance › Pane widths › sidebar is back to its usual width (232 px).",
+      );
+      expect(settings.get().paneWidths).toEqual({ "tasks.left": 320 });
+      // A list table's column, though no table has been drawn here, by the table's own name.
+      expect(await run("settings")).toMatch(/wiki\.tags \(Wiki › the Tags column, 48 to 480, usually 200\)/);
+      // Named in the screens' own words: a column by the heading its table draws.
+      expect(await run("settings")).toContain("trash.folder (Trash › the Was in column, 80 to 480, usually 220)");
+      expect(await run("settings")).toContain("sources.ingested (Sources › the Status column, 48 to 480, usually 88)");
+      expect(await run("settings", { action: "set", key: "paneWidths.notes.type", value: 72 })).toBe(
+        "Settings › General › Appearance › Pane widths › notes.type is now 72 px.",
+      );
+      expect(await run("settings", { action: "set", key: "paneWidths.notes.type", value: null })).toMatch(/notes\.type is back/);
+      expect(settings.get().paneWidths).toEqual({ "tasks.left": 320 });
+      expect(await run("settings", { action: "set", key: "paneWidths", value: null })).toBe(
+        "Settings › General › Appearance › Pane widths: every pane is back to its usual width.",
+      );
+      expect(settings.get().paneWidths).toBeUndefined();
+      // Locks, by type: a locked type's panes are refused with the setting that unlocks them; the
+      // other type's aren't, and every pane back still works.
+      expect(await run("settings")).toMatch(
+        /- resizeLocks\.panes · Settings › General › Appearance › Pane widths › Lock pane widths: false/,
+      );
+      expect(await run("settings", { action: "set", key: "resizeLocks.columns", value: true })).toBe(
+        "Settings › General › Appearance › Pane widths › Lock column widths is now true.",
+      );
+      expect(settings.get().resizeLocks).toEqual({ columns: true });
+      expect(await run("settings")).toMatch(/- resizeLocks\.columns · [^\n]*Lock column widths: true/);
+      expect(await run("settings")).toContain("trash.type (Trash › the Type column, 60 to 200, usually 90, locked by resizeLocks.columns)");
+      await expect(run("settings", { action: "set", key: "paneWidths.trash.type", value: 120 })).rejects.toThrow(
+        "Column widths are locked, so trash.type can't be resized: turn off Lock column widths (resizeLocks.columns) in Settings › General › Appearance › Pane widths first.",
+      );
+      await expect(run("settings", { action: "set", key: "paneWidths.activity.when", value: null })).rejects.toThrow(
+        /Column widths are locked/,
+      );
+      expect(await run("settings", { action: "set", key: "paneWidths.sidebar", value: 300 })).toBe(
+        "Settings › General › Appearance › Pane widths › sidebar is now 300 px.",
+      );
+      await run("settings", { action: "set", key: "resizeLocks.panes", value: "true" });
+      await expect(run("settings", { action: "set", key: "paneWidths.sidebar", value: 320 })).rejects.toThrow(
+        /^Pane widths are locked, so sidebar can't be resized: turn off Lock pane widths \(resizeLocks\.panes\)/,
+      );
+      expect(settings.get().paneWidths).toEqual({ sidebar: 300 });
+      await run("settings", { action: "set", key: "paneWidths", value: null });
+      expect(settings.get().paneWidths).toBeUndefined();
+      await run("settings", { action: "set", key: "resizeLocks.panes", value: false });
+      await run("settings", { action: "set", key: "resizeLocks.columns", value: false });
+      // Stored as the screen stores it: a lock turned off is left out.
+      expect(settings.get().resizeLocks).toBeUndefined();
+      expect(await run("settings", { action: "set", key: "paneWidths.trash.type", value: 120 })).toBe(
+        "Settings › General › Appearance › Pane widths › trash.type is now 120 px.",
+      );
+      settings.update({ paneWidths: undefined, resizeLocks: undefined });
       answers.capture_shortcut_status = () => ["Control+Shift+K", null];
       expect(await run("settings", { action: "set", key: "captureShortcut", value: "shift+control+k" })).toMatch(
         /is now "Control\+Shift\+K", registered with the system/,
@@ -1809,7 +2000,7 @@ describe("MCP actions", () => {
       expect(await run("settings", { action: "set", key: "captureShortcut", value: "Super+Space" })).toMatch(
         /set to "Super\+Space", but it isn't working: The system wouldn't give/,
       );
-      settings.update({ readSize: undefined, interfaceSize: undefined, captureShortcut: undefined });
+      settings.update({ readSize: undefined, interfaceSize: undefined, captureShortcut: undefined, accent: undefined });
     });
   });
 
@@ -2301,6 +2492,159 @@ describe("MCP actions", () => {
       expect(out).toContain("- Claude Code · 2.1.0: 1 model · /usr/local/bin/claude");
       expect(out).toContain(`- ChatGPT (Codex): No models listed: open ${terminalApp}, run codex and sign in.`);
       expect(out).toContain("- GitHub Copilot: Not installed. How to install: https://docs.github.com/");
+    });
+
+    it("lists Ollama's row as the pane does: its server, its models through Codex, or what's missing", async () => {
+      answers.settings_write = (a) => a!.settings;
+      answers.login_item = () => null;
+      const oss = { id: "ollama:gpt-oss:20b", name: "gpt-oss:20b (20.9B)", efforts: ["low", "medium", "high"] };
+      const qwen = { id: "ollama:qwen3:4b", name: "qwen3:4b (4.0B)", efforts: [] };
+      answers.ask_clis = () => [
+        {
+          cli: "codex",
+          path: "/usr/local/bin/codex",
+          version: "0.166.0",
+          models: [{ id: "gpt-5", name: "gpt-5" }],
+          efforts: ["low", "medium", "high", "xhigh"],
+        },
+        {
+          cli: "ollama",
+          path: "http://localhost:11434",
+          version: "0.35.1",
+          models: [oss, qwen],
+          efforts: ["low", "medium", "high"],
+          note: "Through Codex 0.166.0. Not listed, as it can't call tools, which Codex's agent loop needs: llama2",
+        },
+      ];
+      const out = (await run("assistants.found", { look_again: true })) as string;
+      expect(out).toContain(
+        "- Ollama · 0.35.1: 2 models · http://localhost:11434. Default effort (the assistant's own for each model). Through Codex 0.166.0. Not listed, as it can't call tools, which Codex's agent loop needs: llama2.",
+      );
+      // Its models can be picked for new chats and jobs, and a job's Effort offers the levels its model names.
+      expect(await run("settings", { action: "set", key: "askModel", value: "Ollama · gpt-oss:20b (20.9B)" })).toMatch(
+        /is now "ollama:gpt-oss:20b"/,
+      );
+      const all = (await run("settings")) as string;
+      expect(all).toContain(
+        "jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects › Effort: null (Default, the effort set for the job's assistant) (one of: low (Low), medium (Medium), high (High); null for Default",
+      );
+      expect(all).toContain("effort.ollama · Settings › AI assistants › Found on this computer › Ollama › Effort: null (Default effort");
+      await expect(run("settings", { action: "set", key: "jobEffort.find", value: "xhigh" })).rejects.toThrow(
+        /one of: low, medium, high, or null/,
+      );
+      // A model that names no level offers none, and takes a job's own level away, saying so.
+      await run("settings", { action: "set", key: "jobEffort.find", value: "high" });
+      expect(await run("settings", { action: "set", key: "jobModels.find", value: "ollama:qwen3:4b" })).toMatch(
+        /went back to Default: Ollama doesn't offer it for Ollama · qwen3:4b \(4\.0B\)\.$/,
+      );
+      expect((await run("settings")) as string).toContain(
+        "jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects › Effort: null (Default, the effort set for the job's assistant) (one of: none here; null for Default",
+      );
+      settings.update({ askModel: undefined, jobModels: undefined, jobEffort: undefined, effort: undefined });
+      // Not usable: the row says why, and where to read how to install it.
+      answers.ask_clis = () => [
+        { cli: "codex", path: null, version: null, models: [], efforts: ["low", "medium", "high", "xhigh"] },
+        {
+          cli: "ollama",
+          path: null,
+          version: null,
+          models: [],
+          efforts: ["low", "medium", "high"],
+          note: "Ollama isn't running at http://localhost:11434, or isn't installed, and its models run through Codex, which isn't installed either.",
+        },
+      ];
+      const none = (await run("assistants.found", { look_again: true })) as string;
+      expect(none).toContain(
+        "- Ollama: Ollama isn't running at http://localhost:11434, or isn't installed, and its models run through Codex, which isn't installed either. How to install: https://ollama.com/download",
+      );
+      // Brainstead's tools' commands: Codex's covers Ollama, which gets none of its own.
+      expect(none).not.toMatch(/- Ollama: ollama/);
+      clis.set(null);
+    });
+
+    it("reads and sets each assistant's effort as Found on this computer does", async () => {
+      answers.settings_write = (a) => a!.settings;
+      answers.login_item = () => null;
+      answers.ask_clis = () => [
+        { cli: "claude", path: "/usr/local/bin/claude", version: "2.1.0", models: [], efforts: ["low", "medium", "high", "xhigh", "max"] },
+        { cli: "codex", path: "/usr/local/bin/codex", version: null, models: [], efforts: ["low", "medium", "high", "xhigh"] },
+      ];
+      await findClis(true);
+      const all = (await run("settings")) as string;
+      expect(all).toContain(
+        "effort.claude · Settings › AI assistants › Found on this computer › Claude Code › Effort: null (Default effort, the assistant's own for each model) (one of: low (Low), medium (Medium), high (High), xhigh (Extra high), max (Max)",
+      );
+      expect(await run("settings", { action: "set", key: "effort.claude", value: "Extra high" })).toMatch(/is now "xhigh"/);
+      expect(settings.get().effort).toEqual({ claude: "xhigh" });
+      // Codex takes no max.
+      await expect(run("settings", { action: "set", key: "effort.codex", value: "max" })).rejects.toThrow(
+        /one of: low, medium, high, xhigh/,
+      );
+      const out = (await run("assistants.found")) as string;
+      expect(out).toContain("- Claude Code · 2.1.0: No models listed");
+      expect(out).toContain("Extra high effort.");
+      expect(out).toContain("- ChatGPT (Codex): No models listed");
+      expect(out).toContain("Default effort (the assistant's own for each model).");
+      await run("settings", { action: "set", key: "effort.claude", value: null });
+      expect(settings.get().effort).toEqual({});
+    });
+
+    it("reads and sets a job's own effort as Models by job does, leaving the assistant's alone", async () => {
+      answers.settings_write = (a) => a!.settings;
+      answers.login_item = () => null;
+      answers.ask_clis = () => [
+        {
+          cli: "claude",
+          path: "/usr/local/bin/claude",
+          version: "2.1.0",
+          models: [{ id: "claude:opus", name: "Opus" }],
+          efforts: ["low", "medium", "high", "xhigh", "max"],
+        },
+        {
+          cli: "codex",
+          path: "/usr/local/bin/codex",
+          version: null,
+          models: [{ id: "gpt-5", name: "gpt-5" }],
+          efforts: ["low", "medium", "high", "xhigh"],
+        },
+      ];
+      await findClis(true);
+      settings.update({ effort: { claude: "low" } });
+      const all = (await run("settings")) as string;
+      expect(all).toContain(
+        "jobEffort.weekprep · Settings › AI assistants › Models by job › Weekly review preparation › Effort: null (Default, the effort set for the job's assistant) (one of: low (Low), medium (Medium), high (High), xhigh (Extra high), max (Max)",
+      );
+      expect(await run("settings", { action: "set", key: "jobEffort.weekprep", value: "Max" })).toMatch(
+        /Weekly review preparation › Effort is now "max"/,
+      );
+      expect(settings.get().jobEffort).toEqual({ weekprep: "max" });
+      expect(settings.get().effort).toEqual({ claude: "low" });
+      // A model whose assistant has no max takes the job's effort away, as the screen does, and says so.
+      expect(await run("settings", { action: "set", key: "jobModels.weekprep", value: "gpt-5" })).toMatch(
+        /is now "gpt-5"\. Its effort \(Max\) went back to Default: ChatGPT \(Codex\) doesn't offer it for ChatGPT · gpt-5\.$/,
+      );
+      expect(settings.get().jobModels).toEqual({ weekprep: "gpt-5" });
+      expect(settings.get().jobEffort).toEqual({});
+      await expect(run("settings", { action: "set", key: "jobEffort.weekprep", value: "max" })).rejects.toThrow(
+        /one of: low, medium, high, xhigh, or null for Default/,
+      );
+      await run("settings", { action: "set", key: "jobEffort.weekprep", value: "high" });
+      await run("settings", { action: "set", key: "jobEffort.weekprep", value: null });
+      expect(settings.get().jobEffort).toEqual({});
+      // A model the job inherits (new chats', or the summaries' for weekprep) moving to an assistant
+      // without its level sets it aside: list_settings says what the screen shows, and it comes back.
+      settings.update({ askModel: "claude:opus", jobModels: {}, jobEffort: { find: "max", weekprep: "max" } });
+      await run("settings", { action: "set", key: "jobModels.summaries", value: "gpt-5" });
+      expect(await run("settings", { action: "set", key: "askModel", value: "gpt-5" })).not.toMatch(/went back to Default/);
+      expect(settings.get().jobEffort).toEqual({ find: "max", weekprep: "max" });
+      expect(await run("settings")).toContain(
+        "jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects › Effort: null (Default",
+      );
+      await run("settings", { action: "set", key: "askModel", value: "claude:opus" });
+      expect(await run("settings")).toContain(
+        'jobEffort.find · Settings › AI assistants › Models by job › Find tasks and projects › Effort: "max"',
+      );
+      settings.update({ askModel: undefined, jobModels: undefined, jobEffort: undefined, effort: undefined });
     });
 
     it("names the read-aloud highlight as Settings does", async () => {

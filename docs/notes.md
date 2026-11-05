@@ -47,7 +47,7 @@ Choose **Read aloud** on the top bar's ⋯, or press ⇧⌘P, to hear the note o
 
 - **Tasks queries** (`tasks` blocks) and **Dataview** (`dataview` blocks: TABLE, LIST, TASK and CALENDAR) run in View, with tasks you can tick. In Edit, the editor suggests what comes next, and **Build query…** opens a builder with a live preview.
 - **Callouts** (`> [!tip] Title`) are tinted boxes with an icon; `[!tip]-` or `[!tip]+` makes them fold.
-- **Mermaid** diagrams, with pan, zoom and a full-screen button (Escape closes it).
+- **Mermaid** diagrams, with pan, zoom and a full-screen button (Escape closes it; on Windows the full screen opens below the title bar, so the window's own buttons keep their row and don't close it).
 - **KaTeX** maths (`$…$` and `$$…$$`); an amount like $5 isn't taken for maths.
 - Highlighted code, and `==highlights==` in colours.
 
@@ -86,4 +86,4 @@ Other apps can still change these files.
 
 ## The Trash
 
-Moving a note to the Trash puts it in the vault's `.trash` folder, with Undo. Trashing a transcript first points its links at its meeting note, when it has one. A capture restored from the Trash goes back to the Inbox. The Trash screen lists and searches what's there, puts files back where they were, and deletes them for good. **Quick Look** (`Space`) previews a file on a Mac; on Windows the same button opens it in its own app.
+Moving a note to the Trash puts it in the vault's `.trash` folder, with Undo. Trashing a transcript first points its links at its meeting note, when it has one. A capture restored from the Trash goes back to the Inbox. The Trash screen lists and searches what's there, puts files back where they were, and deletes them for good. **Quick Look** (`Space`) previews a file on a Mac. On Windows the same button is **Preview**: the file drawn in the window below the title bar by its preview handler, or opened in its own app when Windows has no handler for its type. `Space` or `Esc` closes it; after a click into the document, keys go to the document until the panel's bar is clicked, as in Explorer's preview pane.

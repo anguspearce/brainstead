@@ -25,6 +25,7 @@ import {
   ChangeOutcome,
   ChangeRow,
   ChangeSubmit,
+  CliName,
   CurrentStateRun,
   Instruction,
   FindSuggestion,
@@ -100,21 +101,42 @@ import {
   ask,
   CLI_LABEL,
   clis,
+  cliOf,
   DEFAULT_MODEL,
+  effortLabel,
+  effortSaved,
   findClis,
+  installedEfforts,
   isSaved,
   keepChat,
+  jobModelOf,
+  jobOwnEffort,
   MODEL_JOBS,
   modelLabel,
   pinSaved,
   renameSaved,
+  setJobModel,
   trashSaved,
 } from "./askState";
 import { DOC_ACCENTS, DOC_STYLES, docDefaults, lookOf, withOwnLook } from "./docLook";
 import { loadVoices, speechSettingsChanged, voiceLabel, voices } from "./speech/player";
 import { applyReadSize, applyTheme, READ_SIZE, settings } from "./store";
 import { clampInterfaceSize, INTERFACE_SIZE, setInterfaceSize } from "./interfaceSize";
+import { Accent, setAccent, systemAccent } from "./accent";
+import {
+  lockedMessage,
+  paneName,
+  paneSpecs,
+  RESIZE_LOCKS,
+  ResizeType,
+  resetPaneWidth,
+  resetPaneWidths,
+  resizeLocked,
+  setPaneWidth,
+  setResizeLock,
+} from "./panes";
 import { imageView } from "./ImageViewer";
+import { lookIn, LookIn } from "./Preview";
 import { TOPICS } from "./help";
 import { HelpView, openHelp } from "./help/HelpDrawer";
 import { IMAGE_EXT } from "./md/wikilinks";
@@ -138,7 +160,7 @@ import { LABEL as TRIAGE } from "./skills/Triage";
 import { ANSWERED, replyTask } from "./skills/Reply";
 import { actionLabel, actionsIn, filterLog, rankLog } from "./activityModel";
 import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from "./taskGroups";
-import { captureDefault, isMac, keyLabel, terminalApp, vaultFile } from "./platform";
+import { captureDefault, isMac, isWindows, keyLabel, terminalApp, vaultFile } from "./platform";
 
 const TODO_LIST = "Me. To Do List.md";
 const SCRATCHPAD = "Me. Scratchpad.md";
@@ -2003,6 +2025,13 @@ async function fixName(a: Args): Promise<string> {
 
 // ---- the rest
 
+/** What Space does with a file, as list_trash says it. */
+const LOOK_TEXT: Record<LookIn, string> = {
+  "quick look": "Quick Look shows it",
+  preview: "Preview shows it in the window",
+  app: "opens in its app",
+};
+
 async function trash(a: Args, r: McpRequest): Promise<string | Listing> {
   const action = str(a, "action") ?? "list";
   if (action === "list") {
@@ -2011,13 +2040,22 @@ async function trash(a: Args, r: McpRequest): Promise<string | Listing> {
     // As the Trash screen says it (fmtBytes counts in 1024s).
     const size = fmtBytes(bytes);
     const { shown, head, page } = pagedRows(a, all, (t) => t.originalRel, ["item", "items"]);
+    // What the row's eye button and Space do with it, as the screen decides (Preview.tsx).
+    const looks = await Promise.all(shown.map((t) => lookIn(t.basename)));
     const text = all.length
       ? [
           `The Trash (${size}), newest first: ${head}:`,
-          ...shown.map((t) => `- ${t.originalRel} · deleted ${t.deletedAt.slice(0, 10)}  (id ${t.id})`),
+          ...shown.map((t, i) => `- ${t.originalRel} · deleted ${t.deletedAt.slice(0, 10)} · ${LOOK_TEXT[looks[i]]}  (id ${t.id})`),
         ].join("\n")
       : "The Trash is empty.";
-    const items = shown.map((t) => ({ id: t.id, path: t.originalRel, layer: t.layer, deleted: t.deletedAt, bytes: t.sizeBytes }));
+    const items = shown.map((t, i) => ({
+      id: t.id,
+      path: t.originalRel,
+      layer: t.layer,
+      deleted: t.deletedAt,
+      bytes: t.sizeBytes,
+      look: looks[i],
+    }));
     return { text, structured: { ...page, bytes, size, items } };
   }
   if (action === "restore") {
@@ -2189,14 +2227,30 @@ async function graph(a: Args): Promise<string> {
   return [links, "", "Pages:", ...pages.slice(0, 200), ...(pages.length > 200 ? [`…and ${pages.length - 200} more`] : [])].join("\n");
 }
 
+/** The types a source or a trashed file is likely to be, for app_status's Preview line. */
+const PREVIEW_TYPES = ["docx", "doc", "pptx", "ppt", "xlsx", "xls", "pdf", "rtf", "txt", "md", "csv", "png", "jpg"];
+
+/** On Windows, which of `PREVIEW_TYPES` the Preview button and Space (Sources, the Trash) show in
+ *  the window, as the screens decide it (`lookIn`); "" elsewhere. */
+async function previewLine(): Promise<string> {
+  if (!isWindows) return "";
+  const looks = await Promise.all(PREVIEW_TYPES.map((t) => lookIn(`file.${t}`)));
+  const shown = PREVIEW_TYPES.filter((_, i) => looks[i] === "preview");
+  return `Preview (Sources' Preview button and Space, and the Trash's): ${
+    shown.length ? `shows .${shown.join(", .")} files in the window` : "shows no common type in the window"
+  }; any other type, and a file downloaded from the internet, opens in its app.`;
+}
+
 async function status(): Promise<string> {
-  const [s, v, u, sw, perm, info] = await Promise.all([
+  const [s, v, u, sw, perm, info, failed, preview] = await Promise.all([
     api.settingsRead(),
     api.vaultStatus(),
     api.undoPeek(),
     api.switchoverStatus().catch(() => null),
     api.permissions().catch(() => null),
     api.appInfo().catch(() => null),
+    api.updateFailed().catch(() => null),
+    previewLine(),
   ]);
   const disk = v.state === "ready" ? await api.diskUsage().catch(() => null) : null;
   const old = sw && (sw.skills || sw.scripts);
@@ -2220,8 +2274,11 @@ async function status(): Promise<string> {
       ? `Full Disk Access: ${perm.fullDiskAccess === true ? "granted" : perm.fullDiskAccess === false ? "not granted (Settings › Permissions says how to give it)" : `${isMac ? "macOS" : "the system"} can't say`}`
       : "",
     info ? `Brainstead ${info.version} (${info.build}); its app data folder: ${info.dataDir}; its website: ${WEBSITE}` : "",
+    // What the update dialog said at this start (Windows): the update the app closed for didn't install.
+    failed ? `${failed.title}: ${failed.text}` : "",
     `Brainstead runs the daily and weekly summaries (Settings › Jobs & schedule): ${s.summariesHere ? "on" : "off"}`,
     u ? `${keyLabel("⌘Z")} would undo: ${u.label}` : "Nothing to undo.",
+    preview,
     old
       ? "The previous app's skills or scripts are still in the vault (.claude/skills, scripts/): don't use them; use these tools. The user can retire them in Settings › General › Moving over."
       : "",
@@ -2367,7 +2424,7 @@ async function assistantsFound(a: Args): Promise<string> {
     `Found on this computer (Settings › AI assistants)${a.look_again === true ? ", looked for again just now" : ""}: ${n ? `${n} assistant${n === 1 ? "" : "s"}` : "no assistants"}.`,
     ...found.map(
       (c) =>
-        `- ${CLI_LABEL[c.cli]}${c.version ? ` · ${c.version}` : ""}: ${foundDetail(c)}${c.path ? "" : ` How to install: ${INSTALL[c.cli]}`}`,
+        `- ${CLI_LABEL[c.cli]}${c.version ? ` · ${c.version}` : ""}: ${c.path ? `${foundDetail(c).replace(/\.$/, "")}. ${effortSaid(c.cli)}.` : `${foundDetail(c)} How to install: ${INSTALL[c.cli]}`}${c.path && c.note ? ` ${c.note.replace(/\.?$/, ".")}` : ""}`,
     ),
     "",
     cmds.length
@@ -2382,6 +2439,20 @@ async function assistantsFound(a: Args): Promise<string> {
         ]
       : []),
   ].join("\n");
+}
+
+/** An assistant's effort, as its row in Found on this computer shows it. */
+function effortSaid(cli: CliName): string {
+  const level = settings.get().effort?.[cli];
+  return level ? `${effortLabel(level)} effort` : "Default effort (the assistant's own for each model)";
+}
+
+/** The effort levels an assistant can be set to, as its menus list them (for `model`, the model's
+ *  own where its assistant lists them per model): none while it isn't installed, when the screens
+ *  show no menu. */
+async function effortChoices(cli: CliName, model?: string): Promise<[string, string][]> {
+  await findClis(!clis.get()?.length);
+  return installedEfforts(cli, model).map((l) => [l, effortLabel(l)]);
 }
 
 /** A source's Provenance card, as Sources shows it: ingested or not and by which run, its size and
@@ -3106,10 +3177,12 @@ async function chatsTool(a: Args): Promise<string | Listing> {
     const turns = full.transcript.filter((t) => t.role === "user" || t.role === "assistant");
     return {
       text: [
-        `${c.title} (${turns.length} messages):`,
+        `${c.title} (${turns.length} messages, ${c.effort ? `${effortLabel(c.effort)} effort` : "Default effort"}):`,
         ...turns.map((t) => `\n${t.role === "user" ? "User" : "Assistant"}: ${t.text}`),
       ].join("\n"),
-      structured: { chat: { file: c.filename, title: c.title, messages: turns.map((t) => ({ role: t.role, text: t.text })) } },
+      structured: {
+        chat: { file: c.filename, title: c.title, effort: c.effort ?? null, messages: turns.map((t) => ({ role: t.role, text: t.text })) },
+      },
     };
   }
   if (action === "rename") {
@@ -3128,12 +3201,28 @@ async function chatsTool(a: Args): Promise<string | Listing> {
       ? `Pinned “${c.title}”: it's kept whatever happens.`
       : `Unpinned “${c.title}”${saved(c) ? "" : "; as it isn't saved, it's deleted once it's closed and 20 newer chats are in History"}.`;
   }
+  if (action === "effort") {
+    // As the menu beside the chat's model in Ask: its assistant's levels, by id or name.
+    const model = c.model ?? DEFAULT_MODEL;
+    const cli = cliOf(model);
+    await findClis(!clis.get()?.length);
+    const levels = installedEfforts(cli, model);
+    const choices = `${levels.join(", ") || "none here"}, or empty for Default effort`;
+    if (a.effort == null) throw new Error(`Give effort: for ${CLI_LABEL[cli]}, one of ${choices}.`);
+    const want = String(a.effort).trim().toLowerCase();
+    const level = want ? levels.find((l) => l === want || effortLabel(l).toLowerCase() === want) : null;
+    if (level === undefined) throw new Error(`effort for ${CLI_LABEL[cli]} is one of: ${choices}.`);
+    await effortSaved(c, level);
+    const said = level ? `${effortLabel(level)} effort` : "Default effort (the assistant's own for each model)";
+    noted(`set the chat “${c.title}” to ${said}`);
+    return `“${c.title}” runs at ${said} from its next message. New chats still start with the effort set in Settings › AI assistants.`;
+  }
   if (action === "trash") {
     await trashSaved(c);
     noted(`moved the chat “${c.title}” to the Trash`);
     return `Moved “${c.title}” to the Trash.`;
   }
-  throw new Error("action is list, read, rename, pin, unpin or trash.");
+  throw new Error("action is list, read, rename, pin, unpin, effort or trash.");
 }
 
 // ---- Tasks' saved lists
@@ -3183,7 +3272,8 @@ async function taskLists(a: Args): Promise<string> {
 
 // ---- Settings
 
-type SettingKind = "bool" | "time" | "text" | "number" | "day" | "theme" | "choice" | "model" | "speed" | "size" | "percent" | "shortcut";
+type SettingKind =
+  "bool" | "time" | "text" | "number" | "day" | "theme" | "choice" | "model" | "speed" | "size" | "percent" | "shortcut" | "panes";
 /** A choice setting's choices, as its menu offers them: each value and how the screen names it. */
 type Choices = () => Promise<[string, string][]> | [string, string][];
 /** What the settings tool can change, by key: its pane, label, kind and default, a choice's
@@ -3205,6 +3295,27 @@ const settingRows = (): SettingRow[] => [
   ["ownerName", "General", "Your name", "text", ""],
   ["theme", "General", "Appearance (system, light or dark)", "theme", "system"],
   ["interfaceSize", "General", "Appearance › Interface size (80 to 150, %)", "percent", INTERFACE_SIZE.default],
+  [
+    "accent",
+    "General",
+    "Appearance › Accent colour",
+    "choice",
+    "app",
+    () => [
+      ["app", "App"],
+      ["system", "System"],
+    ],
+  ],
+  // The panes dragged wider or narrower (src/panes.ts), px by pane key; one pane is set as paneWidths.<pane>.
+  ["paneWidths", "General", "Appearance › Pane widths (px by pane; paneWidths.<pane> sets one, null puts them all back)", "panes", {}],
+  // A lock per type of divider (src/panes.ts RESIZE_LOCKS): resizeLocks.panes, resizeLocks.columns.
+  ...(Object.keys(RESIZE_LOCKS) as ResizeType[]).map((type): SettingRow => [
+    `resizeLocks.${type}`,
+    "General",
+    `Appearance › Pane widths › ${RESIZE_LOCKS[type].label}`,
+    "bool",
+    false,
+  ]),
   ["openAtLogin", "General", "Open at login", "bool", false],
   ["menuBar", "General", "Show in the menu bar", "bool", true],
   ["menuBarOnly", "General", `Only in the menu bar when the window is closed${isMac ? "" : " (Mac only; no effect here)"}`, "bool", false],
@@ -3261,7 +3372,25 @@ const settingRows = (): SettingRow[] => [
     "model",
     null,
     modelChoices,
-    job === "weekprep" ? "As the summaries, else as new chats" : "As new chats",
+    job === "weekprep" ? "Default: the summaries' model, else new chats'" : "Default: the model new chats use",
+  ]),
+  ...MODEL_JOBS.map(([job, label]): SettingRow => [
+    `jobEffort.${job}`,
+    "AI assistants",
+    `Models by job › ${label} › Effort`,
+    "choice",
+    null,
+    () => effortChoices(cliOf(jobModelOf(job)), jobModelOf(job)),
+    "Default, the effort set for the job's assistant",
+  ]),
+  ...(Object.keys(CLI_LABEL) as CliName[]).map((cli): SettingRow => [
+    `effort.${cli}`,
+    "AI assistants",
+    `Found on this computer › ${CLI_LABEL[cli]} › Effort`,
+    "choice",
+    null,
+    () => effortChoices(cli),
+    "Default effort, the assistant's own for each model",
   ]),
   ["askSuggest", "AI assistants", "Suggest a next message", "bool", true],
   ["meetingIngest", "AI assistants", "Ingest a meeting note once it's made", "bool", true],
@@ -3316,14 +3445,21 @@ async function settingsTool(a: Args): Promise<string> {
     summaries: { ...DEFAULT_SCHEDULE, ...s.summaries },
     weeklyReview: { ...DEFAULT_WEEKLY_REVIEW, ...s.weeklyReview },
     jobModels: { ...s.jobModels },
+    jobEffort: { ...s.jobEffort },
+    effort: { ...s.effort },
+    resizeLocks: { ...s.resizeLocks },
   };
   // Open at login is macOS's login item, not a setting in the file; null where macOS can't say
   // (a copy run from a folder), and then it isn't offered, as the screen hides it.
   const login = (await api.loginItem().catch(() => null)) ?? null;
-  const offered = settingRows().filter(([k]) => k !== "openAtLogin" || login !== null);
+  // Accent colour is offered where the system has one (Windows), as the screen shows it.
+  const sysAccent = (await api.systemAccent().catch(() => null)) ?? null;
+  const offered = settingRows().filter(([k]) => (k !== "openAtLogin" || login !== null) && (k !== "accent" || sysAccent !== null));
   const valueOf = (key: string, def: unknown) => {
     if (key === "openAtLogin") return login;
     const [head, sub] = key.split(".");
+    // As Models by job shows it: a level the job's assistant doesn't offer reads Default.
+    if (head === "jobEffort") return jobOwnEffort(sub, s);
     const v = sub ? nested[head][sub] : (s as unknown as Record<string, unknown>)[key];
     return v ?? def;
   };
@@ -3341,6 +3477,17 @@ async function settingsTool(a: Args): Promise<string> {
           const list = cs.map(([v, l]) => (v === l ? v : `${v} (${l})`)).join(", ");
           extra = ` (one of: ${list || "none here"}${none ? `; null for ${none}` : ""})`;
         }
+        if (kind === "panes") {
+          // Each pane's key with what the screen calls it (a column by its heading), its range and
+          // usual width, as the dividers clamp them, and whether its type is locked.
+          const panes = Object.entries(paneSpecs())
+            .map(
+              ([pk, sp]) =>
+                `${pk} (${paneName(pk)}, ${sp.min} to ${sp.max}, usually ${sp.def}${resizeLocked(sp.type) ? `, locked by resizeLocks.${sp.type}` : ""})`,
+            )
+            .join(", ");
+          extra = ` (panes: ${panes})`;
+        }
         return `- ${k} · ${where(pane, label)}: ${shown(valueOf(k, def), none)}${extra}`;
       }),
     );
@@ -3348,12 +3495,45 @@ async function settingsTool(a: Args): Promise<string> {
   }
   if (action !== "set") throw new Error("action is get or set.");
   const key = str(a, "key");
+  // One pane's width, as its divider sets it: clamped to the pane's range only (the screen fits it
+  // to its room as it draws, src/PaneResizer.tsx, so a width past the room shows narrower than it is
+  // kept); null puts that pane, or with the bare key every pane, back. A pane
+  // whose type is locked (resizeLocks) is refused, as its divider is hidden; every pane back isn't.
+  if (key === "paneWidths" || key?.startsWith("paneWidths.")) {
+    const label = "Settings › General › Appearance › Pane widths";
+    if (key === "paneWidths") {
+      if (a.value !== null)
+        throw new Error("paneWidths takes null, to put every pane back; set one pane as paneWidths.<pane> (list_settings names them).");
+      resetPaneWidths();
+      await settings.flush();
+      noted("put every pane back to its usual width");
+      return `${label}: every pane is back to its usual width.`;
+    }
+    const pane = key.slice("paneWidths.".length);
+    const spec = paneSpecs()[pane];
+    if (!spec) throw new Error(`No pane “${pane}”. Panes: ${Object.keys(paneSpecs()).join(", ")}.`);
+    if (resizeLocked(spec.type)) throw new Error(lockedMessage(pane, spec.type));
+    if (a.value === null) {
+      resetPaneWidth(pane);
+      await settings.flush();
+      noted(`put the ${pane} pane back to its usual width`);
+      return `${label} › ${pane} is back to its usual width (${spec.def} px).`;
+    }
+    const n = Number(a.value);
+    if (!Number.isFinite(n)) throw new Error(`${key} is a width in px, from ${spec.min} to ${spec.max}, or null for its usual width.`);
+    const v = setPaneWidth(pane, n);
+    await settings.flush();
+    noted(`set the ${pane} pane to ${v} px`);
+    return `${label} › ${pane} is now ${v} px${v !== Math.round(n) ? ` (${spec.min} to ${spec.max})` : ""}.`;
+  }
   const row = offered.find(([k]) => k === key);
   if (!row)
     throw new Error(
-      key === "openAtLogin"
-        ? `Open at login can't be changed for this copy of Brainstead (${isMac ? "macOS" : "the system"} manages it only for the installed app).`
-        : `Not a setting this tool changes: ${key}. list_settings lists them; the vault, Read-only and the folders left out are the user's, in the app.`,
+      key === "accent"
+        ? "Accent colour is offered only on Windows, which has a system accent colour to follow."
+        : key === "openAtLogin"
+          ? `Open at login can't be changed for this copy of Brainstead (${isMac ? "macOS" : "the system"} manages it only for the installed app).`
+          : `Not a setting this tool changes: ${key}. list_settings lists them; the vault, Read-only and the folders left out are the user's, in the app.`,
     );
   const [, pane, label, kind, , choices, none] = row;
   // The screen shows Only in the menu bar… only while Show in the menu bar is on.
@@ -3417,8 +3597,17 @@ async function settingsTool(a: Args): Promise<string> {
     v = scriptsFolder(String(v ?? ""));
   } else v = String(v ?? "").trim() || undefined;
   const [head, sub] = key!.split(".");
+  let dropped = "";
   if (key === "openAtLogin") {
     await api.loginItemSet(v as boolean);
+  } else if (head === "jobModels") {
+    // As Models by job does: the job's own effort goes when its new model's assistant doesn't offer it.
+    const level = setJobModel(sub, (v as string | undefined) ?? null);
+    if (level)
+      dropped = ` Its effort (${effortLabel(level)}) went back to Default: ${CLI_LABEL[cliOf(jobModelOf(sub))]} doesn't offer it for ${modelLabel(jobModelOf(sub), clis.get())}.`;
+  } else if (head === "resizeLocks") {
+    // As the screen's checkbox sets it.
+    setResizeLock(sub as ResizeType, v as boolean);
   } else if (sub) {
     const next = { ...nested[head], [sub]: v };
     if (v === undefined) delete next[sub];
@@ -3430,6 +3619,9 @@ async function settingsTool(a: Args): Promise<string> {
     settings.update({ readSize: applyReadSize(v as number) });
   } else if (kind === "percent") {
     await setInterfaceSize(v as number);
+  } else if (key === "accent") {
+    systemAccent.set(sysAccent);
+    setAccent(v as Accent);
   } else settings.update({ [key!]: v } as Partial<Settings>);
   await settings.flush();
   if (key === "speechVoice" || key === "speechRate") speechSettingsChanged();
@@ -3444,7 +3636,7 @@ async function settingsTool(a: Args): Promise<string> {
     return `${where(pane, label)} is now ${said}, registered with the system.`;
   }
   noted(`set ${label} to ${said}`);
-  return `${where(pane, label)} is now ${said}.`;
+  return `${where(pane, label)} is now ${said}.${dropped}`;
 }
 
 // ---- a note's own look

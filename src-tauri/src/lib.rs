@@ -20,6 +20,7 @@ mod listnotes;
 mod menu;
 mod nativehost;
 mod notes;
+mod ollama;
 mod platform;
 mod reviews;
 mod settings;
@@ -480,16 +481,41 @@ async fn file_open(app: AppHandle, path: String) -> Result<(), String> {
     .await
 }
 
-/// Shows a vault file (vault-relative path) in the system's Quick Look panel, as Finder's space bar
-/// does: Office files look as they do in Office, which the window can't draw.
+/// Shows a vault file (vault-relative path) without opening its app: the system's Quick Look panel
+/// on a Mac, as Finder's space bar does, or on Windows the file's preview handler in the page's
+/// panel at `frame` (src/Preview.tsx): Office files look as they do in Office, which the window
+/// can't draw. Without a frame, or where Windows has no preview for the type, the file opens in its
+/// own app (then false). On a blocking thread: on Windows it waits for the preview to draw.
 #[tauri::command]
-fn file_quick_look(app: AppHandle, path: String) -> Result<(), String> {
-    let abs = app.state::<VaultService>().resolve_path(&path)?;
-    if !abs.is_file() {
-        return Err(format!("{path} isn't in the vault any more."));
-    }
-    let w = app.get_webview_window("main").ok_or_else(|| "No window to show Quick Look over.".to_string())?;
-    platform::quick_look(&w, &abs)
+async fn file_quick_look(app: AppHandle, path: String, frame: Option<platform::PreviewFrame>) -> Result<bool, String> {
+    blocking(move || {
+        let abs = app.state::<VaultService>().resolve_path(&path)?;
+        if !abs.is_file() {
+            return Err(format!("{path} isn't in the vault any more."));
+        }
+        let w = app.get_webview_window("main").ok_or_else(|| "No window to show the preview over.".to_string())?;
+        platform::quick_look(&w, &abs, frame)
+    })
+    .await
+}
+
+/// Whether `file_quick_look` and `trash_quick_look` can show a file named like `name` in the
+/// window rather than its app (src/Preview.tsx opens its panel only then).
+#[tauri::command]
+fn preview_available(name: String) -> bool {
+    platform::preview_available(&name)
+}
+
+/// The preview panel moved or resized (src/Preview.tsx).
+#[tauri::command]
+fn preview_move(frame: platform::PreviewFrame) {
+    platform::preview_move(frame);
+}
+
+/// The preview panel `id` closed (src/Preview.tsx numbers them).
+#[tauri::command]
+fn preview_close(id: u64) {
+    platform::preview_close(id);
 }
 
 /// Shows a vault file (vault-relative path) or the vault folder itself (empty path) in Finder.
@@ -569,6 +595,7 @@ fn app_restart(app: AppHandle) {
 pub(crate) fn before_quit(app: &AppHandle) {
     let _ = app.save_window_state(STATE_FLAGS);
     app.state::<std::sync::Arc<ask::Running>>().kill_all();
+    platform::preview_shutdown();
 }
 
 /// What would be cut short by restarting into an update now, or None.
@@ -807,6 +834,20 @@ fn login_item_set(app: AppHandle, on: bool) -> Result<Option<bool>, String> {
     Ok(now)
 }
 
+/// The system's accent colour, `#rrggbb`, for Appearance › Accent colour (src/accent.ts); None off
+/// Windows, where the setting isn't offered.
+#[tauri::command]
+fn system_accent() -> Option<String> {
+    platform::system_accent()
+}
+
+/// Whether Windows shows scroll bars all the time, so the app does too (src/scrollbars.ts); false
+/// elsewhere.
+#[tauri::command]
+fn always_show_scrollbars() -> bool {
+    platform::always_show_scrollbars()
+}
+
 /// Shows the app's log folder in Finder.
 #[tauri::command]
 fn logs_reveal() -> Result<(), String> {
@@ -824,6 +865,11 @@ pub fn run() {
         platform::claim_single_instance(&context.config().identifier);
     }
     let data = platform::data_dir();
+    // A copy beside the installed app gets WebView2's browser process of its own, so stopping it
+    // never takes the installed app's page with it.
+    if !shares_instance_lock() {
+        platform::own_webview_data(&data);
+    }
     let settings_path = data.join("settings.json");
     let (settings, settings_warning) = settings::load_checked(&settings_path);
     applog::init(&data, log_days(&settings));
@@ -872,6 +918,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             graph,
             updates::update_offered,
+            updates::update_unshown,
+            updates::update_failed,
             updates::update_install,
             updates::update_later,
             updates::update_skip,
@@ -898,6 +946,8 @@ pub fn run() {
             logs_reveal,
             login_item,
             login_item_set,
+            system_accent,
+            always_show_scrollbars,
             switchover_status,
             switchover_retire,
             reviews::automated_list,
@@ -906,6 +956,9 @@ pub fn run() {
             paths_exist,
             file_open,
             file_quick_look,
+            preview_available,
+            preview_move,
+            preview_close,
             activity,
             activity_day,
             listnotes::bookmark_toggle,
@@ -1088,6 +1141,8 @@ pub fn run() {
             scene
         ])
         .setup(move |app| {
+            // Tauri builds the windows tauri.conf.json lists before this runs.
+            platform::webview_data_built();
             // `Brainstead --quit` (the Windows install script) with no copy running to hand it to
             // (`tray::second_launch`): there is nothing to quit, so this copy doesn't start either.
             if std::env::args().skip(1).any(|a| a == "--quit") {
@@ -1101,6 +1156,7 @@ pub fn run() {
                 std::thread::spawn(nativehost::register);
             }
             nativehost::watch(app.handle().clone());
+            platform::watch_system_accent(app.handle());
             // Teams and Outlook sync's timer (D-20261025-01): off unless the user turns it on, and a
             // no-op without a sign-in. Not in a screenshot demo.
             if scene().is_none() {
@@ -1194,8 +1250,12 @@ pub fn run() {
                             tray::main_closed(app);
                         }
                     }
-                    // An update a background check found is offered once the window has the focus.
-                    tauri::WindowEvent::Focused(true) => updates::focused(w2.app_handle()),
+                    // An update a background check found is offered once the window has the focus,
+                    // and a system accent change the watch missed is picked up (platform/accent_win.rs).
+                    tauri::WindowEvent::Focused(true) => {
+                        updates::focused(w2.app_handle());
+                        platform::system_accent_focused(w2.app_handle());
+                    }
                     // The system went light or dark: About follows when the app's theme is System.
                     tauri::WindowEvent::ThemeChanged(t) => {
                         let app = w2.app_handle();

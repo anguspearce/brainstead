@@ -24,10 +24,14 @@ const api = vi.hoisted(() => ({
   trashRestore: vi.fn(),
   trashDelete: vi.fn(),
   trashEmpty: vi.fn(),
+  trashQuickLook: vi.fn(),
+  previewAvailable: vi.fn(),
 }));
 vi.mock(import("../api"), async (orig) => ({ ...(await orig()), api: api as never }));
 
 const { TrashScreen, deletedWhen } = await import("./Trash");
+const { previewView } = await import("../Preview");
+const { setPlatform } = await import("../platform");
 
 afterEach(() => {
   cleanup();
@@ -35,6 +39,38 @@ afterEach(() => {
 });
 
 describe("Trash", () => {
+  it("previews the one ticked file on Space, even with its tick box just clicked (Windows), but not on a Mac", async () => {
+    api.trashList.mockResolvedValue(entries);
+    api.previewAvailable.mockResolvedValue(true);
+    api.trashQuickLook.mockResolvedValue(true);
+    try {
+      setPlatform("windows");
+      render(<TrashScreen />);
+      const tick = await screen.findByLabelText("Select Dup.md");
+      fireEvent.pointerDown(tick);
+      fireEvent.click(tick);
+      tick.focus();
+      // Taken from the tick box: its default prevented, so the browser doesn't also untick it on keyup.
+      expect(fireEvent.keyDown(tick, { key: " " })).toBe(false);
+      await waitFor(() => expect(previewView.get()?.name).toBe("Dup.md"));
+      expect(tick.getAttribute("aria-checked")).toBe("true");
+      previewView.set(null);
+      cleanup();
+      setPlatform("macos");
+      render(<TrashScreen />);
+      const again = await screen.findByLabelText("Select Dup.md");
+      fireEvent.pointerDown(again);
+      fireEvent.click(again);
+      again.focus();
+      fireEvent.keyDown(again, { key: " " });
+      await new Promise((r) => setTimeout(r, 5));
+      expect(api.trashQuickLook).not.toHaveBeenCalled();
+    } finally {
+      setPlatform("linux");
+      previewView.set(null);
+    }
+  });
+
   it("searches by name and the folder it was in", async () => {
     api.trashList.mockResolvedValue(entries);
     render(<TrashScreen />);
@@ -123,5 +159,20 @@ describe("rename", () => {
       ["x.md", 2],
       ["y.md", 1],
     ]);
+  });
+
+  it("narrows its columns' defaults to the room, so a narrow table keeps its buttons", async () => {
+    // A 1040px window with the sidebar at 400px leaves the table about 600px: the checkbox, the
+    // buttons, the padding and the gaps take 322, and the columns' defaults another 492.
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(600);
+    api.trashList.mockResolvedValue(entries);
+    render(<TrashScreen />);
+    await screen.findByText("Dup");
+    const table = screen.getByRole("table", { name: "Trash" });
+    const col = (v: string) => parseFloat(table.style.getPropertyValue(v));
+    const cols = ["--col-type", "--col-folder", "--col-deleted", "--col-size"].map(col);
+    expect(cols).toEqual([60, 80, 70, 50]);
+    expect(322 + cols.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(600);
+    vi.restoreAllMocks();
   });
 });

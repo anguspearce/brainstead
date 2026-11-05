@@ -21,7 +21,7 @@ Sources (⌘0) are the files in `sources/`: emails, Teams chats and transcripts 
 - A row's button is what the source usually becomes: **Meeting note** for a Teams transcript, **Draft reply** for an email or chat thread, otherwise **Ingest**. Its ▾ has the rest: **Make and ingest a meeting note** or **Draft a reply** where they fit, **Ingest into the wiki**, **Ask about this source** and **Compare with…**. A file's right-click menu offers the same.
 - Transcripts, emails and chats are known by their names (`Teams. Transcript. …`, `Email. …`, `Teams. Chat. …`), in `sources/` or any folder under it.
 - The **Ingest runs** pane lists each run's steps, the latest first and older ones as you scroll. **Search runs** finds them by name, state, model or day, and **See N changes** opens Changes at the run's first change.
-- PDFs open with page navigation, zoom and find. Word, PowerPoint and Excel files show their text; **Quick Look** (`Space`) on a Mac, or **Open in its app**, shows how they look. Images show the text read from them, which search uses too (Mac only for now).
+- PDFs open with page navigation, zoom and find. Word, PowerPoint and Excel files show their text; **Quick Look** (`Space`) on a Mac, **Preview** (`Space`) on Windows, or **Open in its app**, shows how they look. Images show the text read from them, which search uses too (Mac only for now).
 
 <a href="images/index.md#the-wiki-and-sources"><picture><source media="(prefers-color-scheme: dark)" srcset="images/source-provenance-dark.png"><img alt="A source's provenance: when it was ingested and by which model, and the wiki pages that cite it with the passages they cite" src="images/source-provenance-light.png"></picture></a>
 
@@ -57,7 +57,7 @@ Brainstead, not the AI, decides where text goes on a page:
 - The checked facts behind a change (what, its value, as of when, and the quote) are kept with the page. They're part of the change, so Revert takes them back too.
 - A change that would rewrite a section the AI saw only part of is dropped, so nothing is lost on a long page.
 
-An image is ingested from the text read from it. Claude Code and Codex also see the picture; Copilot and Antigravity don't, so an image with no text needs one of the first two. Its changes are kept even when a quote isn't in that text, each flagged in Changes to check against the picture. On Windows the text is read by Windows' own text recognition, in the first of your languages it has it for (Settings › Time & language › Language adds one); HEIC and WebP pictures need their free extensions from the Microsoft Store.
+An image is ingested from the text read from it. Claude Code and Codex also see the picture; Copilot, Antigravity and Ollama's models don't, so an image with no text needs one of the first two. Its changes are kept even when a quote isn't in that text, each flagged in Changes to check against the picture. On Windows the text is read by Windows' own text recognition, in the first of your languages it has it for (Settings › Time & language › Language adds one); HEIC and WebP pictures need their free extensions from the Microsoft Store.
 
 An ingest you start makes its changes at once. One the daily check starts holds any change that fails a check for you instead. To ingest each capture as it lands, turn on **Ingest new sources as they arrive** in Settings › AI assistants.
 

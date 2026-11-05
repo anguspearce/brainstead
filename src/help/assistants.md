@@ -5,7 +5,7 @@ screens: []
 order: 38
 summary: What AI assistants can do in Brainstead through its tools, in Ask and in sessions outside the app, and what waits for you.
 ---
-Brainstead gives AI assistants a set of tools that do what its screens do, as an MCP server (the standard way to add tools to an assistant). Ask's Claude Code, Codex and Copilot chats get them, and so does an assistant run outside the app once you add them (the command is in [Settings › AI assistants](app:settings/assistants)).
+Brainstead gives AI assistants a set of tools that do what its screens do, as an MCP server (the standard way to add tools to an assistant). Ask's Claude Code, Codex, Copilot and Ollama chats get them (Ollama's models run through Codex), and so does an assistant run outside the app once you add them (the command is in [Settings › AI assistants](app:settings/assistants)).
 
 An assistant never edits a file itself. Its tools ask the app, which makes each change with the same checks the screens use. In short, an assistant can do whatever the screens do, and the rest of this page says what happens to each kind of change.
 
@@ -25,7 +25,7 @@ These happen at once with no `⌘Z`, and only when you ask:
 - Moving over ([Settings › General](app:settings/general)): ticking items, and **Retire them** once **The other app is stopped** is ticked. The other app's skills and scripts go to the Trash, where you can restore them.
 - Going through the Weekly review, and marking a [contradiction](app:contradictions) resolved or ignored.
 - Knowledge health's **Ignore**, **Ignore all** and **Show again**.
-- Ask's chats (rename, pin, move to the Trash), Tasks' saved lists, and a note's own look.
+- Ask's chats (rename, pin, set a chat's effort, move to the Trash), Tasks' saved lists, and a note's own look.
 - Settings, except the vault, **Read-only** and the folders left out, which are yours to change. This includes how long [Changes](app:review) keeps its history, **Rebuild index**, and your tools that start Claude Code sessions.
 - Runs, with their progress and **Stop**: an ingest, the daily or weekly summary, the weekly review's preparation, the daily check, Find tasks and projects, a contradictions check, a meeting note from a transcript, **Write Current state**, bookmark triage, a drafted reply (never sent, and revised when you ask for a change), a doc check and a comparison of two documents. They use the models set in [Settings › AI assistants](app:settings/assistants). What a run changes in the vault is listed in Changes, and an assistant can undo a run when you ask.
 
@@ -71,7 +71,7 @@ Two things stay with you on the [Trash](app:trash) screen: **Empty the Trash** a
 ## When Brainstead isn't open
 Reading pages, search, facts, the summaries, the health report and the Page shape check work whether the app is open or not. Everything else needs the app: the assistant opens Brainstead and waits for it.
 
-Updating Brainstead doesn't disconnect an assistant in a session outside the app on a Mac: its tools move to the new version by themselves, between calls, a few seconds after the update is in place. On Windows the update stops them, because Windows can't replace a program while it runs; reconnect them in the assistant afterwards (in Claude Code, `/mcp`).
+Updating Brainstead doesn't disconnect an assistant in a session outside the app on a Mac: its tools move to the new version by themselves, between calls, a few seconds after the update is in place. On Windows the update stops them, because Windows can't replace a program while it runs; reconnect them in the assistant afterwards (in Claude Code, `/mcp`; `claude -p` and Agent SDK sessions start Brainstead's server again at their next tool call).
 
 An assistant can also bring Brainstead's window to the front when you ask to see something: a screen, a Settings pane, a note, a search, or [Graph](app:graph) around a page.
 

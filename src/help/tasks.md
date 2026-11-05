@@ -17,7 +17,7 @@ Each list on the left shows its count:
 - **Someday / maybe**: tasks tagged `#someday-maybe`.
 - **Done this week** and **Done last week**: ticked tasks by done date, weeks starting on Monday.
 
-In Next actions, Follow-ups, Waiting for and Someday / maybe, drag rows by their grip to set your own order (not while grouped). The order is saved at the end of each line as `^rank-1024`, and the list is renumbered when it needs room. An assistant moves a task the same way.
+In Next actions, Follow-ups, Waiting for and Someday / maybe, drag rows by their grip to set your own order (not while grouped). The order is saved at the end of each line as `^rank-1024`, and the list is renumbered when it needs room. Tasks a search or filter hides at the time keep their places next to the tasks they followed. An assistant moves a task the same way.
 
 ## Use the keys
 - `↑` and `↓` choose a task, carrying on into the next list.
@@ -51,7 +51,7 @@ To change a task's words in any list, point at it and click the pencil after the
 **Lives in** shows the note, line and heading; click it to open the note there. **Ask about this** opens [Ask](app:ask) about the task. ⌘Z undoes any change.
 
 ## Group, filter and save lists
-**Group by** in the top bar (**None**, **Project**, **Context** or **Due**) groups the list, with a band and count per group. Grouped lists can't be dragged.
+**Group by** in the top bar (**None**, **Project**, **Context** or **Due**) groups the list, with a band and count per group; in a narrow window it's a drop-down menu instead. Grouped lists can't be dragged.
 
 **Search tasks** narrows every list to tasks with all the words you type, in their text, note, heading, project, tags or context. The counts on the left follow, and `Esc` clears it. Context chips (**All**, `@calls`, `@office`…) show one context; click the chip again, or **All**, to show all. The effort menu shows tasks of 15 minutes, 30 minutes or an hour or less.
 
@@ -89,3 +89,6 @@ Tasks are plain markdown, so other editors read them too.
 Rows show these under the task as one line of grey text with small icons, not emoji: an overdue date is red and one due in the next three days is darker. In its project's own note a row shows the project, not the note's name. If the tasks can't be read, the list says **Couldn't load the tasks.** with **Retry**.
 
 An assistant can change tasks as you can here; each change is listed in [Changes](app:review) with Revert. A task it adds gets the list's tag, as **New task** does, and one with no project waits in the [Inbox](app:inbox).
+
+## Resize the panes
+Drag the line beside the lists, or beside the task pane, to resize them; a double-click on it puts it back ([pane widths](help:settings-general)).

@@ -28,7 +28,7 @@ import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
 import { askQuote, TopBar } from "./TopBar";
 import { reviewWeek } from "./Weekly";
-import { Dialog, LayerTag, TableBand } from "./ui";
+import { Dialog, LayerTag, Squeeze, TableBand } from "./ui";
 import { Markdown } from "./md/Markdown";
 import { settings, useStore } from "./store";
 import { useVaultVersion } from "./state";
@@ -49,6 +49,8 @@ import {
   trashCapture,
 } from "./inboxActions";
 import { keyLabel } from "./platform";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 export { unclarified } from "./gtd";
 
@@ -197,6 +199,7 @@ const DONE_ALL: Record<string, string> = {
 const startText = (i: InboxItem) => (i.kind === "capture" ? `Follow up on [[${i.text}]]` : itemText(i));
 
 export function InboxScreen() {
+  const panes = usePanes({ "inbox.left": PANES["inbox.left"] }, { minFlex: 320 });
   // Drawn again when settings change: Make a meeting note's label follows the Meeting notes switches.
   useStore(settings);
   const raw = useInbox();
@@ -382,7 +385,7 @@ export function InboxScreen() {
   // Keys: the choices, J / K between items, ↩ the suggestion; with several ticked, their choices.
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (!cur || form || filing || making || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!cur || form || filing || making || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       // Its meeting note under way: J / K still move, nothing acts on it.
       if (busy(cur) && !many && !["j", "k", "ArrowDown", "ArrowUp"].includes(e.key)) return;
       if ((e.target as HTMLElement)?.closest?.("input, textarea, [contenteditable]")) return;
@@ -447,7 +450,7 @@ export function InboxScreen() {
       >
         {total > 0 && (
           <>
-            <span className="faint small">{items.length ? `Item ${idx + 1} of ${items.length}` : "All clear"}</span>
+            <span className="faint small wprog">{items.length ? `Item ${idx + 1} of ${items.length}` : "All clear"}</span>
             <span className="pbar">
               <i style={{ width: `${(done / total) * 100}%` }} />
             </span>
@@ -464,11 +467,20 @@ export function InboxScreen() {
         >
           <button type="button" className="btn" disabled={!askable.length || thinking} onClick={() => suggest(askable.slice(0, 20))}>
             <Icon name="cpu" size={14} />
-            {thinking ? "Thinking…" : askable.length > 20 ? "Suggest for all (first 20)" : "Suggest for all"}
+            {thinking ? (
+              "Thinking…"
+            ) : (
+              <Squeeze
+                full={askable.length > 20 ? "Suggest for all (first 20)" : "Suggest for all"}
+                tight="Suggest for all"
+                narrow="Suggest"
+              />
+            )}
           </button>
         </span>
       </TopBar>
-      <div className="body inbox">
+      <div className="body inbox" {...panes.root}>
+        {panes.resizers}
         <div className="ilist tb" role="table" aria-label="Inbox">
           {raw === null && <p className="faint pad">Loading…</p>}
           {raw && !items.length && (

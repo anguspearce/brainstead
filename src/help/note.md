@@ -10,7 +10,7 @@ A note opens in View; switch to Edit or Source to change it. Brainstead saves on
 ## Switch between View, Edit and Source
 The switch in the top bar has three modes:
 
-- **View** (`⌥⌘1`) shows the note rendered: properties, links, tables, task queries, callouts, diagrams and maths. Diagrams have zoom, fit and full-screen buttons. Click an image to see it fitted to the window, click again for actual size, and press Escape to close. Maths in `$…$` or `$$…$$` is drawn as formulas; amounts like $5 stay as written.
+- **View** (`⌥⌘1`) shows the note rendered: properties, links, tables, task queries, callouts, diagrams and maths. Diagrams have zoom, fit and full-screen buttons. Click an image to see it fitted to the window, click again for actual size, and press Escape to close. On Windows a full-screen diagram or image opens below the title bar, so the window's own buttons keep their row and don't close it. Maths in `$…$` or `$$…$$` is drawn as formulas; amounts like $5 stay as written.
 - **Edit** (`⌥⌘2`) shows the markdown hidden except on the line you're editing: headings sized, links as labels, checkboxes and images drawn.
 - **Source** (`⌥⌘3`) is plain markdown in a monospaced font, with no toolbar.
 
@@ -100,3 +100,6 @@ Beside the note:
 - On a 1-1 note named like `1-1. Maya - 2026-10-02.md`, **Last time with Maya**: the previous 1-1 and open follow-ups with them (tasks tagged `#followup/maya`).
 
 The chevron on **Linked from** folds the pane away; **Linked from** in the details row brings it back.
+
+## Resize the panes
+Drag the line between the note and **Linked from** to make the pane wider or narrower; a double-click on it puts it back ([pane widths](help:settings-general)).

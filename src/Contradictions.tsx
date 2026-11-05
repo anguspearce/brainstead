@@ -19,6 +19,8 @@ import { TopBar } from "./TopBar";
 import { DocButton, useGone } from "./docButton";
 import { ASSISTANT_FRONTMATTER } from "./md/scripts";
 import { LayerTag } from "./ui";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 /** How a clash's verdict reads, and its tone. */
 export function verdictLabel(it: ContradictionItem): [string, string] {
@@ -93,6 +95,7 @@ async function saveReport(r: ContradictionsReport) {
 }
 
 export function ContradictionsScreen() {
+  const panes = usePanes({ "contradictions.left": PANES["contradictions.left"] }, { minFlex: 320 });
   const [r, setR] = useState<ContradictionsReport | null>(null);
   const [sel, setSel] = useViewState<string | null>("contradictions:sel", null);
   const load = () =>
@@ -192,7 +195,8 @@ export function ContradictionsScreen() {
             <Icon name="info" size={14} /> {last.failed === 1 ? "1 fix" : `${last.failed} fixes`} not made: {last.failures.join("; ")}
           </p>
         )}
-        <div className="cgrid">
+        <div className="cgrid" {...panes.root}>
+          {panes.resizers}
           <div className="ilist tb">
             {!items.length && (
               <p className="faint pad">{last?.finished ? "No pages disagree." : "Run a check to read the wiki's claims."}</p>

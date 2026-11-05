@@ -18,12 +18,26 @@ import { useDocDefaults, useDocLook } from "./docLook";
 import { Markdown } from "./md/Markdown";
 import { applyTheme, settings, settingsError, useStore } from "./store";
 import { INTERFACE_SIZE, clampInterfaceSize, stepInterfaceSize } from "./interfaceSize";
+import { Accent, setAccent, systemAccent } from "./accent";
 import { toast } from "./Toast";
 import { errText } from "./notes/actions";
 import { Switchover } from "./Switchover";
 import { TopBar } from "./TopBar";
 import { Jobs } from "./Jobs";
-import { CLI_LABEL, clis, DEFAULT_MODEL, findClis, MODEL_JOBS, modelLabel } from "./askState";
+import {
+  CLI_LABEL,
+  cliOf,
+  clis,
+  DEFAULT_MODEL,
+  effortLabel,
+  findClis,
+  installedEfforts,
+  jobModelOf,
+  jobOwnEffort,
+  MODEL_JOBS,
+  modelLabel,
+  setJobModel,
+} from "./askState";
 import { ModelMenu } from "./Ask";
 import { ago, fmtBytes, fmtCount, Popover, Seg, Switch } from "./ui";
 import { useDiskUsage, vaultBytes, vaultParts } from "./diskUsage";
@@ -32,6 +46,8 @@ import { SpeedSlider, VoiceSelect } from "./speech/ReadAloud";
 import { DocButton, useIsGone } from "./docButton";
 import { accelLabel, captureDefault, fileManager, hasSync, isMac, isWindows, keyLabel, terminalApp } from "./platform";
 import { useFeatures } from "./features";
+import { usePanes } from "./PaneResizer";
+import { PANES as PANE_SPECS, RESIZE_LOCKS, ResizeType, resetPaneWidths, resizeLocked, setResizeLock } from "./panes";
 
 const PANES: [SettingsPane, string, string][] = [
   ["general", "General", "settings"],
@@ -46,6 +62,7 @@ const PANES: [SettingsPane, string, string][] = [
 ];
 
 export function SettingsScreen() {
+  const split = usePanes({ "settings.left": PANE_SPECS["settings.left"] }, { minFlex: 360 });
   const p = useStore(place).place;
   const features = useFeatures();
   const panes = PANES.filter(([id]) => (id !== "permissions" || features.fullDiskAccess) && (id !== "sync" || hasSync));
@@ -54,7 +71,8 @@ export function SettingsScreen() {
   return (
     <main className="main">
       <TopBar title="Settings" sub={title} ask={{ about: `Settings › ${title}`, prompt: `About Settings › ${title}: ` }} />
-      <div className="body settings">
+      <div className="body settings" {...split.root}>
+        {split.resizers}
         <nav className="spanes" aria-label="Settings">
           {panes.map(([id, label, icon]) => (
             <button
@@ -170,18 +188,25 @@ function CaptureShortcut() {
   );
 }
 
-/** A model for each background job, or the default (Settings › AI assistants). */
+/** A model and an effort for each background job, or the defaults (Settings › AI assistants). */
 function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: string }) {
   const s = useStore(settings);
   const [at, setAt] = useState<{ job: string; rect: DOMRect } | null>(null);
   const models = s.jobModels ?? {};
   // The weekly review's preparation falls back to the summaries' model (src-tauri/src/weekprep.rs).
-  const fallbackFor = (job: string) => (job === "weekprep" && models.summaries ? models.summaries : fallback);
-  const fallbackName = (job: string) => (job === "weekprep" && models.summaries ? "As the summaries" : "As new chats");
+  const borrows = (job: string) => job === "weekprep" && !!models.summaries;
+  const fallbackFor = (job: string) => (borrows(job) ? models.summaries! : fallback);
+  // Whose model the default is, for the menu item and the tooltip.
+  const fallbackName = (job: string) => (borrows(job) ? "Default: the summaries' model" : "Default: the model new chats use");
+  const levelsFor = (job: string) => {
+    const model = jobModelOf(job, s);
+    const levels = found ? installedEfforts(cliOf(model), model) : [];
+    return levels.length ? levels : null;
+  };
   return (
     <section className="sgroup">
       <h2 className="h3">Models by job</h2>
-      <div className="card">
+      <div className="card jobmodels">
         {MODEL_JOBS.map(([job, label, icon]) => (
           <div key={job} className="srow">
             <Icon name={icon} />
@@ -191,18 +216,21 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
             <button
               type="button"
               className="btn sm"
-              title={`Choose the model for ${label.toLowerCase()}`}
+              title={
+                models[job]
+                  ? `Choose the model for ${label.toLowerCase()}`
+                  : `Choose the model for ${label.toLowerCase()}; until it has its own it runs on ${fallbackName(job).replace(/^Default: /, "")}`
+              }
               onClick={(e) => setAt({ job, rect: e.currentTarget.getBoundingClientRect() })}
             >
               {models[job] ? (
                 modelLabel(models[job], found)
               ) : (
-                <span className="faint">
-                  {fallbackName(job)} ({modelLabel(fallbackFor(job), found)})
-                </span>
+                <span className="faint">Default ({modelLabel(fallbackFor(job), found)})</span>
               )}
               <Icon name="chevdown" size={12} />
             </button>
+            <JobEffort job={job} label={label} levels={levelsFor(job)} />
           </div>
         ))}
       </div>
@@ -212,10 +240,9 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
             <div className="menu">
               <button
                 type="button"
-                title={`Use the same model as ${fallbackName(at.job).replace(/^As /, "")} for this job`}
+                title={`Use ${fallbackName(at.job).replace(/^Default: /, "")} for this job`}
                 onClick={() => {
-                  const { [at.job]: _, ...rest } = models;
-                  settings.update({ jobModels: rest });
+                  setJobModel(at.job, null);
                   setAt(null);
                 }}
               >
@@ -229,13 +256,49 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
             found={found}
             value={models[at.job] ?? fallbackFor(at.job)}
             onPick={(m) => {
-              settings.update({ jobModels: { ...models, [at.job]: m } });
+              setJobModel(at.job, m);
               setAt(null);
             }}
           />
         </Popover>
       )}
     </section>
+  );
+}
+
+/** A job's own effort (`jobEffort.<job>`), the same menu as an assistant's under Found on this
+ *  computer; Default leaves it to `effort.<cli>`, which new chats start from. While the job's
+ *  assistant isn't found, or its model takes no level, the menu is kept but hidden, so the rows of
+ *  Models by job stay one height. */
+function JobEffort({ job, label, levels }: { job: string; label: string; levels: string[] | null }) {
+  const s = useStore(settings);
+  const efforts = s.jobEffort ?? {};
+  return (
+    <label
+      className={`effortpick${levels ? "" : " placeholder"}`}
+      aria-hidden={!levels}
+      title={levels ? `How hard the assistant thinks for ${label.toLowerCase()}, without changing new chats'` : undefined}
+    >
+      <span className="faint">Effort</span>
+      <select
+        className="sel"
+        aria-label={`Effort for ${label.toLowerCase()}`}
+        value={jobOwnEffort(job, s) ?? ""}
+        disabled={!levels}
+        tabIndex={levels ? undefined : -1}
+        onChange={(e) => {
+          const { [job]: _, ...rest } = efforts;
+          settings.update({ jobEffort: e.target.value ? { ...rest, [job]: e.target.value } : rest });
+        }}
+      >
+        <option value="">Default</option>
+        {(levels ?? []).map((l) => (
+          <option key={l} value={l}>
+            {effortLabel(l)}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -366,9 +429,76 @@ function General() {
             applyTheme(t);
           }}
         />
+        <AccentColour />
         <InterfaceSize />
+        <PaneWidths />
       </section>
     </>
+  );
+}
+
+/** Accent colour: the app's own blue or the system's (src/accent.ts). Only where the system has one
+ *  (Windows); elsewhere there's nothing to choose. */
+function AccentColour() {
+  const accent = useStore(settings).accent ?? "app";
+  const colour = useStore(systemAccent);
+  if (!colour) return null;
+  return (
+    <div className="ifacesize">
+      <div className="eyebrow">Accent colour</div>
+      <Seg<Accent>
+        label="Accent colour"
+        value={accent}
+        options={[
+          ["app", "App"],
+          ["system", "System"],
+        ]}
+        onChange={setAccent}
+      />
+      <p className="faint">
+        System takes the accent colour from Windows Settings › Personalisation › Colours and follows it when it changes, lighter or darker
+        where text on it would be hard to read.
+      </p>
+    </div>
+  );
+}
+
+/** Pane widths (src/panes.ts): the panes and table columns dragged wider or narrower, one button
+ *  to put every one back to the stylesheet's width, and a lock for each type of divider. */
+function PaneWidths() {
+  const { paneWidths: widths, resizeLocks } = useStore(settings);
+  const n = Object.keys(widths ?? {}).length;
+  return (
+    <div className="ifacesize">
+      <div className="eyebrow">Pane widths</div>
+      <div className="row">
+        <span title={n ? "Put every pane and column back to its usual width" : "No pane has been resized"}>
+          <button type="button" className="btn sm" disabled={!n} onClick={() => resetPaneWidths()}>
+            Reset pane widths
+          </button>
+        </span>
+        <span className="faint">{n === 0 ? "None resized" : n === 1 ? "1 pane resized" : `${n} panes resized`}</span>
+      </div>
+      <div className="row">
+        {(Object.keys(RESIZE_LOCKS) as ResizeType[]).map((type) => (
+          <label
+            key={type}
+            className="row"
+            style={{ gap: 6 }}
+            title={`${RESIZE_LOCKS[type].what} keep their widths and their dividers are hidden, until this is off`}
+          >
+            <input type="checkbox" checked={resizeLocked(type, resizeLocks)} onChange={(e) => setResizeLock(type, e.target.checked)} />
+            {RESIZE_LOCKS[type].label}
+          </label>
+        ))}
+      </div>
+      <p className="faint">
+        Reset pane widths puts every pane and table column back to its usual width; Lock pane widths keeps the sidebar and the screens'
+        panes as they are, and Lock column widths every table's columns, with their lines hidden. To resize one pane, drag the line between
+        two panes or beside a column's heading; the arrow keys move a focused line, and Enter or a double-click puts that pane back. A lock
+        keeps the widths you set and doesn't stop Reset pane widths. Widths and locks are kept for this computer, not in the vault.
+      </p>
+    </div>
   );
 }
 
@@ -414,8 +544,10 @@ function InterfaceSize() {
         </span>
       </div>
       <p className="faint">
-        Everything in the window, from the sidebar to the text, bigger or smaller together. {keyLabel("⇧⌘=")} and {keyLabel("⇧⌘-")} change
-        it anywhere and {keyLabel("⇧⌘0")} puts it back. A note's Text size comes on top of it.
+        Smaller and Bigger change everything in the window together, from {INTERFACE_SIZE.min}% to {INTERFACE_SIZE.max}% in steps of{" "}
+        {INTERFACE_SIZE.step}: the sidebar, lists, dialogs and the text of notes. {keyLabel("⇧⌘=")} and {keyLabel("⇧⌘-")} do the same from
+        any screen, and {keyLabel("⇧⌘0")} puts it back to {INTERFACE_SIZE.default}%. A note's Text size is separate and comes on top of it,
+        the quick capture window stays at 100%, and the size is kept for this computer, not in the vault.
       </p>
     </div>
   );
@@ -907,10 +1039,18 @@ export const INSTALL: Record<string, string> = {
   codex: "https://developers.openai.com/codex/cli",
   antigravity: "https://antigravity.google",
   copilot: "https://docs.github.com/copilot/how-tos/set-up/install-copilot-cli",
+  ollama: "https://ollama.com/download",
 };
 
-/** An assistant's line under Found on this computer: its models and where it is, or what to do. */
+/** An assistant's line under Found on this computer: its models and where it is, or what to do.
+ *  Ollama's "where" is its server; Rust's note says why it can't be used (not running, Codex missing). */
 export function foundDetail(c: CliInfo): string {
+  if (c.cli === "ollama") {
+    if (!c.path) return c.note ?? "Ollama isn't running, or isn't installed.";
+    return c.models.length
+      ? `${c.models.length} model${c.models.length === 1 ? "" : "s"} · ${c.path}`
+      : `No models pulled: open ${terminalApp} and run ollama pull with a model that calls tools. · ${c.path}`;
+  }
   if (!c.path) return "Not installed.";
   return c.models.length
     ? `${c.models.length} model${c.models.length === 1 ? "" : "s"} · ${c.path}`
@@ -1106,7 +1246,32 @@ function Assistants() {
                   {CLI_LABEL[c.cli]} {c.version && <span className="faint">· {c.version}</span>}
                 </div>
                 <div className="faint">{foundDetail(c)}</div>
+                {c.path && c.note && <div className="faint">{c.note}</div>}
               </div>
+              {c.path && !!c.efforts.length && (
+                <label
+                  className="effortpick"
+                  title={`How hard ${CLI_LABEL[c.cli]} thinks before answering: new chats to start with, and its jobs that have no effort of their own`}
+                >
+                  <span className="faint">Effort</span>
+                  <select
+                    className="sel"
+                    aria-label={`${CLI_LABEL[c.cli]}'s effort`}
+                    value={s.effort?.[c.cli] ?? ""}
+                    onChange={(e) => {
+                      const { [c.cli]: _, ...rest } = s.effort ?? {};
+                      settings.update({ effort: e.target.value ? { ...rest, [c.cli]: e.target.value } : rest });
+                    }}
+                  >
+                    <option value="">Default</option>
+                    {c.efforts.map((l) => (
+                      <option key={l} value={l}>
+                        {effortLabel(l)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               {!c.path && (
                 <button
                   type="button"
@@ -1121,7 +1286,9 @@ function Assistants() {
           ))}
         </div>
         <p className="faint">
-          Ask runs the assistant you choose on this computer with your own account, and it never writes a file itself.
+          Ask runs the assistant you choose on this computer with your own account, and it never writes a file itself. Its effort is what
+          new chats start with (a chat can change its own beside its model in Ask) and what its jobs run at unless Models by job gives a job
+          its own; Default leaves it to the assistant, which picks one for each model.
         </p>
       </section>
       <McpGroup />
@@ -1177,8 +1344,9 @@ function HandedOver() {
   );
 }
 
-/** Each CLI's own command to register Brainstead's server for all its sessions (its user config). */
-const ADD_COMMAND: Record<CliName, (exe: string) => string> = {
+/** Each CLI's own command to register Brainstead's server for all its sessions (its user config).
+ *  Ollama's models run through Codex, whose command covers them. */
+const ADD_COMMAND: Partial<Record<CliName, (exe: string) => string>> = {
   claude: (exe) => `claude mcp add -s user brainstead -- "${exe}" --mcp`,
   codex: (exe) => `codex mcp add brainstead -- "${exe}" --mcp`,
   copilot: (exe) => `copilot mcp add brainstead -- "${exe}" --mcp`,
@@ -1188,7 +1356,10 @@ const ADD_COMMAND: Record<CliName, (exe: string) => string> = {
 /** The commands Brainstead's tools pane shows, [assistant, command], for the assistants found on
  *  this computer (list_assistants gives the same). */
 export const terminalCommands = (found: { cli: CliName; path: string | null }[], exe: string): [string, string][] =>
-  found.filter((c) => c.path).map((c) => [CLI_LABEL[c.cli], ADD_COMMAND[c.cli](exe)]);
+  found.flatMap((c) => {
+    const cmd = ADD_COMMAND[c.cli];
+    return c.path && cmd ? [[CLI_LABEL[c.cli], cmd(exe)] as [string, string]] : [];
+  });
 
 /** Brainstead's MCP server: what Ask gives each CLI, and how to add it to one in a terminal. */
 function McpGroup() {

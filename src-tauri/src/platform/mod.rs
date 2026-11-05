@@ -12,17 +12,23 @@ use std::process::{Child, Command};
 #[cfg(target_os = "macos")]
 mod about;
 #[cfg(windows)]
+mod accent_win;
+#[cfg(windows)]
 mod image_win;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
 mod now_playing;
+#[cfg(windows)]
+mod preview_win;
 #[cfg(target_os = "macos")]
 mod quick_look;
 #[cfg(windows)]
 mod single_instance_win;
 #[cfg(windows)]
 mod snap_win;
+#[cfg(windows)]
+mod snapshot_win;
 #[cfg(target_os = "macos")]
 mod speech;
 #[cfg(target_os = "macos")]
@@ -39,7 +45,7 @@ mod other;
 use other as imp;
 
 mod tray;
-pub use tray::{place_tray_window, tray_icon, tray_window_resized};
+pub use tray::{place_tray_window, tray_icon, tray_window_resized, watch_taskbar_theme};
 
 /// Where Brainstead keeps settings.json and index.db: `~/Library/Application Support/Brainstead/`
 /// on macOS, `%APPDATA%\Brainstead` on Windows. `BRAINSTEAD_DATA` overrides it (screenshots,
@@ -81,11 +87,23 @@ pub fn set_max_button(w: &tauri::WebviewWindow, rect: Option<(i32, i32, i32, i32
     let _ = (w, rect);
 }
 
+/// Where the page's preview panel is and its colours (platform/preview_win.rs); nothing elsewhere.
+#[cfg(windows)]
+pub use preview_win::Frame as PreviewFrame;
+#[cfg(not(windows))]
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct PreviewFrame {}
+
 /// A quick preview of a file without opening it: the Quick Look panel over `w` on macOS (as Finder's
-/// space bar shows it), the file's default app elsewhere.
-pub fn quick_look(w: &tauri::WebviewWindow, path: &Path) -> Result<(), String> {
+/// space bar shows it); on Windows the file's own preview handler in the page's panel at `frame`,
+/// the one Explorer's preview pane would show (platform/preview_win.rs), or its default app with no
+/// frame or where Windows has no handler for the type (`preview_available` says); the default app
+/// elsewhere. On Windows, returns once the preview is drawn, or with why it couldn't be. True when
+/// the file is shown without its app (Quick Look, the panel), false when it opened in its app.
+pub fn quick_look(w: &tauri::WebviewWindow, path: &Path, frame: Option<PreviewFrame>) -> Result<bool, String> {
     #[cfg(target_os = "macos")]
     {
+        let _ = frame;
         let ns = w.ns_window().map_err(|e| e.to_string())? as usize;
         let file = path.to_path_buf();
         w.run_on_main_thread(move || {
@@ -94,13 +112,74 @@ pub fn quick_look(w: &tauri::WebviewWindow, path: &Path) -> Result<(), String> {
             let window = unsafe { &*(ns as *const objc2_app_kit::NSWindow) };
             quick_look::show(mtm, window, &file);
         })
+        .map(|_| true)
         .map_err(|e| e.to_string())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
     {
-        let _ = w;
-        imp::quick_look(path)
+        // A handler COM can't run out of process opens the file in its app, as no handler does. A
+        // file from the web opens there too, and the panel says why (`preview_win::refused`).
+        let here = match frame {
+            Some(f) => match preview_win::refused(path) {
+                Some(why) => return imp::quick_look(path).and(Err(why)),
+                None => preview_win::open(w, path, f)?,
+            },
+            None => false,
+        };
+        if here {
+            Ok(true)
+        } else {
+            imp::quick_look(path).map(|_| false)
+        }
     }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        let _ = (w, frame);
+        imp::quick_look(path).map(|_| false)
+    }
+}
+
+/// Whether `quick_look` can show a file named like `name` without opening its app: always on
+/// macOS (Quick Look has a fallback for every type); on Windows when a preview handler is
+/// registered for the type; never elsewhere.
+pub fn preview_available(name: &str) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = name;
+        true
+    }
+    #[cfg(windows)]
+    {
+        preview_win::available(name)
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        let _ = name;
+        false
+    }
+}
+
+/// The page's preview panel moved or resized (Windows only).
+pub fn preview_move(frame: PreviewFrame) {
+    #[cfg(windows)]
+    preview_win::move_to(frame);
+    #[cfg(not(windows))]
+    let _ = frame;
+}
+
+/// The page closed its preview panel `id` (Windows only): the handler is released.
+pub fn preview_close(id: u64) {
+    #[cfg(windows)]
+    preview_win::close(id);
+    #[cfg(not(windows))]
+    let _ = id;
+}
+
+/// The app is quitting (Windows only): the preview's handler lets go of its file, each call with a
+/// short deadline. On the main thread.
+pub fn preview_shutdown() {
+    #[cfg(windows)]
+    preview_win::shutdown();
 }
 
 /// Shows the window once its webview is painted in `rgb`, so no white frame flashes first (a
@@ -147,9 +226,12 @@ pub fn show_painted(w: &tauri::WebviewWindow, rgb: (u8, u8, u8), focus: bool) {
 }
 
 /// Makes a window invisible and click-through while it still draws, for screenshots
-/// (tools/screenshots.py captures its contents): nothing flashes on screen. macOS only; elsewhere
-/// the window shows as usual.
+/// (tools/screenshots.py captures its contents): nothing flashes on screen. On macOS the window is
+/// fully transparent; on Windows it is moved off every monitor and kept from the focus, the
+/// taskbar and Alt+Tab (`snapshot_win`). Elsewhere the window shows as usual.
 pub fn make_unseen(w: &tauri::WebviewWindow) {
+    #[cfg(windows)]
+    snapshot_win::make_unseen(w);
     #[cfg(target_os = "macos")]
     if let Ok(ns) = w.ns_window() {
         // Tauri's own NSWindow, alive as long as the window is; setup runs on the main thread.
@@ -169,13 +251,14 @@ pub fn make_unseen(w: &tauri::WebviewWindow) {
             let _: () = objc2::msg_send![webview, _setWindowOcclusionDetectionEnabled: false];
         }
     });
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", windows)))]
     let _ = w;
 }
 
-/// Saves what the window's webview shows to `dest` as a TIFF at twice its size, for screenshots taken unseen
-/// (make_unseen: an invisible window's own capture is blank, its webview's snapshot isn't). The file
-/// appears when WebKit has drawn it. macOS only.
+/// Saves what the window's webview shows to `dest`, for screenshots taken unseen (make_unseen: an
+/// invisible window's own capture is blank, its webview's snapshot isn't). On macOS a TIFF at twice
+/// the window's size in points, as a Retina screen draws it; on Windows a PNG at the window's size
+/// in device pixels (`snapshot_win`). The file appears whole once the engine has drawn it.
 pub fn snapshot(w: &tauri::WebviewWindow, dest: &Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -203,10 +286,12 @@ pub fn snapshot(w: &tauri::WebviewWindow, dest: &Path) -> Result<(), String> {
         })
         .map_err(|e| e.to_string())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    return snapshot_win::snapshot(w, dest);
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         let _ = (w, dest);
-        Err("Snapshots are macOS only.".into())
+        Err("Snapshots aren't available on this system yet.".into())
     }
 }
 
@@ -273,6 +358,45 @@ pub fn activate() {
             }
         }
     }
+}
+
+/// Whether Windows shows scroll bars all the time, so the app shows every scrollbar too
+/// (src/scrollbars.ts): Settings › Accessibility › Visual effects › Always show scrollbars
+/// (UISettings' AutoHideScrollBars off, platform/accent_win.rs). False elsewhere, where the app
+/// leaves the native scrollbars alone.
+pub fn always_show_scrollbars() -> bool {
+    #[cfg(windows)]
+    return accent_win::auto_hide_scrollbars() == Some(false);
+    #[cfg(not(windows))]
+    false
+}
+
+/// The system's accent colour as `#rrggbb`, for Appearance › Accent colour's System
+/// (platform/accent_win.rs). `None` off Windows, and Settings then hides the setting.
+pub fn system_accent() -> Option<String> {
+    #[cfg(windows)]
+    return accent_win::accent();
+    #[cfg(not(windows))]
+    None
+}
+
+/// Tells every window when the system's accent colour changes (`system-accent-changed`, the new
+/// `#rrggbb`). Nothing off Windows.
+pub fn watch_system_accent(app: &tauri::AppHandle) {
+    #[cfg(windows)]
+    accent_win::watch(app.clone());
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
+/// The main window gained focus: reads the system's accent colour again and tells every window
+/// when it changed, for a change made while the watch wasn't armed (platform/accent_win.rs).
+/// Nothing off Windows.
+pub fn system_accent_focused(app: &tauri::AppHandle) {
+    #[cfg(windows)]
+    accent_win::focused(app);
+    #[cfg(not(windows))]
+    let _ = app;
 }
 
 /// Shows the file selected in Finder (or the system's file manager).
@@ -810,21 +934,71 @@ pub fn release_updates() -> bool {
 
 /// Deletes the folders Windows' updater leaves in Temp, one per update installed
 /// ("Brainstead-1.3.0-updater-Zu7DmM", holding the installer it ran). By the next start that
-/// installer has done its work. Nothing to do elsewhere.
+/// installer has done its work. Also the old program files the installer moves aside next to this
+/// one ("Brainstead.exe.old", "Brainstead.exe.old-123456": NSIS_HOOK_PREINSTALL in
+/// src-tauri/windows/hooks.nsh) that were still running when it finished; one still running now
+/// stays for the next start. Nothing to do elsewhere.
 pub fn remove_update_installers(name: &str) {
     #[cfg(windows)]
     {
-        let Ok(dir) = std::fs::read_dir(std::env::temp_dir()) else { return };
-        let prefix = format!("{name}-");
+        if let Ok(dir) = std::fs::read_dir(std::env::temp_dir()) {
+            let prefix = format!("{name}-");
+            for e in dir.flatten() {
+                let n = e.file_name().to_string_lossy().into_owned();
+                if n.starts_with(&prefix) && n.contains("-updater-") && e.path().is_dir() {
+                    let _ = std::fs::remove_dir_all(e.path());
+                }
+            }
+        }
+        let Ok(exe) = std::env::current_exe() else { return };
+        let (Some(folder), Some(file)) = (exe.parent(), exe.file_name()) else { return };
+        let Ok(dir) = std::fs::read_dir(folder) else { return };
         for e in dir.flatten() {
-            let n = e.file_name().to_string_lossy().into_owned();
-            if n.starts_with(&prefix) && n.contains("-updater-") && e.path().is_dir() {
-                let _ = std::fs::remove_dir_all(e.path());
+            if is_moved_aside(&file.to_string_lossy(), &e.file_name().to_string_lossy()) {
+                let _ = std::fs::remove_file(e.path());
             }
         }
     }
     #[cfg(not(windows))]
     let _ = name;
+}
+
+/// WebView2's user data folder for a copy that runs beside the installed app (`data` is its own
+/// data folder, `BRAINSTEAD_DATA`): `<data>\WebView2`. Every build otherwise uses the identifier's
+/// folder in `%LOCALAPPDATA%`, and WebView2 runs one browser process per user data folder, shared
+/// by every program using it and started by whichever came first: a dev copy started first would
+/// own the installed app's browser process, and stopping the dev copy (tools/dev_stop.py) would
+/// blank the installed app's window. Set as `WEBVIEW2_USER_DATA_FOLDER`, which takes precedence
+/// over the folder Tauri passes, before the windows are built, and taken away after
+/// (`webview_data_built`) so programs this copy starts don't inherit it. Nothing elsewhere: WebKit
+/// runs a copy's web content in processes of its own.
+pub fn own_webview_data(data: &std::path::Path) {
+    #[cfg(windows)]
+    std::env::set_var(WEBVIEW2_DATA_VAR, webview_data_folder(data));
+    #[cfg(not(windows))]
+    let _ = data;
+}
+
+/// Every window is built (`own_webview_data`).
+pub fn webview_data_built() {
+    #[cfg(windows)]
+    std::env::remove_var(WEBVIEW2_DATA_VAR);
+}
+
+#[cfg_attr(not(windows), allow(dead_code))]
+const WEBVIEW2_DATA_VAR: &str = "WEBVIEW2_USER_DATA_FOLDER";
+
+#[cfg_attr(not(windows), allow(dead_code))]
+fn webview_data_folder(data: &std::path::Path) -> PathBuf {
+    data.join("WebView2")
+}
+/// Whether `file`, in the program's folder, is a copy of the program `exe` the installer moved
+/// aside: `<exe>.old`, or `<exe>.old-<n>` when one was still held from an earlier update. Windows'
+/// names don't go by case.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn is_moved_aside(exe: &str, file: &str) -> bool {
+    let (exe, file) = (exe.to_lowercase(), file.to_lowercase());
+    file.strip_prefix(&exe).is_some_and(|rest| rest == ".old" || rest.strip_prefix(".old-").is_some_and(|n| !n.is_empty()))
 }
 
 /// Which of the features that aren't on every system this one has: one table in core, which the
@@ -859,6 +1033,23 @@ fn secret_service() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_copy_beside_the_app_keeps_its_webview_data_in_its_own_data_folder() {
+        let data = std::path::Path::new("scratch").join("dev-data");
+        assert_eq!(webview_data_folder(&data), data.join("WebView2"));
+        assert_eq!(WEBVIEW2_DATA_VAR, "WEBVIEW2_USER_DATA_FOLDER");
+    }
+
+    #[test]
+    fn only_the_program_files_the_installer_moved_aside_are_old() {
+        for old in ["Brainstead.exe.old", "brainstead.EXE.old", "Brainstead.exe.old-1234567"] {
+            assert!(is_moved_aside("Brainstead.exe", old), "{old}");
+        }
+        for other in ["Brainstead.exe", "Brainstead.exe.old-", "Brainstead.exe.older", "uninstall.exe.old", "Brainstead.exe.old.txt"] {
+            assert!(!is_moved_aside("Brainstead.exe", other), "{other}");
+        }
+    }
 
     #[test]
     fn a_host_manifest_is_written_once_and_then_current() {

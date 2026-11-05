@@ -2,8 +2,9 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Ask: the command line for each AI CLI (Claude Code, Codex, Antigravity, GitHub Copilot) and
-//! the reading of what it streams back, ported from a sibling app's assistant. Nothing here
+//! Ask: the command line for each AI CLI (Claude Code, Codex, Antigravity, GitHub Copilot, and
+//! Codex again for Ollama's local models) and the reading of what it streams back, ported from a
+//! sibling app's assistant. Nothing here
 //! starts a process, so every CLI's flags and stream are tested from recorded lines. The app
 //! crate (src-tauri/src/ask.rs) finds the CLIs, runs them and sends the events to the window.
 //!
@@ -12,8 +13,9 @@
 
 use serde::Serialize;
 
-/// Which CLI answers, from the model id: `agy:` Antigravity, `copilot:` Copilot, `claude…`
-/// Claude Code (`claude:sonnet` or a full id such as `claude-sonnet-5`), the rest Codex.
+/// Which CLI answers, from the model id: `agy:` Antigravity, `copilot:` Copilot, `ollama:` a model
+/// Ollama serves on this computer (run by Codex, pointed at Ollama), `claude…` Claude Code
+/// (`claude:sonnet` or a full id such as `claude-sonnet-5`), the rest Codex.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Cli {
@@ -21,11 +23,16 @@ pub enum Cli {
     Codex,
     Antigravity,
     Copilot,
+    /// Ollama's local models, through Codex's own Ollama provider (`--oss`): Codex's agent loop,
+    /// sandbox and sessions, Ollama's model. Its own entry so it has its own settings key
+    /// (`effort.ollama`) and row under Found on this computer.
+    Ollama,
 }
 
 pub const CLAUDE_PREFIX: &str = "claude:";
 pub const AGY_PREFIX: &str = "agy:";
 pub const COPILOT_PREFIX: &str = "copilot:";
+pub const OLLAMA_PREFIX: &str = "ollama:";
 /// Antigravity's agent, written into its working folder for each run.
 pub const AGY_AGENT: &str = "brainstead-ask";
 
@@ -35,6 +42,8 @@ impl Cli {
             Cli::Antigravity
         } else if model.starts_with(COPILOT_PREFIX) {
             Cli::Copilot
+        } else if model.starts_with(OLLAMA_PREFIX) {
+            Cli::Ollama
         } else if model.starts_with("claude") {
             Cli::Claude
         } else {
@@ -45,9 +54,19 @@ impl Cli {
     pub fn bin(self) -> &'static str {
         match self {
             Cli::Claude => "claude",
-            Cli::Codex => "codex",
+            Cli::Codex | Cli::Ollama => "codex",
             Cli::Antigravity => "agy",
             Cli::Copilot => "copilot",
+        }
+    }
+    /// Its key in the settings (`effort.<key>`) and to the window, as serde names it.
+    pub fn key(self) -> &'static str {
+        match self {
+            Cli::Claude => "claude",
+            Cli::Codex => "codex",
+            Cli::Antigravity => "antigravity",
+            Cli::Copilot => "copilot",
+            Cli::Ollama => "ollama",
         }
     }
     /// The name people know it by, for messages.
@@ -57,6 +76,7 @@ impl Cli {
             Cli::Codex => "Codex",
             Cli::Antigravity => "Antigravity",
             Cli::Copilot => "GitHub Copilot",
+            Cli::Ollama => "Ollama",
         }
     }
     /// Where installers put it under the home folder, besides `~/.local/bin` (`.local\bin\<name>.exe`
@@ -75,7 +95,7 @@ impl Cli {
     fn tools_hint(self) -> &'static str {
         match self {
             Cli::Claude => "Use Grep and Glob to find the notes that matter and Read only what you need; several Read or Grep calls can go in one turn.",
-            Cli::Codex => "Search with rg and print only the relevant lines, covering several files in one command where you can. Read nothing outside the vault.",
+            Cli::Codex | Cli::Ollama => "Search with rg and print only the relevant lines, covering several files in one command where you can. Read nothing outside the vault.",
             Cli::Antigravity => "Search with grep_search, find files with find_by_name, and open them with view_file, several at once where you can. Read nothing outside the vault.",
             Cli::Copilot => "Search with grep, find files with glob, and open them with view, several at once where you can. Read nothing outside the vault.",
         }
@@ -85,7 +105,7 @@ impl Cli {
 /// The MCP server's name, as each CLI is told it.
 pub const MCP_NAME: &str = "brainstead";
 /// Its tools, for the CLIs that list each one (Copilot).
-pub const MCP_TOOLS: [&str; 86] = [
+pub const MCP_TOOLS: [&str; 87] = [
     "search",
     "read_section",
     "backlinks",
@@ -132,6 +152,7 @@ pub const MCP_TOOLS: [&str; 86] = [
     "save_chat",
     "list_chats",
     "chats",
+    "chat_effort",
     "list_transcripts",
     "fix_health",
     "ignore_issue",
@@ -188,10 +209,226 @@ impl Cli {
         self != Cli::Antigravity
     }
     /// Whether it's shown a request's images: Claude Code reads them with Read, Codex has them
-    /// attached. Copilot and Antigravity take none from a script, so they get an image's text only.
+    /// attached. Copilot and Antigravity take none from a script, so they get an image's text only;
+    /// nor does an Ollama model, since few of them see pictures and Codex fails the turn on one that
+    /// doesn't.
     pub fn sees_images(self) -> bool {
         matches!(self, Cli::Claude | Cli::Codex)
     }
+    /// The effort levels Settings › AI assistants offers for it, lowest first, as its CLI names
+    /// them: Claude Code's and Antigravity's `--effort`, Codex's `model_reasoning_effort`,
+    /// Copilot's `--reasoning-effort`. Which a model takes is up to the CLI: Claude Code runs a
+    /// level a model lacks at the highest it has below it, the others may refuse it. Ollama takes
+    /// Codex's `model_reasoning_effort` as a thinking level by name, where a model names its
+    /// levels (gpt-oss: low, medium, high; `ollama::Show::efforts` says which); a model that only
+    /// thinks or not ignores the name, so none is offered for it.
+    pub fn efforts(self) -> &'static [&'static str] {
+        match self {
+            Cli::Codex => &["low", "medium", "high", "xhigh"],
+            Cli::Ollama => &["low", "medium", "high"],
+            Cli::Claude | Cli::Antigravity | Cli::Copilot => &["low", "medium", "high", "xhigh", "max"],
+        }
+    }
+}
+
+/// Ollama's server, as Brainstead and Codex reach it. Nothing here makes a request: the app crate
+/// does (src-tauri/src/ollama.rs) and hands the replies here to read.
+pub mod ollama {
+    /// Where to read how to install it (How to install).
+    pub const INSTALL_URL: &str = "https://ollama.com/download";
+    /// The host Ollama's own tools use when `OLLAMA_HOST` is unset.
+    pub const DEFAULT_HOST: &str = "http://localhost:11434";
+
+    /// The server's base URL from `OLLAMA_HOST` (the variable Ollama's own tools read), as Ollama
+    /// reads it: the scheme is optional (http), so is the port (11434), and a bare port or
+    /// `0.0.0.0` (the server listening on every interface) means this computer. None or an empty
+    /// value is the default host. Never ends in a slash.
+    pub fn host(var: Option<&str>) -> String {
+        let v = var.map(str::trim).unwrap_or_default();
+        if v.is_empty() {
+            return DEFAULT_HOST.to_string();
+        }
+        let (scheme, rest) = match v.split_once("://") {
+            Some((s, r)) => (s.to_string(), r),
+            None => ("http".to_string(), v),
+        };
+        let rest = rest.trim_end_matches('/');
+        // `host:port`, `:port`, `host`, `[::1]:port`.
+        let (mut h, p) = match rest.rsplit_once(':') {
+            Some((h, p)) if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => (h, Some(p)),
+            _ => (rest, None),
+        };
+        if h.is_empty() || h == "0.0.0.0" {
+            h = "localhost";
+        }
+        let port = p.unwrap_or("11434");
+        format!("{scheme}://{h}:{port}")
+    }
+
+    /// Codex's base URL for the Ollama provider at `host` (`CODEX_OSS_BASE_URL`): its
+    /// OpenAI-compatible endpoint.
+    pub fn codex_base_url(host: &str) -> String {
+        format!("{}/v1", host.trim_end_matches('/'))
+    }
+
+    /// A model Ollama has pulled, from `GET /api/tags`.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct Tag {
+        pub name: String,
+        /// "4.0B", when the server says.
+        pub parameters: Option<String>,
+    }
+
+    /// The models in a `GET /api/tags` reply, in the server's order.
+    pub fn parse_tags(reply: &serde_json::Value) -> Vec<Tag> {
+        reply["models"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|m| {
+                let name = m["name"].as_str().or(m["model"].as_str())?.to_string();
+                let parameters = m["details"]["parameter_size"].as_str().filter(|p| !p.is_empty()).map(str::to_string);
+                Some(Tag { name, parameters })
+            })
+            .collect()
+    }
+
+    /// The server's version from `GET /api/version`.
+    pub fn parse_version(reply: &serde_json::Value) -> Option<String> {
+        reply["version"].as_str().filter(|v| !v.is_empty()).map(str::to_string)
+    }
+
+    /// What `POST /api/show` says a model can do.
+    #[derive(Debug, Clone, PartialEq, Eq, Default)]
+    pub struct Show {
+        /// It calls tools, which Codex's agent loop (and Brainstead's MCP tools) need.
+        pub tools: bool,
+        /// Its thinking levels by name (gpt-oss: low, medium, high), in the server's order; empty
+        /// when it only thinks or not (`thinking.values` of true and false), or doesn't think.
+        pub levels: Vec<String>,
+    }
+
+    impl Show {
+        /// The effort levels Brainstead offers for the model: the ones it names that Codex's
+        /// `model_reasoning_effort` has too, lowest first as `Cli::Ollama.efforts()` orders them.
+        pub fn efforts(&self) -> Vec<String> {
+            super::Cli::Ollama.efforts().iter().filter(|l| self.levels.iter().any(|v| v == *l)).map(|l| l.to_string()).collect()
+        }
+    }
+
+    pub fn parse_show(reply: &serde_json::Value) -> Show {
+        let tools = reply["capabilities"].as_array().into_iter().flatten().filter_map(|c| c.as_str()).any(|c| c == "tools");
+        let levels = reply["thinking"]["values"].as_array().into_iter().flatten().filter_map(|v| v.as_str()).map(str::to_string).collect();
+        Show { tools, levels }
+    }
+}
+
+/// The effort a run on `cli` goes at: the job's own (Settings › AI assistants › Models by job,
+/// `jobEffort.<job>`), else the assistant's (`effort.<cli>`), each only when the CLI offers it;
+/// None leaves it to the CLI's own default for the model. A new Ask chat starts from it with no
+/// job's, so a job's level never becomes a chat's. src/askState.ts `resolveEffort` is the same
+/// rule, kept beside this one by the same cases in both tests.
+pub fn resolve_effort<'a>(cli: Cli, job: Option<&'a str>, assistant: Option<&'a str>) -> Option<&'a str> {
+    [job, assistant].into_iter().flatten().find(|e| cli.efforts().contains(e))
+}
+
+/// A background job, by its key in Settings › AI assistants › Models by job (`jobModels.<key>`,
+/// `jobEffort.<key>`); src/askState.ts `MODEL_JOBS` lists the same keys, held together by
+/// tests/fixtures/job-settings.json.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Job {
+    /// The daily and weekly summaries.
+    Summaries,
+    /// The weekly review's preparation.
+    Weekprep,
+    Find,
+    /// Ingests, the daily check's too.
+    Ingest,
+    /// Meeting notes from transcripts.
+    Meeting,
+    /// Clarify's suggestions in the Inbox.
+    Clarify,
+    /// Contradiction checks, the daily check's and Write Current state.
+    Contradictions,
+    /// Triage, Draft reply and Doc check.
+    Skills,
+    /// Ask's next-message suggestions.
+    Suggest,
+}
+
+impl Job {
+    pub const ALL: [Job; 9] =
+        [Job::Summaries, Job::Weekprep, Job::Find, Job::Ingest, Job::Meeting, Job::Clarify, Job::Contradictions, Job::Skills, Job::Suggest];
+    pub fn key(self) -> &'static str {
+        match self {
+            Job::Summaries => "summaries",
+            Job::Weekprep => "weekprep",
+            Job::Find => "find",
+            Job::Ingest => "ingest",
+            Job::Meeting => "meeting",
+            Job::Clarify => "clarify",
+            Job::Contradictions => "contradictions",
+            Job::Skills => "skills",
+            Job::Suggest => "suggest",
+        }
+    }
+}
+
+type Ui = serde_json::Map<String, serde_json::Value>;
+
+/// A setting's text, an empty one counting as unset.
+fn text(v: Option<&serde_json::Value>) -> Option<&str> {
+    v.and_then(serde_json::Value::as_str).filter(|v| !v.is_empty())
+}
+
+/// The model `job` (a `Job` key) runs on, from the window's settings: its own (`jobModels.<job>`),
+/// else, for the weekly review's preparation, the summaries', else new chats' (`askModel`), else
+/// Claude's Sonnet. src/askState.ts `jobModelOf` is the same rule; both tests read
+/// tests/fixtures/job-settings.json.
+pub fn job_model(ui: &Ui, job: &str) -> String {
+    let own = |j: &str| text(ui.get("jobModels").and_then(|m| m.get(j)));
+    own(job)
+        .or_else(|| if job == "weekprep" { own("summaries") } else { None })
+        .or_else(|| text(ui.get("askModel")))
+        .unwrap_or("claude:sonnet")
+        .to_string()
+}
+
+/// The job's own effort (`jobEffort.<job>`) while its model's assistant offers it, else None, as
+/// Models by job and list_settings show it (src/askState.ts `jobOwnEffort`).
+pub fn job_own_effort<'a>(ui: &'a Ui, job: &str) -> Option<&'a str> {
+    let cli = Cli::route(&job_model(ui, job));
+    text(ui.get("jobEffort").and_then(|m| m.get(job))).filter(|e| cli.efforts().contains(e))
+}
+
+/// The effort `job` runs at on `model` (`resolve_effort`): its own while `model` is the job's
+/// (`job_model`), else its assistant's (`effort.<cli>`), each only when the assistant offers it. A
+/// job's level goes with the model it was picked beside: a quick pass on another model (the
+/// contradiction check's extract and Write Current state, on Claude's Haiku) runs at the
+/// assistant's. The weekly review's preparation never takes the summaries' effort, even on their model.
+pub fn job_effort<'a>(ui: &'a Ui, job: &str, model: &str) -> Option<&'a str> {
+    let cli = Cli::route(model);
+    let own = text(ui.get("jobEffort").and_then(|m| m.get(job))).filter(|_| job_model(ui, job) == model);
+    resolve_effort(cli, own, text(ui.get("effort").and_then(|m| m.get(cli.key()))))
+}
+
+/// `level` as a model whose own levels are `model_levels` takes it (None: its CLI doesn't list a
+/// model's levels, so the CLI decides): the level itself, else the highest of the CLI's levels
+/// below it that the model has, else none, the model's own default.
+pub fn fit_effort<'a>(cli: Cli, level: &'a str, model_levels: Option<&[String]>) -> Option<&'a str> {
+    let Some(has) = model_levels else { return Some(level) };
+    if has.iter().any(|l| l == level) {
+        return Some(level);
+    }
+    let all = cli.efforts();
+    let at = all.iter().position(|l| *l == level)?;
+    all[..at].iter().rev().find(|l| has.iter().any(|h| h == *l)).copied()
+}
+
+/// A run that failed before answering with an error naming the effort: the CLI or model refused
+/// the level (or, on an older CLI, the option), so a background job runs again without it.
+pub fn effort_refused(o: &Outcome) -> bool {
+    o.text.trim().is_empty() && o.error.as_deref().is_some_and(|e| e.to_ascii_lowercase().contains("effort"))
 }
 
 /// Claude Code's memory (`~/.claude/projects/<folder>/memory/`), the one place a chat may write.
@@ -281,18 +518,25 @@ pub struct Request<'a> {
     /// Images to show the model (an ingested image, as `platform::image_for_model` made it), for
     /// the CLIs that see them (`Cli::sees_images`); the others ignore them.
     pub images: &'a [std::path::PathBuf],
+    /// The effort level set for this CLI in Settings › AI assistants. None, or a level not in
+    /// `Cli::efforts`, passes none, so the CLI uses its own default for the model.
+    pub effort: Option<&'a str>,
+    /// Ollama's server, for `Cli::Ollama` (`ollama::host`); the others ignore it.
+    pub ollama_host: &'a str,
 }
 
 fn strip<'a>(model: &'a str, prefix: &str) -> &'a str {
     model.strip_prefix(prefix).unwrap_or(model)
 }
 
-/// How to start a CLI for one question: the arguments after the program's name, and what to write
-/// to its standard input before closing it (None: no input).
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// How to start a CLI for one question: the arguments after the program's name, what to write to
+/// its standard input before closing it (None: no input), and the environment variables it needs
+/// (Codex reads Ollama's address from one).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Launch {
     pub args: Vec<String>,
     pub stdin: Option<String>,
+    pub env: Vec<(String, String)>,
 }
 
 /// The longest command line, in UTF-16 units, sent to a CLI on Windows. CreateProcess takes at
@@ -335,13 +579,18 @@ pub fn claude_edit_rule(dir: &str) -> String {
 
 /// How to start the CLI for `r`. Claude Code and Codex take the prompt on standard input (`-p` and
 /// `exec` with no prompt argument, or `-`), so its length is never limited by the command line;
-/// Antigravity and Copilot take it as an argument.
+/// Antigravity and Copilot take it as an argument. An Ollama model is Codex's launch with its
+/// Ollama provider picked (`--oss --local-provider ollama`, and `model_provider`, without which
+/// Codex 0.166 starts the thread on Ollama but runs the turn on OpenAI) and the server's address in
+/// `CODEX_OSS_BASE_URL`, the one variable its provider reads.
 pub fn args(cli: Cli, r: &Request) -> Result<Launch, String> {
     let instructions = format!("{}\n\n{}", r.system, cli.tools_hint());
     let s = |x: &str| x.to_string();
     let mut a: Vec<String> = Vec::new();
     let mut stdin = None;
+    let mut env = Vec::new();
     let images: Vec<String> = r.images.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+    let effort = r.effort.filter(|e| cli.efforts().contains(e));
     match cli {
         Cli::Claude => {
             // An image is read with Read from its own folder, added to the ones Claude Code may read.
@@ -352,6 +601,9 @@ pub fn args(cli: Cli, r: &Request) -> Result<Launch, String> {
             };
             // `-p` without a prompt reads it from standard input.
             a.extend([s("-p"), s("--model"), s(strip(r.model, CLAUDE_PREFIX))]);
+            if let Some(e) = effort {
+                a.extend([s("--effort"), s(e)]);
+            }
             stdin = Some(prompt);
             let mut dirs: Vec<String> = r.images.iter().filter_map(|p| p.parent()).map(|d| d.to_string_lossy().into_owned()).collect();
             dirs.dedup();
@@ -383,17 +635,29 @@ pub fn args(cli: Cli, r: &Request) -> Result<Launch, String> {
                 a.extend(["--resume", id].map(s));
             }
         }
-        Cli::Codex => {
+        Cli::Codex | Cli::Ollama => {
             a.push(s("exec"));
             if r.session.is_some() {
                 a.push(s("resume"));
             }
-            a.extend(["--json", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules", "-m", r.model].map(s));
+            a.extend(["--json", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules"].map(s));
+            if cli == Cli::Ollama {
+                a.extend(
+                    ["--oss", "--local-provider", "ollama", "-c", "model_provider=\"ollama\"", "-m", strip(r.model, OLLAMA_PREFIX)].map(s),
+                );
+                env.push(("CODEX_OSS_BASE_URL".to_string(), ollama::codex_base_url(r.ollama_host)));
+            } else {
+                a.extend(["-m", r.model].map(s));
+            }
             // Attached to the prompt (`-i, --image <FILE>...`; one per flag, so none swallows the next).
             a.extend(images.iter().map(|i| format!("--image={i}")));
             // -c values are TOML; a JSON string is a valid TOML basic string.
             let dev = serde_json::to_string(&instructions).map_err(|e| e.to_string())?;
             a.extend([s("-c"), s("sandbox_mode=\"read-only\""), s("-c"), format!("developer_instructions={dev}")]);
+            // `--ignore-user-config` leaves out the user's own config.toml, so its effort too.
+            if let Some(e) = effort {
+                a.extend([s("-c"), format!("model_reasoning_effort=\"{e}\"")]);
+            }
             if let Some(m) = r.mcp {
                 // TOML values; JSON strings and arrays of strings are valid TOML.
                 let cmd = serde_json::to_string(&m.command).map_err(|e| e.to_string())?;
@@ -415,6 +679,9 @@ pub fn args(cli: Cli, r: &Request) -> Result<Launch, String> {
         Cli::Antigravity => {
             a.extend(["-p", r.prompt, "--agent", AGY_AGENT, "--model", strip(r.model, AGY_PREFIX)].map(s));
             a.extend(["--add-dir", r.vault, "--sandbox", "--disable-slash-commands", "--output-format", "stream-json"].map(s));
+            if let Some(e) = effort {
+                a.extend([s("--effort"), s(e)]);
+            }
             if let Some(id) = r.session {
                 a.extend(["--conversation", id].map(s));
             }
@@ -428,6 +695,9 @@ pub fn args(cli: Cli, r: &Request) -> Result<Launch, String> {
             };
             a.extend([s("-p"), prompt]);
             a.extend(["--model", strip(r.model, COPILOT_PREFIX), "--output-format", "json", "--stream", "on"].map(s));
+            if let Some(e) = effort {
+                a.extend([s("--reasoning-effort"), s(e)]);
+            }
             a.extend(["--no-custom-instructions", "--disable-builtin-mcps", "--no-auto-update", "--disallow-temp-dir"].map(s));
             // Never an empty list: `--available-tools=` would allow every tool.
             let mut tools = s("view,grep,glob");
@@ -446,7 +716,7 @@ pub fn args(cli: Cli, r: &Request) -> Result<Launch, String> {
         }
     }
     fits_command_line(cli, &a, cfg!(windows))?;
-    Ok(Launch { args: a, stdin })
+    Ok(Launch { args: a, stdin, env })
 }
 
 /// Antigravity's agent: only its read and search tools (a custom agent's list is enforced; the
@@ -544,7 +814,7 @@ impl Parser {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { return out };
         match self.cli {
             Cli::Claude => self.claude(&v, &mut out),
-            Cli::Codex => self.codex(&v, &mut out),
+            Cli::Codex | Cli::Ollama => self.codex(&v, &mut out),
             Cli::Antigravity => self.agy(&v, &mut out),
             Cli::Copilot => self.copilot(&v, &mut out),
         }
@@ -747,7 +1017,7 @@ impl Parser {
         let mut error = self.error;
         // Codex and Copilot report transient trouble (a dropped stream they reconnect) as errors
         // too, so one only counts when no answer came.
-        if matches!(self.cli, Cli::Codex | Cli::Copilot) && !self.text.trim().is_empty() {
+        if matches!(self.cli, Cli::Codex | Cli::Ollama | Cli::Copilot) && !self.text.trim().is_empty() {
             error = None;
         }
         if error.is_none() && self.text.trim().is_empty() && (!ok || matches!(self.cli, Cli::Antigravity | Cli::Copilot)) {
@@ -803,7 +1073,17 @@ mod tests {
     }
 
     fn req<'a>(model: &'a str, session: Option<&'a str>) -> Request<'a> {
-        Request { prompt: "What's due?", model, session, system: "SYS", vault: "/v", mcp: None, images: &[] }
+        Request {
+            prompt: "What's due?",
+            model,
+            session,
+            system: "SYS",
+            vault: "/v",
+            mcp: None,
+            images: &[],
+            effort: None,
+            ollama_host: ollama::DEFAULT_HOST,
+        }
     }
 
     fn feed(cli: Cli, lines: &[&str]) -> (Vec<Event>, Parser) {
@@ -822,7 +1102,95 @@ mod tests {
         assert_eq!(Cli::route("claude-sonnet-5"), Cli::Claude);
         assert_eq!(Cli::route("agy:claude-opus"), Cli::Antigravity);
         assert_eq!(Cli::route("copilot:auto"), Cli::Copilot);
+        assert_eq!(Cli::route("ollama:gpt-oss:20b"), Cli::Ollama);
         assert_eq!(Cli::route("gpt-5.5"), Cli::Codex);
+        // Ollama runs through Codex's program, under its own key and label.
+        assert_eq!((Cli::Ollama.bin(), Cli::Ollama.key(), Cli::Ollama.label()), ("codex", "ollama", "Ollama"));
+    }
+
+    #[test]
+    fn ollama_args() {
+        let host = "http://localhost:11434";
+        let l = args(Cli::Ollama, &Request { ollama_host: host, ..req("ollama:gpt-oss:20b", None) }).unwrap();
+        let a = &l.args;
+        assert_eq!(a[0], "exec");
+        // Codex's own Ollama provider, told to use it for the turn too, with the model as Ollama names it.
+        assert!(a.windows(3).any(|w| w == ["--oss", "--local-provider", "ollama"]), "{a:?}");
+        assert!(a.windows(2).any(|w| w == ["-c", "model_provider=\"ollama\""]), "{a:?}");
+        assert!(a.windows(2).any(|w| w == ["-m", "gpt-oss:20b"]), "{a:?}");
+        assert!(!a.iter().any(|x| x.starts_with("ollama:")));
+        // Everything else as Codex: read-only, the instructions, the prompt on stdin.
+        assert!(a.windows(2).any(|w| w == ["-c", "sandbox_mode=\"read-only\""]));
+        assert!(a.iter().any(|x| x.starts_with("developer_instructions=\"SYS\\n\\n")));
+        assert_eq!(a[a.len() - 2..], ["--", "-"]);
+        assert_eq!(l.stdin.as_deref(), Some("What's due?"));
+        // The server's address reaches Codex in the one variable its provider reads.
+        assert_eq!(l.env, vec![("CODEX_OSS_BASE_URL".to_string(), "http://localhost:11434/v1".to_string())]);
+        let far = args(Cli::Ollama, &Request { ollama_host: "http://gpu-box:11434", ..req("ollama:qwen3:4b", Some("t1")) }).unwrap();
+        assert_eq!(far.env[0].1, "http://gpu-box:11434/v1");
+        assert_eq!(far.args[..2], ["exec", "resume"]);
+        assert_eq!(far.args[far.args.len() - 3..], ["--", "t1", "-"]);
+        // Codex's own launch has none of it.
+        let c = args(Cli::Codex, &req("gpt-5", None)).unwrap();
+        assert!(c.env.is_empty() && !c.args.iter().any(|x| x == "--oss"));
+        // An Ollama model gets its level as Codex's model_reasoning_effort, from Ollama's names only.
+        let e = args(Cli::Ollama, &Request { effort: Some("high"), ..req("ollama:gpt-oss:20b", None) }).unwrap().args;
+        assert!(e.windows(2).any(|w| w == ["-c", "model_reasoning_effort=\"high\""]), "{e:?}");
+        let x = args(Cli::Ollama, &Request { effort: Some("xhigh"), ..req("ollama:gpt-oss:20b", None) }).unwrap().args.join(" ");
+        assert!(!x.contains("effort"), "{x}");
+        // Images aren't attached: the model may not see them, and Codex fails the turn if it doesn't.
+        assert!(!Cli::Ollama.sees_images());
+    }
+
+    #[test]
+    fn ollama_host_as_ollama_reads_it() {
+        for (var, host) in [
+            (None, "http://localhost:11434"),
+            (Some(""), "http://localhost:11434"),
+            (Some("0.0.0.0"), "http://localhost:11434"),
+            (Some("0.0.0.0:11435"), "http://localhost:11435"),
+            (Some(":11435"), "http://localhost:11435"),
+            (Some("gpu-box"), "http://gpu-box:11434"),
+            (Some("gpu-box:8080"), "http://gpu-box:8080"),
+            (Some("https://ollama.example.com"), "https://ollama.example.com:11434"),
+            (Some("http://127.0.0.1:11434/"), "http://127.0.0.1:11434"),
+            (Some("[::1]:11434"), "http://[::1]:11434"),
+        ] {
+            assert_eq!(ollama::host(var), host, "{var:?}");
+        }
+        assert_eq!(ollama::codex_base_url("http://localhost:11434"), "http://localhost:11434/v1");
+    }
+
+    #[test]
+    fn ollama_tags_and_show() {
+        let tags = serde_json::json!({"models": [
+            {"name": "qwen3:4b", "model": "qwen3:4b", "size": 2497293931u64, "details": {"family": "qwen3", "parameter_size": "4.0B"}},
+            {"name": "gpt-oss:20b", "model": "gpt-oss:20b", "details": {"parameter_size": ""}}
+        ]});
+        let t = ollama::parse_tags(&tags);
+        assert_eq!(t.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["qwen3:4b", "gpt-oss:20b"]);
+        assert_eq!(t[0].parameters.as_deref(), Some("4.0B"));
+        assert_eq!(t[1].parameters, None);
+        assert!(ollama::parse_tags(&serde_json::json!({})).is_empty());
+        assert_eq!(ollama::parse_version(&serde_json::json!({"version": "0.35.1"})).as_deref(), Some("0.35.1"));
+        // qwen3 calls tools and thinks, but only on or off: no level to offer.
+        let qwen = ollama::parse_show(
+            &serde_json::json!({"capabilities": ["completion", "tools", "thinking"], "thinking": {"values": [true], "default": true}}),
+        );
+        assert_eq!(qwen, ollama::Show { tools: true, levels: vec![] });
+        assert!(qwen.efforts().is_empty());
+        // gpt-oss names its levels, offered in Codex's order whatever the server's.
+        let oss = ollama::parse_show(
+            &serde_json::json!({"capabilities": ["completion", "tools", "thinking"], "thinking": {"values": ["high", "medium", "low"], "default": "medium"}}),
+        );
+        assert!(oss.tools);
+        assert_eq!(oss.efforts(), ["low", "medium", "high"]);
+        // A level Codex doesn't name isn't offered; a model without tools can't run Codex's loop.
+        let odd =
+            ollama::parse_show(&serde_json::json!({"capabilities": ["completion", "vision"], "thinking": {"values": ["minimal", "high"]}}));
+        assert!(!odd.tools);
+        assert_eq!(odd.efforts(), ["high"]);
+        assert_eq!(ollama::parse_show(&serde_json::json!({})), ollama::Show::default());
     }
 
     #[test]
@@ -1027,6 +1395,91 @@ mod tests {
         let b = args(Cli::Copilot, &req("copilot:auto", Some("s9"))).unwrap().args;
         assert_eq!(b[1], "What's due?");
         assert_eq!(b.last().unwrap(), "--resume=s9");
+    }
+
+    #[test]
+    fn a_jobs_own_effort_goes_with_its_model() {
+        let ui = serde_json::json!({
+            "jobModels": {"contradictions": "claude:opus"},
+            "jobEffort": {"contradictions": "max"},
+            "effort": {"claude": "low"}
+        });
+        let ui = ui.as_object().unwrap();
+        assert_eq!(job_effort(ui, "contradictions", "claude:opus"), Some("max"));
+        // The extract pass and Write Current state, on Haiku, run at Claude Code's.
+        assert_eq!(job_effort(ui, "contradictions", "claude:haiku"), Some("low"));
+    }
+
+    #[test]
+    fn effort_resolves_job_then_assistant() {
+        // The same cases as askState.test.ts "resolves a run's effort".
+        assert_eq!(resolve_effort(Cli::Claude, Some("high"), Some("low")), Some("high"));
+        assert_eq!(resolve_effort(Cli::Claude, None, Some("low")), Some("low"));
+        assert_eq!(resolve_effort(Cli::Claude, None, None), None);
+        // A level the CLI doesn't offer falls through: Codex takes no max.
+        assert_eq!(resolve_effort(Cli::Codex, Some("max"), Some("medium")), Some("medium"));
+        assert_eq!(resolve_effort(Cli::Codex, Some("max"), None), None);
+    }
+
+    #[test]
+    fn job_model_and_effort_follow_the_shared_cases() {
+        // src/askState.test.ts reads the same file.
+        let f: serde_json::Value = serde_json::from_str(include_str!("../../../tests/fixtures/job-settings.json")).unwrap();
+        let keys: Vec<&str> = Job::ALL.iter().map(|j| j.key()).collect();
+        assert_eq!(serde_json::json!(keys), f["jobs"]);
+        for cli in [Cli::Claude, Cli::Codex, Cli::Antigravity, Cli::Copilot, Cli::Ollama] {
+            assert_eq!(serde_json::to_value(cli).unwrap(), cli.key());
+            assert_eq!(serde_json::json!(cli.efforts()), f["levels"][cli.key()], "{cli:?}");
+        }
+        for c in f["cases"].as_array().unwrap() {
+            let (name, ui, job) = (&c["name"], c["settings"].as_object().unwrap(), c["job"].as_str().unwrap());
+            let model = job_model(ui, job);
+            assert_eq!(model, c["model"], "{name}");
+            assert_eq!(serde_json::json!(job_own_effort(ui, job)), c["own"], "{name}");
+            assert_eq!(serde_json::json!(job_effort(ui, job, &model)), c["effort"], "{name}");
+        }
+    }
+
+    #[test]
+    fn a_level_the_model_lacks_falls_back() {
+        let has = |l: &[&str]| l.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        // A CLI that doesn't list a model's levels decides itself.
+        assert_eq!(fit_effort(Cli::Claude, "max", None), Some("max"));
+        assert_eq!(fit_effort(Cli::Codex, "xhigh", Some(&has(&["low", "medium", "high", "xhigh"]))), Some("xhigh"));
+        // The highest below that the model has, else its default.
+        assert_eq!(fit_effort(Cli::Codex, "xhigh", Some(&has(&["minimal", "low", "medium", "high"]))), Some("high"));
+        assert_eq!(fit_effort(Cli::Codex, "medium", Some(&has(&["high"]))), None);
+        assert_eq!(fit_effort(Cli::Codex, "low", Some(&[])), None);
+        // A refusal names the effort and comes before any answer.
+        let o = |text: &str, e: &str| Outcome { text: text.into(), error: Some(e.into()), ..Default::default() };
+        assert!(effort_refused(&o("", "error: unknown option '--effort'")));
+        assert!(effort_refused(&o(" ", "Unsupported value: 'xhigh' for reasoning.effort with this model")));
+        assert!(!effort_refused(&o("Half an answer", "--effort high: rate limited")));
+        assert!(!effort_refused(&o("", "Not signed in.")));
+        assert!(!effort_refused(&Outcome::default()));
+    }
+
+    #[test]
+    fn effort_only_when_set() {
+        for (model, flag) in [
+            ("claude:sonnet", ["--effort", "high"]),
+            ("gpt-5", ["-c", "model_reasoning_effort=\"high\""]),
+            ("agy:gemini-3", ["--effort", "high"]),
+            ("copilot:auto", ["--reasoning-effort", "high"]),
+        ] {
+            let cli = Cli::route(model);
+            let set = args(cli, &Request { effort: Some("high"), ..req(model, None) }).unwrap().args;
+            assert!(set.windows(2).any(|w| w == flag), "{set:?}");
+            // Unset, or a level the CLI doesn't name, passes none: the CLI's own default.
+            for effort in [None, Some("ultra"), Some("")] {
+                let a = args(cli, &Request { effort, ..req(model, None) }).unwrap().args.join(" ");
+                assert!(!a.contains("effort"), "{a}");
+            }
+        }
+        assert!(!Cli::Codex.efforts().contains(&"max"));
+        // Codex's still reads its prompt last.
+        let c = args(Cli::Codex, &Request { effort: Some("low"), ..req("gpt-5", None) }).unwrap().args;
+        assert_eq!(c[c.len() - 2..], ["--", "-"]);
     }
 
     #[test]

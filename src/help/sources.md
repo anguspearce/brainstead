@@ -56,7 +56,7 @@ The **Ingest runs** pane on the right shows each run's steps, with **Stop** whil
 Open a source to read it.
 
 - **PDF**: a bar with page n of N, previous and next, and zoom from 50% to 300% (click the percentage to fit the width again). **Find in this file** lists the pages that match; `↩` goes to the next match and `⇧↩` the one before.
-- **Word, PowerPoint and Excel**: the text Brainstead reads from them, which search, ingest and quotes use. To see the file as it looks in its app, press **Quick Look** or `Space` on a Mac, or **Open in its app**.
+- **Word, PowerPoint and Excel**: the text Brainstead reads from them, which search, ingest and quotes use. To see the file as it looks in its app, press **Quick Look** (Mac), **Preview** (Windows) or `Space`, or **Open in its app**. On Windows, Preview draws the file in the window below the title bar, as Explorer's preview pane does, with Open in its app and Close (`Esc`, or `Space` again). After a click into the document, keys go to it (`Space` scrolls) until you click the panel's bar or the page. A type Windows can't preview, or a file downloaded from the internet, opens in its own app instead; the panel says why. The preview runs in its own process, so a file that upsets it can't take Brainstead down. Brainstead waits while Office starts, reads or draws a preview, up to half a minute for each (ten seconds for smaller steps); a preview that takes longer is let go, with Open in its app, and its process keeps the file open until it ends or Brainstead quits. A question from Brainstead (Quit, unsaved edits, an update) hides the preview until answered, and messages show through it.
 - **Image**: shown with **Text in the image** folded under it; click it to see the text Brainstead read, which search and ingest use.
 - **Open in its app** opens the file in its usual app. A file Brainstead can't show has both buttons.
 
@@ -66,3 +66,6 @@ When you ingest an image, Claude Code and Codex see the picture as well as its t
 Beside the preview, the provenance card, **Cited by N pages**, says when the source was last ingested and by which model, and lists the wiki pages that cite it and the passages they cite; **Details** adds the file's hash and passages indexed. **Re-ingest** and **Reveal** (in Finder, or Explorer on Windows) are at the foot, with **Move to the Trash** at the right. An assistant can read the same card.
 
 A source's top bar has **Ask**, which starts a chat about it. A captured thread has **Draft a reply**, and other documents have **Doc check**. On the Sources list, **Meeting notes** opens [Meeting notes](app:meeting).
+
+## Resize the panes
+Drag the line between the list and the ingest runs to resize them, and a column heading's left edge to resize that column; **Title** takes the rest, and a double-click puts either back ([pane widths](help:settings-general)).

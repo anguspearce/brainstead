@@ -18,6 +18,8 @@ import { Dialog, fmtCount, LAYER_LABEL, LayerTag, SearchBox, Seg, useDebounced }
 import { TypePill } from "./typeTone";
 import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
+import { usePanes } from "./PaneResizer";
+import { PANES } from "./panes";
 
 /** The parts of the vault Search filters on (and a saved search keeps; saved_searches takes the same). */
 export const LAYERS: Layer[] = ["note", "wiki", "source"];
@@ -83,6 +85,7 @@ export function sortHits(hits: SearchHit[], sort: "best" | "newest" | "oldest"):
 }
 
 export function SearchScreen() {
+  const panes = usePanes({ "search.left": PANES["search.left"] }, { minFlex: 300 });
   const { place: here } = useStore(place);
   const [typed, setQ] = useViewState("search:q", here.q ?? "");
   const q = useDebounced(typed);
@@ -168,7 +171,8 @@ export function SearchScreen() {
         </button>
       </TopBar>
       {saving && <SaveSearch query={q.trim()} layers={layers.length === LAYERS.length ? [] : layers} onClose={() => setSaving(false)} />}
-      <div className="body split">
+      <div className="body split" {...panes.root}>
+        {panes.resizers}
         <nav className="tagtree" aria-label="Saved searches">
           <div className="sect static">Saved searches</div>
           {lists.length === 0 && <p className="faint pad">None yet: Save search keeps one here (in Me. Smart Lists.md).</p>}
