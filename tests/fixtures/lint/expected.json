@@ -5,10 +5,6 @@
   "missing-crossrefs": ["wiki/entities/Northwind.md: 'Orbit App' mentioned without [[link]]"],
   "stale-dates": ["wiki/entities/Northwind.md  (updated: 2026-09-01, mtime: 2026-10-03)"],
   "unlogged-writes": ["wiki/entities/Northwind.md  (mtime: 2026-10-03 08:00 UTC)"],
-  "uningested-sources": [
-    "sources/Orbit App readiness review.docx",
-    "sources/Programme Update Steerco 2026-09-28.pdf",
-    "sources/Whiteboard photo.png"
-  ],
+  "uningested-sources": ["sources/Programme Update Steerco 2026-09-28.pdf", "sources/Whiteboard photo.png"],
   "unreferenced-images": ["images/readme.md", "images/unused.png"]
 }
