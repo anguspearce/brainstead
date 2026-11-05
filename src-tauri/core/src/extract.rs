@@ -315,8 +315,9 @@ fn pptx(zip: &mut Zip) -> Result<Vec<Part>, String> {
         let num = |s: &str| s.chars().filter(char::is_ascii_digit).collect::<String>().parse::<u64>().unwrap_or(0);
         slides = zip
             .file_names()
+            .filter_map(Result::ok)
             .filter(|n| n.starts_with("ppt/slides/slide") && n.ends_with(".xml") && !n[16..].contains('/'))
-            .map(str::to_string)
+            .map(|n| n.into_owned())
             .collect();
         slides.sort_by_key(|s| num(s));
     }
