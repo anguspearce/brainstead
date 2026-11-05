@@ -29,7 +29,7 @@ import {
   toggleTask,
   useAllTasks,
 } from "./taskModel";
-import { fieldIcon, fieldTip, fieldValue, TASK_FIELDS, taskFieldsOf } from "./taskFields";
+import { fieldIcon, fieldTip, fieldValue, priorityOf, TASK_FIELDS, taskFieldsOf } from "./taskFields";
 import { parseTask, PriorityName } from "./tasksq/fields";
 import { urgency } from "./tasksq/task";
 import { splitTaskDates, taskDate, TaskDateId } from "./taskDates";
@@ -203,7 +203,6 @@ const PRIORITY_CHOICES: [PriorityName, string][] = [
   ["high", "High"],
   ["highest", "Highest"],
 ];
-const priorityOf = (t: TaskRow) => parseTask(t.lineText)?.priority ?? "none";
 
 /** A task's menu: its editor (TaskEditor) in a popover by the row. */
 function TaskMenu({ t, at, onClose }: { t: TaskRow; at: DOMRect; onClose: () => void }) {
@@ -585,7 +584,13 @@ function GtdMenu({ t, onClose }: { t: TaskRow; onClose: () => void }) {
             {!active.length && <span className="faint small">No active projects yet.</span>}
           </>
         )}
-        {t.project && (
+        {/* A project from the note's Project: line stays whatever the task's line links, so it has no Clear. */}
+        {t.project && t.projectFrom === "member" && (
+          <span className="faint small" title="The note this task is in names the project on its Project: line">
+            From its note's Project: line
+          </span>
+        )}
+        {t.project && t.projectFrom !== "member" && (
           <button
             type="button"
             className="chip f"

@@ -14,7 +14,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 
 import type { TaskRow } from "./api";
 import { threadLabel } from "./skills/Reply";
-import { TaskList, TasksFailed, TaskText } from "./TaskList";
+import { TaskEditor, TaskList, TasksFailed, TaskText } from "./TaskList";
 import { retitled, retryTasks, tasksFailed } from "./taskModel";
 import { toast, Toasts } from "./Toast";
 
@@ -170,5 +170,37 @@ describe("Draft reply's thread names", () => {
     expect(threadLabel({ path: "sources/Teams. Chat. Lena - 2026-10-01.md", title: "Teams. Chat. Lena - 2026-10-01", date: null })).toBe(
       "Teams: Lena",
     );
+  });
+});
+
+describe("the task pane's project", () => {
+  it("has no Clear for a project that comes from its note's Project: line", async () => {
+    invoke.mockImplementation(async (cmd: unknown) =>
+      ["projects_list", "tasks_all", "tasks_query"].includes(String(cmd)) ? [] : { undo: "" },
+    );
+    const inherited = t("From the tracker", { path: "Tracker. Orbit.md", project: "Project. Orbit.md", projectFrom: "member" });
+    const { rerender } = render(<TaskEditor t={inherited} onClose={() => {}} wide={false} />);
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: "Clear project" })).toBeNull();
+    expect(screen.getByText("From its note's Project: line")).toBeTruthy();
+    // A project its line links can still be cleared.
+    rerender(<TaskEditor t={{ ...inherited, projectFrom: "line" }} onClose={() => {}} wide={false} />);
+    expect(screen.getByRole("button", { name: "Clear project" })).toBeTruthy();
+    expect(screen.queryByText("From its note's Project: line")).toBeNull();
+    invoke.mockImplementation(async () => ({ undo: "" }));
+  });
+});
+
+describe("the task editor's priority", () => {
+  const pressed = (name: string) => screen.getByRole("button", { name }).getAttribute("aria-pressed");
+
+  it("shows the priority the row's chip shows, wherever it is on the line", () => {
+    for (const text of ["Call Sam ⏫ [effort:: 15m]", "⏫ Review the plan", "Call Sam ⏫"]) {
+      render(<TaskEditor t={t(text)} onClose={() => {}} wide={false} />);
+      expect([pressed("High"), pressed("None"), pressed("Low")], text).toEqual(["true", "false", "false"]);
+      cleanup();
+    }
+    render(<TaskEditor t={t("Plain words")} onClose={() => {}} wide={false} />);
+    expect([pressed("High"), pressed("None")]).toEqual(["false", "true"]);
   });
 });

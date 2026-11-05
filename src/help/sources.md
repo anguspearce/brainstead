@@ -35,6 +35,8 @@ Markdown, text, PDF, Word, PowerPoint and Excel files and images (not SVG) can b
 
 Ingests run one at a time, oldest source first, so a newer source has the last word on a page.
 
+A real document also gets a summary page in the wiki, named `Summary. ` and the source's name, so a link to the source's name still reaches the source. A source that already has a summary doesn't get a second one: Brainstead looks for a summary page that cites the source in its `sources:`, whatever the page is called, so older summaries (named like their source) and a renamed source's summary count.
+
 The AI drafts changes to the wiki pages the source mentions, and every quote is checked against the source. What the source adds goes in as:
 
 - a dated entry in the page's Timeline, newest first, naming the source (ingesting the source again replaces its entry);

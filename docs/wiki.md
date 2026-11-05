@@ -48,6 +48,8 @@ It uses the tokens your open Teams tab already has. While Teams is open in your 
 
 **Ingest** reads a source and has the AI draft changes to the wiki pages it mentions, each claim with a quote from the source. Brainstead checks every quote. A change with none of its quotes found is dropped; one with some missing is kept and flagged. The source is added to each page's `sources:` list, and misheard names in it are fixed. A run shows its steps as it goes, with **Stop**.
 
+A real document (a PDF, Office file, web clip, transcript or email) also gets a summary page in `wiki/summaries/`, named `Summary. ` and the source's name (`Summary. Roadmap Update 2026-09-18`). The prefix keeps the summary's name different from the source's, so a `[[Roadmap Update 2026-09-18]]` link reaches the source and `[[Summary. Roadmap Update 2026-09-18]]` the summary. An ingest makes no summary when a page in `wiki/summaries/` already cites the source in its `sources:`, whatever that page is called (older summaries are named like their source, and a renamed source keeps its summary), or when another page already has the name.
+
 Ingests wait in one queue, whoever started them, and run one at a time, oldest source first, so a newer source has the last word on a page.
 
 Brainstead, not the AI, decides where text goes on a page:

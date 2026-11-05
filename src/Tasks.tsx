@@ -7,7 +7,7 @@
 import { FoundTasks } from "./Found";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CaptureBox } from "./Capture";
-import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from "./taskGroups";
+import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, SortBy, sortTasks, withinEffort } from "./taskGroups";
 import { fieldIcon, fieldValue, taskFieldsOf } from "./taskFields";
 import type { TaskRow } from "./api";
 import { contextsInUse, useInbox } from "./gtd";
@@ -29,7 +29,13 @@ import { usePanes } from "./PaneResizer";
 import { PANES } from "./panes";
 
 /** Each grouping's band icon, and what its count's tooltip says. */
-const GROUP_ICON: Record<GroupBy, string> = { none: "", project: "project", context: "tag", due: taskDate("due").icon };
+const GROUP_ICON: Record<GroupBy, string> = {
+  none: "",
+  project: "project",
+  context: "tag",
+  due: taskDate("due").icon,
+  priority: "priority",
+};
 const groupTip = (by: GroupBy, label: string) =>
   by === "project"
     ? label === "No project"
@@ -39,11 +45,15 @@ const groupTip = (by: GroupBy, label: string) =>
       ? label === "No context"
         ? "with no context"
         : "in this context"
-      : label === "No due date"
-        ? "with no due date"
-        : label === "Overdue"
-          ? "overdue"
-          : `due ${label.toLowerCase()}`;
+      : by === "priority"
+        ? label === "No priority"
+          ? "with no priority"
+          : `with ${label.toLowerCase()} priority`
+        : label === "No due date"
+          ? "with no due date"
+          : label === "Overdue"
+            ? "overdue"
+            : `due ${label.toLowerCase()}`;
 
 export function TasksScreen() {
   const panes = usePanes({ "tasks.left": PANES["tasks.left"], "tasks.side": PANES["tasks.side"] }, { minFlex: 320 });
@@ -63,13 +73,17 @@ export function TasksScreen() {
   const [ctx, setCtx] = useViewState("tasks:context", "");
   const [effort, setEffort] = useViewState("tasks:effort", "");
   const [groupBy, setGroupBy] = useViewState<GroupBy>("tasks:group", "none");
+  const [sortBy, setSortBy] = useViewState<SortBy>("tasks:sort", "manual");
   const [adding, setAdding] = useState<DOMRect | null>(null);
   const contexts = useMemo(() => (all ? contextsInUse(all) : []), [all]);
   const filtered = useCallback(
     (t: TaskRow) => (!ctx || (t.contexts ?? []).includes(ctx)) && withinEffort(t, effort) && matchesSearch(t, dq),
     [ctx, effort, dq],
   );
-  const rows = useMemo(() => (all ? viewRows(all, view, today, inbox) : []).filter(filtered), [all, inbox, view, today, filtered]);
+  const rows = useMemo(
+    () => sortTasks((all ? viewRows(all, view, today, inbox) : []).filter(filtered), sortBy),
+    [all, inbox, view, today, filtered, sortBy],
+  );
   // The whole manual list, with what the search and filters hide, for a drag's renumber.
   const every = useMemo(() => (all && view.manual ? viewRows(all, view, today, inbox) : undefined), [all, inbox, view, today]);
   const groups = useMemo(() => groupTasks(rows, groupBy, today), [rows, groupBy, today]);
@@ -138,6 +152,7 @@ export function TasksScreen() {
             ["project", "Project"],
             ["context", "Context"],
             ["due", "Due"],
+            ["priority", "Priority"],
           ]}
         />
         <button
@@ -255,6 +270,16 @@ export function TasksScreen() {
                     </option>
                   ))}
                 </select>
+                <select
+                  title="Order the list: your own order (drag to reorder), or by priority, highest first and tasks with none last"
+                  className="sel sm"
+                  aria-label="Sort"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as SortBy)}
+                >
+                  <option value="manual">Manual order</option>
+                  <option value="priority">By priority</option>
+                </select>
               </div>
               <div className="ttable" role="table" aria-label={view.label}>
                 {groups.map((g) => (
@@ -271,7 +296,7 @@ export function TasksScreen() {
                     <TaskList
                       table
                       rows={g.rows}
-                      manual={view.manual && groupBy === "none"}
+                      manual={view.manual && groupBy === "none" && sortBy === "manual"}
                       every={every}
                       selected={sel}
                       onSelect={(t) => setSel(taskKey(t))}

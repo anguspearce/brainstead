@@ -9,7 +9,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::index::{Index, Result};
-use crate::projects::is_project_sql;
+use crate::projects::{is_project_sql, member_project_sql};
 
 fn e<E: std::fmt::Display>(x: E) -> String {
     x.to_string()
@@ -83,10 +83,13 @@ pub struct TaskRow {
     pub tags: Vec<String>,
     pub heading: Option<String>,
     /// The project note it belongs to: the one it's written in, else the first link on its line
-    /// to one.
+    /// to one, else the project its note belongs to by a `Project: [[…]]` line.
     pub project: Option<String>,
     /// That project's status (active, on-hold, someday, done), when it has one.
     pub project_status: Option<String>,
+    /// Where its project comes from: `note` (it's written in the project note), `line` (its line
+    /// links it) or `member` (its note's `Project:` line, so unlinking it changes nothing).
+    pub project_from: Option<String>,
     /// From `#context/<name>` tags, without the prefix.
     pub contexts: Vec<String>,
     /// As written in `[effort:: …]`.
@@ -106,15 +109,21 @@ impl TaskRow {
 
 fn rows_sql() -> String {
     let own = is_project_sql("f");
-    let linked = is_project_sql("pf");
+    let linked = is_project_sql("pl");
+    let member = member_project_sql("f");
+    // The task's project note: the note it's in when that's a project, else the first project its
+    // line links, else (unless its line links a project note that isn't there, as Project in the
+    // task's menu counts it) the project the note belongs to by its `Project:` line.
     format!(
         "SELECT f.path, f.title, t.line, t.text, t.done, t.due, t.scheduled, t.done_on, t.created, t.rank, t.tags, t.heading, f.mtime, t.line_text, t.start, t.status, t.cancelled,
-           CASE WHEN {own} THEN f.path ELSE (SELECT pf.path FROM links l JOIN files pf ON pf.id = l.target_id
-             WHERE l.src = f.id AND l.line = t.line AND l.kind = 'link' AND {linked} ORDER BY l.rowid LIMIT 1) END,
-           t.contexts, t.effort, t.effort_min,
-           CASE WHEN {own} THEN f.frontmatter ELSE (SELECT pf.frontmatter FROM links l JOIN files pf ON pf.id = l.target_id
-             WHERE l.src = f.id AND l.line = t.line AND l.kind = 'link' AND {linked} ORDER BY l.rowid LIMIT 1) END
-         FROM tasks t JOIN files f ON f.id = t.file_id"
+           pf.path, t.contexts, t.effort, t.effort_min, pf.frontmatter,
+           CASE WHEN pf.id IS NULL THEN NULL WHEN {own} THEN 'note' WHEN pf.id IS {member} THEN 'member' ELSE 'line' END
+         FROM tasks t JOIN files f ON f.id = t.file_id
+         LEFT JOIN files pf ON pf.id = CASE WHEN {own} THEN f.id ELSE COALESCE(
+           (SELECT l.target_id FROM links l JOIN files pl ON pl.id = l.target_id
+             WHERE l.src = f.id AND l.line = t.line AND l.kind = 'link' AND {linked} ORDER BY l.rowid LIMIT 1),
+           CASE WHEN EXISTS (SELECT 1 FROM links g WHERE g.src = f.id AND g.line = t.line AND g.kind = 'link' AND g.target_id IS NULL
+               AND (g.target GLOB 'Project. ?*' OR g.target GLOB '*/Project. ?*')) THEN NULL ELSE {member} END) END"
     )
 }
 
@@ -146,6 +155,7 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<TaskRow> {
         effort: r.get(19)?,
         effort_min: r.get(20)?,
         project_status: project_status(r.get(17)?, r.get(21)?),
+        project_from: r.get(22)?,
     })
 }
 
@@ -189,12 +199,21 @@ fn week(today: &str, offset: i64) -> Option<(i64, i64)> {
 
 impl Index {
     /// Every task outside the templates, in file order, for the query language in the window
-    /// (src/tasksq/), which searches the whole vault as the Tasks plugin does.
+    /// (src/tasksq/), which searches the whole vault as the Tasks plugin does. Counts and lists
+    /// that must agree with the Tasks screen use `note_tasks` instead, which leaves out the wiki
+    /// and sources too.
     pub fn all_tasks(&self) -> Result<Vec<TaskRow>> {
         let mut st =
             self.conn().prepare_cached(&format!("{} WHERE f.layer != 'template' ORDER BY f.path, t.line", rows_sql())).map_err(e)?;
         let rows = st.query_map([], row).map_err(e)?;
         rows.collect::<std::result::Result<Vec<_>, _>>().map_err(e)
+    }
+
+    /// Every task in the notes (not the wiki, sources or templates), done or not, in manual order:
+    /// exactly the rows the Tasks screen reads (`tasks` with any status and `Sort::Manual`). The
+    /// one filter behind the project counts, the tray and the assistants' `list_tasks`.
+    pub fn note_tasks(&self) -> Result<Vec<TaskRow>> {
+        self.tasks(&TaskQuery { sort: Sort::Manual, ..Default::default() })
     }
 
     pub fn tasks(&self, q: &TaskQuery) -> Result<Vec<TaskRow>> {
@@ -340,6 +359,66 @@ mod tests {
         assert!(ranked[0].is_none());
         // Templates and sources hold no tasks for queries.
         assert!(ix.tasks(&TaskQuery::default()).unwrap().iter().all(|t| !t.path.starts_with("Templates/")));
+    }
+
+    #[test]
+    fn note_tasks_leave_out_the_wiki_and_sources() {
+        // A task in a note, a wiki page, a source and a template; the wiki and the source also link
+        // the project, so they would count towards it if they were read.
+        let d = tempfile::tempdir().unwrap();
+        let w = |rel: &str, text: &str| {
+            let p = d.path().join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, text).unwrap();
+        };
+        w(
+            "Project. Orbit.md",
+            "## Next actions
+
+- [ ] In the note
+",
+        );
+        w(
+            "Meeting. Steerco.md",
+            "- [ ] Second ^rank-2048
+- [ ] First ^rank-1024
+- [ ] Unranked
+",
+        );
+        w(
+            "wiki/entities/Orbit.md",
+            "- [ ] In the wiki [[Project. Orbit]]
+",
+        );
+        w(
+            "sources/emails/Thread.md",
+            "- [ ] In a source [[Project. Orbit]]
+",
+        );
+        w(
+            "Templates/Meeting.md",
+            "- [ ] In a template
+",
+        );
+        let mut ix = Index::open_in_memory().unwrap();
+        ix.sync(&Vault::new(d.path().to_path_buf(), vec![])).unwrap();
+        // The query language still searches the wiki and sources; the Tasks screen's rows don't.
+        let all = ix.all_tasks().unwrap();
+        assert!(all.iter().any(|t| t.path.starts_with("wiki/")) && all.iter().any(|t| t.path.starts_with("sources/")));
+        let notes = ix.note_tasks().unwrap();
+        assert!(notes.iter().all(|t| !t.path.starts_with("wiki/") && !t.path.starts_with("sources/") && !t.path.starts_with("Templates/")));
+        // Manual order, as the Tasks screen has it: unranked first (by file, then line), then by rank.
+        assert_eq!(texts(&notes), ["Unranked", "In the note", "First", "Second"]);
+        // The same rows the screen's own query returns.
+        let screen = ix.tasks(&TaskQuery { status: Status::Any, sort: Sort::Manual, ..Default::default() }).unwrap();
+        assert_eq!(
+            notes.iter().map(|t| (&t.path, t.line)).collect::<Vec<_>>(),
+            screen.iter().map(|t| (&t.path, t.line)).collect::<Vec<_>>()
+        );
+        // And the project counts only its own note's task.
+        let p = ix.projects().unwrap();
+        assert_eq!(p.len(), 1);
+        assert_eq!((p[0].next, p[0].waiting, p[0].done), (1, 0, 0));
     }
 
     #[test]

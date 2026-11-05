@@ -124,14 +124,33 @@ export function started(line: string): LineChange {
   return { lines: [withoutDate(withoutDate(withStatus(line, "/"), "done"), "cancelled")], label: "Started" };
 }
 
-/** The line with its priority set (or cleared with "none"), placed before the other fields. */
+/** `text` with `f` applied to the parts outside `code` spans, which are left as written. */
+const outsideCode = (text: string, f: (part: string) => string) =>
+  text
+    .split(/(`[^`\n]*`)/)
+    .map((part, i) => (i % 2 ? part : f(part)))
+    .join("");
+
+/** The index of the first field emoji outside `code` spans, or -1. */
+function fieldAt(text: string): number {
+  let at = 0;
+  for (const [i, part] of text.split(/(`[^`\n]*`)/).entries()) {
+    const m = i % 2 ? -1 : part.search(FIELD_EMOJI);
+    if (m >= 0) return at + m;
+    at += part.length;
+  }
+  return -1;
+}
+
+/** The line with its priority set (or cleared with "none"), placed before the other fields. A
+ *  priority emoji inside a `code` span is text, not a priority, and stays. */
 export function withPriority(line: string, p: PriorityName): LineChange {
-  let l = line.replace(/\s*[🔺⏫🔼🔽⏬]️?/gu, "");
+  let l = outsideCode(line, (part) => part.replace(/\s*[🔺⏫🔼🔽⏬]️?/gu, ""));
   if (p !== "none") {
     const emoji = Object.entries(PRIORITY_EMOJI).find(([, v]) => v === p)![0];
     const head = /^(\s*(?:[-*+]|\d+[.)])\s+\[[^\]]\]\s+)/.exec(l)![0];
     const body = l.slice(head.length);
-    const at = body.search(FIELD_EMOJI);
+    const at = fieldAt(body);
     const tail = /(\s+\^[\w-]+)+\s*$/.exec(body);
     const cut = at >= 0 ? at : tail ? tail.index : body.length;
     l = `${head}${body.slice(0, cut).trimEnd()} ${emoji}${cut < body.length ? ` ${body.slice(cut).trimStart()}` : ""}`;

@@ -57,7 +57,7 @@ const BECOMES: Record<string, string> = {
 
 /** The task an action is on, as it is now. */
 async function current(t: WeekPrepTask): Promise<TaskRow> {
-  return findTask(await api.tasksAll(), `${t.path}:${t.line + 1}`, t.text);
+  return findTask(await api.tasksNotes(), `${t.path}:${t.line + 1}`, t.text);
 }
 
 const hasTag = (t: TaskRow, tag: string) => t.tags.some((x) => x.replace(/^#/, "") === tag);
