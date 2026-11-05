@@ -11,12 +11,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const invoke = vi.hoisted(() => vi.fn(async (..._a: unknown[]): Promise<unknown> => ({ undo: "" })));
 vi.mock("@tauri-apps/api/core", () => ({ convertFileSrc: (p: string) => `asset://${p}`, invoke }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
+const openUrl = vi.hoisted(() => vi.fn());
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl, openPath: vi.fn() }));
 
 import type { TaskRow } from "./api";
 import { threadLabel } from "./skills/Reply";
 import { TaskEditor, TaskList, TasksFailed, TaskText } from "./TaskList";
 import { retitled, retryTasks, tasksFailed } from "./taskModel";
 import { toast, Toasts } from "./Toast";
+import { settings } from "./store";
 
 const t = (text: string, o: Partial<TaskRow> = {}): TaskRow => ({
   path: "A.md",
@@ -39,6 +42,8 @@ const t = (text: string, o: Partial<TaskRow> = {}): TaskRow => ({
 afterEach(() => {
   cleanup();
   invoke.mockClear();
+  openUrl.mockClear();
+  settings.update({ referenceLinks: [] });
 });
 
 const rows = [t("One", { line: 1 }), t("Two", { line: 2 }), t("Three", { line: 3 })];
@@ -89,6 +94,73 @@ describe("a task's words", () => {
     expect(container.textContent).not.toContain("📅");
     expect(container.querySelector(".femoji")).toBeTruthy();
     expect(container.querySelector("b")?.textContent).toBe("soon");
+  });
+});
+
+describe("links in a task's words", () => {
+  const text = "Review [the spec](https://example.com/spec) and https://www.example.com/a/b, then ORBIT-12.";
+
+  it("draw a [label](url) as its label and a bare URL as its domain, and open them in the browser", () => {
+    const { container } = render(<TaskText text={text} />);
+    const links = [...container.querySelectorAll<HTMLAnchorElement>("a.tlinkword")];
+    expect(links.map((a) => a.textContent)).toEqual(["the spec", "example.com"]);
+    expect(container.textContent).toBe("Review the spec and example.com, then ORBIT-12.");
+    fireEvent.click(links[0]);
+    expect(openUrl).toHaveBeenLastCalledWith("https://example.com/spec");
+    fireEvent.click(links[1]);
+    expect(openUrl).toHaveBeenLastCalledWith("https://www.example.com/a/b");
+  });
+
+  it("draw a configured key as a link, and leave one alone with no pattern", () => {
+    expect(render(<TaskText text={text} />).container.textContent).toContain("ORBIT-12");
+    cleanup();
+    settings.update({ referenceLinks: [{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }] });
+    const { container } = render(<TaskText text={text} />);
+    const key = [...container.querySelectorAll<HTMLAnchorElement>("a.tlinkword")].find((a) => a.textContent === "ORBIT-12")!;
+    expect(key.title).toBe("https://tickets.example.com/browse/ORBIT-12");
+    fireEvent.click(key);
+    expect(openUrl).toHaveBeenLastCalledWith("https://tickets.example.com/browse/ORBIT-12");
+  });
+
+  it("leave a key inside a link, code or a wikilink alone, and draw a link's bold and code with it", () => {
+    settings.update({ referenceLinks: [{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }] });
+    const { container } = render(
+      <TaskText text="[ORBIT-1](Note.md) `ORBIT-2` [[Bug ORBIT-3]] [**Spec** and `cmd`](https://example.com/s) ![diagram ORBIT-4](a.png) **ORBIT-5**" />,
+    );
+    const links = [...container.querySelectorAll<HTMLAnchorElement>("a.tlinkword")];
+    // One link for the labelled address, holding its bold and code, and one for the key in bold.
+    expect(links.map((a) => a.textContent)).toEqual(["Spec and cmd", "ORBIT-5"]);
+    expect(links[0].querySelector("b")?.textContent).toBe("Spec");
+    expect(links[0].querySelector("code")?.textContent).toBe("cmd");
+    expect(container.querySelector("b > a")?.textContent).toBe("ORBIT-5");
+    // An image is its alt text, not a "!" and a link; a link to a note stays as written.
+    expect(container.textContent).toContain(" diagram ORBIT-4 ");
+    expect(container.textContent).not.toContain("!");
+    expect(container.textContent).toContain("[ORBIT-1](Note.md)");
+  });
+
+  it("are text, not links, where the row is itself a button", () => {
+    const { container } = render(<TaskText text={text} plain />);
+    expect(container.querySelector("a")).toBeNull();
+    expect(container.querySelector(".tlinkword.ext")?.textContent).toBe("the spec");
+  });
+
+  it("open on a click without selecting the row, and keep ↩ and Space from acting on it", () => {
+    const row = t("Check [the spec](https://example.com/spec)", { line: 1 });
+    const onSelect = vi.fn();
+    const onOpen = vi.fn();
+    const { container } = render(<TaskList rows={[row]} manual={false} keys onSelect={onSelect} onOpen={onOpen} selected="A.md:1" />);
+    const a = container.querySelector("a")!;
+    fireEvent.click(a);
+    expect(openUrl).toHaveBeenCalledWith("https://example.com/spec");
+    expect(onSelect).not.toHaveBeenCalled();
+    fireEvent.keyDown(a, { key: "Enter" });
+    fireEvent.keyDown(a, { key: " " });
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(calls("task_toggle")).toHaveLength(0);
+    // Off the link, the row's own keys still work.
+    fireEvent.keyDown(container.querySelector("ul")!, { key: "Enter" });
+    expect(onOpen).toHaveBeenCalledWith(row);
   });
 });
 

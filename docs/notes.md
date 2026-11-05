@@ -1,6 +1,6 @@
 # Notes
 
-[A note](#a-note) · [Read aloud](#read-aloud) · [Writing](#writing) · [Saving and drafts](#saving-and-drafts) · [Queries, callouts and diagrams](#queries-callouts-and-diagrams) · [Templates](#templates) · [Finding things](#finding-things) · [System notes](#system-notes) · [The Trash](#the-trash)
+[A note](#a-note) · [Read aloud](#read-aloud) · [Writing](#writing) · [Reference links](#reference-links) · [Saving and drafts](#saving-and-drafts) · [Queries, callouts and diagrams](#queries-callouts-and-diagrams) · [Templates](#templates) · [Finding things](#finding-things) · [System notes](#system-notes) · [The Trash](#the-trash)
 
 ## A note
 
@@ -35,6 +35,15 @@ Choose **Read aloud** on the top bar's ⋯, or press ⇧⌘P, to hear the note o
 - ⌘F finds, and in Edit and Source replaces, one match or all.
 
 **New note** (⌘N) names the note from its type, title and date (`Meeting. Orbit App Steerco - 2026-09-30.md`), or makes it from a template.
+
+## Reference links
+
+A ticket or issue key such as `ORBIT-12` can be a link that opens your browser. Settings › Notes › **Reference links** holds rows of a prefix (`ORBIT-`) and an address with `{key}` (the whole key) or `{num}` (its digits) in it, such as `https://tickets.example.com/browse/{key}`. A key is the prefix and digits, and the prefix is case-sensitive. Before a key there is no letter, digit, `_`, `-`, `#` or `/`, and after it no letter, digit or `_` and no `-` followed by one, so `ALB-02` is plain text unless `ALB-` is a prefix, and `XORBIT-12`, `#team/ORBIT-12` and `ORBIT-12-b` have no key. A prefix can be used once. None are set by default, and the feature is on only when at least one working prefix is set.
+
+- With a prefix set, keys are links in task rows, in View, in Edit (⌘-click, Ctrl-click on Windows), in Dataview tables, and in a property that is one key (`tickets: [ORBIT-12]` is a chip in View; `tags` and `aliases` never are). They are never links in code, a wikilink, an image or any markdown link.
+- A note's side pane has a **References** card of the keys and links in its properties, text (as View draws it) and open tasks, each once with where it appears. A project's page has **Tickets and links**, [described with projects](tasks.md#projects). Both appear only with a prefix set.
+- An assistant reads each task's `refs` and each project's `references` from `list_tasks` and `list_projects` (only with a prefix set), and reads or sets the list with the `referenceLinks` setting.
+- With no prefix set, `[label](https://example.com)` links and bare web addresses open in the browser from task rows, and a property that is a web address is a link showing the address as written; task rows also draw image syntax as its alt text and handle double-backtick code and code or wikilinks inside italics.
 
 ## Saving and drafts
 

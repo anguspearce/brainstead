@@ -6,14 +6,17 @@
 // and what's still open with them.
 
 import { useEffect, useMemo, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, FileSummary, TaskRow } from "../api";
 import { Icon } from "../icons";
-import { taskLabel } from "../md/TaskBlock";
+import { taskLabel, tasksAt } from "../md/TaskBlock";
+import { fromLabel, noteRefs, type RefUse } from "../md/refUses";
+import { type RefPattern, useRefPatterns } from "../md/refs";
 import { openDoc } from "../nav";
 import { useVaultVersion } from "../state";
 import { useStore } from "../store";
 import { retryTasks, tasksFailed, toggleTask, useAllTasks } from "../taskModel";
-import { LayerTag } from "../ui";
+import { LayerTag, useDebounced } from "../ui";
 
 /** The note's headings, outside code blocks and frontmatter, as (level, text). */
 export function outline(md: string): [number, string][] {
@@ -55,6 +58,76 @@ export function OutlineCard({ path, md }: { path: string; md: string }) {
       ))}
     </section>
   );
+}
+
+/** How many links show in a references card before Show all. */
+const REFS_SHOWN = 12;
+
+/** A card of the links a note or project holds (reference keys, `[label](url)` links and URLs), each
+ *  once, with where it is written. Each opens in the browser. Nothing when there are none. */
+export function RefsCard({ title, uses }: { title: string; uses: RefUse[] }) {
+  const [all, setAll] = useState(false);
+  if (!uses.length) return null;
+  return (
+    <section className="card side-card">
+      <div className="eyebrow">
+        {title} · {uses.length}
+      </div>
+      {(all ? uses : uses.slice(0, REFS_SHOWN)).map((u) => (
+        <div key={u.url} className="refrow">
+          <a
+            className="tlinkword ext"
+            href={u.url}
+            title={u.url}
+            onClick={(e) => {
+              e.preventDefault();
+              void openUrl(u.url);
+            }}
+          >
+            {u.key}
+          </a>
+          <span className="faint small">{u.from.map(fromLabel).join(", ")}</span>
+        </div>
+      ))}
+      {uses.length > REFS_SHOWN && (
+        <button
+          type="button"
+          className="btn sm ghost"
+          title={all ? "Show the first few again" : "Show every link"}
+          onClick={() => setAll(!all)}
+        >
+          {all ? "Show fewer" : `Show all ${uses.length}`}
+        </button>
+      )}
+    </section>
+  );
+}
+
+/** The open note's References: the keys and links in its properties, text and open tasks. Only
+ *  with a Reference links pattern set. */
+export function ReferencesCard({ path, md }: { path: string; md: string }) {
+  const patterns = useRefPatterns();
+  // Keyed by the note, so what is read of one note is never shown beside another.
+  return patterns.length ? <NoteReferences key={path} path={path} md={md} patterns={patterns} /> : null;
+}
+
+function NoteReferences({ path, md, patterns }: { path: string; md: string; patterns: RefPattern[] }) {
+  const v = useVaultVersion();
+  // The tasks every task block on the screen shares, not a query of this card's own.
+  const [tasks, setTasks] = useState<TaskRow[]>([]);
+  useEffect(() => {
+    let live = true;
+    tasksAt(v)
+      .then((all) => live && setTasks(all.filter((t) => t.path === path)))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [v, path]);
+  // The text is read again a moment after typing stops, not on every key.
+  const text = useDebounced(md, 400);
+  const uses = useMemo(() => noteRefs(text, tasks, patterns), [text, tasks, patterns]);
+  return <RefsCard title="References" uses={uses} />;
 }
 
 /** Says the tasks couldn't be read, with Retry, where a card would otherwise show none. */

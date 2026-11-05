@@ -143,6 +143,9 @@ import { TOPICS } from "./help";
 import { HelpView, openHelp } from "./help/HelpDrawer";
 import { IMAGE_EXT } from "./md/wikilinks";
 import { documentGroups } from "./projectDocs";
+import { taskRefs } from "./md/inline";
+import { type RefPattern, refPatterns, rowProblem } from "./md/refs";
+import { fromLabel, projectRefs, type RefUse } from "./md/refUses";
 import { nav, place, Screen, SettingsPane } from "./nav";
 import { focusMode } from "./focus";
 import { DEFAULT_SCHEDULE, DEFAULT_WEEKLY_REVIEW } from "./Jobs";
@@ -459,7 +462,7 @@ async function listTasks(a: Args): Promise<Listing> {
 }
 
 /** A task as list_tasks' data gives it. */
-const taskItem = (t: TaskRow) => ({
+const taskItem = (t: TaskRow, patterns: readonly RefPattern[] = refPatterns()) => ({
   id: taskId(t),
   text: shownText(t.text),
   path: t.path,
@@ -477,6 +480,9 @@ const taskItem = (t: TaskRow) => ({
   created: t.created,
   effort: t.effort ?? null,
   heading: t.heading,
+  // The reference keys and links in its words, as the task row draws them, once a Reference links
+  // pattern is set (Settings › Notes).
+  ...(patterns.length ? { refs: taskRefs(t.text, patterns).map(({ key, url }) => ({ key, url })) } : {}),
 });
 
 const DATE_KEYS: [string, TaskDateKind][] = [
@@ -1059,10 +1065,14 @@ const flagLine = (p: ProjectRow) => {
 
 /** A project's line: its name, status, next actions and flag; with detail its area, what done looks like, every count
  *  and its documents (member notes) under it, by type as its page groups them. */
-const projectOut = (p: ProjectRow, detail = true) =>
+const projectOut = (p: ProjectRow, detail = true, refs: RefUse[] = []) =>
   detail
-    ? `- ${p.name} · ${statusOut(p.status)}${p.area ? ` · ${p.area}` : ""} · ${p.next} next, ${p.waiting} waiting, ${p.someday} someday, ${p.done} done${flagLine(p)}${p.outcome ? ` · done looks like: ${p.outcome}` : ""}  (${p.path})${documentsOut(p)}`
+    ? `- ${p.name} · ${statusOut(p.status)}${p.area ? ` · ${p.area}` : ""} · ${p.next} next, ${p.waiting} waiting, ${p.someday} someday, ${p.done} done${flagLine(p)}${p.outcome ? ` · done looks like: ${p.outcome}` : ""}  (${p.path})${documentsOut(p)}${referencesOut(refs)}`
     : `- ${p.name} · ${statusOut(p.status)} · ${p.next} next${flagLine(p)}  (${p.path})`;
+
+/** A project's reference keys and links, one indented line each: its page's Tickets and links card. */
+const referencesOut = (refs: RefUse[]) =>
+  refs.map((r) => `\n  - Reference ${r.key} · ${r.url} · ${r.from.map(fromLabel).join(", ")}`).join("");
 
 /** A project's member notes, one indented line each, by type: its page's Documents card. */
 const documentsOut = (p: ProjectRow) =>
@@ -2806,11 +2816,32 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   "inbox.list": (a) => listInbox(a),
   "inbox.clarify": clarify,
   "inbox.capture": captureTool,
-  "projects.list": async (a) =>
-    listed(a, orderedProjects(await api.projectsList()), {
+  "projects.list": async (a) => {
+    const projects = orderedProjects(await api.projectsList());
+    // The keys and links each project's properties, documents and open tasks hold, as its page's
+    // Tickets and links card: only once a Reference links pattern is set, and then the tasks are read.
+    const patterns = refPatterns();
+    let tasks: TaskRow[] = [];
+    let failed = "";
+    if (patterns.length) {
+      try {
+        tasks = (await api.tasksNotes()) ?? [];
+      } catch (e) {
+        failed = e instanceof Error ? e.message : String(e);
+      }
+    }
+    const on = patterns.length > 0 && !failed;
+    const found = new Map<ProjectRow, RefUse[]>();
+    const refsOf = (p: ProjectRow) => {
+      if (!on) return [];
+      if (!found.has(p)) found.set(p, projectRefs(p, tasks, patterns));
+      return found.get(p)!;
+    };
+    return listed(a, projects, {
+      before: failed ? [`References are left out: the tasks couldn't be read (${failed}).`] : [],
       text: (p) => projectOut(p),
       noun: ["project", "projects"],
-      line: (p) => projectOut(p, a.detail === true),
+      line: (p) => projectOut(p, a.detail === true, refsOf(p)),
       item: (p) => ({
         name: p.name,
         path: p.path,
@@ -2825,9 +2856,11 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
         documents: documentGroups(p.documents ?? []).flatMap((g) =>
           g.docs.map((d) => ({ type: g.type, title: d.title, path: d.path, summary: d.summary, current_state: d.currentState ?? null })),
         ),
+        ...(on ? { references: refsOf(p).map((r) => ({ key: r.key, url: r.url, from: r.from.map(fromLabel) })) } : {}),
       }),
       empty: "No projects.",
-    }),
+    });
+  },
   "project.create": createProject,
   "project.update": updateProject,
   "project.rename_area": renameArea,
@@ -3317,7 +3350,20 @@ async function taskLists(a: Args): Promise<string> {
 // ---- Settings
 
 type SettingKind =
-  "bool" | "time" | "text" | "number" | "day" | "theme" | "choice" | "model" | "speed" | "size" | "percent" | "shortcut" | "panes";
+  | "bool"
+  | "time"
+  | "text"
+  | "number"
+  | "day"
+  | "theme"
+  | "choice"
+  | "model"
+  | "speed"
+  | "size"
+  | "percent"
+  | "shortcut"
+  | "panes"
+  | "links";
 /** A choice setting's choices, as its menu offers them: each value and how the screen names it. */
 type Choices = () => Promise<[string, string][]> | [string, string][];
 /** What the settings tool can change, by key: its pane, label, kind and default, a choice's
@@ -3408,6 +3454,8 @@ const settingRows = (): SettingRow[] => [
     "As the app",
   ],
   ["templateScripts", "Notes", "User scripts folder", "text", "Templates/scripts"],
+  // A list of rows, each a prefix and an address with {key} or {num} in it; set as an array of {prefix, url}, [] for none.
+  ["referenceLinks", "Notes", "Reference links (rows of a prefix and an address)", "links", []],
   ["askModel", "AI assistants", "New chats use", "model", DEFAULT_MODEL, modelChoices],
   ...MODEL_JOBS.map(([job, label]): SettingRow => [
     `jobModels.${job}`,
@@ -3482,6 +3530,31 @@ function shortcutSpec(spec: string): string {
   return [...SHORTCUT_MODS.filter((m) => mods.includes(m)), k].join("+");
 }
 
+/** referenceLinks as the screen keeps them: rows of a prefix and the address it opens (https://… or
+ *  http://…, with {key} or {num} in it), each prefix once. Null, an empty list or empty text clears them. */
+function referenceLinksIn(key: string, v: unknown): { prefix: string; url: string }[] {
+  let list: unknown = v;
+  if (typeof v === "string") {
+    try {
+      list = v.trim() ? JSON.parse(v) : [];
+    } catch {
+      throw new Error(`${key} is a list of {prefix, url} rows, as an array.`);
+    }
+  }
+  if (list === null) list = [];
+  if (!Array.isArray(list)) throw new Error(`${key} is a list of {prefix, url} rows, as an array; [] for none.`);
+  const rows = list.map((r) => ({
+    prefix: String((r as { prefix?: unknown })?.prefix ?? "").trim(),
+    url: String((r as { url?: unknown })?.url ?? "").trim(),
+  }));
+  // Each row is held to the rule the Settings rows and the scanner use.
+  rows.forEach((_, i) => {
+    const problem = rowProblem(rows, i);
+    if (problem) throw new Error(`Row ${i + 1} of ${key}: ${problem} {key} or {num} in the address stands for the key.`);
+  });
+  return rows;
+}
+
 async function settingsTool(a: Args): Promise<string> {
   const s = settings.get();
   /** The settings kept as objects, with their defaults filled in. */
@@ -3525,6 +3598,8 @@ async function settingsTool(a: Args): Promise<string> {
           const list = cs.map(([v, l]) => (v === l ? v : `${v} (${l})`)).join(", ");
           extra = ` (one of: ${list || "none here"}${none ? `; null for ${none}` : ""})`;
         }
+        if (kind === "links")
+          extra = ` (a list of {prefix, url}: a key that is the prefix and digits, as ORBIT-12, opens the url, where {key} is the whole key and {num} its digits; set it to the whole list, [] for none)`;
         if (kind === "panes") {
           // Each pane's key with what the screen calls it (a column by its heading), its range and
           // usual width, as the dividers clamp them, and whether its type is locked.
@@ -3594,7 +3669,9 @@ async function settingsTool(a: Args): Promise<string> {
       "Only in the menu bar when the window is closed is there only while Show in the menu bar (menuBar) is on: turn that on first.",
     );
   let v: unknown = a.value;
-  if (v === null) {
+  if (kind === "links") {
+    v = referenceLinksIn(key!, v);
+  } else if (v === null) {
     if (!none) throw new Error(`${key} has no default choice to go back to: give a value.`);
     v = undefined;
   } else if (kind === "bool") {

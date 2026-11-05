@@ -865,6 +865,29 @@ fn listings_give_their_rows_as_data() {
 }
 
 #[test]
+fn reference_links_are_in_the_task_and_project_listings() {
+    // list_tasks gives each task's refs and list_projects each project's references, which the
+    // app's tools fill from the user's Reference links setting.
+    let f = fixture();
+    let list = rpc(&f.ctx, 1, "tools/list", json!({}));
+    let tools = list["result"]["tools"].as_array().unwrap();
+    let item = |name: &str, field: &str| {
+        let t = tools.iter().find(|t| t["name"] == name).unwrap_or_else(|| panic!("no {name}"));
+        t["outputSchema"]["properties"]["items"]["items"]["properties"][field].clone()
+    };
+    let refs = item("list_tasks", "refs");
+    assert_eq!(refs["type"], "array");
+    assert_eq!(refs["items"]["properties"]["url"]["type"], "string");
+    let references = item("list_projects", "references");
+    assert_eq!(references["type"], "array");
+    assert_eq!(references["items"]["properties"]["from"]["type"], "array");
+    // The settings tool takes the list as an array, and says so.
+    let settings = tools.iter().find(|t| t["name"] == "settings").unwrap();
+    assert!(settings["inputSchema"]["properties"]["value"]["type"].as_array().unwrap().iter().any(|t| t == "array"));
+    assert!(settings["description"].as_str().unwrap().contains("referenceLinks"));
+}
+
+#[test]
 fn a_read_tool_never_changes_anything() {
     let f = fixture();
     // Each list_* tool keeps to its own actions; asking it to change something is refused here,

@@ -7,8 +7,11 @@
 
 import moment from "moment";
 import { askWith } from "./askState";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { iconizeEmoji } from "./md/fieldEmoji";
+import { type Inline, parseInline } from "./md/inline";
+import { useRefPatterns } from "./md/refs";
 import type { TaskDateKind, TaskRow } from "./api";
 import { DatePicker } from "./DatePicker";
 import { Icon } from "./icons";
@@ -40,27 +43,60 @@ import { keyLabel } from "./platform";
 
 export const taskKey = (t: TaskRow) => `${t.path}:${t.line}`;
 
-/** A task's text with its inline markdown shown: `code`, **bold**, *italic*, and [[links]] as their label. */
-export function TaskText({ text }: { text: string }) {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*\s][^*]*\*|!?\[\[[^\]]+\]\])/g);
-  return (
-    <>
-      {parts.map((p, i) => {
+/** A task's text with its inline markdown shown: `code`, **bold**, *italic*, [[links]] as their label,
+ *  an image as its alt text, and the links of src/md/refs.ts: `[label](url)` as its label (which may
+ *  hold code and bold), a bare URL as its domain and a reference key (Settings › Notes › Reference
+ *  links) as itself, each a link that opens in the browser. `plain` draws them as text in the link's
+ *  colour, for a row that is itself a button (a link can't sit in one). */
+export function TaskText({ text, plain = false }: { text: string; plain?: boolean }) {
+  const patterns = useRefPatterns();
+  const tree = useMemo(() => parseInline(text, patterns), [text, patterns]);
+  const draw = (nodes: Inline[], top: boolean): ReactNode =>
+    nodes.map((n, i) => {
+      switch (n.t) {
         // Plain words, with any Tasks-format emoji drawn as their field's icon.
-        if (i % 2 === 0) return <Fragment key={i}>{iconizeEmoji(p)}</Fragment>;
-        if (p.startsWith("`")) return <code key={i}>{p.slice(1, -1)}</code>;
-        if (p.startsWith("**")) return <b key={i}>{p.slice(2, -2)}</b>;
-        if (p.startsWith("*")) return <i key={i}>{p.slice(1, -1)}</i>;
-        const inner = p.replace(/^!?\[\[|\]\]$/g, "");
-        const [target, alias] = inner.split("|");
-        return (
-          <span key={i} className="tlinkword">
-            {alias ?? target.split("#")[0].split("/").pop()}
-          </span>
-        );
-      })}
-    </>
-  );
+        case "text":
+          return <Fragment key={i}>{top ? iconizeEmoji(n.text) : n.text}</Fragment>;
+        case "code":
+          return <code key={i}>{n.text}</code>;
+        case "strong":
+          return <b key={i}>{draw(n.children, false)}</b>;
+        case "em":
+          return <i key={i}>{draw(n.children, false)}</i>;
+        case "wiki":
+          return (
+            <span key={i} className="tlinkword">
+              {n.label}
+            </span>
+          );
+        case "image":
+          return <Fragment key={i}>{n.alt}</Fragment>;
+        case "a":
+          if (plain)
+            return (
+              <span key={i} className="tlinkword ext" title={n.href}>
+                {draw(n.children, false)}
+              </span>
+            );
+          return (
+            <a
+              key={i}
+              className="tlinkword ext"
+              href={n.href}
+              title={n.href}
+              onClick={(e) => {
+                // The row's own click selects it; this one opens the page.
+                e.preventDefault();
+                e.stopPropagation();
+                void openUrl(n.href);
+              }}
+            >
+              {draw(n.children, false)}
+            </a>
+          );
+      }
+    });
+  return <>{draw(tree, true)}</>;
 }
 
 function dueChip(due: string, done: boolean) {
@@ -723,8 +759,8 @@ export function TaskList({
     if (e.metaKey || e.ctrlKey || e.altKey || typingIn(e.target)) return;
     const i = shown.findIndex((t) => taskKey(t) === cur);
     const t = i >= 0 ? shown[i] : undefined;
-    // A row's own buttons keep ↩ and Space.
-    const onButton = (e.target as HTMLElement).closest?.("button") && e.target !== e.currentTarget;
+    // A row's own buttons and links keep ↩ and Space.
+    const onButton = (e.target as HTMLElement).closest?.("button, a") && e.target !== e.currentTarget;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       const d = e.key === "ArrowDown" ? 1 : -1;
       e.preventDefault();

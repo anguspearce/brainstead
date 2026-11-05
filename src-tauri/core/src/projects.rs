@@ -128,6 +128,9 @@ pub struct ProjectRow {
     pub links: Vec<String>,
     /// Its member notes, those whose `Project:` line names it, by path.
     pub documents: Vec<ProjectDoc>,
+    /// The text in its properties: each text value, and each text item of a list. The window finds
+    /// reference keys in it (Settings › Notes › Reference links), so the patterns stay out of here.
+    pub property_text: Vec<String>,
 }
 
 /// A note that belongs to a project by its `Project: [[…]]` line.
@@ -144,6 +147,26 @@ pub struct ProjectDoc {
     pub mtime: i64,
     /// A tracker's Current state text, when it has one.
     pub current_state: Option<String>,
+    /// The text in its properties, as `ProjectRow::property_text`.
+    pub property_text: Vec<String>,
+}
+
+/// The text a note's properties hold: each string value and each string item of a list, in order,
+/// except those of `tags` and `aliases`, which are labels and never references.
+fn property_text(fm: &serde_json::Value) -> Vec<String> {
+    use serde_json::Value;
+    let mut out = Vec::new();
+    let labels = ["tags", "tag", "aliases", "alias"];
+    for (_, v) in fm.as_object().into_iter().flat_map(|o| o.iter()).filter(|(k, _)| !labels.iter().any(|l| k.eq_ignore_ascii_case(l))) {
+        match v {
+            Value::String(s) if !s.trim().is_empty() => out.push(s.trim().to_string()),
+            Value::Array(items) => {
+                out.extend(items.iter().filter_map(|i| i.as_str()).map(str::trim).filter(|s| !s.is_empty()).map(String::from))
+            }
+            _ => {}
+        }
+    }
+    out
 }
 
 impl Index {
@@ -196,6 +219,7 @@ impl Index {
                 last_touched: tasks.iter().map(|t| t.mtime).fold(mtime, i64::max),
                 links,
                 documents: documents.remove(&id).unwrap_or_default(),
+                property_text: property_text(&fm),
                 path,
             });
         }
@@ -229,6 +253,7 @@ impl Index {
                         summary: crate::frontmatter::string(&fm, "summary"),
                         mtime: r.get(5)?,
                         current_state: r.get(6)?,
+                        property_text: property_text(&fm),
                     },
                 ))
             })
@@ -392,11 +417,11 @@ mod tests {
     fn member_vault() -> (tempfile::TempDir, Index) {
         let d = tempfile::tempdir().unwrap();
         let w = |name: &str, text: &str| std::fs::write(d.path().join(name), text).unwrap();
-        w("Project. Orbit.md", "---\nstatus: active\n---\n\n## Next actions\n\n- [ ] In the project note\n");
+        w("Project. Orbit.md", "---\nstatus: active\ntickets: ORBIT-9\n---\n\n## Next actions\n\n- [ ] In the project note\n");
         w("Project. Hub.md", "---\nstatus: on hold\n---\n\n## Next actions\n");
         w(
             "Tracker. Orbit rollout.md",
-            "---\nsummary: Where the rollout stands.\n---\n\nProject: [[Project. Orbit|Orbit]]\n\n## Next\n\n- [ ] Inherited from the tracker\n- [ ] Belongs to Hub instead [[Project. Hub]]\n- [x] Done in the tracker\n",
+            "---\nsummary: Where the rollout stands.\ntickets: [ORBIT-12, ORBIT-14]\nstage: 3\ntags: [ORBIT-99]\naliases: [ORBIT-98]\n---\n\nProject: [[Project. Orbit|Orbit]]\n\n## Next\n\n- [ ] Inherited from the tracker\n- [ ] Belongs to Hub instead [[Project. Hub]]\n- [x] Done in the tracker\n",
         );
         w("Plan. Orbit comms.md", "  Project: [[Project. Orbit]]\n\n- [ ] Write the comms\n");
         w("Findings. Orbit outage.md", "Project: [[Project. Orbit]]\n\nWhat we found.\n");
@@ -448,6 +473,24 @@ mod tests {
         let hub = ps.iter().find(|p| p.name == "Hub").unwrap();
         assert_eq!(hub.next, 1);
         assert!(hub.documents.is_empty());
+    }
+
+    #[test]
+    fn projects_and_member_notes_carry_their_property_text() {
+        let (_d, ix) = member_vault();
+        let ps = ix.projects().unwrap();
+        let orbit = ps.iter().find(|p| p.name == "Orbit").unwrap();
+        let sorted = |v: &[String]| {
+            let mut v = v.to_vec();
+            v.sort();
+            v
+        };
+        assert_eq!(sorted(&orbit.property_text), ["ORBIT-9", "active"]);
+        let tracker = orbit.documents.iter().find(|d| d.kind.as_deref() == Some("Tracker")).unwrap();
+        // Text values and the items of a list, not a number.
+        assert_eq!(sorted(&tracker.property_text), ["ORBIT-12", "ORBIT-14", "Where the rollout stands."]);
+        let plan = orbit.documents.iter().find(|d| d.kind.as_deref() == Some("Plan")).unwrap();
+        assert!(plan.property_text.is_empty());
     }
 
     #[test]

@@ -65,7 +65,8 @@ export const sanitizeSchema = {
   attributes: {
     ...defaultSchema.attributes,
     "*": [...(defaultSchema.attributes?.["*"] ?? []), "className", "id"],
-    a: [...(defaultSchema.attributes?.a ?? []), "dataWiki"],
+    // dataRef: a reference key drawn as a link (src/md/remarkRefs.ts).
+    a: [...(defaultSchema.attributes?.a ?? []), "dataWiki", "dataRef"],
     img: [...(defaultSchema.attributes?.img ?? []), "dataWiki", "width", "height"],
     // dataMath: `$$…$$` within a line (src/md/math.ts).
     code: [...(defaultSchema.attributes?.code ?? []), "className", "dataMath"],

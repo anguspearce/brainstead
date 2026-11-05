@@ -87,6 +87,7 @@ Tasks are plain markdown, so other editors read them too.
 - A task belongs to a project when it's in the project's note or links `[[Project. Orbit App launch]]`.
 - A recurring task carries a rule such as `🔁 every week`. Tick it and the next one is added above, with its dates moved on.
 - Tasks inside quotes and callouts (`> - [ ] Call Maya`) work like any other.
+- A link is `[label](https://example.com)`. A row shows just the label, or a bare web address as its domain, and a click opens it in your browser without selecting the row. A ticket key such as `ORBIT-12` does the same once its prefix is set in [Settings › Notes](app:settings/notes). Write a key once, on the task or note it belongs to: the note and its project gather them.
 
 Rows show these under the task as one line of grey text with small icons, not emoji: an overdue date is red and one due in the next three days is darker. In its project's own note a row shows the project, not the note's name. If the tasks can't be read, the list says **Couldn't load the tasks.** with **Retry**.
 
