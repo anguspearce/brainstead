@@ -51,6 +51,9 @@ describe("Editor interface", () => {
     document.body.appendChild(parent);
     ed = new CMEditor(parent, { today: () => "2026-10-02" });
     ed.load("# T\n\n- [ ] ship it ^rank-1024\n");
+    // The checkbox is drawn from the syntax tree, which a slow first parse (CI) may not have
+    // finished within live.ts's 50 ms budget.
+    forceParsing(ed.view, ed.view.state.doc.length, 5000);
     const box = parent.querySelector<HTMLElement>("[data-check]");
     expect(box).toBeTruthy();
     box!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
