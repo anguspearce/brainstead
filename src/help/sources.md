@@ -60,7 +60,7 @@ Open a source to read it.
 - **Image**: shown with **Text in the image** folded under it; click it to see the text Brainstead read, which search and ingest use.
 - **Open in its app** opens the file in its usual app. A file Brainstead can't show has both buttons.
 
-When you ingest an image, Claude Code and Codex see the picture as well as its text; Copilot and Antigravity get the text only. So an image with no text needs Claude Code or Codex. A change from an image is flagged in [Changes](app:review), to check against the picture.
+When you ingest an image, Claude Code and Codex see the picture as well as its text; Copilot, Antigravity and Ollama's models get the text only. So an image with no text needs Claude Code or Codex. A change from an image is flagged in [Changes](app:review), to check against the picture.
 
 ## See where a source is used
 Beside the preview, the provenance card, **Cited by N pages**, says when the source was last ingested and by which model, and lists the wiki pages that cite it and the passages they cite; **Details** adds the file's hash and passages indexed. **Re-ingest** and **Reveal** (in Finder, or Explorer on Windows) are at the foot, with **Move to the Trash** at the right. An assistant can read the same card.
