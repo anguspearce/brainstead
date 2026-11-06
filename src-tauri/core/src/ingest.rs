@@ -373,13 +373,73 @@ fn new_page(rel: &str, kind: &str, description: &str, source_link: &str, body: &
     format!("---\ntype: {kind}\nname: {}\ndescription: {desc}\nsources: [{src}]\n---\n\n{}\n", crate::write::yaml_scalar(name), body.trim())
 }
 
+/// What a summary page's name starts with. A summary named like its source would share the
+/// source's link key, and `[[name]]` goes to the shorter path (the source), so the summary couldn't
+/// be linked by name. Summaries made before this carry their source's name; they still count as
+/// the source's summary (`plan` finds them by what their `sources:` cite, then by name).
+pub const SUMMARY_PREFIX: &str = "Summary. ";
+
+/// A summary page's path with `SUMMARY_PREFIX` on its name, as it is when it already has it.
+fn prefixed_summary(rel: &str) -> String {
+    match rel.rsplit_once('/') {
+        Some((dir, name)) if !name.starts_with(SUMMARY_PREFIX) => format!("{dir}/{SUMMARY_PREFIX}{name}"),
+        _ => rel.to_string(),
+    }
+}
+
+/// What `plan` checks a new summary page against.
+pub struct SummaryCheck<'a> {
+    /// Every page in `wiki/summaries/` with the entries of its `sources:` property as written
+    /// (`"[[Plan.pdf]]"`): which source each one summarises, whatever it's called.
+    pub citing: &'a [(String, Vec<String>)],
+    /// The page of any layer that a name's link key reaches, if one does: a summary may not share
+    /// its link key with another page.
+    pub taken: &'a dyn Fn(&str) -> Option<String>,
+}
+
+fn no_page(_: &str) -> Option<String> {
+    None
+}
+
+impl SummaryCheck<'static> {
+    /// No summaries and no pages: nothing to clash with.
+    pub const NONE: SummaryCheck<'static> = SummaryCheck { citing: &[], taken: &no_page };
+}
+
+static CITED: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| regex::Regex::new(r"\[\[([^\]|#\n]+)").unwrap());
+
+impl SummaryCheck<'_> {
+    /// The summary page that cites this source in its `sources:`, by the source's file name with
+    /// or without its extension: the rule Sources' Ingested status and Knowledge health's
+    /// uningested check use. It holds when the source is renamed (the citing page's link is
+    /// rewritten with it) and for summaries named before the `Summary. ` prefix, with or without
+    /// the source's extension.
+    fn summary_of(&self, src: &Source) -> Option<&str> {
+        let base = crate::links::nfc(crate::lint::name_of(&src.rel)).to_lowercase();
+        let stem = base.rsplit_once('.').map(|(s, _)| s.to_string()).unwrap_or_else(|| base.clone());
+        self.citing
+            .iter()
+            .find(|(_, entries)| {
+                entries.iter().any(|e| {
+                    CITED.captures_iter(e).any(|c| {
+                        let name = c[1].trim();
+                        let n = crate::links::nfc(name.rsplit('/').next().unwrap_or(name)).to_lowercase();
+                        n == base || n == stem
+                    })
+                })
+            })
+            .map(|(p, _)| p.as_str())
+    }
+}
+
 /// Checks the answer and turns it into page changes. `read` gives a page's text by vault path;
-/// `resolve` a name's page.
+/// `resolve` a name's wiki page; `summaries` what a new summary page is checked against.
 pub fn plan(
     src: &Source,
     answer: &Answer,
     read: impl Fn(&str) -> Option<String>,
     resolve: impl Fn(&str) -> Option<String>,
+    summaries: &SummaryCheck,
     today: &str,
     budget: usize,
 ) -> (Vec<Planned>, Vec<Dropped>) {
@@ -390,20 +450,47 @@ pub fn plan(
 
     if let Some(s) = &answer.summary {
         let named = s.page.trim();
-        let rel = wiki_page(named).unwrap_or_else(|_| md(named));
+        let asked = wiki_page(named).unwrap_or_else(|_| md(named));
+        // Named from the source (`Summary. <its name>`), not by the model: whatever the model
+        // wrote, a name that is the source's own would share its link key.
+        let stem = crate::lint::stem(crate::lint::name_of(&src.rel));
+        let rel = format!("wiki/summaries/{SUMMARY_PREFIX}{stem}.md");
         if src.is_journal() {
             dropped.push(Dropped { page: rel, reason: "A journal note gets no summary page.".into() });
         } else if let Err(e) = wiki_page(named).and_then(|_| {
-            if rel.starts_with("wiki/summaries/") {
+            if asked.starts_with("wiki/summaries/") {
                 Ok(())
             } else {
                 Err("A summary goes in wiki/summaries/.".into())
             }
         }) {
-            dropped.push(Dropped { page: rel, reason: e });
-        } else if read(&rel).is_some() {
-            dropped
-                .push(Dropped { page: rel, reason: "There's a summary page already; update it by hand or re-ingest it as a page.".into() });
+            dropped.push(Dropped { page: asked, reason: e });
+        } else if let Some(have) = summaries.summary_of(src).map(String::from).or_else(|| {
+            // No page cites it: by name, as this one would be named, as the model named it, and
+            // as summaries were named before the prefix (the source's name, with or without its
+            // extension).
+            [
+                rel.clone(),
+                asked.clone(),
+                prefixed_summary(&asked),
+                format!("wiki/summaries/{stem}.md"),
+                format!("wiki/summaries/{link}.md"),
+                format!("wiki/summaries/{SUMMARY_PREFIX}{link}.md"),
+            ]
+            .into_iter()
+            .find(|p| read(p).is_some())
+        }) {
+            dropped.push(Dropped {
+                page: have,
+                reason: "There's a summary page already; update it by hand or re-ingest it as a page.".into(),
+            });
+        } else if let Some(other) = (summaries.taken)(&format!("{SUMMARY_PREFIX}{stem}"))
+            .filter(|p| p != &rel && p != &src.rel && crate::links::key(p) == crate::links::key(&rel))
+        {
+            dropped.push(Dropped {
+                page: rel,
+                reason: format!("{other} already has this name, so a [[link]] to the summary would reach it instead. A summary needs a name of its own."),
+            });
         } else {
             let after = new_page(&rel, "summary", s.description.as_deref().unwrap_or(""), &link, &s.content);
             out.push(Planned {
@@ -618,11 +705,15 @@ mod tests {
 
     #[test]
     fn quotes_decide_what_survives() {
-        let (planned, dropped) = plan(&pdf(), &answer(), read, resolve, "2026-10-02", page_budget(1));
+        let (planned, dropped) = plan(&pdf(), &answer(), read, resolve, &SummaryCheck::NONE, "2026-10-02", page_budget(1));
         let pages: Vec<&str> = planned.iter().map(|p| p.page.as_str()).collect();
         assert_eq!(
             pages,
-            ["wiki/summaries/Programme Update Steerco 2026-09-28.md", "wiki/entities/Orbit App.md", "wiki/concepts/Launch gate.md"]
+            [
+                "wiki/summaries/Summary. Programme Update Steerco 2026-09-28.md",
+                "wiki/entities/Orbit App.md",
+                "wiki/concepts/Launch gate.md"
+            ]
         );
         // Northwind's quote isn't in the source; the pen test's is, but not on page 1.
         assert_eq!(
@@ -639,6 +730,145 @@ mod tests {
         assert!(gate.after.starts_with("---\ntype: concept\nname: Launch gate\ndescription: \"\"\nsources: [\"[[Programme Update Steerco 2026-09-28.pdf]]\"]\n---\n\n## Current state\n\nGates the launch.\n"));
         let summary = &planned[0];
         assert!(summary.after.contains("type: summary") && summary.after.ends_with("Launch moves to 28 November.\n"));
+    }
+
+    /// An answer with only a summary, named as given.
+    fn summary_only(page: &str) -> Answer {
+        let page = page.replace('\\', "\\\\");
+        parse_answer(&format!(r#"{{"summary": {{"page": "{page}", "description": "d", "content": "Launch moves."}}, "pages": []}}"#))
+            .unwrap()
+    }
+
+    const SUMMARY: &str = "wiki/summaries/Summary. Programme Update Steerco 2026-09-28.md";
+
+    fn plan_summary(src: &Source, a: &Answer, read: impl Fn(&str) -> Option<String>, s: &SummaryCheck) -> (Vec<Planned>, Vec<Dropped>) {
+        plan(src, a, read, |_| None, s, "2026-10-02", page_budget(1))
+    }
+
+    fn citing(path: &str, sources: &[&str]) -> (String, Vec<String>) {
+        (path.to_string(), sources.iter().map(|s| s.to_string()).collect())
+    }
+
+    #[test]
+    fn a_summary_is_named_from_its_source_with_the_summary_prefix() {
+        for named in [
+            "wiki/summaries/Programme Update Steerco 2026-09-28",
+            "wiki/summaries/Programme Update Steerco 2026-09-28.md",
+            "wiki/summaries/Summary. Programme Update Steerco 2026-09-28",
+            "wiki/summaries/Something the model liked better",
+            "wiki\\summaries\\Programme Update Steerco 2026-09-28.md",
+        ] {
+            let (planned, dropped) = plan_summary(&pdf(), &summary_only(named), |_| None, &SummaryCheck::NONE);
+            assert!(dropped.is_empty(), "{named}: {dropped:?}");
+            assert_eq!(planned[0].page, SUMMARY, "{named}");
+            // The page's own name property carries it too; it cites the source by the source's name.
+            assert!(planned[0].after.contains("name: Summary. Programme Update Steerco 2026-09-28\n"), "{}", planned[0].after);
+            assert!(planned[0].after.contains("sources: [\"[[Programme Update Steerco 2026-09-28.pdf]]\"]"));
+        }
+        // Not the summaries folder: still refused, whatever the prefix.
+        let a = summary_only("wiki/entities/Summary. Orbit");
+        let (planned, dropped) = plan_summary(&pdf(), &a, |_| None, &SummaryCheck::NONE);
+        assert!(planned.is_empty() && dropped[0].reason.contains("wiki/summaries/"), "{dropped:?}");
+    }
+
+    #[test]
+    fn a_source_called_summary_still_gets_a_summary() {
+        // Its own name already starts with the prefix: the summary is `Summary. Summary. Q3`, not a
+        // page with the source's own link key.
+        let src =
+            Source { rel: "sources/Summary. Q3.md".into(), text: SourceText::Text("Staff launch now targeted for 28 November.".into()) };
+        let a = summary_only("wiki/summaries/Summary. Q3");
+        // The source itself is what its own name reaches; that isn't a clash.
+        let itself = |name: &str| (crate::links::key(name) == "summary. q3").then(|| "sources/Summary. Q3.md".to_string());
+        let (planned, dropped) = plan_summary(&src, &a, |_| None, &SummaryCheck { citing: &[], taken: &itself });
+        assert!(dropped.is_empty(), "{dropped:?}");
+        assert_eq!(planned[0].page, "wiki/summaries/Summary. Summary. Q3.md");
+        assert!(planned[0].after.contains("sources: [\"[[Summary. Q3]]\"]"));
+    }
+
+    #[test]
+    fn a_summary_may_not_share_a_link_key_with_any_page() {
+        let a = summary_only("wiki/summaries/Programme Update Steerco 2026-09-28");
+        // Any layer: the key is the lower-cased name without .md, wherever the file is.
+        let clash = |name: &str| {
+            (crate::links::key(name) == "summary. programme update steerco 2026-09-28")
+                .then(|| "Notes/summary. Programme Update Steerco 2026-09-28.md".to_string())
+        };
+        let (planned, dropped) = plan_summary(&pdf(), &a, |_| None, &SummaryCheck { citing: &[], taken: &clash });
+        assert!(planned.is_empty());
+        assert_eq!(dropped[0].page, SUMMARY);
+        assert!(
+            dropped[0].reason.contains("Notes/summary. Programme Update Steerco 2026-09-28.md already has this name"),
+            "{}",
+            dropped[0].reason
+        );
+        // A page of another name (reached by an alias, say) is no clash.
+        let other = |_: &str| Some("sources/Something else.md".to_string());
+        let (planned, _) = plan_summary(&pdf(), &a, |_| None, &SummaryCheck { citing: &[], taken: &other });
+        assert_eq!(planned.len(), 1);
+    }
+
+    #[test]
+    fn a_source_with_a_summary_gets_no_second_one_whatever_the_summary_is_called() {
+        let a = summary_only("wiki/summaries/Programme Update Steerco 2026-09-28");
+        let exists = |c: &[(String, Vec<String>)]| {
+            let (planned, dropped) = plan_summary(&pdf(), &a, |_| None, &SummaryCheck { citing: c, taken: &no_page });
+            assert!(planned.is_empty(), "no second summary: {c:?}");
+            assert!(dropped[0].reason.contains("summary page already"), "{dropped:?}");
+            dropped[0].page.clone()
+        };
+        // Old form: named like the source without its extension (what the app made before the
+        // prefix for a PDF), citing it by its name with or without the extension.
+        let old = "wiki/summaries/Programme Update Steerco 2026-09-28.md";
+        assert_eq!(exists(&[citing(old, &["[[Programme Update Steerco 2026-09-28.pdf]]"])]), old);
+        assert_eq!(exists(&[citing(old, &["\"[[Programme Update Steerco 2026-09-28]]\""])]), old);
+        // The new form, and a page that cites it among others, with a folder in the link.
+        let new = "wiki/summaries/Summary. Programme Update Steerco 2026-09-28.md";
+        assert_eq!(
+            exists(&[
+                citing("wiki/summaries/Other.md", &["[[Other.pdf]]"]),
+                citing(new, &["[[Notes/Other]]", "[[sources/Programme Update Steerco 2026-09-28.pdf]]"])
+            ]),
+            new
+        );
+    }
+
+    #[test]
+    fn a_renamed_source_keeps_its_summary() {
+        // The source was `Steerco update.pdf` when it was summarised; renaming it rewrote the
+        // summary's link, and the summary kept its first name.
+        let src = Source { rel: "sources/Steerco notes.pdf".into(), ..pdf() };
+        let kept = [citing("wiki/summaries/Summary. Steerco update.md", &["[[Steerco notes.pdf]]"])];
+        let (planned, dropped) =
+            plan_summary(&src, &summary_only("wiki/summaries/Steerco notes"), |_| None, &SummaryCheck { citing: &kept, taken: &no_page });
+        assert!(planned.is_empty());
+        assert_eq!(dropped[0].page, "wiki/summaries/Summary. Steerco update.md");
+        // A summary citing some other source doesn't count.
+        let other = [citing("wiki/summaries/Summary. Steerco update.md", &["[[Steerco update.pdf]]"])];
+        let (planned, _) =
+            plan_summary(&src, &summary_only("wiki/summaries/Steerco notes"), |_| None, &SummaryCheck { citing: &other, taken: &no_page });
+        assert_eq!(planned.len(), 1);
+    }
+
+    #[test]
+    fn a_summary_found_only_by_name_still_counts() {
+        // No `sources:` to go by: the page at the old name (with the extension, or without), and at
+        // the new one.
+        for path in [
+            "wiki/summaries/Programme Update Steerco 2026-09-28.pdf.md",
+            "wiki/summaries/Programme Update Steerco 2026-09-28.md",
+            "wiki/summaries/Summary. Programme Update Steerco 2026-09-28.pdf.md",
+            SUMMARY,
+        ] {
+            let there = |rel: &str| (rel == path).then(|| "---\ntype: summary\n---\n".to_string());
+            let (planned, dropped) = plan_summary(&pdf(), &summary_only("wiki/summaries/Anything"), there, &SummaryCheck::NONE);
+            assert!(planned.is_empty() && dropped[0].reason.contains("summary page already"), "{path}: {dropped:?}");
+        }
+    }
+
+    #[test]
+    fn the_workflow_names_summaries_with_the_prefix() {
+        assert!(WORKFLOW.contains("wiki/summaries/Summary. <Source name>.md"));
     }
 
     /// A page in the shape, and an answer in the page-shape form for it.
@@ -658,7 +888,7 @@ mod tests {
     #[test]
     fn the_app_places_the_entry_and_current_state_and_reingesting_replaces_the_entry() {
         let read = |r: &str| (r == "wiki/entities/Orbit App.md").then(|| SHAPED.to_string());
-        let (planned, dropped) = plan(&pdf(), &shaped_answer(""), read, resolve, "2026-10-02", page_budget(1));
+        let (planned, dropped) = plan(&pdf(), &shaped_answer(""), read, resolve, &SummaryCheck::NONE, "2026-10-02", page_budget(1));
         assert!(dropped.is_empty(), "{dropped:?}");
         let after = &planned[0].after;
         assert!(after.contains("## Current state\n\nSoft launch to staff on 28 November"));
@@ -670,7 +900,7 @@ mod tests {
         let a2 = parse_answer(&serde_json::to_string(&serde_json::json!({"pages": [{"page": "Orbit App",
             "entry": {"date": "2026-09-28", "title": "Steerco: launch on 28 November confirmed", "body": "Confirmed."},
             "claims": [{"subject": "Orbit App", "attribute": "go_live_date", "value": "28 November", "quote": "Staff launch now targeted for 28 November", "anchor": "page=2"}]}]})).unwrap()).unwrap();
-        let (p2, _) = plan(&pdf(), &a2, read2, resolve, "2026-10-02", page_budget(1));
+        let (p2, _) = plan(&pdf(), &a2, read2, resolve, &SummaryCheck::NONE, "2026-10-02", page_budget(1));
         assert_eq!(p2[0].after.matches("Source: [[Programme Update Steerco 2026-09-28.pdf]]").count(), 1);
         assert!(p2[0].after.contains("### 2026-09-28 — Steerco: launch on 28 November confirmed\nSource: [[Programme Update Steerco 2026-09-28.pdf]]\n\nConfirmed.\n"));
     }
@@ -679,13 +909,13 @@ mod tests {
     fn a_topical_section_is_rewritten_only_when_shown_whole() {
         let read = |r: &str| (r == "wiki/entities/Orbit App.md").then(|| SHAPED.to_string());
         let a = shaped_answer(r#""section": {"heading": "Risks", "content": "- The pen test gates the launch."},"#);
-        let (planned, _) = plan(&pdf(), &a, read, resolve, "2026-10-02", page_budget(1));
+        let (planned, _) = plan(&pdf(), &a, read, resolve, &SummaryCheck::NONE, "2026-10-02", page_budget(1));
         assert!(planned[0].after.contains("On the Hub.\n\n## Risks\n\n- The pen test gates the launch.\n\n## Timeline"));
         // A long page whose Architecture the model saw only the heading of.
         let long = SHAPED.replace("On the Hub.", &"On the Hub, with many details. ".repeat(2000));
         let read = move |r: &str| (r == "wiki/entities/Orbit App.md").then(|| long.clone());
         let a = shaped_answer(r#""section": {"heading": "Architecture", "content": "Rewritten."},"#);
-        let (planned, dropped) = plan(&pdf(), &a, read, resolve, "2026-10-02", page_budget(1));
+        let (planned, dropped) = plan(&pdf(), &a, read, resolve, &SummaryCheck::NONE, "2026-10-02", page_budget(1));
         assert!(planned.is_empty() && dropped[0].reason.contains("Architecture"), "{dropped:?}");
     }
 
@@ -694,7 +924,7 @@ mod tests {
         let a = parse_answer(r#"{"pages": [{"page": "wiki/entities/Pen test.md", "new": true, "description": "The launch gate",
             "current_state": "Gates the launch.", "entry": {"date": "", "title": "Pending", "body": "Pending closure."},
             "claims": [{"subject": "Pen test", "attribute": "status", "value": "pending", "quote": "pending pen-test closure", "anchor": "page=2"}]}]}"#).unwrap();
-        let (planned, _) = plan(&pdf(), &a, |_| None, |_| None, "2026-10-02", page_budget(1));
+        let (planned, _) = plan(&pdf(), &a, |_| None, |_| None, &SummaryCheck::NONE, "2026-10-02", page_budget(1));
         // No date given: the source's own day.
         assert!(planned[0].after.ends_with("## Current state\n\nGates the launch.\n\n## Timeline\n\n### 2026-09-28 — Pending\nSource: [[Programme Update Steerco 2026-09-28.pdf]]\n\nPending closure.\n"), "{}", planned[0].after);
     }
@@ -706,7 +936,7 @@ mod tests {
             text: SourceText::Text("Staff launch now targeted for 28 November, pending pen-test closure.".into()),
         };
         assert!(note.is_journal());
-        let (planned, dropped) = plan(&note, &answer(), read, resolve, "2026-10-02", page_budget(1));
+        let (planned, dropped) = plan(&note, &answer(), read, resolve, &SummaryCheck::NONE, "2026-10-02", page_budget(1));
         assert!(planned.iter().all(|p| !p.page.starts_with("wiki/summaries/")));
         assert_eq!(dropped[0].reason, "A journal note gets no summary page.");
         // Without anchors to check, a markdown source's quotes are found anywhere in it.
@@ -774,7 +1004,7 @@ mod tests {
             ]}"#,
         )
         .unwrap();
-        let (planned, dropped) = plan(&src, &a, read, resolve, "2026-10-04", page_budget(1));
+        let (planned, dropped) = plan(&src, &a, read, resolve, &SummaryCheck::NONE, "2026-10-04", page_budget(1));
         assert_eq!(planned.iter().map(|p| p.page.as_str()).collect::<Vec<_>>(), ["wiki/entities/Orbit App.md", "wiki/entities/Lena.md"]);
         assert_eq!(dropped.iter().map(|d| d.page.as_str()).collect::<Vec<_>>(), ["wiki/entities/Theo.md"]);
         // The OCR'd quote counts as found; the one read from the picture alone is a warning.
@@ -816,7 +1046,8 @@ mod tests {
             ]}"#,
         )
         .unwrap();
-        let (planned, dropped) = plan(&pdf(), &a, read, |_| Some("Projects/Hub.md".into()), "2026-10-03", page_budget(1));
+        let (planned, dropped) =
+            plan(&pdf(), &a, read, |_| Some("Projects/Hub.md".into()), &SummaryCheck::NONE, "2026-10-03", page_budget(1));
         assert!(planned.is_empty(), "{planned:?}");
         assert_eq!(dropped.len(), 3);
     }
@@ -831,7 +1062,7 @@ mod tests {
 
     fn plan_one(content: &str, quotes: &[&str]) -> Planned {
         let read = |rel: &str| (rel == "wiki/entities/Orbit App.md").then(|| LIST_PAGE.to_string());
-        let (planned, dropped) = plan(&pdf(), &one(content, quotes), read, resolve, "2026-10-03", page_budget(1));
+        let (planned, dropped) = plan(&pdf(), &one(content, quotes), read, resolve, &SummaryCheck::NONE, "2026-10-03", page_budget(1));
         assert!(dropped.is_empty(), "{dropped:?}");
         planned.into_iter().next().unwrap()
     }

@@ -469,6 +469,42 @@ fn edit_page_changes_a_note() {
 }
 
 #[test]
+fn write_current_state_writes_a_trackers_state() {
+    let f = fixture();
+    let rel = "Tracker. Orbit rollout.md";
+    std::fs::write(
+        f.ctx.vault.join(rel),
+        "---\nupdated: 2026-09-01\n---\n\nProject: [[Project. Orbit App launch]]\n\n## Log\n\n- 2026-09-30: Steerco.\n\n## Decisions\n\n1. Ship.\n",
+    )
+    .unwrap();
+    let mut ix = Index::open(&f.ctx.data.join("index.db")).unwrap();
+    ix.sync(&brainstead_core::vault::Vault::new(f.ctx.vault.clone(), vec![])).unwrap();
+    drop(ix);
+    let (t, c) = submitted(
+        &f,
+        "write_current_state",
+        json!({"page": "Tracker. Orbit rollout", "text": "Staged; cutover next.", "log": "Wrote the state."}),
+    );
+    assert!(t.contains("Revert it in Changes"), "{t}");
+    assert_eq!((c["kind"].as_str(), c["page"].as_str()), (Some("edit"), Some(rel)));
+    assert_eq!(c["title"], "Wrote the Current state and a Log line");
+    assert_eq!(c["origin"]["chat"], "chat-1");
+    // Only the Current state and the Log change, and `updated:` moves to today.
+    assert_eq!(
+        made(&f, &c),
+        "---\nupdated: 2026-10-02\n---\n\nProject: [[Project. Orbit App launch]]\n\n## Current state\n\nStaged; cutover next.\n\n## Log\n\n- 2026-10-02: Wrote the state.\n- 2026-09-30: Steerco.\n\n## Decisions\n\n1. Ship.\n"
+    );
+    // Not a tracker: refused, with what to use instead.
+    assert!(refused(&f.ctx, "write_current_state", json!({"page": "Orbit App", "text": "x"})).contains("edit_page"));
+    assert!(refused(&f.ctx, "write_current_state", json!({"text": "x"})).contains("Give page"));
+    // page_shape reads it by the tracker shape.
+    let shape = ok(&f.ctx, "page_shape", json!({"page": rel}));
+    assert!(shape.contains("isn't in the tracker shape") && shape.contains("reshape_pages can reshape it by itself"), "{shape}");
+    let all = ok(&f.ctx, "page_shape", json!({}));
+    assert!(all.contains("1 of 1 Tracker notes aren't in the tracker shape"), "{all}");
+}
+
+#[test]
 fn help_answers_from_the_apps_own_help() {
     let f = fixture();
     let list = ok(&f.ctx, "help", json!({}));
@@ -582,6 +618,11 @@ fn renames_trash_and_deletes_are_sent() {
     assert_eq!(c["instruction"], json!({"op": "delete_line", "line": line, "at": n}));
     assert!(!made(&f, &c).contains("Walk through the Dashboard"));
     assert!(refused(&f.ctx, "delete_task", json!({"task": "Me. To Do List.md:1", "text": "no such task"})).contains("no task"));
+    // Not a task in the wiki, a source or a template, which the Tasks screen and list_tasks leave out.
+    for path in ["sources/Roadmap Update 2026-09-18.md", "wiki/entities/Orbit App.md", "Templates/Meeting.md"] {
+        let r = refused(&f.ctx, "delete_task", json!({"task": format!("{path}:1"), "text": "anything"}));
+        assert!(r.contains("only tasks in notes can be edited, moved or deleted"), "{path}: {r}");
+    }
 }
 
 /// The page each tool sends for `spelling`, which names Templates/Meeting.md: edit_page,
@@ -824,6 +865,29 @@ fn listings_give_their_rows_as_data() {
 }
 
 #[test]
+fn reference_links_are_in_the_task_and_project_listings() {
+    // list_tasks gives each task's refs and list_projects each project's references, which the
+    // app's tools fill from the user's Reference links setting.
+    let f = fixture();
+    let list = rpc(&f.ctx, 1, "tools/list", json!({}));
+    let tools = list["result"]["tools"].as_array().unwrap();
+    let item = |name: &str, field: &str| {
+        let t = tools.iter().find(|t| t["name"] == name).unwrap_or_else(|| panic!("no {name}"));
+        t["outputSchema"]["properties"]["items"]["items"]["properties"][field].clone()
+    };
+    let refs = item("list_tasks", "refs");
+    assert_eq!(refs["type"], "array");
+    assert_eq!(refs["items"]["properties"]["url"]["type"], "string");
+    let references = item("list_projects", "references");
+    assert_eq!(references["type"], "array");
+    assert_eq!(references["items"]["properties"]["from"]["type"], "array");
+    // The settings tool takes the list as an array, and says so.
+    let settings = tools.iter().find(|t| t["name"] == "settings").unwrap();
+    assert!(settings["inputSchema"]["properties"]["value"]["type"].as_array().unwrap().iter().any(|t| t == "array"));
+    assert!(settings["description"].as_str().unwrap().contains("referenceLinks"));
+}
+
+#[test]
 fn a_read_tool_never_changes_anything() {
     let f = fixture();
     // Each list_* tool keeps to its own actions; asking it to change something is refused here,
@@ -898,6 +962,7 @@ fn rebuilding_the_index_and_pinning_a_chat_go_to_the_app() {
     for (tool_name, arg) in [
         ("list_tasks", "effort"),
         ("list_tasks", "group"),
+        ("list_tasks", "sort"),
         ("list_inbox", "suggest"),
         ("fix_name", "files"),
         ("activity", "action"),
@@ -907,6 +972,10 @@ fn rebuilding_the_index_and_pinning_a_chat_go_to_the_app() {
     ] {
         assert!(props(tool_name).get(arg).is_some(), "{tool_name} takes {arg}");
     }
+    // Priority is a sort and a grouping, as on the Tasks screen.
+    let has = |tool_name: &str, arg: &str, v: &str| props(tool_name)[arg]["enum"].as_array().unwrap().iter().any(|x| x == v);
+    assert!(has("list_tasks", "sort", "priority") && has("list_tasks", "sort", "manual"));
+    assert!(has("list_tasks", "group", "priority") && has("task_lists", "group", "priority"));
     let screens = props("open")["screen"]["enum"].clone();
     for s in ["meeting", "reply", "doc_check"] {
         assert!(screens.as_array().unwrap().iter().any(|x| x == s), "open on {s}");

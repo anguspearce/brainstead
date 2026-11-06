@@ -92,7 +92,8 @@ import { runHooks, vaultEnv } from "./notes/TemplateRun";
 import { deferredPast, rankBetween, retitled, todayRows, toggleTaskEdit, undoAction, viewRows, VIEWS } from "./taskModel";
 import { taskLabel } from "./md/TaskBlock";
 import { cancelled, completion, inQuote, LineChange, reopened, started, tagToggled, waitingToggled, withPriority } from "./tasksq/edits";
-import { parseTask, statusOf, type PriorityName } from "./tasksq/fields";
+import { priorityOf } from "./taskFields";
+import { statusOf, type PriorityName } from "./tasksq/fields";
 import { toast } from "./Toast";
 import { fmtBytes, fmtCount } from "./ui";
 import { diskUsageText } from "./diskUsage";
@@ -140,6 +141,10 @@ import { imageView } from "./ImageViewer";
 import { TOPICS } from "./help";
 import { HelpView, openHelp } from "./help/HelpDrawer";
 import { IMAGE_EXT } from "./md/wikilinks";
+import { documentGroups } from "./projectDocs";
+import { taskRefs } from "./md/inline";
+import { type RefPattern, refPatterns, rowProblem } from "./md/refs";
+import { fromLabel, projectRefs, type RefUse } from "./md/refUses";
 import { nav, place, Screen, SettingsPane } from "./nav";
 import { focusMode } from "./focus";
 import { DEFAULT_SCHEDULE, DEFAULT_WEEKLY_REVIEW } from "./Jobs";
@@ -159,7 +164,7 @@ import { findingsMarkdown, findingsNote, governingDocs, REGISTER, REGISTER_STUB,
 import { LABEL as TRIAGE } from "./skills/Triage";
 import { ANSWERED, replyTask } from "./skills/Reply";
 import { actionLabel, actionsIn, filterLog, rankLog } from "./activityModel";
-import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from "./taskGroups";
+import { EFFORT_LIMITS, GROUP_NAMES, GroupBy, groupTasks, matchesSearch, SORT_NAMES, SortBy, sortTasks, withinEffort } from "./taskGroups";
 import { captureDefault, isMac, keyLabel, terminalApp, vaultFile } from "./platform";
 
 const TODO_LIST = "Me. To Do List.md";
@@ -285,6 +290,14 @@ export function findTask(all: TaskRow[], id: string, text?: string): TaskRow {
   const m = /^(.*):(\d+)$/.exec(id.trim());
   if (!m) throw new Error(`“${id}” isn't a task id: use the path:line that list_tasks gives, as in Me. To Do List.md:12.`);
   const [, path, n] = m;
+  // The system folders hold no tasks as far as the Tasks screen and list_tasks go (Rust's
+  // Vault::classify: only notes do), so say so rather than that the task has moved. The list is
+  // classify's top-level folders that aren't notes.
+  const system = /^(wiki|sources|Templates|templates|images|scripts|attachments|node_modules)\//.exec(path)?.[1];
+  if (system)
+    throw new Error(
+      `${path} is in the ${system}/ folder: only tasks in notes can be edited, moved or deleted, not ones in the wiki, sources, Templates or images folders.`,
+    );
   const want = text ? taskWords(text) : "";
   const fits = (t: TaskRow) => {
     const have = taskWords(t.text);
@@ -311,9 +324,9 @@ const shownText = (text: string) =>
 /** A task's #tags but its contexts (#context/…), without the #. */
 const otherTags = (t: TaskRow) => t.tags.map((x) => x.replace(/^#/, "")).filter((g) => !/^context\//.test(g));
 /** Its priority as the task menu names it (edit_task's), or null for none. */
-const priorityOf = (t: TaskRow) => {
-  const p = parseTask(t.lineText)?.priority;
-  return p && p !== "none" ? p : null;
+const priorityName = (t: TaskRow) => {
+  const p = priorityOf(t);
+  return p === "none" ? null : p;
 };
 /** Its status in edit_task's words, done added: open, in_progress, done or cancelled. */
 const statusName = (t: TaskRow) => {
@@ -329,7 +342,7 @@ export function taskLineOut(t: TaskRow, detail = false): string {
   if (t.start) bits.push(`starts ${t.start}`);
   for (const c of t.contexts ?? []) bits.push(`@${c}`);
   if (t.effort) bits.push(`effort ${t.effort}`);
-  const p = priorityOf(t);
+  const p = priorityName(t);
   if (p) bits.push(`priority ${p}`);
   // Its #tags, the lists' among them; contexts are the @ chips above.
   for (const g of otherTags(t)) bits.push(`#${g}`);
@@ -346,7 +359,7 @@ export function taskLineOut(t: TaskRow, detail = false): string {
 const viewName = (id: string) => (id === "scheduled" ? "deferred" : id);
 
 async function listTasks(a: Args): Promise<Listing> {
-  const all = await api.tasksAll();
+  const all = await api.tasksNotes();
   const today = localToday();
   // The Deferred list's id is `scheduled` (saved lists keep it); `deferred` is its name.
   const saved = str(a, "list");
@@ -396,7 +409,23 @@ async function listTasks(a: Args): Promise<Listing> {
   if (effort && !EFFORT_LIMITS.some(([v]) => v === effort)) throw new Error("effort is 15, 30 or 60 (minutes), or left out.");
   if (effort) rows = rows.filter((t) => withinEffort(t, effort));
   const group = (str(a, "group") ?? "none") as GroupBy;
-  if (!["none", "project", "context", "due"].includes(group)) throw new Error("group is none, project, context or due.");
+  if (!GROUP_NAMES.includes(group)) throw new Error("group is none, project, context, due or priority.");
+  // The Tasks screen's Sort: manual keeps the order above (the manual order, or Today's bands);
+  // priority puts the most important first, within each of Today's bands, and ties keep their order.
+  const sort = (str(a, "sort") ?? "manual") as SortBy;
+  if (!SORT_NAMES.includes(sort)) throw new Error("sort is manual or priority.");
+  if (sort === "priority") {
+    const bands = [...new Set(band.values())];
+    const inBand = (t: TaskRow) => bands.indexOf(band.get(t) ?? "");
+    rows = bands.length
+      ? bands.flatMap((_, i) =>
+          sortTasks(
+            rows.filter((t) => inBand(t) === i),
+            sort,
+          ),
+        )
+      : sortTasks(rows, sort);
+  }
   // Grouped as the screen groups them: each group's rows together, under its heading.
   const under = new Map<TaskRow, string>();
   if (group !== "none") {
@@ -432,7 +461,7 @@ async function listTasks(a: Args): Promise<Listing> {
 }
 
 /** A task as list_tasks' data gives it. */
-const taskItem = (t: TaskRow) => ({
+const taskItem = (t: TaskRow, patterns: readonly RefPattern[] = refPatterns()) => ({
   id: taskId(t),
   text: shownText(t.text),
   path: t.path,
@@ -445,11 +474,14 @@ const taskItem = (t: TaskRow) => ({
   project: t.project ? projectName(t.project) : null,
   contexts: t.contexts ?? [],
   tags: otherTags(t),
-  priority: priorityOf(t),
+  priority: priorityName(t),
   status: statusName(t),
   created: t.created,
   effort: t.effort ?? null,
   heading: t.heading,
+  // The reference keys and links in its words, as the task row draws them, once a Reference links
+  // pattern is set (Settings › Notes).
+  ...(patterns.length ? { refs: taskRefs(t.text, patterns).map(({ key, url }) => ({ key, url })) } : {}),
 });
 
 const DATE_KEYS: [string, TaskDateKind][] = [
@@ -483,7 +515,13 @@ async function submitAll(list: ChangeSubmit[]): Promise<{ applied: boolean; mess
 async function editTask(a: Args, r: McpRequest): Promise<string> {
   const id = str(a, "task");
   if (!id) throw new Error("Which task? Give its id from list_tasks (path:line).");
-  const t = findTask(await api.tasksAll(), id, str(a, "text"));
+  const t = findTask(await api.tasksNotes(), id, str(a, "text"));
+  // A task that takes its project from its note's Project: line has no project link of its own
+  // to remove, so clearing it would change nothing (the task pane offers no Clear for it either).
+  if (has(a, "project") && !a.project && t.projectFrom === "member")
+    throw new Error(
+      `Its project, ${projectName(t.project ?? "")}, comes from the Project: line of ${t.path}, not from the task's own line, so it can't be cleared: move the task to another note, or give it another project.`,
+    );
   const today = localToday();
   const day = moment(today, "YYYY-MM-DD");
   // The line worked out edit by edit (a recurring tick makes two; the rest act on the last), then
@@ -569,7 +607,7 @@ async function editTask(a: Args, r: McpRequest): Promise<string> {
   ]);
   told(o.applied ? `${done.join(", ")}: “${was}”` : `held a change to “${was}” for you in Changes`);
   if (!o.applied) return o.message;
-  const now = (await api.tasksAll()).find((x) => x.path === t.path && x.lineText === last()) ?? t;
+  const now = (await api.tasksNotes()).find((x) => x.path === t.path && x.lineText === last()) ?? t;
   return `Done (${done.join(", ")}). The task is now:\n${taskLineOut(now)}\n${o.message}`;
 }
 
@@ -580,7 +618,7 @@ const RANK_SPACING = 1024;
  *  the list both tasks are in (or, with project, the project page's Next actions), between its real neighbours there, or the whole list renumbered when
  *  some rows have no rank or there's no room. Every line it changes is one change, made together. */
 async function moveTask(a: Args, r: McpRequest): Promise<string> {
-  const all = await api.tasksAll();
+  const all = await api.tasksNotes();
   const t = findTask(all, str(a, "task") ?? "", str(a, "text"));
   const ref = (k: string) => (str(a, k) ? findTask(all, str(a, k)!) : null);
   const after = ref("after");
@@ -1024,11 +1062,22 @@ const flagLine = (p: ProjectRow) => {
   return f === "stuck" ? " · Stuck: it has no next action" : f === "quiet" ? " · Quiet: nothing has happened for two weeks" : "";
 };
 
-/** A project's line: its name, status, next actions and flag; with detail its area, what done looks like and every count. */
-const projectOut = (p: ProjectRow, detail = true) =>
+/** A project's line: its name, status, next actions and flag; with detail its area, what done looks like, every count
+ *  and its documents (member notes) under it, by type as its page groups them. */
+const projectOut = (p: ProjectRow, detail = true, refs: RefUse[] = []) =>
   detail
-    ? `- ${p.name} · ${statusOut(p.status)}${p.area ? ` · ${p.area}` : ""} · ${p.next} next, ${p.waiting} waiting, ${p.someday} someday, ${p.done} done${flagLine(p)}${p.outcome ? ` · done looks like: ${p.outcome}` : ""}  (${p.path})`
+    ? `- ${p.name} · ${statusOut(p.status)}${p.area ? ` · ${p.area}` : ""} · ${p.next} next, ${p.waiting} waiting, ${p.someday} someday, ${p.done} done${flagLine(p)}${p.outcome ? ` · done looks like: ${p.outcome}` : ""}  (${p.path})${documentsOut(p)}${referencesOut(refs)}`
     : `- ${p.name} · ${statusOut(p.status)} · ${p.next} next${flagLine(p)}  (${p.path})`;
+
+/** A project's reference keys and links, one indented line each: its page's Tickets and links card. */
+const referencesOut = (refs: RefUse[]) =>
+  refs.map((r) => `\n  - Reference ${r.key} · ${r.url} · ${r.from.map(fromLabel).join(", ")}`).join("");
+
+/** A project's member notes, one indented line each, by type: its page's Documents card. */
+const documentsOut = (p: ProjectRow) =>
+  documentGroups(p.documents ?? [])
+    .flatMap((g) => g.docs.map((d) => `\n  - ${g.type}: ${d.title}${d.summary ? ` · ${d.summary}` : ""}  (${d.path})`))
+    .join("");
 
 async function updateProject(a: Args, r: McpRequest): Promise<string> {
   const path = await projectPath(str(a, "project") ?? "");
@@ -2734,11 +2783,32 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   "inbox.list": (a) => listInbox(a),
   "inbox.clarify": clarify,
   "inbox.capture": captureTool,
-  "projects.list": async (a) =>
-    listed(a, orderedProjects(await api.projectsList()), {
+  "projects.list": async (a) => {
+    const projects = orderedProjects(await api.projectsList());
+    // The keys and links each project's properties, documents and open tasks hold, as its page's
+    // Tickets and links card: only once a Reference links pattern is set, and then the tasks are read.
+    const patterns = refPatterns();
+    let tasks: TaskRow[] = [];
+    let failed = "";
+    if (patterns.length) {
+      try {
+        tasks = (await api.tasksNotes()) ?? [];
+      } catch (e) {
+        failed = e instanceof Error ? e.message : String(e);
+      }
+    }
+    const on = patterns.length > 0 && !failed;
+    const found = new Map<ProjectRow, RefUse[]>();
+    const refsOf = (p: ProjectRow) => {
+      if (!on) return [];
+      if (!found.has(p)) found.set(p, projectRefs(p, tasks, patterns));
+      return found.get(p)!;
+    };
+    return listed(a, projects, {
+      before: failed ? [`References are left out: the tasks couldn't be read (${failed}).`] : [],
       text: (p) => projectOut(p),
       noun: ["project", "projects"],
-      line: (p) => projectOut(p, a.detail === true),
+      line: (p) => projectOut(p, a.detail === true, refsOf(p)),
       item: (p) => ({
         name: p.name,
         path: p.path,
@@ -2750,9 +2820,14 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
         waiting: p.waiting,
         someday: p.someday,
         done: p.done,
+        documents: documentGroups(p.documents ?? []).flatMap((g) =>
+          g.docs.map((d) => ({ type: g.type, title: d.title, path: d.path, summary: d.summary, current_state: d.currentState ?? null })),
+        ),
+        ...(on ? { references: refsOf(p).map((r) => ({ key: r.key, url: r.url, from: r.from.map(fromLabel) })) } : {}),
       }),
       empty: "No projects.",
-    }),
+    });
+  },
   "project.create": createProject,
   "project.update": updateProject,
   "project.rename_area": renameArea,
@@ -3229,7 +3304,7 @@ async function taskLists(a: Args): Promise<string> {
   const effort = a.effort == null ? "" : String(a.effort);
   if (effort && !EFFORT_LIMITS.some(([v]) => v === effort)) throw new Error("effort is 15, 30 or 60 (minutes), or left out.");
   const group = str(a, "group") ?? "none";
-  if (!["none", "project", "context", "due"].includes(group)) throw new Error("group is none, project, context or due.");
+  if (!GROUP_NAMES.includes(group as GroupBy)) throw new Error("group is none, project, context, due or priority.");
   // none is no context: any context, as the list with none chosen.
   const ctx = str(a, "context");
   const l = { name, view, context: ctx && ctx.toLowerCase() !== "none" ? contextName(ctx) : "", effort, group };
@@ -3242,7 +3317,20 @@ async function taskLists(a: Args): Promise<string> {
 // ---- Settings
 
 type SettingKind =
-  "bool" | "time" | "text" | "number" | "day" | "theme" | "choice" | "model" | "speed" | "size" | "percent" | "shortcut" | "panes";
+  | "bool"
+  | "time"
+  | "text"
+  | "number"
+  | "day"
+  | "theme"
+  | "choice"
+  | "model"
+  | "speed"
+  | "size"
+  | "percent"
+  | "shortcut"
+  | "panes"
+  | "links";
 /** A choice setting's choices, as its menu offers them: each value and how the screen names it. */
 type Choices = () => Promise<[string, string][]> | [string, string][];
 /** What the settings tool can change, by key: its pane, label, kind and default, a choice's
@@ -3333,6 +3421,8 @@ const settingRows = (): SettingRow[] => [
     "As the app",
   ],
   ["templateScripts", "Notes", "User scripts folder", "text", "Templates/scripts"],
+  // A list of rows, each a prefix and an address with {key} or {num} in it; set as an array of {prefix, url}, [] for none.
+  ["referenceLinks", "Notes", "Reference links (rows of a prefix and an address)", "links", []],
   ["askModel", "AI assistants", "New chats use", "model", DEFAULT_MODEL, modelChoices],
   ...MODEL_JOBS.map(([job, label]): SettingRow => [
     `jobModels.${job}`,
@@ -3407,6 +3497,31 @@ function shortcutSpec(spec: string): string {
   return [...SHORTCUT_MODS.filter((m) => mods.includes(m)), k].join("+");
 }
 
+/** referenceLinks as the screen keeps them: rows of a prefix and the address it opens (https://… or
+ *  http://…, with {key} or {num} in it), each prefix once. Null, an empty list or empty text clears them. */
+function referenceLinksIn(key: string, v: unknown): { prefix: string; url: string }[] {
+  let list: unknown = v;
+  if (typeof v === "string") {
+    try {
+      list = v.trim() ? JSON.parse(v) : [];
+    } catch {
+      throw new Error(`${key} is a list of {prefix, url} rows, as an array.`);
+    }
+  }
+  if (list === null) list = [];
+  if (!Array.isArray(list)) throw new Error(`${key} is a list of {prefix, url} rows, as an array; [] for none.`);
+  const rows = list.map((r) => ({
+    prefix: String((r as { prefix?: unknown })?.prefix ?? "").trim(),
+    url: String((r as { url?: unknown })?.url ?? "").trim(),
+  }));
+  // Each row is held to the rule the Settings rows and the scanner use.
+  rows.forEach((_, i) => {
+    const problem = rowProblem(rows, i);
+    if (problem) throw new Error(`Row ${i + 1} of ${key}: ${problem} {key} or {num} in the address stands for the key.`);
+  });
+  return rows;
+}
+
 async function settingsTool(a: Args): Promise<string> {
   const s = settings.get();
   /** The settings kept as objects, with their defaults filled in. */
@@ -3450,6 +3565,8 @@ async function settingsTool(a: Args): Promise<string> {
           const list = cs.map(([v, l]) => (v === l ? v : `${v} (${l})`)).join(", ");
           extra = ` (one of: ${list || "none here"}${none ? `; null for ${none}` : ""})`;
         }
+        if (kind === "links")
+          extra = ` (a list of {prefix, url}: a key that is the prefix and digits, as ORBIT-12, opens the url, where {key} is the whole key and {num} its digits; set it to the whole list, [] for none)`;
         if (kind === "panes") {
           // Each pane's key with what the screen calls it (a column by its heading), its range and
           // usual width, as the dividers clamp them, and whether its type is locked.
@@ -3519,7 +3636,9 @@ async function settingsTool(a: Args): Promise<string> {
       "Only in the menu bar when the window is closed is there only while Show in the menu bar (menuBar) is on: turn that on first.",
     );
   let v: unknown = a.value;
-  if (v === null) {
+  if (kind === "links") {
+    v = referenceLinksIn(key!, v);
+  } else if (v === null) {
     if (!none) throw new Error(`${key} has no default choice to go back to: give a value.`);
     v = undefined;
   } else if (kind === "bool") {

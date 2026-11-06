@@ -8,6 +8,7 @@
 // splits task text into words and fields for the task lists, View and Edit.
 
 import { TASK_DATES, TaskDate } from "./taskDates";
+import { PRIORITY_EMOJI, type PriorityName } from "./tasksq/fields";
 
 export type FieldId = "priority" | "recurrence" | "cancelled" | "id" | "dependsOn" | "onCompletion";
 
@@ -106,6 +107,15 @@ export function splitTaskFields(text: string): TextPart[] {
 
 /** The fields of task text, in order. */
 export const taskFieldsOf = (text: string) => splitTaskFields(text).filter((p): p is FieldPart => typeof p !== "string");
+
+/** A task's priority as its row's chip shows it: the first priority emoji anywhere in its text
+ *  outside code spans, not only at the end of the line (capture writes `Call Sam ⏫ [effort:: 15m]`).
+ *  The one reader for the Tasks screen's sort and grouping and the assistants' list_tasks, so they
+ *  agree with the chip. The `tasks` query blocks keep the Tasks plugin's trailing-fields reading. */
+export function priorityOf(t: { text: string }): PriorityName {
+  const p = taskFieldsOf(t.text).find((x) => x.field.id === "priority");
+  return (p && PRIORITY_EMOJI[p.emoji]) || "none";
+}
 
 /** Task text with every field taken out (they're shown as chips). */
 export const withoutFields = (text: string) =>

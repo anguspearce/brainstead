@@ -22,6 +22,7 @@ vi.mock("@tauri-apps/api/webviewWindow", () => ({ getCurrentWebviewWindow: () =>
 
 import type { InboxItem, TaskRow } from "./api";
 import { findTask, Listing, runAction, taskLineOut } from "./mcpActions";
+import { localToday } from "./md/taskQuery";
 import { settings } from "./store";
 import { focusMode, startFocus } from "./focus";
 import { nav } from "./nav";
@@ -78,7 +79,7 @@ describe("MCP actions", () => {
   });
 
   it("lists a view, one line per task with its id", async () => {
-    answers.tasks_all = () => [
+    answers.tasks_notes = () => [
       row({ due: "2026-10-06", project: "Project. Orbit App launch.md" }),
       row({ line: 3, text: "Old", done: true }),
     ];
@@ -89,8 +90,116 @@ describe("MCP actions", () => {
     await expect(run("tasks.list", { view: "soon" })).rejects.toThrow(/No view/);
   });
 
+  it("leaves on-hold and someday projects' tasks out of next, as the Tasks screen does", async () => {
+    answers.tasks_notes = () => [
+      row({ project: "Project. Orbit App launch.md", projectStatus: "active" }),
+      row({ line: 3, text: "Prune the roses", project: "Project. Garden.md", projectStatus: "on-hold" }),
+      row({ line: 4, text: "Learn the cello", project: "Project. Cello.md", projectStatus: "someday" }),
+      row({ line: 5, text: "Loose end" }),
+    ];
+    const texts = async (args: Record<string, unknown>) =>
+      ((await data("tasks.list", { view: "next", ...args })).items as { text: string }[]).map((t) => t.text);
+    expect(await texts({})).toEqual(["Call Sam about the launch", "Loose end"]);
+    // Still in all.
+    const all = await data("tasks.list", { view: "all" });
+    expect((all.items as { text: string }[]).map((t) => t.text)).toEqual([
+      "Call Sam about the launch",
+      "Prune the roses",
+      "Learn the cello",
+      "Loose end",
+    ]);
+  });
+
+  it("lists in the Tasks screen's manual order by default, or by priority, or grouped by it", async () => {
+    // As the screen reads them: notes only, unranked first, then by rank (the app answers in that order).
+    const task = (line: number, text: string, emoji: string, rank: number | null) =>
+      row({ line, text: `${text} ${emoji}`.trim(), lineText: `- [ ] ${text} ${emoji}`.trim(), rank });
+    answers.tasks_notes = () => [
+      task(1, "Plain", "", null),
+      task(2, "Low one", "🔽", 1024),
+      task(3, "High one", "⏫", 2048),
+      task(4, "Top one", "🔺", 3072),
+      task(5, "Other high", "⏫", 4096),
+    ];
+    const texts = async (args: Record<string, unknown>) =>
+      ((await data("tasks.list", { view: "all", ...args })).items as { text: string }[]).map((t) => t.text);
+    expect(await texts({})).toEqual(["Plain", "Low one", "High one", "Top one", "Other high"]);
+    expect(await texts({ sort: "manual" })).toEqual(await texts({}));
+    expect(await texts({ sort: "priority" })).toEqual(["Top one", "High one", "Other high", "Low one", "Plain"]);
+    const grouped = (await data("tasks.list", { view: "all", group: "priority" })).items as { text: string; group: string }[];
+    expect(grouped.map((t) => [t.group, t.text])).toEqual([
+      ["Highest", "Top one"],
+      ["High", "High one"],
+      ["High", "Other high"],
+      ["Low", "Low one"],
+      ["No priority", "Plain"],
+    ]);
+    // The sort applies inside a group, and the headings come with the text.
+    expect(await texts({ sort: "priority", group: "priority" })).toEqual(["Top one", "High one", "Other high", "Low one", "Plain"]);
+    expect(await run("tasks.list", { view: "all", group: "priority" })).toContain("High:");
+    await expect(run("tasks.list", { sort: "urgency" })).rejects.toThrow(/sort is manual or priority/);
+    await expect(run("tasks.list", { group: "colour" })).rejects.toThrow(/priority/);
+  });
+
+  it("reads priority where the row's chip does: mid-line, before an effort field or opening the words", async () => {
+    const task = (line: number, text: string) => row({ line, text, lineText: `- [ ] ${text}`, rank: null });
+    answers.tasks_notes = () => [task(1, "Plain"), task(2, "Call Sam ⏫ [effort:: 15m]"), task(3, "🔺 Review [[Project. Orbit]]")];
+    const items = async (args: Record<string, unknown>) =>
+      (await data("tasks.list", { view: "all", ...args })).items as { text: string; priority: string | null }[];
+    expect((await items({})).map((t) => [t.text, t.priority])).toEqual([
+      ["Plain", null],
+      ["Call Sam", "high"],
+      ["Review [[Project. Orbit]]", "highest"],
+    ]);
+    expect((await items({ sort: "priority" })).map((t) => t.priority)).toEqual(["highest", "high", null]);
+    expect(await run("tasks.list", { view: "all" })).toContain("priority high");
+  });
+
+  it("says only tasks in notes can be edited, moved or deleted for an id in a system folder", () => {
+    const all = [row({})];
+    for (const id of [
+      "wiki/entities/Orbit App.md:3",
+      "sources/emails/Thread.md:2",
+      "Templates/Meeting.md:1",
+      "templates/Meeting.md:1",
+      "images/a.md:1",
+      "scripts/x.md:1",
+      "attachments/a.md:2",
+      "node_modules/pkg/README.md:4",
+    ])
+      expect(() => findTask(all, id)).toThrow(/only tasks in notes can be edited, moved or deleted/);
+    // A note that merely isn't there is still just moved on.
+    expect(() => findTask(all, "Other note.md:3")).toThrow(/no task at/);
+  });
+
+  it("sorts Today's bands by priority within each band, not across them", async () => {
+    const today = localToday();
+    const task = (line: number, text: string, emoji: string, due: string) =>
+      row({ line, text: `${text} ${emoji} 📅 ${due}`, lineText: `- [ ] ${text} ${emoji} 📅 ${due}`, due, rank: null });
+    answers.tasks_notes = () => [
+      task(1, "Overdue low", "🔽", "2000-01-01"),
+      task(2, "Overdue top", "🔺", "2000-01-01"),
+      task(3, "Today plain", "", today),
+      task(4, "Today high", "⏫", today),
+    ];
+    const items = async (sort: string) =>
+      ((await data("tasks.list", { view: "today", sort })).items as { text: string; band: string }[]).map((t) => `${t.band}: ${t.text}`);
+    expect(await items("manual")).toEqual([
+      "Overdue: Overdue low",
+      "Overdue: Overdue top",
+      "Due today: Today plain",
+      "Due today: Today high",
+    ]);
+    expect(await items("priority")).toEqual([
+      "Overdue: Overdue top",
+      "Overdue: Overdue low",
+      "Due today: Today high",
+      "Due today: Today plain",
+    ]);
+  });
+
   it("matches query as the Tasks screen's search does: project, heading and tags too, accents ignored", async () => {
-    answers.tasks_all = () => [
+    answers.tasks_notes = () => [
       row({ text: "Book the café", lineText: "- [ ] Book the café", project: "Project. Orbit App launch.md" }),
       row({ line: 4, text: "Call Lena", lineText: "- [ ] Call Lena", heading: "Venue", tags: ["#followup"] }),
     ];
@@ -113,7 +222,7 @@ describe("MCP actions", () => {
   const submitted = () => calls.filter(([c]) => c === "changes_submit_many").flatMap(([, a]) => a!.changes as Record<string, unknown>[]);
 
   it("edits a task through Changes: worked out edit by edit, made as one change", async () => {
-    answers.tasks_all = () => [row({})];
+    answers.tasks_notes = () => [row({})];
     answers.change_task_line = (a) => {
       const e = a!.edit as { op: string; date?: string; names?: string[] };
       const l = a!.line as string;
@@ -143,8 +252,28 @@ describe("MCP actions", () => {
     await expect(run("task.edit", { task: "Me. To Do List.md:12", text: "Call Sam" })).rejects.toThrow(/Nothing to change/);
   });
 
+  it("won't clear a project that comes from the note's Project: line, and clears one the line links", async () => {
+    const inherited = row({ path: "Tracker. Orbit.md", project: "Project. Orbit.md", projectFrom: "member" });
+    answers.tasks_notes = () => [inherited];
+    await expect(run("task.edit", { task: "Tracker. Orbit.md:12", text: "Call Sam", project: null })).rejects.toThrow(
+      /comes from the Project: line of Tracker\. Orbit\.md/,
+    );
+    expect(calls.some(([c]) => c === "changes_submit_many")).toBe(false);
+    answers.tasks_notes = () => [
+      {
+        ...inherited,
+        projectFrom: "line",
+        lineText: "- [ ] Call Sam about the launch [[Project. Orbit]]",
+        text: "Call Sam about the launch [[Project. Orbit]]",
+      },
+    ];
+    answers.change_task_line = (a) => (a!.line as string).replace(" [[Project. Orbit]]", "");
+    answers.changes_submit_many = outcomes(true);
+    expect(await run("task.edit", { task: "Tracker. Orbit.md:12", text: "Call Sam", project: null })).toMatch(/^Done \(no project\)/);
+  });
+
   it("an unattended edit carries its origin, and says when it's held", async () => {
-    answers.tasks_all = () => [row({})];
+    answers.tasks_notes = () => [row({})];
     answers.changes_submit_many = outcomes(false);
     const origin = { kind: "chat", run: "session-1", trigger: "scheduled" };
     const out = (await run("task.edit", { task: "Me. To Do List.md:12", text: "Call Sam", status: "cancelled", origin })) as string;
@@ -153,7 +282,10 @@ describe("MCP actions", () => {
   });
 
   it("moves a task by its rank, through Changes", async () => {
-    answers.tasks_all = () => [row({ rank: 1024 }), row({ line: 12, lineText: "- [ ] Book the room", text: "Book the room", rank: 2048 })];
+    answers.tasks_notes = () => [
+      row({ rank: 1024 }),
+      row({ line: 12, lineText: "- [ ] Book the room", text: "Book the room", rank: 2048 }),
+    ];
     answers.change_task_line = (a) => `${a!.line} [rank:: 1536]`;
     answers.changes_submit_many = outcomes(true);
     await run("task.move", { task: "Me. To Do List.md:13", text: "Book the room", after: "Me. To Do List.md:12" });
@@ -163,7 +295,7 @@ describe("MCP actions", () => {
 
   it("moves a task between its two real neighbours, or renumbers the list, as the screen's drag does", async () => {
     const task = (line: number, text: string, rank: number | null) => row({ line, lineText: `- [ ] ${text}`, text, rank });
-    answers.tasks_all = () => [task(1, "Ask Maya", 1024), task(2, "Book the room", 2048), task(3, "Call Lena", 3072)];
+    answers.tasks_notes = () => [task(1, "Ask Maya", 1024), task(2, "Book the room", 2048), task(3, "Call Lena", 3072)];
     answers.change_task_line = (a) => `${a!.line} ^rank-${JSON.stringify(a!.edit)}`;
     answers.changes_submit_many = outcomes(true);
     await run("task.move", { task: "Me. To Do List.md:4", text: "Call Lena", after: "Me. To Do List.md:2" });
@@ -172,7 +304,7 @@ describe("MCP actions", () => {
     expect(submitted()).toHaveLength(1);
     // A row with no rank: the list renumbered in its new order, each line a change made together.
     calls.length = 0;
-    answers.tasks_all = () => [task(1, "Ask Maya", null), task(2, "Book the room", 2048), task(3, "Call Lena", 3072)];
+    answers.tasks_notes = () => [task(1, "Ask Maya", null), task(2, "Book the room", 2048), task(3, "Call Lena", 3072)];
     const out = (await run("task.move", { task: "Me. To Do List.md:4", text: "Call Lena", before: "Me. To Do List.md:3" })) as string;
     const edits = calls.filter(([c]) => c === "change_task_line").map(([, a]) => [a!.line, a!.edit]);
     expect(edits).toEqual([
@@ -479,7 +611,7 @@ describe("MCP actions", () => {
   });
 
   it("takes the Deferred list as deferred, and scheduled as before", async () => {
-    answers.tasks_all = () => [row({ scheduled: "2099-01-01" })];
+    answers.tasks_notes = () => [row({ scheduled: "2099-01-01" })];
     const out = (await run("tasks.list", { view: "deferred" })) as string;
     expect(out).toMatch(/^1 task in deferred:/);
     expect(await run("tasks.list", { view: "scheduled" })).toBe(out);
@@ -549,7 +681,7 @@ describe("MCP actions", () => {
       answers.weekly_state_read = () => state;
       answers.weekprep_status = () => ({ prep, running: false, error: null });
       answers.projects_list = () => [];
-      answers.tasks_all = () => [row({})];
+      answers.tasks_notes = () => [row({})];
       answers.task_toggle = edited;
     });
 
@@ -874,7 +1006,7 @@ describe("MCP actions", () => {
       answers.settings_write = (a) => a!.settings;
       await run("task_lists", { action: "save", name: "Quick calls", view: "next", context: "@calls", effort: 15 });
       expect(await run("task_lists")).toBe("1 saved list:\n- Quick calls: next, @calls, 15 min or less");
-      answers.tasks_all = () => [
+      answers.tasks_notes = () => [
         row({ contexts: ["calls"], effortMin: 10 }),
         row({ line: 3, contexts: ["calls"], effortMin: 60, text: "Long call" }),
         row({ line: 4, text: "Not a call" }),
@@ -1006,7 +1138,7 @@ describe("MCP actions", () => {
     });
 
     it("pages tasks like every list, with all of query's words, and names the defer date as edit_task does", async () => {
-      answers.tasks_all = () => [
+      answers.tasks_notes = () => [
         row({ text: "Call Sam about the launch", scheduled: "2026-01-01" }),
         row({ line: 3, text: "Call Lena about the budget" }),
         row({ line: 4, text: "Email Sam the launch plan" }),
@@ -1061,8 +1193,9 @@ describe("MCP actions", () => {
 
     it("gives a task's tags, priority, status and created date, and Today's bands", async () => {
       const today = new Date().toLocaleDateString("en-CA");
-      answers.tasks_all = () => [
+      answers.tasks_notes = () => [
         row({
+          text: "Call Sam about the launch ⏫ #budget #context/calls ➕ 2026-10-01",
           lineText: "- [/] Call Sam about the launch ⏫ #budget #context/calls ➕ 2026-10-01",
           status: "/",
           tags: ["budget", "context/calls"],
@@ -1413,7 +1546,7 @@ describe("MCP actions", () => {
     });
 
     it("filters tasks by effort and groups them, as the Tasks screen does", async () => {
-      answers.tasks_all = () => [
+      answers.tasks_notes = () => [
         row({ text: "Call Sam", effortMin: 10, project: "Project. Orbit App launch.md" }),
         row({ line: 3, text: "Write the plan", effortMin: 120, project: "Project. Orbit App launch.md" }),
         row({ line: 4, text: "Book the room", effortMin: 15 }),
@@ -2003,7 +2136,7 @@ describe("MCP actions", () => {
 
   describe("the 2026-10-07 re-audit's screen actions", () => {
     it("rewords a task as the Tasks screen's rename does, and makes it a follow-up", async () => {
-      answers.tasks_all = () => [row({ lineText: "- [ ] Call Sam about the launch 📅 2026-10-09 #work", tags: ["#work"] })];
+      answers.tasks_notes = () => [row({ lineText: "- [ ] Call Sam about the launch 📅 2026-10-09 #work", tags: ["#work"] })];
       answers.changes_submit_many = outcomes(true);
       const out = (await run("task.edit", {
         task: "Me. To Do List.md:12",
@@ -2015,11 +2148,11 @@ describe("MCP actions", () => {
       expect(out).toMatch(/^Done \(reworded to “Call Lena about the launch”, follow-up\)/);
       // Taking it off again.
       calls.length = 0;
-      answers.tasks_all = () => [row({ lineText: "- [ ] Call Sam about the launch #followup", tags: ["#followup"] })];
+      answers.tasks_notes = () => [row({ lineText: "- [ ] Call Sam about the launch #followup", tags: ["#followup"] })];
       await run("task.edit", { task: "Me. To Do List.md:12", text: "Call Sam", followup: false });
       expect(submitted()[0].instruction).toMatchObject({ new: ["- [ ] Call Sam about the launch"] });
       // Words that can't be found on the line once can't be changed simply.
-      answers.tasks_all = () => [row({ lineText: "- [ ] go go", text: "go" })];
+      answers.tasks_notes = () => [row({ lineText: "- [ ] go go", text: "go" })];
       await expect(run("task.edit", { task: "Me. To Do List.md:12", text: "go", words: "x" })).rejects.toThrow(/isn't on its line once/);
     });
 
@@ -2277,6 +2410,190 @@ describe("MCP actions", () => {
       expect(out).toContain("- Orbit · active · 0 next · Stuck: it has no next action  (Project. Orbit.md)");
       expect(out).toContain("- Hub · active · 2 next · Quiet: nothing has happened for two weeks  (Project. Hub.md)");
       expect(((await data("projects.list")).items as { flag: string | null }[]).map((x) => x.flag)).toEqual(["quiet", null, "stuck"]);
+    });
+
+    it("lists a project's documents with detail, by type as its page groups them", async () => {
+      const doc = (title: string, type: string, summary: string | null) => ({
+        path: `${type}. ${title}.md`,
+        title,
+        type,
+        summary,
+        mtime: 0,
+      });
+      answers.projects_list = () => [
+        {
+          name: "Orbit",
+          path: "Project. Orbit.md",
+          status: "active",
+          area: null,
+          outcome: null,
+          next: 1,
+          waiting: 0,
+          someday: 0,
+          done: 0,
+          lastTouched: Date.now(),
+          links: [],
+          documents: [doc("Comms", "Plan", null), doc("Rollout", "Tracker", "Where it stands.")],
+        },
+      ];
+      const out = (await run("projects.list", { detail: true })) as string;
+      expect(out).toContain(
+        "(Project. Orbit.md)\n  - Tracker: Rollout · Where it stands.  (Tracker. Rollout.md)\n  - Plan: Comms  (Plan. Comms.md)",
+      );
+      expect(await run("projects.list")).not.toContain("Tracker: Rollout");
+      const items = (await data("projects.list")).items as { documents: { type: string; title: string }[] }[];
+      expect(items[0].documents.map((d) => `${d.type}: ${d.title}`)).toEqual(["Tracker: Rollout", "Plan: Comms"]);
+    });
+
+    it("gives each task's reference keys and links, and each project's, as the screens draw them", async () => {
+      settings.update({ referenceLinks: [{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }] });
+      onTestFinished(() => settings.update({ referenceLinks: [] }));
+      answers.tasks_notes = () => [
+        row({
+          text: "Ship ORBIT-12 after [the spec](https://example.com/spec) and XORBIT-9",
+          project: "Project. Orbit.md",
+          projectStatus: "active",
+        }),
+        row({ line: 3, text: "Chase ORBIT-14 #waiting-for", tags: ["waiting-for"], project: "Project. Orbit.md", projectStatus: "active" }),
+        row({ line: 4, text: "No keys here" }),
+      ];
+      answers.inbox_list = () => [];
+      const tasks = (await data("tasks.list", { view: "all" })).items as { text: string; refs: { key: string; url: string }[] }[];
+      expect(tasks.map((t) => t.refs)).toEqual([
+        [
+          { key: "ORBIT-12", url: "https://tickets.example.com/browse/ORBIT-12" },
+          { key: "the spec", url: "https://example.com/spec" },
+        ],
+        [{ key: "ORBIT-14", url: "https://tickets.example.com/browse/ORBIT-14" }],
+        [],
+      ]);
+      answers.projects_list = () => [
+        {
+          name: "Orbit",
+          path: "Project. Orbit.md",
+          status: "active",
+          area: null,
+          outcome: null,
+          next: 1,
+          waiting: 1,
+          someday: 0,
+          done: 0,
+          lastTouched: Date.now(),
+          links: [],
+          documents: [
+            {
+              path: "Tracker. Rollout.md",
+              title: "Rollout",
+              type: "Tracker",
+              summary: null,
+              mtime: 0,
+              propertyText: ["ORBIT-12", "ORBIT-20"],
+            },
+          ],
+          propertyText: ["ORBIT-9"],
+        },
+      ];
+      const items = (await data("projects.list")).items as { references: { key: string; url: string; from: string[] }[] }[];
+      expect(items[0].references.map((r) => [r.key, r.from])).toEqual([
+        ["ORBIT-9", ["Project note"]],
+        ["ORBIT-12", ["Rollout", "Next action"]],
+        ["ORBIT-20", ["Rollout"]],
+        ["the spec", ["Next action"]],
+        ["ORBIT-14", ["Waiting for"]],
+      ]);
+      expect(items[0].references[0].url).toBe("https://tickets.example.com/browse/ORBIT-9");
+      expect((await run("projects.list", { detail: true })) as string).toContain(
+        "\n  - Reference ORBIT-12 · https://tickets.example.com/browse/ORBIT-12 · Rollout, Next action",
+      );
+    });
+
+    it("gives no refs or references, and reads no tasks for them, with no Reference links pattern set", async () => {
+      answers.tasks_notes = () => [row({ text: "Ship ORBIT-12 and [the spec](https://example.com/spec)", project: "Project. Orbit.md" })];
+      answers.inbox_list = () => [];
+      const task = ((await data("tasks.list", { view: "all" })).items as Record<string, unknown>[])[0];
+      expect("refs" in task).toBe(false);
+      answers.projects_list = () => [
+        {
+          name: "Orbit",
+          path: "Project. Orbit.md",
+          status: "active",
+          area: null,
+          outcome: null,
+          next: 1,
+          waiting: 0,
+          someday: 0,
+          done: 0,
+          lastTouched: Date.now(),
+          links: [],
+          documents: [],
+          propertyText: ["https://example.com/x"],
+        },
+      ];
+      calls.length = 0;
+      const items = (await data("projects.list", { detail: true })).items as Record<string, unknown>[];
+      expect("references" in items[0]).toBe(false);
+      expect(calls.some(([c]) => c === "tasks_notes")).toBe(false);
+      expect((await run("projects.list", { detail: true })) as string).not.toContain("Reference");
+    });
+
+    it("says so when the tasks for a project's references can't be read", async () => {
+      settings.update({ referenceLinks: [{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }] });
+      onTestFinished(() => settings.update({ referenceLinks: [] }));
+      answers.tasks_notes = () => {
+        throw new Error("the index is busy");
+      };
+      answers.projects_list = () => [
+        {
+          name: "Orbit",
+          path: "Project. Orbit.md",
+          status: "active",
+          area: null,
+          outcome: null,
+          next: 1,
+          waiting: 0,
+          someday: 0,
+          done: 0,
+          lastTouched: Date.now(),
+          links: [],
+          documents: [],
+          propertyText: ["ORBIT-9"],
+        },
+      ];
+      const out = (await run("projects.list")) as string;
+      expect(out).toContain("References are left out: the tasks couldn't be read (the index is busy).");
+      expect(out).toContain("- Orbit · active");
+      const items = (await data("projects.list")).items as Record<string, unknown>[];
+      expect("references" in items[0]).toBe(false);
+    });
+
+    it("keeps the reference links setting as a list of rows, checked as the screen's are", async () => {
+      answers.settings_write = (a) => a!.settings;
+      onTestFinished(() => settings.update({ referenceLinks: [] }));
+      expect(await run("settings")).toContain("referenceLinks · Settings › Notes › Reference links");
+      const rows = [{ prefix: " ORBIT- ", url: "https://tickets.example.com/browse/{key}" }];
+      expect(await run("settings", { action: "set", key: "referenceLinks", value: rows })).toMatch(/is now \[/);
+      expect(settings.get().referenceLinks).toEqual([{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }]);
+      expect(await run("settings")).toContain(
+        'referenceLinks · Settings › Notes › Reference links (rows of a prefix and an address): [{"prefix":"ORBIT-"',
+      );
+      await expect(
+        run("settings", { action: "set", key: "referenceLinks", value: [{ prefix: "X-", url: "javascript:alert(1)" }] }),
+      ).rejects.toThrow(/must start with http/);
+      await expect(
+        run("settings", { action: "set", key: "referenceLinks", value: [{ prefix: "", url: "https://a.example.com" }] }),
+      ).rejects.toThrow(/Needs a prefix/);
+      await expect(
+        run("settings", {
+          action: "set",
+          key: "referenceLinks",
+          value: [
+            { prefix: "A-", url: "https://a.example.com/{key}" },
+            { prefix: " A- ", url: "https://b.example.com/{key}" },
+          ],
+        }),
+      ).rejects.toThrow(/Row 2 of referenceLinks: An earlier row has this prefix already/);
+      await run("settings", { action: "set", key: "referenceLinks", value: null });
+      expect(settings.get().referenceLinks).toEqual([]);
     });
 
     it("gives the judge's fix and whether it's waiting in Changes", async () => {
@@ -2731,7 +3048,7 @@ describe("MCP actions", () => {
       const task = (line: number, text: string, rank: number | null, tags: string[] = []) =>
         row({ path: project, line, lineText: `- [ ] ${text}`, text, rank, tags, project });
       answers.projects_list = () => [{ name: "Orbit App launch", path: project, status: "active" }];
-      answers.tasks_all = () => [
+      answers.tasks_notes = () => [
         task(1, "Ask Maya", 2048),
         task(2, "Wait for Lena", 1536, ["waiting-for"]),
         task(3, "Book the room", 1024),

@@ -408,6 +408,24 @@ pub fn ingest_start_for(app: &AppHandle, paths: Vec<String>, trigger: Option<&st
     Ok(ids)
 }
 
+/// Each page in `wiki/summaries/` with what its `sources:` property cites, to find the source a
+/// summary is of whatever the summary is called.
+fn summary_sources(root: &std::path::Path) -> Vec<(String, Vec<String>)> {
+    let mut out = Vec::new();
+    let Ok(rd) = std::fs::read_dir(root.join("wiki").join("summaries")) else { return out };
+    for e in rd.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        if !name.ends_with(".md") {
+            continue;
+        }
+        let text = std::fs::read_to_string(e.path()).unwrap_or_default();
+        let fm = brainstead_core::frontmatter::split(&text);
+        out.push((format!("wiki/summaries/{name}"), brainstead_core::frontmatter::list(&fm.data, &["sources"], false)));
+    }
+    out.sort();
+    out
+}
+
 /// The pages a text may touch: every entity, concept and summary page, with its aliases.
 fn wiki_pages(root: &std::path::Path) -> Vec<(String, Vec<String>)> {
     let mut out = Vec::new();
@@ -622,7 +640,18 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
                 .and_then(|x| x.exact.map(|(p, _)| p))
                 .filter(|p| p.starts_with("wiki/"))
         };
-        let (planned, dropped) = core_ingest::plan(&source, &answer, read, resolve, &today, core_ingest::page_budget(pages.len()));
+        // The page any layer's file of that name is (by link key), which a summary can't share. An
+        // index error reads as no page: the check is then skipped, and the ingest goes on rather
+        // than stopping for it (a summary named `Summary. <source>` rarely clashes anyway).
+        let taken = |name: &str| {
+            app.state::<VaultService>()
+                .with_index(|ix, _| ix.resolve(&[name.to_string()]))
+                .ok()
+                .and_then(|v| v.into_iter().next().flatten())
+        };
+        let citing = summary_sources(&root);
+        let check = core_ingest::SummaryCheck { citing: &citing, taken: &taken };
+        let (planned, dropped) = core_ingest::plan(&source, &answer, read, resolve, &check, &today, core_ingest::page_budget(pages.len()));
         let d = format!("{} kept, {} dropped", planned.len(), dropped.len());
         r.dropped = dropped;
         Ok((planned, d))

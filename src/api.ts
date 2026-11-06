@@ -106,6 +106,9 @@ export interface Settings {
   docAccent?: string;
   /** Templater's user scripts folder, vault-relative (Settings › Notes; default Templates/scripts). */
   templateScripts?: string;
+  /** Reference links (Settings › Notes; src/md/refs.ts): text that starts with a prefix and ends in
+   *  digits (ORBIT-12) opens the URL, where {key} is the whole key and {num} its digits. None by default. */
+  referenceLinks?: { prefix: string; url: string }[];
   /** Notes with their own theme or colour, by vault path. */
   docLooks?: Record<string, { style?: string; accent?: string }>;
   /** Documents light or dark on their own; absent: as the app. */
@@ -216,6 +219,7 @@ export const DEFAULT_SETTINGS: Settings = {
   readOnly: true,
   theme: "system",
   skippedFullDiskAccess: false,
+  referenceLinks: [],
 };
 
 export interface IndexStats {
@@ -311,6 +315,8 @@ export interface FileSummary {
   size: number;
   mtime: number;
   tags: string[];
+  /** The project note it belongs to: itself for a project note, else the one its `Project: [[…]]` line names. */
+  project: string | null;
 }
 
 /** A file on the Graph screen, or `ghost:<name>` for a link to nothing (core/src/graph.rs). */
@@ -489,10 +495,14 @@ export interface TaskRow {
   rank: number | null;
   tags: string[];
   heading: string | null;
-  /** The project note it belongs to (stage 6): the one it's written in, or one its line links. */
+  /** The project note it belongs to (stage 6): the one it's written in, one its line links, or its
+   *  note's by the note's `Project: [[…]]` line. */
   project?: string | null;
   /** That project's status (`ProjectStatus` in gtd.ts); a missing or unknown one reads as active. */
   projectStatus?: string | null;
+  /** Where its project comes from: `note` (written in the project note), `line` (its line links it)
+   *  or `member` (its note's `Project:` line, which unlinking the task doesn't change). */
+  projectFrom?: "note" | "line" | "member" | null;
   /** From `#context/<name>` tags, without the prefix. */
   contexts?: string[];
   /** As written in `[effort:: 15m]`, and in minutes. */
@@ -514,6 +524,25 @@ export interface ProjectRow {
   lastTouched: number;
   /** Notes that link the project. */
   links: string[];
+  /** Its member notes: those whose `Project: [[…]]` line names it. */
+  documents: ProjectDoc[];
+  /** The text in its properties: each text value and each text item of a list (reference keys are found in it, src/md/refs.ts). */
+  propertyText?: string[];
+}
+
+/** A note that belongs to a project by its `Project: [[…]]` line (core/src/projects.rs). */
+export interface ProjectDoc {
+  path: string;
+  title: string;
+  /** The type in its file name: Tracker, Plan, Findings… */
+  type: string | null;
+  /** Its `summary` property. */
+  summary: string | null;
+  mtime: number;
+  /** A tracker's `## Current state` text, as the index read it (core pageshape). */
+  currentState: string | null;
+  /** The text in its properties, as ProjectRow's. */
+  propertyText?: string[];
 }
 
 /** Something to clarify: a Scratchpad block or a To Do `#### Other` task. */
@@ -1293,6 +1322,9 @@ export const api = {
   tasksQuery: (query: TaskQuery) => invoke<TaskRow[]>("tasks_query", { query }),
   /** Every task outside the templates, for task query blocks (src/tasksq/). */
   tasksAll: () => invoke<TaskRow[]>("tasks_all"),
+  /** Every task in the notes (not the wiki, sources or templates), in the Tasks screen's manual
+   *  order: what the screen lists, for the tray's counts and the assistants' task tools. */
+  tasksNotes: () => invoke<TaskRow[]>("tasks_notes"),
   /** Replaces a task's line with `lines` (src/tasksq/edits.ts works them out); undoable. */
   taskReplace: (t: { path: string; line: number; lineText: string }, lines: string[], label: string) =>
     invoke<Edited>("task_replace", { path: t.path, line: t.line, lineText: t.lineText, lines, label }),

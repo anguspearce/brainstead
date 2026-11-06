@@ -77,12 +77,13 @@ export function taskLine(c: Clarified): string {
 const TAG = /(^|\s)#([A-Za-z][\w/-]*)/g;
 
 /** An item's first line with its #tags after it, as a task row shows them: contexts as @calls, the
- *  rest as #tag, in grey. */
-function ItemTitle({ text }: { text: string }) {
+ *  rest as #tag, in grey. `plain` draws its links as text, for a row that is a button. */
+function ItemTitle({ text, plain = false }: { text: string; plain?: boolean }) {
   const tags = [...text.matchAll(TAG)].map((m) => m[2]);
   return (
     <>
       <TaskText
+        plain={plain}
         text={
           tags.length
             ? text
@@ -544,7 +545,7 @@ export function InboxScreen() {
                         }}
                       >
                         <span className="tt">
-                          <ItemTitle text={i.kind === "capture" ? captureTitle(i.text) : itemText(i).split("\n")[0]} />
+                          <ItemTitle plain text={i.kind === "capture" ? captureTitle(i.text) : itemText(i).split("\n")[0]} />
                         </span>
                         {p ? (
                           <span className={`faint iprog ${p.busy ? "" : "bad"}`} title={p.why}>

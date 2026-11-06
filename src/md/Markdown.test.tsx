@@ -34,12 +34,14 @@ vi.mock("@tauri-apps/api/core", () => ({
   }),
 }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
-vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn(), openPath: vi.fn() }));
+const openUrl = vi.hoisted(() => vi.fn());
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl, openPath: vi.fn() }));
 vi.mock("mermaid", () => ({ default: { initialize: vi.fn(), render: vi.fn(async () => ({ svg: "<svg data-test='mmd'></svg>" })) } }));
 
 import { imageSource, Markdown } from "./Markdown";
 import { nav } from "../nav";
 import { ErrorBoundary } from "../ErrorBoundary";
+import { settings } from "../store";
 
 afterEach(cleanup);
 
@@ -267,5 +269,50 @@ describe("a template in View", () => {
     // …and goes a moment after it leaves.
     fireEvent.mouseLeave(container.querySelector(".prose")!);
     await waitFor(() => expect(container.querySelector(".tpview")).toBeNull());
+  });
+});
+
+describe("reference keys in View", () => {
+  const set = (on: boolean) =>
+    settings.update({ referenceLinks: on ? [{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }] : [] });
+  afterEach(() => set(false));
+  const body = [
+    "Blocked on ORBIT-12 and ORBIT-14.",
+    "",
+    "Not `ORBIT-98` in code, [ORBIT-97](https://example.com/x) in a link, or XORBIT-96.",
+    "",
+    "```",
+    "ORBIT-95",
+    "```",
+  ].join("\n");
+
+  it("turn a configured key into a link that opens in the browser, outside code and links", () => {
+    set(true);
+    const { container } = md(body);
+    const refs = [...container.querySelectorAll<HTMLAnchorElement>("a[data-ref]")];
+    expect(refs.map((a) => a.textContent)).toEqual(["ORBIT-12", "ORBIT-14"]);
+    expect(refs[0].getAttribute("href")).toBe("https://tickets.example.com/browse/ORBIT-12");
+    expect(refs[0].className).toContain("mdref");
+    fireEvent.click(refs[1]);
+    expect(openUrl).toHaveBeenLastCalledWith("https://tickets.example.com/browse/ORBIT-14");
+    // The text of what was left alone is as written.
+    expect(container.querySelector("code")?.textContent).toBe("ORBIT-98");
+    expect(container.querySelector("pre")?.textContent).toContain("ORBIT-95");
+    expect(container.textContent).toContain("XORBIT-96");
+    expect(container.querySelectorAll("a").length).toBe(3);
+  });
+
+  it("are not keys inside a link to a note or a heading, a reference link or an image, or after a slash", () => {
+    set(true);
+    const { container } = md(
+      "[ORBIT-1](Note.md) [ORBIT-2](#top) [ORBIT-3][ref] ![ORBIT-4](pic.png) #team/ORBIT-5 docs/ORBIT-6.md and ORBIT-7",
+    );
+    expect([...container.querySelectorAll("a[data-ref]")].map((a) => a.textContent)).toEqual(["ORBIT-7"]);
+  });
+
+  it("change nothing with no pattern set", () => {
+    const { container } = md(body);
+    expect(container.querySelector("a[data-ref]")).toBeNull();
+    expect(container.textContent).toContain("Blocked on ORBIT-12 and ORBIT-14.");
   });
 });

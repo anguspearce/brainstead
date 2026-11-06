@@ -5,7 +5,7 @@ screens: [tasks]
 order: 3
 summary: Every task in the vault, live from the notes it's written in, as GTD lists you can tick, date, filter and reorder.
 ---
-A task is a `- [ ]` line in any note. Tasks lists them all, and each change rewrites only that one line in its note.
+A task is a `- [ ]` line in any note. Tasks lists them all, and each change rewrites only that one line in its note. A checklist inside a wiki page, a source or a template isn't a task here, and isn't counted in the tray, in Projects or by an assistant either.
 
 ## Choose a list
 Each list on the left shows its count:
@@ -17,7 +17,7 @@ Each list on the left shows its count:
 - **Someday / maybe**: tasks tagged `#someday-maybe`.
 - **Done this week** and **Done last week**: ticked tasks by done date, weeks starting on Monday.
 
-In Next actions, Follow-ups, Waiting for and Someday / maybe, drag rows by their grip to set your own order (not while grouped). The order is saved at the end of each line as `^rank-1024`, and the list is renumbered when it needs room. Tasks a search or filter hides at the time keep their places next to the tasks they followed. An assistant moves a task the same way.
+In Next actions, Follow-ups, Waiting for and Someday / maybe, drag rows by their grip to set your own order (not while grouped, or sorted by priority). The order is saved at the end of each line as `^rank-1024`, and the list is renumbered when it needs room. Tasks a search or filter hides at the time keep their places next to the tasks they followed. An assistant moves a task the same way.
 
 ## Use the keys
 - `↑` and `↓` choose a task, carrying on into the next list.
@@ -51,11 +51,13 @@ To change a task's words in any list, point at it and click the pencil after the
 **Lives in** shows the note, line and heading; click it to open the note there. **Ask about this** opens [Ask](app:ask) about the task. ⌘Z undoes any change.
 
 ## Group, filter and save lists
-**Group by** in the top bar (**None**, **Project**, **Context** or **Due**) groups the list, with a band and count per group; in a narrow window it's a drop-down menu instead. Grouped lists can't be dragged.
+**Group by** in the top bar (**None**, **Project**, **Context**, **Due** or **Priority**) groups the list, with a band and count per group; in a narrow window it's a drop-down menu instead. Grouped lists can't be dragged. Priority bands run Highest, High, Medium, Low, Lowest, then **No priority**.
+
+The **Sort** menu beside the effort menu picks **Manual order** (your dragged order, the default) or **By priority**: highest first, tasks with no priority last, and tasks of the same priority keep their manual order. Each row shows its priority as a chip. A sorted list can't be dragged; switch back to **Manual order** to reorder. The sort isn't kept in saved lists.
 
 **Search tasks** narrows every list to tasks with all the words you type, in their text, note, heading, project, tags or context. The counts on the left follow, and `Esc` clears it. Context chips (**All**, `@calls`, `@office`…) show one context; click the chip again, or **All**, to show all. The effort menu shows tasks of 15 minutes, 30 minutes or an hour or less.
 
-**Save this list…** keeps a context, effort and grouping under a name, under Saved on the left. Its x forgets it; the tasks stay. An assistant can use the same search, grouping and filters.
+**Save this list…** keeps a context, effort and grouping under a name, under Saved on the left. Its x forgets it; the tasks stay. An assistant can use the same search, sort, grouping and filters.
 
 ## Find tasks in your notes
 At the top of **Next actions**, **Find tasks and projects** has an assistant read your last 90 days of notes (not the wiki, sources, templates or project notes) for things you'd do, or are waiting on, that aren't tasks yet. It runs only when you start it, here, in [Projects](app:projects) or from `⌘K`, with progress and **Stop** on its row.
@@ -85,6 +87,7 @@ Tasks are plain markdown, so other editors read them too.
 - A task belongs to a project when it's in the project's note or links `[[Project. Orbit App launch]]`.
 - A recurring task carries a rule such as `🔁 every week`. Tick it and the next one is added above, with its dates moved on.
 - Tasks inside quotes and callouts (`> - [ ] Call Maya`) work like any other.
+- A link is `[label](https://example.com)`. A row shows just the label, or a bare web address as its domain, and a click opens it in your browser without selecting the row. A ticket key such as `ORBIT-12` does the same once its prefix is set in [Settings › Notes](app:settings/notes). Write a key once, on the task or note it belongs to: the note and its project gather them.
 
 Rows show these under the task as one line of grey text with small icons, not emoji: an overdue date is red and one due in the next three days is darker. In its project's own note a row shows the project, not the note's name. If the tasks can't be read, the list says **Couldn't load the tasks.** with **Retry**.
 

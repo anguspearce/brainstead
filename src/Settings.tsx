@@ -13,6 +13,7 @@ import { nav, place, SettingsPane } from "./nav";
 import { chooseVault, FullDiskAccessCard, useRecheckOnFocus } from "./Permissions";
 import { lastSeen, useVaultVersion, vaultStatus } from "./state";
 import { LookPicker } from "./LookPicker";
+import { RefLinksSettings } from "./RefLinksSettings";
 import { DEFAULT_SCRIPTS, TemplaterDocsLink } from "./notes/TemplateRun";
 import { useDocDefaults, useDocLook } from "./docLook";
 import { Markdown } from "./md/Markdown";
@@ -771,6 +772,7 @@ function Notes() {
           <TemplaterDocsLink className="btn" />
         </div>
       </section>
+      <RefLinksSettings />
       {own > 0 && (
         <section className="sgroup">
           <h2 className="h3">Notes with their own look</h2>

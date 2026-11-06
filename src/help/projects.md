@@ -5,7 +5,7 @@ screens: [projects]
 order: 4
 summary: Every project note by status and area, with its next actions, waiting-fors and a flag when one is stuck.
 ---
-A project is a note named `Project. <name>.md`. Its properties hold its status, area and outcome. Its tasks are those written in it plus any task elsewhere that links it. In the daily and weekly summaries, area Personal goes under **Personal** and any other area under **Work done**, done projects included.
+A project is a note named `Project. <name>.md`. Its properties hold its status, area and outcome. Its tasks are those written in it, those in its documents, and any task elsewhere that links it. In the daily and weekly summaries, area Personal goes under **Personal** and any other area under **Work done**, done projects included.
 
 ## Find a project
 **Active**, **On hold**, **Someday** and **Completed** in the top bar switch by status, each with its count (in a narrow window the counts go, then the four become a drop-down menu). The list groups projects by area (no area last). Under each project's name, a grey line says how many next actions and waiting-fors it has and when the note or any of its tasks last changed. Click a project to open it on the right, and click it again to let it go. Click an area's name to fold its projects away or show them again; what's folded is remembered.
@@ -23,7 +23,19 @@ Click a project to open it. Edit its name, **Done looks like** (the outcome) and
 
 **Waiting for** and **Someday / maybe** list those tasks when there are any. Each waiting-for has **Draft nudge**, which asks [Ask](app:ask) for a follow-up to copy into Outlook or Teams.
 
-The side shows the project note, notes that link it, wiki pages it links, recent activity and what's done (cancelled tasks struck through).
+When the project has a tracker, **Current state** under its name shows the tracker's `## Current state` section (the first tracker by title, when there are several); the tracker's name beside it opens it.
+
+The side shows the project note, its **Documents**, **Tickets and links**, the other notes that link it (**Show all** when there are more than 12), wiki pages it links, recent activity and what's done (cancelled tasks struck through).
+
+**Tickets and links** appears once a prefix is set under **Reference links** in [Settings › Notes](app:settings/notes). It gathers each ticket key and link written in the project note's properties, its documents' properties and the project's open tasks, once each. Each says where it appears: **Project note**, a document's title, **Next action**, **Waiting for** or **Someday / maybe**. Click one to open it in your browser. It isn't shown when there are none. Write a key where it belongs, on the task or in a note's `tickets:` property, and the card collects it.
+
+## Documents
+A note belongs to a project when a line near its top, within its first 15 lines after the properties, says `Project: [[Project. <name>]]` (an alias such as `[[Project. <name>|<name>]]` is fine). Only the first such line counts. The line can be indented, but it must start with `Project:` and the link: a Dataview field (`Project:: [[…]]`), a bold label (`**Project:**`) and a line in a code block or an HTML comment don't count. Only notes belong to projects, not wiki pages, sources or templates. **Documents** lists these notes by type: Tracker, Plan, Findings, Review, Ticket, Prompt, then Other, each with its `summary` property when it has one.
+
+A document's tasks are the project's, on its page, on [Tasks](app:tasks) and in its counts, unless a task's own line links a different project, or a project note that isn't there. In the task's pane such a task says **From its note's Project: line** instead of offering Clear: to take it out of the project, move it to another note.
+
+## Trackers
+A tracker (`Tracker. <title>.md`) keeps where the work stands. Its shape is the opening with the `Project:` line, then `## Current state`, `## Blockers`, `## Next` and `## Log`, the Log a list of dated lines (`- 2026-10-02: …`) newest first. Any other sections stay below those. An assistant can put a tracker in this shape (reshape_pages, naming it), which adds the missing sections empty and sorts the Log without dropping a line, and can rewrite its Current state and add a Log line (write_current_state). Rewriting the Current state changes only its own text, above any `###` parts it has, and a Log line is spaced like the entries below it. Both are recorded in [Changes](app:review), where you can revert them.
 
 ## Change its status
 Under the tasks are **Mark complete** (or **Make active**), **Edit** and ⋯. They change only the note's status:
@@ -48,7 +60,7 @@ At the top of the **Active** projects, **Find tasks and projects** has an assist
 Or start one from ⌘K, or from an [Inbox](app:inbox) item with `P`.
 
 ## Link tasks to a project
-Add the project's link to a task's line, as in `- [ ] Draft the launch post [[Project. Orbit App launch]]`, or use Project in its ⋯ menu or the task pane on [Tasks](app:tasks). Rows show the project as a chip; click it to open the project.
+Add the project's link to a task's line, as in `- [ ] Draft the launch post [[Project. Orbit App launch]]`, or use Project in its ⋯ menu or the task pane on [Tasks](app:tasks). Rows show the project as a chip; click it to open the project. A task in one of the project's documents belongs to it already.
 
 ## Resize the panes
 Drag the line between the project list and the open project to resize them, and the line beside a project's side column; a double-click puts either back ([pane widths](help:settings-general)).

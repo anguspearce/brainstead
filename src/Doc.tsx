@@ -19,6 +19,8 @@ import { Icon } from "./icons";
 import { lineText } from "./md/highlight";
 import { headingSlug } from "./md/plugins";
 import { Markdown } from "./md/Markdown";
+import { tokenize, useRefPatterns } from "./md/refs";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { nav, openDoc, place, setLeaveGuard } from "./nav";
 import { bodyStartsWithH1, DOC_ACCENTS, DOC_STYLES, useDocLook } from "./docLook";
 import { DatePicker } from "./DatePicker";
@@ -53,7 +55,7 @@ import { AgentChangesCard } from "./Review";
 import { FindBar } from "./notes/FindBar";
 import { lineDiff } from "./notes/lineDiff";
 import { plainText } from "./md/plainText";
-import { LastTimeCard, NoteTasksCard, OutlineCard } from "./notes/SideCards";
+import { LastTimeCard, NoteTasksCard, OutlineCard, ReferencesCard } from "./notes/SideCards";
 import { ago, Dialog, LAYER_LABEL, LayerTag, Popover, Seg, useDebounced } from "./ui";
 import { TypePill } from "./typeTone";
 import { scriptsAllowed } from "./md/scripts";
@@ -873,6 +875,7 @@ export function DocScreen() {
                 {isWiki && <FactsCard path={s.path} stamp={doc.content} />}
                 <AgentChangesCard path={s.path} />
                 {isMarkdown(s.path) && s.layer !== "source" && <NoteTasksCard path={s.path} />}
+                {isMarkdown(s.path) && s.layer !== "source" && <ReferencesCard path={s.path} md={liveText ?? doc.content} />}
                 {isMarkdown(s.path) && <OutlineCard path={s.path} md={liveText ?? doc.content} />}
                 {isWiki && <SourcesCard cites={cites.order.length ? cites.order : cites.listed} />}
               </aside>
@@ -1265,7 +1268,7 @@ function Properties({ doc }: { doc: Doc }) {
             {k}
           </dt>
           <dd>
-            <PropValue v={v} tags={k === "tags"} />
+            <PropValue v={v} tags={k === "tags"} label={LABEL_PROPS.test(k)} />
           </dd>
         </div>
       ))}
@@ -1273,8 +1276,54 @@ function Properties({ doc }: { doc: Doc }) {
   );
 }
 
-/** `tags`: the tags property, each shown with its #, as tags are everywhere else. */
-function PropValue({ v, tags }: { v: unknown; tags?: boolean }) {
+/** A property value that is a web address, shown as written and opening in the browser; in a list
+ *  it keeps its chip. */
+function PropUrl({ text, href, chip }: { text: string; href: string; chip?: boolean }) {
+  return (
+    <a
+      className={`propurl ${chip ? "chip" : ""}`}
+      href={href}
+      title={href}
+      onClick={(e) => {
+        e.preventDefault();
+        void openUrl(href);
+      }}
+    >
+      {text}
+    </a>
+  );
+}
+
+/** A property value that is a reference key, as a chip that opens it in the browser. */
+function PropRef({ text, href }: { text: string; href: string }) {
+  return (
+    <button type="button" className="chip link ext" title={href} onClick={() => void openUrl(href)}>
+      {text}
+    </button>
+  );
+}
+
+/** Names whose values are labels, never links: the tags and the aliases. */
+const LABEL_PROPS = /^(tags?|aliases|alias)$/i;
+
+/** `tags`: the tags property, each shown with its #, as tags are everywhere else. A value that is
+ *  one web address is a link showing the address as written; one that is a reference key (once a
+ *  Reference links pattern is set), such as a ticket in `tickets`, is a link chip. `label` values
+ *  (tags, aliases) are never links. */
+export function PropValue({ v, tags, label }: { v: unknown; tags?: boolean; label?: boolean }) {
+  const patterns = useRefPatterns();
+  const link = (x: unknown) => {
+    if (label || tags || typeof x !== "string") return null;
+    const s = x.trim();
+    const segs = tokenize(s, { patterns });
+    const one = segs.length === 1 && "href" in segs[0] ? segs[0] : null;
+    if (!one) return null;
+    return one.kind === "ref"
+      ? { ref: true, text: one.text, href: one.href }
+      : one.kind === "url" && one.href === s
+        ? { ref: false, text: s, href: s }
+        : null;
+  };
   const items = Array.isArray(v) ? v : [v];
   if (items.every((x) => typeof x === "string" && /^\[\[[^\]]+\]\]$/.test(x))) {
     return (
@@ -1288,13 +1337,24 @@ function PropValue({ v, tags }: { v: unknown; tags?: boolean }) {
   if (Array.isArray(v) && v.every((x) => typeof x !== "object"))
     return (
       <span className="chips">
-        {v.map((x, i) => (
-          <span key={i} className="chip">
-            {tags ? `#${String(x).replace(/^#/, "")}` : String(x)}
-          </span>
-        ))}
+        {v.map((x, i) => {
+          const l = link(x);
+          return l ? (
+            l.ref ? (
+              <PropRef key={i} text={l.text} href={l.href} />
+            ) : (
+              <PropUrl key={i} text={l.text} href={l.href} chip />
+            )
+          ) : (
+            <span key={i} className="chip">
+              {tags ? `#${String(x).replace(/^#/, "")}` : String(x)}
+            </span>
+          );
+        })}
       </span>
     );
+  const one = link(v);
+  if (one) return one.ref ? <PropRef text={one.text} href={one.href} /> : <PropUrl text={one.text} href={one.href} />;
   return <>{propValue(v)}</>;
 }
 

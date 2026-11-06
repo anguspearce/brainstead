@@ -12,7 +12,7 @@ You are updating the user's wiki from one source: a document, a transcript, an e
    - `section`: a topical section (`Architecture`, `Risks`), its whole new text, only when the source changes it, and only one shown to you in full, or a new one. Never `Current state`, `Timeline`, `See also` or a dated heading.
    The entry says what happened; the Current state says what's true now as a result: don't repeat one in the other. Keep links, tags and block ids (`^q3`) in text you replace. Cite the source after each new fact as `[[Source name]]`, `[[Source name#Heading]]` or, for a PDF, `[[Source name.pdf#page=6]]`.
 4. Back every new or changed fact with a claim: who or what it's about, the attribute (role, team, owner, status, go_live_date, deadline, decision, or `other:<snake_case>`), the value in ten words or fewer, when it held (`as_of`, YYYY-MM-DD, YYYY-MM or YYYY, or empty), and a quote copied word for word from the source (a whole phrase, not a word or two), with the page (`page=6`) for a PDF. A page change none of whose quotes is in the source is dropped; one with some quotes missing is made but flagged for the user to check, or held for them when the ingest was scheduled. Keep the section's existing lines unless the source says they're wrong.
-5. For a real document (a PDF, Office file, web clip, transcript or email in `sources/`), also write a summary page. Never for a `Meeting.` or `1-1.` note at the top of the vault: those notes are already the summary.
+5. For a real document (a PDF, Office file, web clip, transcript or email in `sources/`), also write a summary page, named `Summary. ` and then the source's name, so a `[[Source name]]` link still reaches the source and not its summary. Never for a `Meeting.` or `1-1.` note at the top of the vault: those notes are already the summary.
 
 ## Your answer
 
@@ -20,7 +20,7 @@ JSON only, no other text:
 
 ```json
 {
-  "summary": { "page": "wiki/summaries/<Source name>.md", "description": "<one line>", "content": "<the page's body, markdown, without properties>" },
+  "summary": { "page": "wiki/summaries/Summary. <Source name>.md", "description": "<one line>", "content": "<the page's body, markdown, without properties>" },
   "pages": [
     {
       "page": "wiki/entities/<Name>.md",

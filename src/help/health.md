@@ -62,6 +62,8 @@ It checks that no text is lost before saving. Each page is one change in [Change
 
 A page that needs you says why: a heading whose year it can't tell, two summing-up sections, two entries citing the same note on different dates, or text in the Timeline that isn't an entry. Fix that (usually a heading) and it reshapes by itself, or click **Reshape anyway** and check the result in Changes.
 
+Tracker notes have a shape of their own ([Trackers](help:projects)) and aren't listed here: they're your notes, not the wiki. An assistant reshapes a tracker when you name it, the same way and with the same checks.
+
 ## Write the missing Current states
 **Pages with no Current state** lists pages with a Timeline but no Current state; they aren't counted as needing a decision. **Write 5** has the assistant's cheap model write one for five pages, so you can check them in [Changes](app:review) first; **Write all** does the rest. It uses only the page's opening text and newest Timeline entries, and leaves alone a page with nothing current to say. Each page is one change, with **Revert all** for the run. **Stop** ends the run after the pages in progress.
 
