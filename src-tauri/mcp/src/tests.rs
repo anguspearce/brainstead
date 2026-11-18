@@ -652,7 +652,14 @@ fn summaries_by_day_or_the_latest() {
     assert!(week.contains("2026-W39") && week.contains("A quiet week"), "{week}");
     assert!(ok(&f.ctx, "summary", json!({"kind": "weekly"})).contains("A quiet week"));
     assert!(refused(&f.ctx, "summary", json!({"day": "2026-09-29"})).contains("no daily summary for 2026-09-29"));
-    assert!(refused(&f.ctx, "summary", json!({"kind": "monthly"})).contains("kind is daily or weekly"));
+    assert!(refused(&f.ctx, "summary", json!({"kind": "monthly"})).contains("kind is daily, weekly or brief"));
+    // A brief: the note itself, the latest or a day's.
+    std::fs::create_dir_all(f.ctx.vault.join("Briefs")).unwrap();
+    std::fs::write(f.ctx.vault.join("Briefs/Brief 2026-10-01.md"), "---\ntype: brief\n---\n\n# Brief\n\n## Themes\n\nLaunch moved.\n")
+        .unwrap();
+    let b = ok(&f.ctx, "summary", json!({"kind": "brief"}));
+    assert!(b.contains("The brief for 2026-10-01, from Briefs/Brief 2026-10-01.md") && b.contains("Launch moved."), "{b}");
+    assert!(refused(&f.ctx, "summary", json!({"kind": "brief", "day": "2026-09-01"})).contains("start_run daily_brief"));
 }
 
 #[test]

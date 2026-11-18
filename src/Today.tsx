@@ -237,6 +237,7 @@ export function TodayScreen() {
         <aside className="tside">
           <ProcessCard />
           {hasSync && s.syncEnabled && <MeetingsCard />}
+          <SummaryCard kind="brief" />
           <SummaryCard kind="weekly" />
           <SummaryCard kind="daily" />
           <HeldCard />
@@ -460,10 +461,10 @@ function summaryDate(label: string, today: string): string {
   return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
 }
 
-/** The latest daily or weekly summary, folded to a line until opened: its date and whether the
- *  next run is due or one is running. Shown when
- *  Brainstead runs the summaries or a block is on file. */
-function SummaryCard({ kind }: { kind: "daily" | "weekly" }) {
+/** The latest daily or weekly summary, or daily brief, folded to a line until opened: its date and
+ *  whether the next run is due or one is running. Shown when Brainstead runs the summaries (for the
+ *  brief, when it's switched on) or one is on file. */
+function SummaryCard({ kind }: { kind: "daily" | "weekly" | "brief" }) {
   const s = useStore(settings);
   const v = useVaultVersion();
   const [open, setOpen] = useViewState<boolean>(`today.${kind}Summary`, false);
@@ -494,10 +495,11 @@ function SummaryCard({ kind }: { kind: "daily" | "weekly" }) {
       live = false;
     };
   }, [kind, s.summariesHere, v, tries, changed]);
-  const name = kind === "daily" ? "Daily summary" : "Weekly summary";
-  if (!s.summariesHere && !block && !failed) return null;
+  const name = kind === "daily" ? "Daily summary" : kind === "brief" ? "Daily brief" : "Weekly summary";
+  const on = kind === "brief" ? !!s.summariesHere && !!s.summaries?.briefEnabled : !!s.summariesHere;
+  if (!on && !block && !failed) return null;
   // This period's run, for whether it failed.
-  const target = kind === "daily" ? today : isoWeek(today);
+  const target = kind === "weekly" ? isoWeek(today) : today;
   const run = status?.runs.find((r) => r.kind === kind && r.target === target);
   const next = status?.next[kind];
   const line = status?.running.includes(kind)
@@ -508,7 +510,8 @@ function SummaryCard({ kind }: { kind: "daily" | "weekly" }) {
         ? nextLabel(next)
         : "";
   const when = block ? summaryDate(block.label, today) : "Not written yet";
-  const anchor = block?.heading.replace(/^#+\s*/, "");
+  // A brief is a note of its own: opened at its top.
+  const anchor = kind === "brief" ? undefined : block?.heading.replace(/^#+\s*/, "");
   return (
     <section className="rcard sumcard" aria-label={name}>
       <button
@@ -539,13 +542,13 @@ function SummaryCard({ kind }: { kind: "daily" | "weekly" }) {
         (block ? (
           <>
             <div className="sumbody">
-              <Markdown content={block.text.replace(/^## .*\n/, "")} path={block.file} root={s.vaultPath ?? ""} />
+              <Markdown content={block.text.replace(/^#{1,2} .*\n/, "")} path={block.file} root={s.vaultPath ?? ""} />
             </div>
             <div className="rfoot">
               <button
                 type="button"
                 className="btn sm ghost ract"
-                title={`Open ${block.file} at ${anchor}`}
+                title={anchor ? `Open ${block.file} at ${anchor}` : `Open ${block.file}`}
                 onClick={() => openDoc(block.file, { anchor })}
               >
                 Open note
@@ -556,7 +559,11 @@ function SummaryCard({ kind }: { kind: "daily" | "weekly" }) {
         ) : (
           !failed && (
             <p className="faint rempty">
-              {kind === "daily" ? "Today's summary isn't written yet." : "This week's summary isn't written yet."}
+              {kind === "daily"
+                ? "Today's summary isn't written yet."
+                : kind === "brief"
+                  ? "Today's brief isn't written yet."
+                  : "This week's summary isn't written yet."}
             </p>
           )
         ))}

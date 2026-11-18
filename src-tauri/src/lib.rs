@@ -99,7 +99,11 @@ fn settings_write(app: AppHandle, st: State<AppState>, settings: Settings) -> Re
     // time rather than catching up at once.
     let mut stamp = prev.summaries.changed(&next.summaries);
     if next.summaries_here && !prev.summaries_here {
-        stamp = vec![brainstead_core::reviews::ReviewKind::Daily, brainstead_core::reviews::ReviewKind::Weekly];
+        stamp = vec![
+            brainstead_core::reviews::ReviewKind::Daily,
+            brainstead_core::reviews::ReviewKind::Weekly,
+            brainstead_core::reviews::ReviewKind::Brief,
+        ];
     }
     if !stamp.is_empty() {
         app.state::<reviews::Reviews>().stamp(&stamp);

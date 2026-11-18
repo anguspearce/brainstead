@@ -48,6 +48,16 @@ pub fn latest(kind: ReviewKind, today: NaiveDate, read: impl Fn(&str) -> Option<
     let targets: Vec<Target> = match kind {
         ReviewKind::Daily => (0..=DAILY_LOOK_BACK).map(|i| Target::Day(today - Duration::days(i))).collect(),
         ReviewKind::Weekly => (0..=WEEKLY_LOOK_BACK).map(|i| Target::week_of(today - Duration::weeks(i))).collect(),
+        // A brief is a note of its own, not a block in a monthly file.
+        ReviewKind::Brief => {
+            return (0..=DAILY_LOOK_BACK).find_map(|i| {
+                let day = (today - Duration::days(i)).to_string();
+                let file = crate::brief::path(&day);
+                let text = cached(&file)?;
+                let body = text[crate::frontmatter::split(&text).body_start..].trim().to_string();
+                Some(Latest { heading: format!("# Brief {day}"), label: day, text: body, file })
+            })
+        }
     };
     targets.into_iter().find_map(|t| {
         let w = window(t);

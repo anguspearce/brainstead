@@ -26,6 +26,8 @@ export const DEFAULT_SCHEDULE: SummarySchedule = {
   weeklyEnabled: false,
   weeklyDay: "fri",
   weeklyTime: "16:00",
+  briefEnabled: false,
+  briefTime: "07:00",
 };
 
 export const DEFAULT_WEEKLY_REVIEW: WeeklyReviewTime = { day: "fri", time: "16:00" };
@@ -79,7 +81,7 @@ export function Jobs() {
   const set = (patch: Partial<SummarySchedule>) => settings.update({ summaries: { ...sch, ...patch } });
   const setReview = (patch: Partial<WeeklyReviewTime>) => settings.update({ weeklyReview: { ...wr, ...patch } });
   const [dailyFor, setDailyFor] = useState("");
-  const runNow = (kind: "daily" | "weekly", day?: string) =>
+  const runNow = (kind: "daily" | "weekly" | "brief", day?: string) =>
     api
       .reviewRunNow(kind, day)
       .then((id) => {
@@ -87,8 +89,8 @@ export function Jobs() {
         nav.go("ask");
       })
       .catch((e) => toast(String(e), undefined, "bad"));
-  const running = (k: "daily" | "weekly") => !!st?.running.includes(k);
-  const last = (k: "daily" | "weekly") => st?.runs.find((r) => r.kind === k) ?? null;
+  const running = (k: "daily" | "weekly" | "brief") => !!st?.running.includes(k);
+  const last = (k: "daily" | "weekly" | "brief") => st?.runs.find((r) => r.kind === k) ?? null;
 
   return (
     <>
@@ -239,11 +241,34 @@ export function Jobs() {
           </button>
           <Switch label="Weekly summary" on={sch.weeklyEnabled} onChange={(v) => set({ weeklyEnabled: v })} />
         </div>
+        <div className={`job ${here ? "" : "off"}`}>
+          <div className="t">
+            <div className="pt">Daily brief</div>
+            <div className="faint">
+              Today's note in Briefs/: the themes of what came in since yesterday, your actions, what you're waiting for and what you can
+              archive.
+            </div>
+            <RunLine run={last("brief")} next={here && sch.briefEnabled ? (st?.next.brief ?? null) : null} running={running("brief")} />
+          </div>
+          <label className="jtime">
+            <span className="muted">Every day at</span>
+            <TimeField value={sch.briefTime ?? "07:00"} onChange={(t) => set({ briefTime: t })} label="Daily brief time" />
+          </label>
+          <button
+            type="button"
+            className="btn sm"
+            title={running("brief") ? "Stop the brief" : "Write today's brief now, whether or not it's scheduled"}
+            onClick={() => void (running("brief") ? api.reviewsStop("brief") : runNow("brief"))}
+          >
+            {running("brief") ? "Stop" : "Run now"}
+          </button>
+          <Switch label="Daily brief" on={!!sch.briefEnabled} onChange={(v) => set({ briefEnabled: v })} />
+        </div>
       </div>
       <p className="faint">
         Brainstead gathers each summary's notes, tasks and Claude Code sessions itself, the model (Settings › AI assistants) writes it from
-        them with read-only tools, and Brainstead puts it at the top of the month's summaries note. Run now works whether or not the
-        schedule is on.
+        them with read-only tools, and Brainstead puts it at the top of the month's summaries note. The brief is a note of its own each day;
+        the model writes only its themes. Run now works whether or not the schedule is on.
       </p>
       <AutomatedTools />
       <DailyCheck />
@@ -282,7 +307,7 @@ function RunRow({ r }: { r: ReviewRun }) {
       />
       <div className="t">
         <div className="pt">
-          {r.kind === "daily" ? "Daily summary" : "Weekly summary"} {r.target}
+          {r.kind === "daily" ? "Daily summary" : r.kind === "brief" ? "Daily brief" : "Weekly summary"} {r.target}
           <span className="faint"> · {r.trigger === "schedule" ? "scheduled" : "run now"}</span>
         </div>
         <div className="faint">

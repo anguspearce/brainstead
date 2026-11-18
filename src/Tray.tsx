@@ -162,7 +162,7 @@ async function load(): Promise<TrayData> {
     api.changesList().catch(() => null),
     api.ingestRuns().catch(() => []),
     api.dailyCheckStatus().catch(() => ({ running: false }) as DailyCheckStatus),
-    api.reviewsStatus().catch(() => ({ runs: [], next: { daily: null, weekly: null }, running: [] }) as ReviewsStatus),
+    api.reviewsStatus().catch(() => ({ runs: [], next: { daily: null, weekly: null, brief: null }, running: [] }) as ReviewsStatus),
     api.contradictionsReport().catch(() => null),
     api.weekprepJob().catch(() => null),
     api.findStatus().catch(() => null),

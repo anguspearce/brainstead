@@ -20,6 +20,8 @@ use super::target::{week_label, Target};
 pub enum ReviewKind {
     Daily,
     Weekly,
+    /// The daily brief (D-20261118-14): today's, not a review of the day before.
+    Brief,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,6 +59,15 @@ pub struct ScheduleSettings {
     pub weekly_enabled: bool,
     pub weekly_day: Weekday,
     pub weekly_time: String,
+    /// The daily brief: off unless turned on, at 07:00 unless set.
+    #[serde(default)]
+    pub brief_enabled: bool,
+    #[serde(default = "brief_time")]
+    pub brief_time: String,
+}
+
+fn brief_time() -> String {
+    "07:00".into()
 }
 
 /// When you do the guided weekly review (Today reminds you then), not a job: Friday 16:00 unless
@@ -91,6 +102,8 @@ impl Default for ScheduleSettings {
             weekly_enabled: false,
             weekly_day: Weekday::Fri,
             weekly_time: "16:00".into(),
+            brief_enabled: false,
+            brief_time: brief_time(),
         }
     }
 }
@@ -98,7 +111,7 @@ impl Default for ScheduleSettings {
 impl ScheduleSettings {
     /// Why the settings can't be saved, in words for the user.
     pub fn validate(&self) -> Result<(), String> {
-        for (k, v) in [("dailyTime", &self.daily_time), ("weeklyTime", &self.weekly_time)] {
+        for (k, v) in [("dailyTime", &self.daily_time), ("weeklyTime", &self.weekly_time), ("briefTime", &self.brief_time)] {
             if parse_time(v).is_none() {
                 return Err(format!("summaries.{k} must be HH:MM (24-hour)"));
             }
@@ -116,6 +129,9 @@ impl ScheduleSettings {
         }
         if self.weekly_enabled != next.weekly_enabled || self.weekly_day != next.weekly_day || self.weekly_time != next.weekly_time {
             out.push(ReviewKind::Weekly);
+        }
+        if self.brief_enabled != next.brief_enabled || self.brief_time != next.brief_time {
+            out.push(ReviewKind::Brief);
         }
         out
     }
@@ -185,6 +201,7 @@ pub fn target_for(kind: ReviewKind, due: NaiveDateTime) -> Target {
             let day = if weekly_target(due).1 { due.date() - Duration::days(7) } else { due.date() };
             Target::week_of(day)
         }
+        ReviewKind::Brief => Target::Day(due.date()),
     }
 }
 
@@ -193,6 +210,7 @@ pub fn target_for(kind: ReviewKind, due: NaiveDateTime) -> Target {
 pub struct LastRun {
     pub daily: Option<NaiveDateTime>,
     pub weekly: Option<NaiveDateTime>,
+    pub brief: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -214,6 +232,7 @@ pub fn compute_due(s: &ScheduleSettings, last: &LastRun, now: NaiveDateTime) -> 
     };
     check(ReviewKind::Daily, s.daily_enabled, last_occurrence(now, &s.daily_time, None), last.daily);
     check(ReviewKind::Weekly, s.weekly_enabled, last_occurrence(now, &s.weekly_time, Some(s.weekly_day)), last.weekly);
+    check(ReviewKind::Brief, s.brief_enabled, last_occurrence(now, &s.brief_time, None), last.brief);
     due
 }
 
@@ -231,12 +250,15 @@ pub struct NextDue {
     pub daily: Option<NaiveDateTime>,
     #[serde(serialize_with = "super::ser_time_opt")]
     pub weekly: Option<NaiveDateTime>,
+    #[serde(serialize_with = "super::ser_time_opt")]
+    pub brief: Option<NaiveDateTime>,
 }
 
 pub fn next_due(s: &ScheduleSettings, now: NaiveDateTime) -> NextDue {
     NextDue {
         daily: s.daily_enabled.then(|| next_occurrence(now, &s.daily_time, None)),
         weekly: s.weekly_enabled.then(|| next_occurrence(now, &s.weekly_time, Some(s.weekly_day))),
+        brief: s.brief_enabled.then(|| next_occurrence(now, &s.brief_time, None)),
     }
 }
 
@@ -309,16 +331,16 @@ mod tests {
         let none = LastRun::default();
         let kinds = |d: Vec<Due>| d.into_iter().map(|d| d.kind).collect::<Vec<_>>();
         assert_eq!(kinds(compute_due(&on(), &none, at(2026, 9, 8, 10, 0))), [ReviewKind::Daily, ReviewKind::Weekly]);
-        let ran = LastRun { daily: Some(at(2026, 9, 8, 6, 30)), weekly: Some(at(2026, 9, 4, 16, 0)) };
+        let ran = LastRun { daily: Some(at(2026, 9, 8, 6, 30)), weekly: Some(at(2026, 9, 4, 16, 0)), brief: None };
         assert!(compute_due(&on(), &ran, at(2026, 9, 8, 10, 0)).is_empty());
         // A later stamp (the settings just changed) holds it off too.
-        let later = LastRun { daily: Some(at(2026, 9, 8, 9, 0)), weekly: None };
+        let later = LastRun { daily: Some(at(2026, 9, 8, 9, 0)), weekly: None, brief: None };
         assert!(compute_due(&ScheduleSettings { weekly_enabled: false, ..on() }, &later, at(2026, 9, 8, 10, 0)).is_empty());
         // Missed yesterday's 06:30 and today's hasn't come: yesterday's is due, once.
         assert_eq!(
             compute_due(
                 &ScheduleSettings { weekly_enabled: false, ..on() },
-                &LastRun { daily: Some(at(2026, 9, 5, 6, 30)), weekly: None },
+                &LastRun { daily: Some(at(2026, 9, 5, 6, 30)), weekly: None, brief: None },
                 at(2026, 9, 8, 6, 0)
             ),
             [Due { kind: ReviewKind::Daily, due_at: at(2026, 9, 7, 6, 30) }]
@@ -331,7 +353,7 @@ mod tests {
         let due = compute_due(&on(), &LastRun::default(), at(2026, 9, 8, 10, 0));
         assert_eq!(to_start(&due, &[]), [due[0]]);
         // Still running: the weekly keeps waiting, and stays due.
-        let after = compute_due(&on(), &LastRun { daily: Some(due[0].due_at), weekly: None }, at(2026, 9, 8, 10, 1));
+        let after = compute_due(&on(), &LastRun { daily: Some(due[0].due_at), weekly: None, brief: None }, at(2026, 9, 8, 10, 1));
         assert!(to_start(&after, &[ReviewKind::Daily]).is_empty());
         // The daily finished (or failed): the weekly goes.
         assert_eq!(to_start(&after, &[]), [Due { kind: ReviewKind::Weekly, due_at: at(2026, 9, 4, 16, 0) }]);
@@ -360,7 +382,27 @@ mod tests {
         assert_eq!((review.day, review.time.as_str()), (Weekday::Fri, "09:00"));
         assert_eq!(
             next_due(&on(), at(2026, 9, 8, 10, 0)),
-            NextDue { daily: Some(at(2026, 9, 9, 6, 30)), weekly: Some(at(2026, 9, 11, 16, 0)) }
+            NextDue { daily: Some(at(2026, 9, 9, 6, 30)), weekly: Some(at(2026, 9, 11, 16, 0)), brief: None }
         );
+    }
+
+    #[test]
+    fn the_brief_is_due_each_day_at_its_time_and_is_for_that_day() {
+        let s = ScheduleSettings { brief_enabled: true, brief_time: "07:00".into(), ..Default::default() };
+        let none = LastRun::default();
+        assert!(compute_due(&s, &none, at(2026, 11, 18, 6, 59)).iter().any(|d| d.kind == ReviewKind::Brief), "never run: one is due");
+        let due = compute_due(&s, &LastRun { brief: Some(at(2026, 11, 17, 7, 0)), ..none }, at(2026, 11, 18, 7, 1));
+        assert_eq!(due, vec![Due { kind: ReviewKind::Brief, due_at: at(2026, 11, 18, 7, 0) }]);
+        assert!(compute_due(&s, &LastRun { brief: Some(at(2026, 11, 18, 7, 0)), ..none }, at(2026, 11, 18, 9, 0)).is_empty());
+        assert_eq!(target_for(ReviewKind::Brief, at(2026, 11, 18, 7, 0)), Target::Day(day(2026, 11, 18)));
+        assert_eq!(next_due(&s, at(2026, 11, 18, 9, 0)).brief, Some(at(2026, 11, 19, 7, 0)));
+        // Off by default, and an old settings file without it reads as off at 07:00.
+        let old: ScheduleSettings = serde_json::from_str(
+            r#"{"dailyEnabled":true,"dailyTime":"06:30","weeklyEnabled":false,"weeklyDay":"fri","weeklyTime":"16:00"}"#,
+        )
+        .unwrap();
+        assert_eq!((old.brief_enabled, old.brief_time.as_str()), (false, "07:00"));
+        assert_eq!(ScheduleSettings::default().changed(&s), vec![ReviewKind::Brief]);
+        assert!(ScheduleSettings { brief_time: "7am".into(), ..s }.validate().is_err());
     }
 }

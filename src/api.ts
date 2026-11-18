@@ -156,6 +156,10 @@ export interface SummarySchedule {
   weeklyEnabled: boolean;
   weeklyDay: Weekday;
   weeklyTime: string;
+  /** The daily brief (Briefs/Brief YYYY-MM-DD.md). */
+  briefEnabled?: boolean;
+  /** HH:MM, local; 07:00 when unset. */
+  briefTime?: string;
 }
 
 export interface WeeklyReviewTime {
@@ -166,7 +170,7 @@ export interface WeeklyReviewTime {
 
 export interface ReviewRun {
   id: string;
-  kind: "daily" | "weekly";
+  kind: "daily" | "weekly" | "brief";
   /** 2026-10-01 or 2026-W40. */
   target: string;
   trigger: "schedule" | "manual" | "retry" | "unattended";
@@ -186,8 +190,8 @@ export interface ReviewRun {
 
 export interface ReviewsStatus {
   runs: ReviewRun[];
-  next: { daily: string | null; weekly: string | null };
-  running: ("daily" | "weekly")[];
+  next: { daily: string | null; weekly: string | null; brief: string | null };
+  running: ("daily" | "weekly" | "brief")[];
 }
 
 /** A daily or weekly summary block, as Today shows it. */
@@ -1131,7 +1135,7 @@ export const api = {
   dailyCheckStatus: () => invoke<DailyCheckStatus>("daily_check_status"),
   dailyCheckRunNow: (unattended = false) => invoke<void>("daily_check_run_now", { unattended }),
   dailyCheckStop: () => invoke<void>("daily_check_stop"),
-  reviewsStop: (kind: "daily" | "weekly") => invoke<void>("reviews_stop", { kind }),
+  reviewsStop: (kind: "daily" | "weekly" | "brief") => invoke<void>("reviews_stop", { kind }),
   contradictionsStop: () => invoke<void>("contradictions_stop"),
   onDailyCheckChanged: (f: () => void): Promise<UnlistenFn> => listen("daily-check-changed", () => f()),
   contradictionsReport: () => invoke<ContradictionsReport>("contradictions_report"),
@@ -1514,11 +1518,11 @@ export const api = {
   // Scheduled reviews (src-tauri/src/reviews.rs, src/Jobs.tsx).
   reviewsStatus: () => invoke<ReviewsStatus>("reviews_status"),
   /** `day` (YYYY-MM-DD) runs it for that day, or that day's week. */
-  reviewRunNow: (kind: "daily" | "weekly", day?: string, unattended = false) =>
+  reviewRunNow: (kind: "daily" | "weekly" | "brief", day?: string, unattended = false) =>
     invoke<string>("review_run_now", { kind, day: day ?? null, unattended }),
   reviewUndo: (id: string) => invoke<void>("review_undo", { id }),
   /** The latest daily summary block (within a month) or weekly one (this week's or last week's). */
-  reviewLatest: (kind: "daily" | "weekly") => invoke<LatestSummary | null>("review_latest", { kind }),
+  reviewLatest: (kind: "daily" | "weekly" | "brief") => invoke<LatestSummary | null>("review_latest", { kind }),
   onReviewsChanged: (f: () => void): Promise<UnlistenFn> => listen("reviews-changed", () => f()),
   /** A review run started: its chat id and title, to open as a tab. */
   /** A review run started; `effort` is the one it runs at (its job's), null for the model's own default. */

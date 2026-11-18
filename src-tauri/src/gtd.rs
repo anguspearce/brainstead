@@ -204,6 +204,11 @@ fn forget_done(file: &Path, path: &str) -> Result<(), EditError> {
     })
 }
 
+/// The captures clarified (or ingested) from the Inbox: their paths.
+pub fn clarified() -> Vec<String> {
+    captures_done()
+}
+
 /// A source an ingest finished with: it leaves the Inbox whether or not a page cites it now, as its
 /// actions are on its initiatives (D-20261118-09). Kept in Sources.
 pub fn ingested(path: &str) {

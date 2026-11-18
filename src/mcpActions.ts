@@ -1506,9 +1506,10 @@ async function changesTool(a: Args): Promise<string | Listing> {
 // ---- runs
 
 /** The summaries' runs, by name. */
-const SUMMARY_RUNS: Record<string, "daily" | "weekly"> = {
+const SUMMARY_RUNS: Record<string, "daily" | "weekly" | "brief"> = {
   daily_summary: "daily",
   weekly_summary: "weekly",
+  daily_brief: "brief",
 };
 
 async function startRun(a: Args, r: McpRequest): Promise<string> {
@@ -3435,6 +3436,8 @@ const settingRows = (): SettingRow[] => [
   ["summaries.weeklyEnabled", "Jobs & schedule", "Weekly summary", "bool", false],
   ["summaries.weeklyDay", "Jobs & schedule", "Weekly summary day", "day", null],
   ["summaries.weeklyTime", "Jobs & schedule", "Weekly summary time", "time", null],
+  ["summaries.briefEnabled", "Jobs & schedule", "Daily brief", "bool", false],
+  ["summaries.briefTime", "Jobs & schedule", "Daily brief time", "time", null],
   ["weeklyReview.day", "Jobs & schedule", "Weekly review day", "day", null],
   ["weeklyReview.time", "Jobs & schedule", "Weekly review time", "time", null],
   ["weekprepEnabled", "Jobs & schedule", "Prepare the weekly review", "bool", true],

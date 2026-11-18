@@ -32,6 +32,18 @@ pub const UNFILED: &str = "wiki/initiatives/Unfiled.md";
 pub const ACTIONS: &str = "Actions";
 pub const DECISIONS: &str = "Decisions";
 
+/// Every initiative page in the vault, read, whatever its status.
+pub fn all(root: &std::path::Path) -> Vec<Initiative> {
+    let Ok(rd) = std::fs::read_dir(root.join(FOLDER)) else { return vec![] };
+    rd.flatten()
+        .filter_map(|e| {
+            let rel = format!("{FOLDER}/{}", e.file_name().to_string_lossy());
+            let text = std::fs::read_to_string(e.path()).ok()?;
+            is_initiative(&rel).then(|| parse(&rel, &text))
+        })
+        .collect()
+}
+
 /// Whether `rel` is an initiative page.
 pub fn is_initiative(rel: &str) -> bool {
     rel.starts_with("wiki/initiatives/") && rel.ends_with(".md") && rel.matches('/').count() == 2

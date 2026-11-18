@@ -26,6 +26,7 @@ Only one app should write them, so Brainstead runs them only when **Brainstead r
 
 - **Daily summary**: every day at 06:30 by default.
 - **Weekly summary**: Friday at 16:00 by default. This is the AI-written block for the week, not the [Weekly review](app:weekly) you go through yourself.
+- **Daily brief**: every day at 07:00 by default, a note of its own in `Briefs/` (`Brief 2026-11-18`): **Themes**, what the sources that came in since yesterday are about, which the model writes; then **Your actions**, **Waiting for** (the delegated actions, the ones to chase first) and **You can archive** (an initiative whose actions are all closed, a source nothing came of), which Brainstead lists from your [initiatives](help:wiki) itself. When nothing came in, no model is asked. **Run now** writes today's again, replacing it.
 
 Brainstead gathers the notes, tasks and Claude Code sessions, the model writes the block, and Brainstead puts it at the top of the month's summaries note. While the vault is read-only, a scheduled summary is held in [Changes](app:review), and **Run now** needs Read-only off in [Settings › Vault](app:settings/vault).
 

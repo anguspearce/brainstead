@@ -44,7 +44,7 @@ The To process card shows:
 - **Weekly review day** with **Start**, from the review's time on its day until the end of the next day (Friday 16:00 unless changed in [Settings › Jobs & schedule](app:settings/jobs)). While a review is paused it shows **Weekly review, paused** with **Carry on**. Either goes straight into the [Weekly review](app:weekly).
 
 ## Read the daily and weekly summaries
-The **Daily summary** card shows today's or the most recent daily summary, folded to one line: its date, and whether a run is going or when the next is due. Click the line to open or fold it; Brainstead remembers. **Open note** opens the summary note at that day's heading.
+The **Daily brief** card, while the brief is on, shows today's or the most recent brief, folded to one line the same way; **Open note** opens it. The **Daily summary** card shows today's or the most recent daily summary, folded to one line: its date, and whether a run is going or when the next is due. Click the line to open or fold it; Brainstead remembers. **Open note** opens the summary note at that day's heading.
 
 The **Weekly summary** card above it works the same way. Both show when **Brainstead runs the daily and weekly summaries** is on in [Settings › Jobs & schedule](app:settings/jobs), or when there's a summary to show.
 

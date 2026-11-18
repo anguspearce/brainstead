@@ -45,7 +45,7 @@ describe("the menu-bar window", () => {
     const going = runningOf({
       ingests: [ingest("i1", "ingest", "sources/Plan.pdf"), ingest("m1", "meeting", "sources/Standup transcript.vtt")],
       dailyCheck: { running: false } as DailyCheckStatus,
-      reviews: { runs: [], next: { daily: null, weekly: null }, running: ["daily"] } as unknown as ReviewsStatus,
+      reviews: { runs: [], next: { daily: null, weekly: null, brief: null }, running: ["daily"] } as unknown as ReviewsStatus,
       contradictions: true,
       weekprep: { running: "2026-W41" } as WeekPrepJob,
       find: { run: { status: "running", done: 2, batches: 4, found: 3 } } as FindState,
@@ -64,7 +64,7 @@ describe("the menu-bar window", () => {
     const idle = runningOf({
       ingests: [],
       dailyCheck: { running: false } as DailyCheckStatus,
-      reviews: { runs: [], next: { daily: null, weekly: null }, running: [] } as unknown as ReviewsStatus,
+      reviews: { runs: [], next: { daily: null, weekly: null, brief: null }, running: [] } as unknown as ReviewsStatus,
       contradictions: false,
       weekprep: null,
       find: { run: { status: "done" } } as FindState,

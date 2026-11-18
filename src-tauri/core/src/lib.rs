@@ -9,6 +9,7 @@ pub mod activity;
 pub mod ask;
 pub mod assets;
 pub mod bridge;
+pub mod brief;
 pub mod canonical;
 pub mod catalogue;
 pub mod changes;

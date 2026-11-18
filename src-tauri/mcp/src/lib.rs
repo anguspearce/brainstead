@@ -622,9 +622,9 @@ pub fn tools() -> Vec<Value> {
             }), &["action"])),
         // Runs and the wiki.
         tool("start_run", "Start a run", Run,
-            "Starts work Brainstead does with a model on the user's account, as its screens do (needs the app): ingest sources into the wiki (notes, PDFs, Office files or images; their changes are made and recorded in Changes), the daily check, the daily or weekly summary (daily_summary, weekly_summary; date picks the day or week; summary reads them), the weekly review's preparation (weekly_prep: suggestions for each step of the review's week, a paused review's own as on the screen, nothing changed until one is accepted; weekly_review lists them), a look through the last 90 days of notes for tasks and projects (find_tasks; list_suggestions lists what it found), a contradictions check, or a meeting note from a Teams transcript (list_transcripts; once made, the note is ingested and the transcript moved to the Trash, as the user's settings say; with ingest_existing, the note that's there already is kept as it is instead and followed through the same way, as the card's Ingest the existing note does). Write Current state has its own tool, write_current_state. It returns once started; run_status shows progress and stop_run stops it.",
+            "Starts work Brainstead does with a model on the user's account, as its screens do (needs the app): ingest sources into the wiki (notes, PDFs, Office files or images; their changes are made and recorded in Changes), the daily check, the daily or weekly summary (daily_summary, weekly_summary; date picks the day or week; summary reads them), the daily brief (daily_brief: themes of what came in, the user's actions, waiting-fors and what can be archived, as Briefs/Brief YYYY-MM-DD.md; date picks the day, today by default; summary kind brief reads it), the weekly review's preparation (weekly_prep: suggestions for each step of the review's week, a paused review's own as on the screen, nothing changed until one is accepted; weekly_review lists them), a look through the last 90 days of notes for tasks and projects (find_tasks; list_suggestions lists what it found), a contradictions check, or a meeting note from a Teams transcript (list_transcripts; once made, the note is ingested and the transcript moved to the Trash, as the user's settings say; with ingest_existing, the note that's there already is kept as it is instead and followed through the same way, as the card's Ingest the existing note does). Write Current state has its own tool, write_current_state. It returns once started; run_status shows progress and stop_run stops it.",
             schema(json!({
-                "run": {"type": "string", "enum": ["ingest", "daily_check", "daily_summary", "weekly_summary", "weekly_prep", "find_tasks", "contradictions", "meeting_note"], "description": "Which run."},
+                "run": {"type": "string", "enum": ["ingest", "daily_check", "daily_summary", "weekly_summary", "daily_brief", "weekly_prep", "find_tasks", "contradictions", "meeting_note"], "description": "Which run."},
                 "sources": {"type": "array", "items": {"type": "string"}, "description": "For ingest: vault paths to ingest, in sources/ or notes (pending_sources lists those not yet ingested): notes and text, PDFs, Office files and images; anything else is refused. All are checked before any is queued. Every ingest waits in one queue with the app's own, one at a time, oldest source first (by the date in its name, else the file's), so the order given and how many calls make no difference."},
                 "transcript": {"type": "string", "description": "For meeting_note: the transcript's path."},
                 "ingest_existing": {"type": "boolean", "description": "For meeting_note: no new note; the one there already (list_transcripts says when there is one; name, type and date pick another) is ingested and the transcript moved to the Trash, as the user's settings say."},
@@ -637,12 +637,12 @@ pub fn tools() -> Vec<Value> {
             schema(json!({"query": {"type": "string", "description": "Words to find ingest runs by, as the Ingest runs pane's search box: Steerco failed."}}), &[])),
         tool("stop_run", "Stop a run", Destroy,
             "Stops a run that's going, or an ingest or meeting note waiting its turn (needs the app), as its Stop button does. What it already changed stays, listed in Changes; the part not yet done is dropped, so start it again with start_run to finish. Stopping a run that isn't going does nothing. Only when the user asks.",
-            schema(json!({"run": {"type": "string", "enum": ["ingest", "daily_check", "daily_summary", "weekly_summary", "weekly_prep", "find_tasks", "contradictions", "meeting_note", "write_current_state"], "description": "Which run, as run_status names it."}, "id": {"type": "string", "description": "For ingest or meeting_note: the run's id from run_status, running or waiting; else the one running, or when none is, the next waiting."}}), &["run"])),
+            schema(json!({"run": {"type": "string", "enum": ["ingest", "daily_check", "daily_summary", "weekly_summary", "daily_brief", "weekly_prep", "find_tasks", "contradictions", "meeting_note", "write_current_state"], "description": "Which run, as run_status names it."}, "id": {"type": "string", "description": "For ingest or meeting_note: the run's id from run_status, running or waiting; else the one running, or when none is, the next waiting."}}), &["run"])),
         // Summaries and the weekly review.
-        tool("summary", "A daily or weekly summary", Read,
-            "The daily or weekly summary Brainstead wrote (what the user did that day or week, from their notes, tasks and log): the latest on file, or the one for day. For \"what did I do yesterday\", give kind daily and yesterday's date.",
+        tool("summary", "A daily or weekly summary, or a brief", Read,
+            "The daily or weekly summary Brainstead wrote (what the user did that day or week, from their notes, tasks and log), or the daily brief (kind brief: the themes of what came in, the user's open actions, what they're waiting for and what can be archived, in Briefs/Brief YYYY-MM-DD.md): the latest on file, or the one for day. For \"what did I do yesterday\", give kind daily and yesterday's date.",
             schema(json!({
-                "kind": {"type": "string", "enum": ["daily", "weekly"], "description": "Default daily."},
+                "kind": {"type": "string", "enum": ["daily", "weekly", "brief"], "description": "Default daily."},
                 "day": {"type": "string", "description": "YYYY-MM-DD: that day's summary, or for weekly the summary of the week it's in (2026-W40 works too). The latest when left out."}
             }), &[])),
         tool("weekly_review", "The weekly review", Read,
@@ -2487,9 +2487,24 @@ fn summary(ctx: &Ctx, a: SummaryArgs) -> Result<String, CallError> {
     let kind = match a.kind.as_deref().map(str::trim).unwrap_or("daily") {
         "" | "daily" => ReviewKind::Daily,
         "weekly" => ReviewKind::Weekly,
-        k => return Err(CallError::Tool(format!("kind is daily or weekly, not {k}."))),
+        "brief" => ReviewKind::Brief,
+        k => return Err(CallError::Tool(format!("kind is daily, weekly or brief, not {k}."))),
     };
     let read = |p: &str| std::fs::read_to_string(ctx.vault.join(p)).ok();
+    if kind == ReviewKind::Brief {
+        let found = match a.day.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
+            None => {
+                reviews::latest(kind, ctx.today, read).ok_or_else(|| "There's no brief from the last few weeks on file.".to_string())?
+            }
+            Some(d) => {
+                let file = brainstead_core::brief::path(d);
+                let text =
+                    read(&file).ok_or_else(|| format!("There's no brief for {d} on file. start_run daily_brief with date writes one."))?;
+                reviews::Latest { heading: format!("# Brief {d}"), label: d.to_string(), text, file }
+            }
+        };
+        return Ok(format!("The brief for {}, from {}:\n\n{}", found.label, found.file, found.text));
+    }
     let name = if kind == ReviewKind::Daily { "daily" } else { "weekly" };
     let found = match a.day.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
         None => {
