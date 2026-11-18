@@ -526,6 +526,9 @@ export interface InboxAction {
   owner: "me" | "delegated";
   person: string | null;
   due: string | null;
+  /** The day it was delegated. */
+  since: string | null;
+  /** Past its due date, or with none, delegated more than a week ago. */
   overdue: boolean;
   /** Its quotes, as `“words” — [[source]]`. */
   quotes: string[];

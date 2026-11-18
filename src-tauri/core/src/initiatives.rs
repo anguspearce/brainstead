@@ -100,6 +100,8 @@ pub struct Action {
     pub quotes: Vec<Quote>,
     /// Where the task it became went, when it's been accepted (its `task::` field).
     pub task: Option<String>,
+    /// The day it was delegated (`since::`), for one delegated with no due date (D-20261118-13).
+    pub since: Option<String>,
     /// 0-based line in the page.
     pub line: usize,
     /// The line as it is.
@@ -254,7 +256,20 @@ fn action_of(it: &Item, problems: &mut Vec<Problem>) -> Action {
         problems.push(Problem { line: it.line, text: format!("“{short}” is due “{d}”, not a date (YYYY-MM-DD)") });
     }
     let task = get("task");
-    Action { id, text, owner, person, status, due, quotes: quotes_of(&it.children), task, line: it.line, line_text: it.text.to_string() }
+    let since = get("since").filter(|d| valid_day(d));
+    Action {
+        id,
+        text,
+        owner,
+        person,
+        status,
+        due,
+        quotes: quotes_of(&it.children),
+        task,
+        since,
+        line: it.line,
+        line_text: it.text.to_string(),
+    }
 }
 
 fn decision_of(it: &Item) -> Decision {
@@ -351,6 +366,10 @@ pub struct ActionEdit {
     /// field: an action with one has been accepted, and leaves the Inbox. Some("") clears it.
     #[serde(default)]
     pub task: Option<String>,
+    /// The day of the change (`YYYY-MM-DD`): written as `since::` when it makes the action
+    /// delegated, or delegated to someone else (D-20261118-13).
+    #[serde(default)]
+    pub on: Option<String>,
 }
 
 fn one_line(s: &str) -> String {
@@ -421,10 +440,12 @@ fn find_item<'a>(items: &'a [Item<'a>], key: &str) -> Option<&'a Item<'a>> {
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn action_head(
     text: &str,
     owner: Owner,
     person: Option<&str>,
+    since: Option<&str>,
     status: Status,
     due: Option<&str>,
     extra: &[(String, String)],
@@ -436,6 +457,9 @@ fn action_head(
         (Owner::Delegated, Some(p)) => h.push_str(&format!(" [delegated:: {p}]")),
         (Owner::Other, Some(p)) => h.push_str(&format!(" [owner:: {p}]")),
         _ => {}
+    }
+    if let (Owner::Delegated, Some(d)) = (owner, since) {
+        h.push_str(&format!(" [since:: {d}]"));
     }
     h.push_str(&format!(" [status:: {}]", status.as_str()));
     if let Some(d) = due {
@@ -465,6 +489,10 @@ pub fn with_action(page: &str, edit: &ActionEdit, seed: &str) -> Result<(String,
     };
     let text = edit.text.as_deref().map(one_line).filter(|t| !t.is_empty());
     let task = edit.task.as_deref().map(field_value).transpose()?;
+    if let Some(d) = edit.on.as_deref().filter(|d| !valid_day(d)) {
+        return Err(format!("“{d}” isn't a date (YYYY-MM-DD)."));
+    }
+    let on = edit.on.as_deref();
     let items = section_items(&page, ACTIONS).map(|(_, _, i)| i).unwrap_or_default();
     match edit.id.as_deref().filter(|k| !k.trim().is_empty()) {
         Some(key) => {
@@ -475,7 +503,7 @@ pub fn with_action(page: &str, edit: &ActionEdit, seed: &str) -> Result<(String,
             // The person as the line spells them (a [[link]] stays one) while they don't change.
             let raw = ["delegated", "owner"].iter().find_map(|f| fields.iter().find(|(k, _)| k == f)).map(|(_, v)| v.clone());
             let mut extra: Vec<(String, String)> =
-                fields.into_iter().filter(|(k, _)| !["owner", "delegated", "status", "due"].contains(&k.as_str())).collect();
+                fields.into_iter().filter(|(k, _)| !["owner", "delegated", "since", "status", "due"].contains(&k.as_str())).collect();
             if let Some(t) = &task {
                 match extra.iter().position(|(k, _)| k == "task") {
                     Some(i) if t.is_empty() => _ = extra.remove(i),
@@ -495,10 +523,15 @@ pub fn with_action(page: &str, edit: &ActionEdit, seed: &str) -> Result<(String,
                 }),
             };
             let due = due.unwrap_or(a.due.clone());
+            // Delegated to the same person as before: the day it was delegated stays; newly
+            // delegated, or to someone else: the day of this change.
+            let same_hands = a.owner == Some(Owner::Delegated) && person.as_deref().is_some_and(same);
+            let since = if same_hands { a.since.clone().or(on.map(str::to_string)) } else { on.map(str::to_string) };
             let head = action_head(
                 text.as_deref().unwrap_or(&a.text),
                 owner,
                 person.as_deref(),
+                since.as_deref(),
                 edit.status.unwrap_or(a.status),
                 due.as_deref(),
                 &extra,
@@ -528,6 +561,7 @@ pub fn with_action(page: &str, edit: &ActionEdit, seed: &str) -> Result<(String,
                 &text,
                 owner,
                 person.as_deref().filter(|_| owner != Owner::Me),
+                on,
                 edit.status.unwrap_or_default(),
                 due.flatten().as_deref(),
                 &task.iter().filter(|t| !t.is_empty()).map(|t| ("task".to_string(), t.clone())).collect::<Vec<_>>(),
@@ -552,14 +586,26 @@ pub fn with_action_line(line: &str, edit: &ActionEdit) -> Result<String, String>
     Ok(out.lines().nth(2).unwrap_or_default().to_string())
 }
 
-/// An open action waits in the Inbox (D-20261118-12) when it's the user's own, or delegated and
-/// past its due date, and hasn't become a task yet.
+/// How long a delegated action with no due date waits before it comes to the Inbox.
+pub const WAIT_DAYS: i64 = 7;
+
+/// When a delegated action is to be chased: its due date, or with none, a week after it was
+/// delegated (D-20261118-13). None when it has neither.
+pub fn chase_from(a: &Action) -> Option<String> {
+    a.due.clone().or_else(|| {
+        let d = chrono::NaiveDate::parse_from_str(a.since.as_deref()?, "%Y-%m-%d").ok()?;
+        Some((d + chrono::Duration::days(WAIT_DAYS)).to_string())
+    })
+}
+
+/// An open action waits in the Inbox (D-20261118-12, -13) when it's the user's own, or delegated
+/// and past its due date (or, with none, waiting a week), and hasn't become a task yet.
 pub fn wants_inbox(a: &Action, today: &str) -> bool {
     a.status == Status::Open
         && a.task.is_none()
         && match a.owner {
             Some(Owner::Me) => true,
-            Some(Owner::Delegated) => a.due.as_deref().is_some_and(|d| d < today),
+            Some(Owner::Delegated) => chase_from(a).is_some_and(|d| d.as_str() < today),
             _ => false,
         }
 }
@@ -749,6 +795,44 @@ mod tests {
         assert_eq!(i.actions[0].task.as_deref(), Some("[[Me. To Do List]]"));
         assert!(!wants_inbox(&i.actions[0], today), "made a task already");
         assert_eq!(i.actions[0].line_text, p.lines().nth(i.actions[0].line).unwrap());
+    }
+
+    #[test]
+    fn a_delegated_action_with_no_due_date_comes_back_after_a_week() {
+        let on = |d: &str| Some(d.to_string());
+        // Delegated: the day is written.
+        let edit = ActionEdit {
+            text: Some("Chase the order".into()),
+            owner: Some(Owner::Delegated),
+            person: Some("Maya".into()),
+            on: on("2026-11-02"),
+            ..Default::default()
+        };
+        let (p, id) = with_action(PAGE, &edit, "s").unwrap();
+        assert!(p.contains(&format!("- Chase the order [delegated:: Maya] [since:: 2026-11-02] [status:: open] ^{id}")), "{p}");
+        let a = |p: &str| parse("x", p).actions.into_iter().find(|a| a.id == id).unwrap();
+        assert_eq!(chase_from(&a(&p)).as_deref(), Some("2026-11-09"));
+        assert!(!wants_inbox(&a(&p), "2026-11-09"), "a week to the day isn't yet");
+        assert!(wants_inbox(&a(&p), "2026-11-10"));
+        // Still Maya's: the day stays. Handed to Lena: the day of that change. Taken back: gone.
+        let still = ActionEdit {
+            id: Some(id.clone()),
+            person: Some("maya".into()),
+            status: Some(Status::Open),
+            on: on("2026-11-05"),
+            ..Default::default()
+        };
+        assert!(with_action(&p, &still, "s").unwrap().0.contains("[since:: 2026-11-02]"));
+        let lena = ActionEdit { id: Some(id.clone()), person: Some("Lena".into()), on: on("2026-11-05"), ..Default::default() };
+        assert!(with_action(&p, &lena, "s").unwrap().0.contains("[delegated:: Lena] [since:: 2026-11-05]"));
+        let mine = ActionEdit { id: Some(id.clone()), owner: Some(Owner::Me), on: on("2026-11-05"), ..Default::default() };
+        let back = with_action(&p, &mine, "s").unwrap().0;
+        assert!(back.contains(&format!("- Chase the order [owner:: me] [status:: open] ^{id}")), "{back}");
+        // A due date wins over the week.
+        let due = ActionEdit { id: Some(id.clone()), due: Some("2026-12-01".into()), ..Default::default() };
+        assert_eq!(chase_from(&a(&with_action(&p, &due, "s").unwrap().0)).as_deref(), Some("2026-12-01"));
+        // A bad day is refused.
+        assert!(with_action(&p, &ActionEdit { on: on("soon"), ..still }, "s").is_err());
     }
 
     #[test]

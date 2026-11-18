@@ -55,7 +55,16 @@ const action = (owner: "me" | "delegated", initiative = "Orbit launch"): InboxIt
   lineText: "- Book the room [delegated:: Maya] [status:: open] [due:: 2026-11-01] ^a-2",
   text: "Book the room",
   stamp: "2026-11-01",
-  action: { id: "a-2", initiative, owner, person: owner === "me" ? null : "Maya", due: "2026-11-01", overdue: true, quotes: [] },
+  action: {
+    id: "a-2",
+    initiative,
+    owner,
+    person: owner === "me" ? null : "Maya",
+    due: "2026-11-01",
+    since: null,
+    overdue: true,
+    quotes: [],
+  },
 });
 
 describe("an initiative's action in the Inbox", () => {

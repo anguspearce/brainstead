@@ -295,7 +295,16 @@ describe("MCP actions", () => {
       lineText: "- Book the room [delegated:: Maya] [status:: open] [due:: 2026-11-01] ^a-2",
       text: "Book the room",
       stamp: "2026-11-01",
-      action: { id: "a-2", initiative: "Orbit launch", owner: "delegated", person: "Maya", due: "2026-11-01", overdue: true, quotes: [] },
+      action: {
+        id: "a-2",
+        initiative: "Orbit launch",
+        owner: "delegated",
+        person: "Maya",
+        due: "2026-11-01",
+        since: null,
+        overdue: true,
+        quotes: [],
+      },
     };
     answers.inbox_list = () => [act];
     answers.projects_list = () => [];

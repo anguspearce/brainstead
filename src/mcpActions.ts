@@ -688,7 +688,7 @@ async function listInbox(a: Args): Promise<Listing> {
   const where = (i: InboxItem) => {
     if (i.kind === "action" && i.action) {
       const x = i.action;
-      const who = x.owner === "delegated" ? `, waiting for ${x.person ?? "someone"}` : "";
+      const who = x.owner === "delegated" ? `, waiting for ${x.person ?? "someone"}${!x.due && x.since ? ` since ${x.since}` : ""}` : "";
       const due = x.due ? `, ${x.overdue ? "overdue since" : "due"} ${x.due}` : "";
       return `action on ${x.initiative}${who}${due}`;
     }

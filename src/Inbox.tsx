@@ -129,7 +129,7 @@ export const bandOf = (i: InboxItem) => SOURCES.find((g) => g.kind === i.kind)!.
 const actionNote = (i: InboxItem) => {
   const a = i.action;
   if (!a) return "";
-  const who = a.owner === "delegated" ? `waiting for ${a.person ?? "someone"}` : "";
+  const who = a.owner === "delegated" ? `waiting for ${a.person ?? "someone"}${!a.due && a.since ? ` since ${a.since}` : ""}` : "";
   const due = a.due ? `${a.overdue ? "overdue since" : "due"} ${a.due}` : "";
   return [a.initiative, who, due].filter(Boolean).join(" · ");
 };

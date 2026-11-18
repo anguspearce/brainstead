@@ -794,6 +794,8 @@ pub fn plan_tracking(
                 due: a.due.clone().filter(|d| !d.trim().is_empty()),
                 quotes: vec![quoted(&a.quote, a.anchor.as_deref())],
                 task: None,
+                // Delegated on the day the source is from.
+                on: Some(source_day(&src.rel).unwrap_or_else(|| today.to_string())),
             };
             let i = page_text(&rel, &mut pages).ok_or_else(|| format!("{rel} isn't there."))?;
             let (after, _) = ini::with_action(&pages[i].text, &edit, &format!("{seed}\n{rel}"))?;

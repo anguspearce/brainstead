@@ -38,7 +38,7 @@ Each action is one list item: what's to be done, then whose it is, its status an
   - "Can you send the revised pricing by Tuesday?" — [[Mail. Pricing - 2026-11-17]]
 ```
 
-`[owner:: me]` is yours, `[delegated:: Lena]` is one you handed to Lena (you're waiting for her), and `[owner:: Lena]` is Lena's own. The status is open, done or dropped. Each decision is a dated item, newest first: `- 2026-11-12 — Annual billing ^d-91c2`, with its quotes under it the same way. Actions are plain list items, not checkboxes, so they don't show up in Tasks.
+`[owner:: me]` is yours, `[delegated:: Lena]` is one you handed to Lena (you're waiting for her), and `[owner:: Lena]` is Lena's own. A delegated action also gets `[since:: …]`, the day it was handed over, written for you. The status is open, done or dropped. Each decision is a dated item, newest first: `- 2026-11-12 — Annual billing ^d-91c2`, with its quotes under it the same way. Actions are plain list items, not checkboxes, so they don't show up in Tasks.
 
 You can write and edit them by hand; [Knowledge health](app:health) says when one has no owner, a status or date that doesn't read, or a quote that isn't in the note it cites. Assistants add and change them for you too, each change listed in [Changes](app:review).
 

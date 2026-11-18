@@ -1092,7 +1092,10 @@ fn initiatives_are_listed_made_and_changed_through_the_app() {
     );
     assert!(t.contains("The action's id is a-"), "{t}");
     let after = made(&f, &c);
-    assert!(after.contains("- Brief the support team [delegated:: Lena] [status:: open] [due:: 2026-11-10] ^a-"), "{after}");
+    assert!(
+        after.contains("- Brief the support team [delegated:: Lena] [since:: 2026-10-02] [status:: open] [due:: 2026-11-10] ^a-"),
+        "{after}"
+    );
     assert!(after.contains("  - \"Staff soft launch remains on track for 14 November.\" — [[Roadmap Update 2026-09-18]]"), "{after}");
     assert_eq!(c["quotes"][0]["checked"], true, "{c}");
     std::fs::write(f.ctx.vault.join(rel), &after).unwrap();

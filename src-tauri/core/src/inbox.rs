@@ -56,7 +56,9 @@ pub struct InboxAction {
     pub owner: String,
     pub person: Option<String>,
     pub due: Option<String>,
-    /// Past its due date.
+    /// The day it was delegated.
+    pub since: Option<String>,
+    /// Past its due date, or with none, delegated more than a week ago.
     pub overdue: bool,
     /// Its quotes as `“words” — [[source]]` lines.
     pub quotes: Vec<String>,
@@ -80,7 +82,10 @@ pub fn actions(root: &std::path::Path, today: &str) -> Vec<InboxItem> {
     let mut out = Vec::new();
     for i in &pages {
         let mut acts: Vec<&ini::Action> = i.actions.iter().filter(|a| ini::wants_inbox(a, today)).collect();
-        acts.sort_by_key(|a| (a.due.is_none(), a.due.clone()));
+        acts.sort_by_key(|a| {
+            let when = if a.owner == Some(ini::Owner::Delegated) { ini::chase_from(a) } else { a.due.clone() };
+            (when.is_none(), when)
+        });
         for a in acts {
             let owner = if a.owner == Some(ini::Owner::Me) { "me" } else { "delegated" };
             out.push(InboxItem {
@@ -97,7 +102,8 @@ pub fn actions(root: &std::path::Path, today: &str) -> Vec<InboxItem> {
                     owner: owner.into(),
                     person: a.person.clone(),
                     due: a.due.clone(),
-                    overdue: a.due.as_deref().is_some_and(|d| d < today),
+                    since: a.since.clone(),
+                    overdue: a.owner == Some(ini::Owner::Delegated) && ini::chase_from(a).is_some_and(|d| d.as_str() < today),
                     quotes: a.quotes.iter().map(|q| format!("“{}” — [[{}]]", q.text, q.source)).collect(),
                 }),
             });
