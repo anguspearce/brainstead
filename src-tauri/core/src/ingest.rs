@@ -793,6 +793,7 @@ pub fn plan_tracking(
                 status: status_of(a.status.as_deref())?,
                 due: a.due.clone().filter(|d| !d.trim().is_empty()),
                 quotes: vec![quoted(&a.quote, a.anchor.as_deref())],
+                task: None,
             };
             let i = page_text(&rel, &mut pages).ok_or_else(|| format!("{rel} isn't there."))?;
             let (after, _) = ini::with_action(&pages[i].text, &edit, &format!("{seed}\n{rel}"))?;

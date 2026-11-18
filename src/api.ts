@@ -517,9 +517,36 @@ export interface ProjectRow {
 }
 
 /** Something to clarify: a Scratchpad block or a To Do `#### Other` task. */
+/** An initiative's action waiting in the Inbox (D-20261118-12): the user's own, or delegated and
+ *  overdue. */
+export interface InboxAction {
+  id: string;
+  /** The initiative's name. */
+  initiative: string;
+  owner: "me" | "delegated";
+  person: string | null;
+  due: string | null;
+  overdue: boolean;
+  /** Its quotes, as `“words” — [[source]]`. */
+  quotes: string[];
+}
+
+/** A change to an initiative's action (brainstead_core::initiatives::ActionEdit). */
+export interface ActionEdit {
+  id?: string;
+  text?: string;
+  owner?: "me" | "delegated" | "other";
+  person?: string;
+  status?: "open" | "done" | "dropped";
+  due?: string;
+  /** Where the task it became went: `[[Me. To Do List]]` or a project's note. */
+  task?: string;
+}
+
 export interface InboxItem {
-  /** capture: a file in sources/ from the Outlook or Teams extension (`path`; `lineText` says what it is). */
-  kind: "thought" | "task" | "capture";
+  /** capture: a file in sources/ from the Outlook or Teams extension (`path`; `lineText` says what it is).
+   *  action: an initiative's action (`path` the initiative's page, `line`/`lineText` the action's). */
+  kind: "thought" | "task" | "capture" | "action";
   path: string;
   /** The block's heading line, or the task's line (0-based). */
   line: number;
@@ -530,6 +557,7 @@ export interface InboxItem {
   stamp: string | null;
   /** A thought's block as it is in the file (heading to body, LF), to remove it by. */
   block?: string | null;
+  action?: InboxAction;
 }
 
 export interface SourceRow extends FileSummary {
@@ -1427,6 +1455,11 @@ export const api = {
   projectsSetArea: (paths: string[], from: string, to: string) => invoke<string>("projects_set_area", { paths, from, to }),
   /** `block` is the item's block, checked before it's removed. */
   inboxRemoveThought: (line: number, text: string) => invoke<string | null>("inbox_remove_thought", { line, text }),
+  /** An initiative action's line after `edit`, not written (clarify_inbox sends it as a change). */
+  initiativeActionLine: (lineText: string, edit: ActionEdit) => invoke<string>("initiative_action_line", { lineText, edit }),
+  /** Changes an initiative action's line in place (accepted, done, dropped); ⌘Z undoes it. */
+  initiativeActionSet: (path: string, line: number, lineText: string, change: ActionEdit) =>
+    invoke<Edited>("initiative_action_set", { path, line, lineText, change }),
   inboxMoveTask: (line: number, lineText: string, toPath: string, heading: string, newLine: string) =>
     invoke<string | null>("inbox_move_task", { line, lineText, toPath, heading, newLine }),
   /** What each Inbox item could become, by the default model (src-tauri/src/weekly.rs). */

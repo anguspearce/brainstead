@@ -39,6 +39,71 @@ pub struct InboxItem {
     /// A thought's whole block (heading to last non-blank line, LF endings), to check before
     /// removing it.
     pub block: Option<String>,
+    /// An initiative's action (kind `action`, D-20261118-12): `path` is the initiative's page and
+    /// `line`/`line_text` the action's line.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<InboxAction>,
+}
+
+/// What the Inbox shows of an initiative's action.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct InboxAction {
+    pub id: String,
+    /// The initiative's name.
+    pub initiative: String,
+    /// me or delegated.
+    pub owner: String,
+    pub person: Option<String>,
+    pub due: Option<String>,
+    /// Past its due date.
+    pub overdue: bool,
+    /// Its quotes as `“words” — [[source]]` lines.
+    pub quotes: Vec<String>,
+}
+
+/// The initiatives' actions that wait in the Inbox (`initiatives::wants_inbox`): Unfiled's last,
+/// otherwise by initiative, overdue first, then by due date.
+pub fn actions(root: &std::path::Path, today: &str) -> Vec<InboxItem> {
+    use crate::initiatives as ini;
+    let Ok(rd) = std::fs::read_dir(root.join(ini::FOLDER)) else { return vec![] };
+    let mut pages: Vec<ini::Initiative> = rd
+        .flatten()
+        .filter_map(|e| {
+            let rel = format!("{}/{}", ini::FOLDER, e.file_name().to_string_lossy());
+            let text = std::fs::read_to_string(e.path()).ok()?;
+            ini::is_initiative(&rel).then(|| ini::parse(&rel, &text))
+        })
+        .filter(|i| i.status != "done")
+        .collect();
+    pages.sort_by_key(|i| (i.path == ini::UNFILED, i.name.to_lowercase()));
+    let mut out = Vec::new();
+    for i in &pages {
+        let mut acts: Vec<&ini::Action> = i.actions.iter().filter(|a| ini::wants_inbox(a, today)).collect();
+        acts.sort_by_key(|a| (a.due.is_none(), a.due.clone()));
+        for a in acts {
+            let owner = if a.owner == Some(ini::Owner::Me) { "me" } else { "delegated" };
+            out.push(InboxItem {
+                kind: "action",
+                path: i.path.clone(),
+                line: a.line,
+                line_text: a.line_text.clone(),
+                text: a.text.clone(),
+                stamp: a.due.clone(),
+                block: None,
+                action: Some(InboxAction {
+                    id: a.id.clone(),
+                    initiative: i.name.clone(),
+                    owner: owner.into(),
+                    person: a.person.clone(),
+                    due: a.due.clone(),
+                    overdue: a.due.as_deref().is_some_and(|d| d < today),
+                    quotes: a.quotes.iter().map(|q| format!("“{}” — [[{}]]", q.text, q.source)).collect(),
+                }),
+            });
+        }
+    }
+    out
 }
 
 /// One Scratchpad block, by line: its heading, its last non-blank line, and where the next
@@ -84,6 +149,7 @@ pub fn thoughts(src: &str) -> Vec<InboxItem> {
             text: ls[b.start + 1..=b.last.max(b.start)].join("\n").trim().to_string(),
             stamp: Some(stamp),
             block: Some(block_text(&ls, b)),
+            action: None,
         })
         .collect();
     out.sort_by(|a, b| b.stamp.cmp(&a.stamp));
@@ -113,6 +179,7 @@ pub fn other_tasks(src: &str) -> Vec<InboxItem> {
                 text: t.text,
                 stamp: None,
                 block: None,
+                action: None,
             });
         }
     }
@@ -246,5 +313,28 @@ mod tests {
         assert_eq!(fs::read_to_string(&p).unwrap(), "## 2026-10-01 09:00\n\nold\n");
         write::restore_files(&[ch]).unwrap();
         assert_eq!(fs::read_to_string(&p).unwrap(), src);
+    }
+
+    #[test]
+    fn initiatives_actions_wait_in_the_inbox() {
+        let t = tempfile::tempdir().unwrap();
+        let dir = t.path().join("wiki/initiatives");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("Orbit launch.md"),
+            "---\ntype: initiative\n---\n## Actions\n\n- Brief support [owner:: me] [status:: open] ^a-1\n  - \"Can you brief support?\" — [[Mail]]\n- Book room [delegated:: Maya] [status:: open] [due:: 2026-11-01] ^a-2\n- Sign off [delegated:: Sam] [status:: open] [due:: 2026-12-01] ^a-3\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("Unfiled.md"), "---\ntype: initiative\n---\n## Actions\n\n- Water the plants [owner:: me] ^a-4\n").unwrap();
+        std::fs::write(dir.join("Old.md"), "---\ntype: initiative\nstatus: done\n---\n## Actions\n\n- Old thing [owner:: me] ^a-5\n")
+            .unwrap();
+        let got = actions(t.path(), "2026-11-18");
+        let ids: Vec<&str> = got.iter().map(|i| i.action.as_ref().unwrap().id.as_str()).collect();
+        assert_eq!(ids, ["a-2", "a-1", "a-4"], "by initiative, Unfiled last; overdue (dated) first; done initiatives left out");
+        let a = &got[1];
+        assert_eq!((a.kind, a.path.as_str(), a.line, a.text.as_str()), ("action", "wiki/initiatives/Orbit launch.md", 5, "Brief support"));
+        assert_eq!(a.action.as_ref().unwrap().quotes, ["“Can you brief support?” — [[Mail]]"]);
+        let m = got[0].action.as_ref().unwrap();
+        assert_eq!((m.owner.as_str(), m.person.as_deref(), m.overdue), ("delegated", Some("Maya"), true));
     }
 }

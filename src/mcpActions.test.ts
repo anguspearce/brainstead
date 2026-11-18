@@ -287,6 +287,40 @@ describe("MCP actions", () => {
     );
   });
 
+  it("clarifies an initiative's action: the task made and the action marked, or done or dropped", async () => {
+    const act: InboxItem = {
+      kind: "action",
+      path: "wiki/initiatives/Orbit launch.md",
+      line: 12,
+      lineText: "- Book the room [delegated:: Maya] [status:: open] [due:: 2026-11-01] ^a-2",
+      text: "Book the room",
+      stamp: "2026-11-01",
+      action: { id: "a-2", initiative: "Orbit launch", owner: "delegated", person: "Maya", due: "2026-11-01", overdue: true, quotes: [] },
+    };
+    answers.inbox_list = () => [act];
+    answers.projects_list = () => [];
+    answers.initiative_action_line = (a) => `${(a!.lineText as string).replace(" ^a-2", "")} ${JSON.stringify(a!.edit)} ^a-2`;
+    answers.changes_submit_many = outcomes(true);
+    const listed = (await run("inbox.list", {})) as string;
+    expect(listed).toContain("action on Orbit launch, waiting for Maya, overdue since 2026-11-01  (action:a-2)");
+    calls.length = 0;
+    await run("inbox.clarify", { item: "action:a-2", becomes: "waiting" });
+    expect(submitted().map((c) => [c.page, (c.instruction as { op: string }).op])).toEqual([
+      ["Me. To Do List.md", "add_task"],
+      ["wiki/initiatives/Orbit launch.md", "lines"],
+    ]);
+    expect(submitted()[0].instruction).toMatchObject({ line: "- [ ] Maya: Book the room [[Orbit launch]] #waiting-for 📅 2026-11-01" });
+    expect(submitted()[1].instruction).toMatchObject({
+      at: 12,
+      old: [act.lineText],
+      new: [expect.stringContaining('{"task":"[[Me. To Do List]]"}')],
+    });
+    calls.length = 0;
+    await run("inbox.clarify", { item: "action:a-2", becomes: "delete" });
+    expect(submitted()[0].instruction).toMatchObject({ new: [expect.stringContaining('{"status":"dropped"}')] });
+    await expect(run("inbox.clarify", { item: "action:a-2", becomes: "reference" })).rejects.toThrow(/doesn't offer reference/);
+  });
+
   it("makes and changes projects through Changes", async () => {
     answers.projects_list = () => [{ name: "Orbit App launch", path: "Project. Orbit App launch.md", status: "active" }];
     answers.change_project_note = (a) => ({ path: `Project. ${a!.name}.md`, content: "---\nstatus: active\n---\n" });

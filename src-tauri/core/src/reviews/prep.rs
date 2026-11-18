@@ -56,6 +56,7 @@ pub fn inbox_kind(kind: &str, path: &str) -> &'static str {
     match kind {
         "thought" => return "thought",
         "task" => return "task",
+        "action" => return "action",
         _ => {}
     }
     let name = path.rsplit('/').next().unwrap_or(path);
@@ -79,6 +80,8 @@ pub fn inbox_kind(kind: &str, path: &str) -> &'static str {
 pub fn fits(kind: &str, becomes: &str) -> bool {
     match kind {
         "thought" | "task" => matches!(becomes, "next" | "project" | "waiting" | "done" | "someday" | "reference" | "delete"),
+        // An initiative's action (D-20261118-12): a task, a waiting-for, done or dropped.
+        "action" => matches!(becomes, "next" | "waiting" | "someday" | "done" | "delete"),
         "transcript" => matches!(becomes, "meeting" | "ingest" | "ask" | "reference" | "delete"),
         "thread" => matches!(becomes, "reply" | "ingest" | "ask" | "next" | "project" | "waiting" | "someday" | "reference" | "delete"),
         "capture" => matches!(becomes, "ingest" | "ask" | "next" | "project" | "someday" | "reference" | "delete"),
@@ -1041,6 +1044,7 @@ mod tests {
             text: l.into(),
             stamp: None,
             block: None,
+            action: None,
         };
         assert!(unclarified(&item("task", "- [ ] ring the bank")));
         assert!(!unclarified(&item("task", "- [ ] ring the bank #context/calls")));

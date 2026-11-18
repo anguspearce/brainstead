@@ -16,6 +16,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import moment from "moment";
 import { listen } from "@tauri-apps/api/event";
 import {
+  ActionEdit,
   api,
   BookmarkRow,
   ChangeKind,
@@ -64,7 +65,17 @@ import {
 import { askEdit } from "./notes/dialogs";
 import { captureStamp, prepareCapture } from "./Capture";
 import { bandOf, inboxRows, taskLine, unclarified } from "./Inbox";
-import { appendAsReference, inboxChoices, newReferenceNote, settleInboxItem, suggestKind, trashCapture } from "./inboxActions";
+import {
+  actionTaskText,
+  appendAsReference,
+  doneNow,
+  inboxChoices,
+  newReferenceNote,
+  settleInboxItem,
+  suggestKind,
+  taskWent,
+  trashCapture,
+} from "./inboxActions";
 import {
   ADVISORY,
   byRun,
@@ -661,7 +672,8 @@ async function projectPath(name: string, activeOnly = false): Promise<string> {
 
 // ---- inbox
 
-const inboxKey = (i: InboxItem) => `${i.kind}:${i.line + 1}`;
+/** An item's id for clarify_inbox: an action by its id (lines repeat across initiatives). */
+const inboxKey = (i: InboxItem) => (i.kind === "action" && i.action?.id ? `action:${i.action.id}` : `${i.kind}:${i.line + 1}`);
 
 /** How many items Suggest asks about at once, as the Inbox's Suggest for all (first 20) does. */
 const SUGGEST_AT_MOST = 20;
@@ -673,8 +685,15 @@ async function listInbox(a: Args): Promise<Listing> {
   const allRuns = await api.ingestRuns().catch(() => [] as IngestRun[]);
   const changeRows = await api.changesList().catch(() => null);
   const prog = (i: InboxItem) => (i.kind === "capture" && isTranscriptPath(i.path) ? meetingProgress(allRuns, i.path, changeRows) : null);
-  const where = (i: InboxItem) =>
-    i.kind === "capture" ? `capture ${i.path}` : i.kind === "thought" ? `Scratchpad ${i.stamp ?? ""}` : "To Do list › Other";
+  const where = (i: InboxItem) => {
+    if (i.kind === "action" && i.action) {
+      const x = i.action;
+      const who = x.owner === "delegated" ? `, waiting for ${x.person ?? "someone"}` : "";
+      const due = x.due ? `, ${x.overdue ? "overdue since" : "due"} ${x.due}` : "";
+      return `action on ${x.initiative}${who}${due}`;
+    }
+    return i.kind === "capture" ? `capture ${i.path}` : i.kind === "thought" ? `Scratchpad ${i.stamp ?? ""}` : "To Do list › Other";
+  };
   const line = (i: InboxItem) => {
     const p = prog(i);
     return `- ${i.text.replace(/\n/g, " ").slice(0, 200)} — ${where(i)}${p ? ` · ${p.label}${p.why ? ` (${p.why})` : ""}` : ""}  (${inboxKey(i)})`;
@@ -683,7 +702,10 @@ async function listInbox(a: Args): Promise<Listing> {
   // (each item's text, and the active projects' names).
   const sugg = new Map<string, ClarifySuggestion>();
   if (a.suggest === true) {
-    const ask = pagedRows(a, items, line, ["", ""]).shown.slice(0, SUGGEST_AT_MOST);
+    // An action is clarified already (its ingest found it): Suggest doesn't ask about it.
+    const ask = pagedRows(a, items, line, ["", ""])
+      .shown.filter((i) => i.kind !== "action")
+      .slice(0, SUGGEST_AT_MOST);
     if (ask.length) {
       const active = (await api.projectsList()).filter((p) => p.status === "active").map((p) => p.name);
       const got = await api.clarifySuggest(
@@ -720,6 +742,7 @@ async function listInbox(a: Args): Promise<Listing> {
         text: i.text,
         path: i.path,
         stamp: i.stamp,
+        ...(i.action ? { action: i.action } : {}),
         ...(a.suggest === true
           ? {
               suggestion: g
@@ -798,10 +821,45 @@ export async function clarifyChanges(
   r: McpRequest,
 ): Promise<{ said: string; changes: ChangeSubmit[]; after?: () => Promise<unknown> }> {
   const becomes = str(a, "becomes");
-  const text = str(a, "text") ?? (i.kind === "capture" ? `Follow up on [[${i.text}]]` : i.text.trim());
+  const text =
+    str(a, "text") ?? (i.kind === "capture" ? `Follow up on [[${i.text}]]` : i.kind === "action" ? actionTaskText(i) : i.text.trim());
   const proj = str(a, "project") ? await projectPath(str(a, "project")!, true) : null;
-  const fields = { text, project: proj, context: str(a, "context") ?? null, effort: str(a, "effort") ?? null, due: str(a, "due") ?? null };
+  const due = str(a, "due") ?? i.action?.due ?? null;
+  const fields = { text, project: proj, context: str(a, "context") ?? null, effort: str(a, "effort") ?? null, due };
   const short = i.text.replace(/\s+/g, " ").trim().slice(0, 60);
+  if (i.kind === "action") {
+    // An initiative's action, as the Inbox clarifies it: its task made and the action marked with
+    // where it went, or the action marked done or dropped, each a change to its line.
+    const mark = async (change: ActionEdit, title: string) =>
+      sub(a, r, i.path, "edit", title, {
+        op: "lines",
+        at: i.line,
+        old: [i.lineText],
+        new: [await api.initiativeActionLine(i.lineText, change)],
+      });
+    const task = async (line: string, heading?: string) => [
+      sub(a, r, proj ?? TODO_LIST, "task", `Add “${taskWords(line)}”`, { op: "add_task", line, ...(proj && heading ? { heading } : {}) }),
+      await mark({ task: taskWent(proj) }, `Made a task of “${short}”`),
+    ];
+    switch (becomes) {
+      case "next":
+        if (!proj && !fields.context?.trim())
+          throw new Error(
+            "A next action needs a project or a context (calls, office…), as the Inbox's form does; without either it would land back in the Inbox.",
+          );
+        return { said: `a next action${proj ? ` in ${projectName(proj)}` : ""}`, changes: await task(taskLine(fields)) };
+      case "waiting":
+        return { said: "waiting for", changes: await task(taskLine({ ...fields, tag: "waiting-for" }), WAITING_FOR) };
+      case "someday":
+        return { said: "someday / maybe", changes: await task(taskLine({ ...fields, tag: "someday-maybe" })) };
+      case "done":
+        return { said: "done", changes: [await mark({ status: "done" }, `Mark “${short}” done`)] };
+      case "delete":
+        return { said: "dropped", changes: [await mark({ status: "dropped" }, `Drop “${short}”`)] };
+      default:
+        throw new Error("An action becomes next, waiting, someday, done or delete (dropped).");
+    }
+  }
   const captureDone = i.kind === "capture" ? () => markCaptureDone(i.path) : undefined;
   // The item out of the Inbox: a task's line, a thought's block; a capture is marked done after.
   const takeOut = (): ChangeSubmit[] =>
@@ -940,7 +998,8 @@ export async function clarifyItem(i: InboxItem, a: Args, unattended = false): Pr
       break;
     }
     case "done":
-      if (i.kind === "task") await toggleTaskEdit({ path: i.path, line: i.line, lineText: i.lineText }, true);
+      if (i.kind === "action") await doneNow(i);
+      else if (i.kind === "task") await toggleTaskEdit({ path: i.path, line: i.line, lineText: i.lineText }, true);
       else if (i.kind === "capture") await markCaptureDone(i.path);
       else await api.inboxRemoveThought(i.line, i.block ?? i.lineText);
       said = "done";

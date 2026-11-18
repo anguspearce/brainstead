@@ -98,8 +98,12 @@ pub struct Action {
     /// `YYYY-MM-DD`.
     pub due: Option<String>,
     pub quotes: Vec<Quote>,
+    /// Where the task it became went, when it's been accepted (its `task::` field).
+    pub task: Option<String>,
     /// 0-based line in the page.
     pub line: usize,
+    /// The line as it is.
+    pub line_text: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -158,6 +162,8 @@ struct Item<'a> {
     start: usize,
     end: usize,
     line: usize,
+    /// The head line whole, and what's after its list marker.
+    text: &'a str,
     head: &'a str,
     children: Vec<&'a str>,
 }
@@ -181,7 +187,14 @@ fn section_items<'a>(page: &'a str, heading: &str) -> Option<(usize, usize, Vec<
             continue;
         }
         if let Some(c) = ITEM.captures(l.text) {
-            items.push(Item { start: l.start, end: after, line: l.no, head: c.get(1).map_or("", |m| m.as_str()), children: vec![] });
+            items.push(Item {
+                start: l.start,
+                end: after,
+                line: l.no,
+                text: l.text,
+                head: c.get(1).map_or("", |m| m.as_str()),
+                children: vec![],
+            });
             open = true;
         } else if open && !l.text.trim().is_empty() && l.text.starts_with([' ', '\t']) {
             let it = items.last_mut().expect("open means an item");
@@ -240,7 +253,8 @@ fn action_of(it: &Item, problems: &mut Vec<Problem>) -> Action {
     if let Some(d) = due.as_deref().filter(|d| !valid_day(d)) {
         problems.push(Problem { line: it.line, text: format!("“{short}” is due “{d}”, not a date (YYYY-MM-DD)") });
     }
-    Action { id, text, owner, person, status, due, quotes: quotes_of(&it.children), line: it.line }
+    let task = get("task");
+    Action { id, text, owner, person, status, due, quotes: quotes_of(&it.children), task, line: it.line, line_text: it.text.to_string() }
 }
 
 fn decision_of(it: &Item) -> Decision {
@@ -333,6 +347,10 @@ pub struct ActionEdit {
     /// Added under it, each once.
     #[serde(default)]
     pub quotes: Vec<Quote>,
+    /// Where the task it became went (`[[Me. To Do List]]`, a project's note), as its `task::`
+    /// field: an action with one has been accepted, and leaves the Inbox. Some("") clears it.
+    #[serde(default)]
+    pub task: Option<String>,
 }
 
 fn one_line(s: &str) -> String {
@@ -446,6 +464,7 @@ pub fn with_action(page: &str, edit: &ActionEdit, seed: &str) -> Result<(String,
         None => None,
     };
     let text = edit.text.as_deref().map(one_line).filter(|t| !t.is_empty());
+    let task = edit.task.as_deref().map(field_value).transpose()?;
     let items = section_items(&page, ACTIONS).map(|(_, _, i)| i).unwrap_or_default();
     match edit.id.as_deref().filter(|k| !k.trim().is_empty()) {
         Some(key) => {
@@ -455,8 +474,16 @@ pub fn with_action(page: &str, edit: &ActionEdit, seed: &str) -> Result<(String,
             let (fields, id, _) = split_head(it.head);
             // The person as the line spells them (a [[link]] stays one) while they don't change.
             let raw = ["delegated", "owner"].iter().find_map(|f| fields.iter().find(|(k, _)| k == f)).map(|(_, v)| v.clone());
-            let extra: Vec<(String, String)> =
+            let mut extra: Vec<(String, String)> =
                 fields.into_iter().filter(|(k, _)| !["owner", "delegated", "status", "due"].contains(&k.as_str())).collect();
+            if let Some(t) = &task {
+                match extra.iter().position(|(k, _)| k == "task") {
+                    Some(i) if t.is_empty() => _ = extra.remove(i),
+                    Some(i) => extra[i].1 = t.clone(),
+                    None if !t.is_empty() => extra.push(("task".into(), t.clone())),
+                    None => {}
+                }
+            }
             let owner = edit.owner.or(a.owner).ok_or("Give the action an owner: me, delegated or other.")?;
             let same = |p: &str| a.person.as_deref().is_some_and(|q| q.eq_ignore_ascii_case(&person_of(p)));
             let person = match owner {
@@ -503,13 +530,38 @@ pub fn with_action(page: &str, edit: &ActionEdit, seed: &str) -> Result<(String,
                 person.as_deref().filter(|_| owner != Owner::Me),
                 edit.status.unwrap_or_default(),
                 due.flatten().as_deref(),
-                &[],
+                &task.iter().filter(|t| !t.is_empty()).map(|t| ("task".to_string(), t.clone())).collect::<Vec<_>>(),
                 &id,
             );
             let block = format!("{head}\n{}", new_quote_lines(&[], &edit.quotes)?);
             Ok((insert_in_section(&page, ACTIONS, &block, None)?, id))
         }
     }
+}
+
+/// One action's line changed on its own, as the Inbox changes it (its status, the task it became):
+/// what `with_action` makes of it, without the page around it. Quotes can't be added this way.
+pub fn with_action_line(line: &str, edit: &ActionEdit) -> Result<String, String> {
+    if !edit.quotes.is_empty() {
+        return Err("Quotes go under the action: change it on its page.".into());
+    }
+    let page = format!("## {ACTIONS}\n\n{}\n", line.trim_end());
+    let key = split_head(ITEM.captures(line.trim_end()).and_then(|c| c.get(1)).map_or("", |m| m.as_str()));
+    let id = if key.1.is_empty() { key.2 } else { key.1 };
+    let (out, _) = with_action(&page, &ActionEdit { id: Some(id), ..edit.clone() }, "")?;
+    Ok(out.lines().nth(2).unwrap_or_default().to_string())
+}
+
+/// An open action waits in the Inbox (D-20261118-12) when it's the user's own, or delegated and
+/// past its due date, and hasn't become a task yet.
+pub fn wants_inbox(a: &Action, today: &str) -> bool {
+    a.status == Status::Open
+        && a.task.is_none()
+        && match a.owner {
+            Some(Owner::Me) => true,
+            Some(Owner::Delegated) => a.due.as_deref().is_some_and(|d| d < today),
+            _ => false,
+        }
 }
 
 /// The page with a decision added, newest first by date (undated ones last), and its id.
@@ -663,6 +715,40 @@ mod tests {
         assert!(i.problems.is_empty(), "{:?}\n{p}", i.problems);
         assert_eq!(i.actions[1].person.as_deref(), Some("Lena"), "{p}");
         assert_eq!(i.actions[2].person.as_deref(), Some("Sam"), "{p}");
+    }
+
+    #[test]
+    fn one_line_changed_on_its_own_as_the_inbox_changes_it() {
+        let line = "- Book the legal review [delegated:: [[Lena]]] [status:: open] [due:: 2026-11-20] ^a-2222";
+        let task = ActionEdit { task: Some("[[Me. To Do List]]".into()), ..Default::default() };
+        assert_eq!(
+            with_action_line(line, &task).unwrap(),
+            "- Book the legal review [delegated:: [[Lena]]] [status:: open] [due:: 2026-11-20] [task:: [[Me. To Do List]]] ^a-2222"
+        );
+        let done = ActionEdit { status: Some(Status::Done), ..Default::default() };
+        assert!(with_action_line(line, &done).unwrap().contains("[status:: done]"));
+        // Found by its words when it has no id.
+        assert_eq!(with_action_line("* Ring Acme [owner:: me]", &done).unwrap(), "- Ring Acme [owner:: me] [status:: done]");
+        let quoted = ActionEdit { quotes: vec![Quote { text: "x".into(), source: "y".into() }], ..Default::default() };
+        assert!(with_action_line(line, &quoted).is_err());
+    }
+
+    #[test]
+    fn which_actions_wait_in_the_inbox() {
+        let i = parse("wiki/initiatives/Acme renewal.md", PAGE);
+        let today = "2026-11-26";
+        // Mine (a-1111); Lena's delegated one has no due date; Sam's is someone else's.
+        let waiting: Vec<&str> = i.actions.iter().filter(|a| wants_inbox(a, today)).map(|a| a.id.as_str()).collect();
+        assert_eq!(waiting, ["a-1111"]);
+        let p = PAGE.replace("[delegated:: Lena] [status:: open]", "[delegated:: Lena] [status:: open] [due:: 2026-11-25]");
+        let i = parse("wiki/initiatives/Acme renewal.md", &p);
+        assert!(wants_inbox(&i.actions[1], today), "overdue");
+        assert!(!wants_inbox(&i.actions[1], "2026-11-25"), "due today isn't overdue");
+        let p = p.replace("[due:: 2026-11-25] ^a-1111", "[due:: 2026-11-25] [task:: [[Me. To Do List]]] ^a-1111");
+        let i = parse("wiki/initiatives/Acme renewal.md", &p);
+        assert_eq!(i.actions[0].task.as_deref(), Some("[[Me. To Do List]]"));
+        assert!(!wants_inbox(&i.actions[0], today), "made a task already");
+        assert_eq!(i.actions[0].line_text, p.lines().nth(i.actions[0].line).unwrap());
     }
 
     #[test]

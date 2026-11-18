@@ -1024,6 +1024,8 @@ pub fn run() {
             notes::doc_save,
             notes::doc_create,
             notes::initiative_page,
+            gtd::initiative_action_line,
+            gtd::initiative_action_set,
             notes::vault_create,
             notes::vault_add_examples,
             notes::draft_write,

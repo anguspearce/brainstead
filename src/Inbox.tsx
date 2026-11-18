@@ -35,6 +35,7 @@ import { useVaultVersion } from "./state";
 import { followThrough, isTranscriptPath, makeMeetingNotes } from "./meetingFlow";
 import { TaskText } from "./TaskList";
 import {
+  actionTaskText,
   appendAsReference,
   doneNow,
   eachItem,
@@ -104,12 +105,18 @@ function ItemTitle({ text }: { text: string }) {
 const itemText = (i: InboxItem) => (i.kind === "task" ? i.text : i.text).trim();
 /** The list's bands, in the order shown (and J / K follow): where each item came from. */
 const SOURCES: { kind: InboxItem["kind"]; label: string; icon: string; tip: string }[] = [
+  {
+    kind: "action",
+    label: "Actions",
+    icon: "tasks",
+    tip: "your actions on your initiatives, and ones you delegated that are past their due date",
+  },
   { kind: "capture", label: "Captures", icon: "source", tip: "captured from Outlook or Teams, or added to Sources and not yet ingested" },
   { kind: "thought", label: "Scratchpad", icon: "note", tip: "on the Scratchpad" },
   { kind: "task", label: "To Do list › Other", icon: "tasks", tip: "under Other on the To Do list" },
 ];
-/** The items to clarify in the order the list shows them, band by band (Captures, Scratchpad, To Do
- *  list › Other), so Suggest for all asks about the same first 20 (an assistant's list_inbox too). */
+/** The items to clarify in the order the list shows them, band by band (Actions, Captures, Scratchpad,
+ *  To Do list › Other), so Suggest for all asks about the same first 20 (an assistant's list_inbox too). */
 export function inboxRows(raw: InboxItem[]): InboxItem[] {
   const open = raw.filter(unclarified);
   return SOURCES.flatMap((g) => open.filter((i) => i.kind === g.kind));
@@ -119,11 +126,28 @@ export function inboxRows(raw: InboxItem[]): InboxItem[] {
 export const bandOf = (i: InboxItem) => SOURCES.find((g) => g.kind === i.kind)!.label;
 
 /** What a row says under its text; its band already says where it came from. */
-const rowNote = (i: InboxItem) => (i.kind === "capture" ? [i.lineText, i.stamp].filter(Boolean).join(" · ") : (i.stamp ?? ""));
+const actionNote = (i: InboxItem) => {
+  const a = i.action;
+  if (!a) return "";
+  const who = a.owner === "delegated" ? `waiting for ${a.person ?? "someone"}` : "";
+  const due = a.due ? `${a.overdue ? "overdue since" : "due"} ${a.due}` : "";
+  return [a.initiative, who, due].filter(Boolean).join(" · ");
+};
+const rowNote = (i: InboxItem) =>
+  i.kind === "capture" ? [i.lineText, i.stamp].filter(Boolean).join(" · ") : i.kind === "action" ? actionNote(i) : (i.stamp ?? "");
 const sourceOf = (i: InboxItem) =>
-  i.kind === "thought" ? `Scratchpad · ${i.stamp ?? ""}` : i.kind === "capture" ? `${i.lineText} · ${i.stamp ?? ""}` : "To Do list · Other";
+  i.kind === "thought"
+    ? `Scratchpad · ${i.stamp ?? ""}`
+    : i.kind === "capture"
+      ? `${i.lineText} · ${i.stamp ?? ""}`
+      : i.kind === "action"
+        ? `Initiative · ${actionNote(i)}`
+        : "To Do list · Other";
 /** A Teams meeting transcript, which becomes a meeting note: Suggest needn't ask about it. */
 const isTranscript = (i: InboxItem) => i.kind === "capture" && isTranscriptPath(i.path);
+/** Suggest doesn't ask about a transcript (it becomes a meeting note) or an action (already clarified
+ *  by its ingest: it's a task, a waiting-for, done or dropped). */
+const unsuggested = (i: InboxItem) => isTranscript(i) || i.kind === "action";
 
 /** Each choice's key, label and tip for one item (what `inboxChoices` gives it, in that order). */
 const CHOICE: Record<string, { key: string; label: (i: InboxItem) => string; tip: (i: InboxItem) => string }> = {
@@ -143,7 +167,14 @@ const CHOICE: Record<string, { key: string; label: (i: InboxItem) => string; tip
   next: { key: "N", label: () => "Next action", tip: () => "Make it a next action; you set its project, context and due date first" },
   project: { key: "P", label: () => "New project", tip: () => "Start a new project from it" },
   waiting: { key: "W", label: () => "Waiting for", tip: () => "Make it a task tagged waiting-for, to chase later" },
-  done: { key: "2", label: () => "Done now (under 2 min)", tip: () => "It takes two minutes: do it now, and this marks it done" },
+  done: {
+    key: "2",
+    label: (i) => (i.kind === "action" ? "Done" : "Done now (under 2 min)"),
+    tip: (i) =>
+      i.kind === "action"
+        ? keyLabel("It's done already, or takes two minutes: mark the action done on its initiative; ⌘Z undoes")
+        : "It takes two minutes: do it now, and this marks it done",
+  },
   someday: { key: "S", label: () => "Someday / maybe", tip: () => "Park it as a task tagged someday-maybe" },
   reference: {
     key: "R",
@@ -155,8 +186,13 @@ const CHOICE: Record<string, { key: string; label: (i: InboxItem) => string; tip
   },
   delete: {
     key: "⌫",
-    label: (i) => (i.kind === "capture" ? "Move to the Trash" : "Delete"),
-    tip: (i) => (i.kind === "capture" ? "Move the captured file to the vault’s Trash" : keyLabel("Delete it from the Inbox; ⌘Z undoes")),
+    label: (i) => (i.kind === "capture" ? "Move to the Trash" : i.kind === "action" ? "Drop" : "Delete"),
+    tip: (i) =>
+      i.kind === "capture"
+        ? "Move the captured file to the vault’s Trash"
+        : i.kind === "action"
+          ? keyLabel("It isn't happening: mark the action dropped on its initiative; ⌘Z undoes")
+          : keyLabel("Delete it from the Inbox; ⌘Z undoes"),
   },
 };
 
@@ -196,7 +232,8 @@ const DONE_ALL: Record<string, string> = {
   delete: "Deleted",
 };
 /** What a capture becomes as a task, by default: a follow-up linking the file. */
-const startText = (i: InboxItem) => (i.kind === "capture" ? `Follow up on [[${i.text}]]` : itemText(i));
+const startText = (i: InboxItem) =>
+  i.kind === "capture" ? `Follow up on [[${i.text}]]` : i.kind === "action" ? actionTaskText(i) : itemText(i);
 
 export function InboxScreen() {
   const panes = usePanes({ "inbox.left": PANES["inbox.left"] }, { minFlex: 320 });
@@ -214,7 +251,12 @@ export function InboxScreen() {
   const [done, setDone] = useState(0);
   // A capture by its file: two captures can share a line and the start of their text (two Teams
   // transcripts did), and then both rows were chosen at once.
-  const key = (i: InboxItem) => (i.kind === "capture" ? `capture:${i.path}` : `${i.kind}:${i.line}:${i.lineText.slice(0, 40)}`);
+  const key = (i: InboxItem) =>
+    i.kind === "capture"
+      ? `capture:${i.path}`
+      : i.kind === "action"
+        ? `action:${i.path}:${i.action?.id ?? i.line}`
+        : `${i.kind}:${i.line}:${i.lineText.slice(0, 40)}`;
   // Ticked to act on together; clicking a row chooses it alone.
   const [checked, setChecked] = useState<string[]>([]);
   const toggle = (k: string) =>
@@ -261,7 +303,7 @@ export function InboxScreen() {
   const cur = items[idx] ?? null;
   // Screenshots: the open item shows a sample suggestion, as Suggest would make.
   useEffect(() => {
-    if (!sceneInboxSuggest.get() || !cur || isTranscript(cur)) return;
+    if (!sceneInboxSuggest.get() || !cur || unsuggested(cur)) return;
     const id = key(cur);
     setSugg((m) => (m[id] ? m : { ...m, [id]: sampleSuggestion(id) }));
   }, [cur]);
@@ -302,7 +344,8 @@ export function InboxScreen() {
 
   const outcome = (i: InboxItem, s: ClarifySuggestion | { becomes: string; text?: string; project?: string | null }) => {
     const proj = s.project ? (active.find((p) => p.name.toLowerCase() === s.project!.toLowerCase())?.path ?? null) : null;
-    const base: Clarified = { text: s.text || startText(i), project: proj };
+    // An action's due date comes with it.
+    const base: Clarified = { text: s.text || startText(i), project: proj, ...(i.action?.due ? { due: i.action.due } : {}) };
     const full = "context" in s ? { ...base, context: s.context, effort: s.effort, due: s.due } : base;
     switch (s.becomes) {
       case "next":
@@ -396,7 +439,7 @@ export function InboxScreen() {
         if (!e.repeat) actAll(picked, c[1]);
         return;
       }
-      const s = isTranscript(cur) ? undefined : sugg[key(cur)];
+      const s = unsuggested(cur) ? undefined : sugg[key(cur)];
       const map: Record<string, string> = Object.fromEntries(
         inboxChoices(cur).map((b) => [CHOICE[b].key === "⌫" ? "Backspace" : CHOICE[b].key.toLowerCase(), b]),
       );
@@ -436,7 +479,7 @@ export function InboxScreen() {
 
   const total = items.length + done;
   // What Suggest asks about: not transcripts, whose choice is the meeting note.
-  const askable = items.filter((i) => !isTranscript(i));
+  const askable = items.filter((i) => !unsuggested(i));
   return (
     <main className="main">
       <TopBar
@@ -598,7 +641,11 @@ export function InboxScreen() {
                 <Icon name={inboxItemKind(cur).icon} size={16} />
                 {sourceOf(cur)}
               </span>
-              {cur.kind === "capture" ? <CaptureBody item={cur} /> : <ItemBody text={itemText(cur)} />}
+              {cur.kind === "capture" ? (
+                <CaptureBody item={cur} />
+              ) : (
+                <ItemBody text={cur.kind === "action" ? actionBody(cur) : itemText(cur)} />
+              )}
               {progress(cur) && (
                 <div className={`doc-banner ${progress(cur)!.busy ? "" : "warn"}`} role="status">
                   {progress(cur)!.busy ? <span className="spin" /> : <Icon name="info" size={14} />}
@@ -612,7 +659,7 @@ export function InboxScreen() {
                   </span>
                 </div>
               )}
-              {isTranscript(cur) ? null : sugg[key(cur)] ? (
+              {unsuggested(cur) ? null : sugg[key(cur)] ? (
                 <SuggestionCard s={sugg[key(cur)]} onAccept={busy(cur) ? undefined : () => outcome(cur, sugg[key(cur)])} />
               ) : (
                 <span
@@ -794,6 +841,9 @@ function CaptureBody({ item }: { item: InboxItem }) {
 }
 
 /** The open item: its first line as the title, the rest drawn as markdown at reading size. */
+/** An action's text, then the quotes it came from (the header above says where it is). */
+const actionBody = (i: InboxItem) => [i.text.trim(), "", ...(i.action?.quotes ?? []).map((q) => `> ${q}`)].join("\n");
+
 function ItemBody({ text }: { text: string }) {
   const root = useStore(settings).vaultPath ?? "";
   const [first, ...rest] = text.split("\n");

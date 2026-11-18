@@ -12,7 +12,18 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 
 import type { InboxItem } from "./api";
-import { choiceGroups, doneNow, eachItem, eachSaid, inboxChoices, inboxItemKind, leadChoice, suggestKind } from "./inboxActions";
+import {
+  actionTaskText,
+  choiceGroups,
+  doneNow,
+  eachItem,
+  eachSaid,
+  inboxChoices,
+  inboxItemKind,
+  leadChoice,
+  settleInboxItem,
+  suggestKind,
+} from "./inboxActions";
 import table from "../tests/fixtures/inbox-choices.json";
 
 const item = (lineText: string): InboxItem =>
@@ -34,6 +45,56 @@ describe("Done now in the Inbox", () => {
     invoke.mockClear();
     await doneNow(item("- [ ] Call Sam"));
     expect(invoke.mock.calls[0][0]).toBe("task_toggle");
+  });
+});
+
+const action = (owner: "me" | "delegated", initiative = "Orbit launch"): InboxItem => ({
+  kind: "action",
+  path: `wiki/initiatives/${initiative}.md`,
+  line: 12,
+  lineText: "- Book the room [delegated:: Maya] [status:: open] [due:: 2026-11-01] ^a-2",
+  text: "Book the room",
+  stamp: "2026-11-01",
+  action: { id: "a-2", initiative, owner, person: owner === "me" ? null : "Maya", due: "2026-11-01", overdue: true, quotes: [] },
+});
+
+describe("an initiative's action in the Inbox", () => {
+  it("leads with a task for the user's own and a waiting-for for a delegated one", () => {
+    expect([inboxChoices(action("me")), leadChoice(action("me"))]).toEqual([["next", "waiting", "someday", "done", "delete"], "next"]);
+    expect([inboxChoices(action("delegated")), leadChoice(action("delegated"))]).toEqual([
+      ["waiting", "next", "someday", "done", "delete"],
+      "waiting",
+    ]);
+    expect(inboxItemKind(action("delegated"))).toEqual({ icon: "waiting", label: "Waiting for Maya, overdue" });
+  });
+
+  it("becomes a task naming whose it is and linking its initiative (not Unfiled)", () => {
+    expect(actionTaskText(action("delegated"))).toBe("Maya: Book the room [[Orbit launch]]");
+    expect(actionTaskText(action("me", "Unfiled"))).toBe("Book the room");
+  });
+
+  it("accepted, makes the task and marks the action with where it went; dropped or done, marks it", async () => {
+    invoke.mockClear();
+    await settleInboxItem(
+      action("delegated"),
+      "- [ ] Maya: Book the room #waiting-for 📅 2026-11-01",
+      "Project. Orbit App launch.md",
+      "Waiting for",
+    );
+    expect(invoke.mock.calls.map((c) => c[0])).toEqual(["project_add_task", "initiative_action_set"]);
+    expect(invoke.mock.calls[1][1]).toMatchObject({
+      path: "wiki/initiatives/Orbit launch.md",
+      line: 12,
+      change: { task: "[[Project. Orbit App launch]]" },
+    });
+    invoke.mockClear();
+    await settleInboxItem(action("me"), "- [ ] Book the room #context/calls");
+    expect(invoke.mock.calls.map((c) => c[0])).toEqual(["capture", "initiative_action_set"]);
+    expect(invoke.mock.calls[1][1]).toMatchObject({ change: { task: "[[Me. To Do List]]" } });
+    invoke.mockClear();
+    await settleInboxItem(action("me"), null);
+    await doneNow(action("me"));
+    expect(invoke.mock.calls.map((c) => (c[1] as { change: unknown }).change)).toEqual([{ status: "dropped" }, { status: "done" }]);
   });
 });
 

@@ -66,7 +66,10 @@ pub async fn inbox_list(app: AppHandle) -> Res<Vec<InboxItem>> {
 pub fn inbox_items(app: &AppHandle) -> Result<Vec<InboxItem>, String> {
     let svc = app.state::<VaultService>();
     let root = svc.root().ok_or("No vault is open.")?;
-    let mut out = captures(&svc, &root);
+    // Initiatives' actions first: the signal the captures were ingested for (D-20261118-12).
+    let today = chrono::Local::now().date_naive().to_string();
+    let mut out = inbox::actions(&root, &today);
+    out.extend(captures(&svc, &root));
     out.extend(inbox::items(&root));
     Ok(out)
 }
@@ -141,7 +144,7 @@ fn captures(svc: &VaultService, root: &Path) -> Vec<InboxItem> {
             let stamp = chrono::DateTime::parse_from_rfc3339(when)
                 .ok()
                 .map(|t| t.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M").to_string());
-            InboxItem { kind: "capture", text: stem(&path), path, line: 0, line_text: c.what, stamp, block: None }
+            InboxItem { kind: "capture", text: stem(&path), path, line: 0, line_text: c.what, stamp, block: None, action: None }
         })
         .collect();
     // Every other source no wiki page cites and not yet clarified here: a file dropped or imported
@@ -159,7 +162,16 @@ fn captures(svc: &VaultService, root: &Path) -> Vec<InboxItem> {
     out.extend(others.into_iter().map(|f| {
         let stamp =
             chrono::DateTime::from_timestamp_millis(f.mtime).map(|t| t.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M").to_string());
-        InboxItem { kind: "capture", text: stem(&f.path), line_text: what_file(&f.path).into(), path: f.path, line: 0, stamp, block: None }
+        InboxItem {
+            kind: "capture",
+            text: stem(&f.path),
+            line_text: what_file(&f.path).into(),
+            path: f.path,
+            line: 0,
+            stamp,
+            block: None,
+            action: None,
+        }
     }));
     out
 }
@@ -204,6 +216,40 @@ pub fn ingested(path: &str) {
 #[tauri::command]
 pub async fn inbox_capture_done(path: String) -> Res<()> {
     writing(move || mark_done(&captures_done_file(), &path)).await
+}
+
+/// An initiative action's line after `edit` (its status, the task it became), without writing it:
+/// the MCP's clarify_inbox sends it as a change, the Inbox writes it with `initiative_action_set`.
+#[tauri::command]
+pub fn initiative_action_line(line_text: String, edit: brainstead_core::initiatives::ActionEdit) -> Res<String> {
+    brainstead_core::initiatives::with_action_line(&line_text, &edit).map_err(invalid)
+}
+
+/// Changes an initiative action's line in place, as the Inbox does when it's accepted, done or
+/// dropped (D-20261118-12); ⌘Z undoes it.
+#[tauri::command]
+pub async fn initiative_action_set(
+    app: AppHandle,
+    path: String,
+    line: usize,
+    line_text: String,
+    change: brainstead_core::initiatives::ActionEdit,
+) -> Res<Edited> {
+    writing(move || {
+        if !brainstead_core::initiatives::is_initiative(&path) {
+            return Err(invalid(format!("Not an initiative: {path}")));
+        }
+        let verb = match (change.status, change.task.as_deref()) {
+            (Some(brainstead_core::initiatives::Status::Done), _) => "Marked done",
+            (Some(brainstead_core::initiatives::Status::Dropped), _) => "Dropped",
+            (_, Some(t)) if !t.is_empty() => "Made a task of",
+            _ => "Changed",
+        };
+        edit(&app, &path, line, &line_text, verb, |l| {
+            brainstead_core::initiatives::with_action_line(l, &change).map_err(write::WriteError::Invalid)
+        })
+    })
+    .await
 }
 
 /// Sets a task's `#context/…` tags (none clears them).

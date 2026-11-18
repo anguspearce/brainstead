@@ -5,7 +5,7 @@
 // Taking an item out of the Inbox once it's clarified: the writes the Inbox screen makes, kept
 // here so the MCP bridge (src/mcpActions.ts) makes the same ones.
 
-import { api, InboxItem } from "./api";
+import { ActionEdit, api, InboxItem } from "./api";
 import { captureDone } from "./gtd";
 import { isTranscriptPath, trashTranscript } from "./meetingFlow";
 import { isThread } from "./skills/Reply";
@@ -19,6 +19,11 @@ import { toggleTaskEdit } from "./taskModel";
  *  leaves it in the Inbox). The Inbox's buttons, keys and ticked-several choices, and
  *  clarify_inbox, all follow this. */
 export function inboxChoices(i: InboxItem): string[] {
+  // An initiative's action: a task (a waiting-for when it's delegated), done or dropped.
+  if (i.kind === "action")
+    return i.action?.owner === "delegated"
+      ? ["waiting", "next", "someday", "done", "delete"]
+      : ["next", "waiting", "someday", "done", "delete"];
   if (i.kind !== "capture") return ["next", "project", "waiting", "done", "someday", "reference", "delete"];
   // A capture's source actions first, as Sources offers them (src/sourceActions.ts).
   const own: string[] = sourceActions(i.path);
@@ -45,11 +50,16 @@ export function choiceGroups(i: InboxItem): { doing: string[]; notDoing: string[
 
 /** The choice an item's buttons lead with, highlighted: a capture's leading source action (a
  *  transcript's meeting note, a thread's reply, else Ingest). */
-export const leadChoice = (i: InboxItem): string | null => (i.kind === "capture" ? (sourceActions(i.path)[0] ?? null) : null);
+export const leadChoice = (i: InboxItem): string | null =>
+  i.kind === "capture" ? (sourceActions(i.path)[0] ?? null) : i.kind === "action" ? inboxChoices(i)[0] : null;
 
 /** What kind of thing an Inbox item is, for its icon and the name beside it: a thought, a task, or
  *  a capture by what its file is (a transcript, an email or chat thread, a Word file, a PDF…). */
 export function inboxItemKind(i: InboxItem): { icon: string; label: string } {
+  if (i.kind === "action")
+    return i.action?.owner === "delegated"
+      ? { icon: "waiting", label: `Waiting for ${i.action.person ?? "someone"}${i.action.overdue ? ", overdue" : ""}` }
+      : { icon: "tasks", label: "Your action" };
   if (i.kind === "thought") return { icon: "bulb", label: "Scratchpad thought" };
   if (i.kind === "task") return { icon: "tasks", label: "Task" };
   if (isTranscriptPath(i.path)) return { icon: "mic", label: "Teams transcript" };
@@ -81,7 +91,23 @@ export function suggestKind(i: InboxItem): string {
 
 /** Done now: a task ticked as everywhere else (a recurring one gets its next occurrence:
  *  toggleTaskEdit), a capture marked done, a thought taken out. */
+/** Where an action's task went, for its `task::` field: the project's note, or the To Do list. */
+export const taskWent = (toProject?: string | null) => `[[${(toProject ?? "Me. To Do List.md").split("/").pop()!.replace(/\.md$/, "")}]]`;
+
+/** What an action becomes as a task, by default: its words, whose it is when delegated, and its
+ *  initiative linked (not Unfiled). */
+export function actionTaskText(i: InboxItem): string {
+  const a = i.action;
+  const who = a?.owner === "delegated" && a.person ? `${a.person}: ` : "";
+  const link = a && a.initiative !== "Unfiled" ? ` [[${a.initiative}]]` : "";
+  return `${who}${i.text.trim()}${link}`;
+}
+
+/** An action's line changed in place (done, dropped, made a task). */
+export const setAction = (i: InboxItem, change: ActionEdit) => api.initiativeActionSet(i.path, i.line, i.lineText, change);
+
 export function doneNow(i: InboxItem): Promise<unknown> {
+  if (i.kind === "action") return setAction(i, { status: "done" });
   if (i.kind === "task") return toggleTaskEdit({ path: i.path, line: i.line, lineText: i.lineText }, true);
   if (i.kind === "capture") return captureDone(i.path);
   return api.inboxRemoveThought(i.line, i.block ?? i.lineText);
@@ -118,6 +144,13 @@ export async function settleInboxItem(
   toProject?: string | null,
   heading = "Next actions",
 ): Promise<unknown> {
+  if (i.kind === "action") {
+    // The task made, then the action marked with where it went; deleted, it's dropped.
+    if (!line) return setAction(i, { status: "dropped" });
+    if (toProject) await api.projectAddTask(toProject, line.replace(/^- \[ \] /, ""), heading);
+    else await api.capture("task", line.replace(/^- \[ \] /, ""), "");
+    return setAction(i, { task: taskWent(toProject) });
+  }
   if (i.kind === "task") {
     if (toProject && line) return api.inboxMoveTask(i.line, i.lineText, toProject, heading, line);
     return api.taskReplace({ path: i.path, line: i.line, lineText: i.lineText }, line ? [line] : [], line ? "Clarified" : "Deleted");
