@@ -51,6 +51,8 @@ It uses the tokens your open Teams tab already has. While Teams is open in your 
 
 Ingests wait in one queue, whoever started them, and run one at a time, oldest source first, so a newer source has the last word on a page.
 
+A document, email thread or transcript also gets a summary page in `wiki/summaries/`. A day of a Teams or Slack chat doesn't: its news goes on the pages it mentions and its actions on your initiatives.
+
 Brainstead, not the AI, decides where text goes on a page:
 
 - Each source gets one dated entry in the page's **Timeline**, newest first, with a `Source:` line. Ingesting the same source again replaces its entry.

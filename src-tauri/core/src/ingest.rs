@@ -290,6 +290,13 @@ impl Source {
     pub fn is_journal(&self) -> bool {
         !self.rel.contains('/') && (self.rel.starts_with("Meeting. ") || self.rel.starts_with("1-1. "))
     }
+    /// A day of a Teams or Slack chat (`Teams. Chat.`, `Slack. Chat.`): short messages whose news
+    /// goes on the pages they mention and whose actions on initiatives, so it gets no summary page of
+    /// its own (D-20261118-21).
+    pub fn is_chat_day(&self) -> bool {
+        let name = crate::lint::name_of(&self.rel);
+        name.starts_with("Teams. Chat. ") || name.starts_with("Slack. Chat. ")
+    }
     fn body(&self) -> String {
         match &self.text {
             SourceText::Text(t) => t.clone(),
@@ -385,6 +392,9 @@ pub fn prompt(src: &Source, pages: &[(String, String)], catalogue: &str, today: 
     out.push_str(&tracking.section());
     if src.is_journal() {
         out.push_str("\nThis source is a journal note: give no summary page.\n");
+    }
+    if src.is_chat_day() {
+        out.push_str("\nThis source is a day of a chat: give no summary page.\n");
     }
     out
 }
@@ -506,6 +516,8 @@ pub fn plan(
         let rel = wiki_page(named).unwrap_or_else(|_| md(named));
         if src.is_journal() {
             dropped.push(Dropped { page: rel, reason: "A journal note gets no summary page.".into() });
+        } else if src.is_chat_day() {
+            dropped.push(Dropped { page: rel, reason: "A day of a chat gets no summary page.".into() });
         } else if let Err(e) = wiki_page(named).and_then(|_| {
             if rel.starts_with("wiki/summaries/") {
                 Ok(())
@@ -1222,6 +1234,18 @@ mod tracking_tests {
     fn planned(json: &str) -> (Vec<Planned>, Vec<Dropped>) {
         let a = parse_answer(json).unwrap();
         plan_tracking(&src(), &a, &tracking(), read, "run-1", "2026-10-02", (vec![], vec![]))
+    }
+
+    #[test]
+    fn a_chat_day_gets_no_summary_page() {
+        let chat = Source { rel: "sources/slack/Slack. Chat. Lena - 2026-11-16.md".into(), text: SourceText::Text("Lena: the launch moves.".into()) };
+        assert!(chat.is_chat_day() && Source { rel: "sources/Teams. Chat. Standup - 2026-11-16.md".into(), text: SourceText::Text(String::new()) }.is_chat_day());
+        assert!(!src().is_chat_day());
+        assert!(prompt(&chat, &[], "", "Friday", &Tracking::default()).contains("give no summary page"));
+        let a = parse_answer(r#"{"summary": {"page": "wiki/summaries/Slack. Chat. Lena - 2026-11-16", "content": "x"}, "pages": []}"#).unwrap();
+        let (out, dropped) = plan(&chat, &a, |_| None, |_| None, "2026-11-18", 6000);
+        assert!(out.is_empty());
+        assert_eq!(dropped[0].reason, "A day of a chat gets no summary page.");
     }
 
     #[test]
