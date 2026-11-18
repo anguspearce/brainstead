@@ -280,6 +280,20 @@ pub async fn ingest_runs() -> Res<Vec<Run>> {
 pub fn ingest_stop(app: AppHandle, id: String) {
     app.state::<Stops>().0.lock().unwrap().insert(id.clone());
     app.state::<std::sync::Arc<crate::ask::Running>>().cancel(&id);
+    // One still waiting is stopped now, on disk too, so a restart before its turn doesn't take it again.
+    let waiting = {
+        let mut q = crate::lock(&QUEUE);
+        q.0.iter().position(|r| r.id == id).map(|i| q.0.remove(i))
+    };
+    if let Some(mut r) = waiting {
+        r.status = "stopped".into();
+        r.finished = Some(proposals::now_local());
+        r.error = Some("Stopped before it started.".into());
+        for s in r.steps.iter_mut() {
+            s.status = "skipped".into();
+        }
+        emit(&app, &r);
+    }
 }
 
 /// The runs waiting, and whether a worker is taking them: every ingest and meeting note goes
