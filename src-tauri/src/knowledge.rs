@@ -129,7 +129,7 @@ pub(crate) fn run_lint(app: &AppHandle) -> Option<Report> {
     let _one = h.running.lock().unwrap();
     let root = app.state::<VaultService>().root()?;
     let dismissed: HashSet<String> = kept().dismissed.into_iter().collect();
-    let mut r = lint::run(&root, today(), &dismissed);
+    let mut r = lint::run_read(&root, today(), &dismissed, &crate::gtd::sources_read());
     // Claims with no citation, from the contradiction check's cached claims (none until it runs).
     r.checks.push(crate::contradict::uncited_check(&root));
     // Finished with `health.json` as it is once the checks are done, not as it was when they

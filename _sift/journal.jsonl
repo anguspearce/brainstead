@@ -550,3 +550,4 @@
 {"commit": "ed085c51", "detail": "D-20261118-25 - Fetch again: only mail since its first day", "id": "j-20261118-214435-d4e6", "kind": "decision-ref", "ts": "2026-11-18T21:44:35Z", "who": "waynetd777@users.noreply.github.com"}
 {"commit": "cf8fd0b3", "detail": "D-20261118-26 - An action's task closes it; actions move between initiatives", "id": "j-20261118-215947-d8e4", "kind": "decision-ref", "ts": "2026-11-18T21:59:47Z", "who": "waynetd777@users.noreply.github.com"}
 {"commit": "03483dd5", "detail": "D-20261118-27 - Inbox: a quick Task choice, and keys by first letter", "id": "j-20261118-222523-c453", "kind": "decision-ref", "ts": "2026-11-18T22:25:23Z", "who": "waynetd777@users.noreply.github.com"}
+{"commit": "2755583c", "detail": "D-20261118-28 - Knowledge health: read sources aren't pending; initiatives aren't orphans", "id": "j-20261118-230500-2423", "kind": "decision-ref", "ts": "2026-11-18T23:05:00Z", "who": "waynetd777@users.noreply.github.com"}

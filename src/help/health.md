@@ -34,13 +34,13 @@ Click **Fix** on one issue, or **Fix safe issues** in the top bar for all of the
 - **A missing page or broken source whose file is in the Trash** (a transcript trashed after its meeting note, say) says **In the Trash since** the day. If a meeting note was made from it (same title and day; a transcript's Part 1 and Part 2 count as one meeting), the row asks **Did you mean** that note, with **Link to it**. **Restore from Trash** puts the file back instead; there's no **Create** for a file in the Trash. An assistant reading the checks is told the same: In the Trash since, and Did you mean. When Brainstead trashes a transcript at the end of making its meeting note, it points the links to it at the note first, so nothing is left missing.
 - **Broken sources** (a page's `sources:` lists a file that isn't there): **Link to…** points it at a file that's there, with **Did you mean** and **Restore from Trash** as for missing pages.
 - **Sources changed since they were cited**: **Ingest again** reads the source again, so the pages citing it catch up.
-- **Orphan pages**: `index.md`'s catalogue links every wiki page, so an orphan is one it hasn't caught up with yet (the daily check does). **Add them to index.md** brings it up to date now.
+- **Orphan pages**: `index.md`'s catalogue links every wiki page, so an orphan is one it hasn't caught up with yet (the daily check does). **Add them to index.md** brings it up to date now. An initiative is never an orphan: you reach it from the Inbox, the brief and the Wiki's initiative filter, not by links.
 - **Possible duplicates**: **Open the other** compares them; **Not duplicates** stops the pair being flagged.
 - **Anything else** (a stale page, a broken source…): **Ignore** hides it until its page (or, for a claim, its line) changes; **Show again** lists ignored ones again. Stale pages and claims with no citation also have **Ignore all**, at the top of their list.
 
 A fixed issue leaves the list as soon as its fix is made, and the checks rerun within a second of any change to the vault, wherever it was made (Changes, Ask, another editor).
 - **Images nothing uses**: **Move to the Trash**, after asking; you can restore them.
-- **Sources not yet ingested**: **Ingest** starts the same ingest as [Sources](app:sources); its page changes are listed in [Changes](app:review). A source that can't be ingested, such as an SVG or a zip file, shows **Can't ingest**.
+- **Sources not yet ingested**: a source no wiki page cites and no ingest has read (one read with nothing in it worth keeping isn't listed). **Ingest** starts the same ingest as [Sources](app:sources); its page changes are listed in [Changes](app:review). A source that can't be ingested, such as an SVG or a zip file, shows **Can't ingest**.
 
 ## Put pages in the page shape
 Every entity, concept and initiative page has the same layout: the opening text, **Current state**, its topics (such as Architecture), a **Timeline**, then **See also**. Each Timeline entry is a heading starting with its date, newest first, with a line under it naming the note it came from:

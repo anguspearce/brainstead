@@ -215,6 +215,31 @@ pub fn ingested(path: &str) {
     if let Err(e) = mark_done(&captures_done_file(), path) {
         crate::applog!("inbox: couldn't mark {path} ingested: {}", e.message());
     }
+    if let Err(e) = edit_done(&sources_read_file(), |read| {
+        if read.iter().any(|p| p == path) {
+            return false;
+        }
+        read.push(path.to_string());
+        true
+    }) {
+        crate::applog!("inbox: couldn't note {path} read: {}", e.message());
+    }
+}
+
+/// The sources an ingest has read, whatever came of them, for Knowledge health: one read with nothing
+/// in it worth citing isn't "not yet ingested" (D-20261118-28). Every one, not capped like the
+/// Inbox's list; started from that list the first time, as its ingested sources were read.
+fn sources_read_file() -> PathBuf {
+    crate::platform::data_dir().join("sources-read.json")
+}
+
+pub fn sources_read() -> std::collections::HashSet<String> {
+    let f = sources_read_file();
+    if !f.exists() {
+        let seed: Vec<String> = captures_done().into_iter().filter(|p| p.starts_with("sources/")).collect();
+        let _ = brainstead_core::write::write_atomic(&f, &serde_json::to_vec(&seed).unwrap_or_default(), false);
+    }
+    read_done(&f).into_iter().collect()
 }
 
 /// A capture clarified in the Inbox (made a task, ingested or kept): it leaves the Inbox.

@@ -235,7 +235,17 @@ pub fn run(root: &Path, today: NaiveDate, dismissed: &HashSet<String>) -> Report
     run_in(root, today, dismissed, Zone::Local)
 }
 
+/// [`run`], told which sources an ingest has read (vault paths): one read with nothing in it worth
+/// citing isn't "not yet ingested" (D-20261118-28).
+pub fn run_read(root: &Path, today: NaiveDate, dismissed: &HashSet<String>, read: &HashSet<String>) -> Report {
+    run_with(root, today, dismissed, Zone::Local, read)
+}
+
 pub(crate) fn run_in(root: &Path, today: NaiveDate, dismissed: &HashSet<String>, zone: Zone) -> Report {
+    run_with(root, today, dismissed, zone, &HashSet::new())
+}
+
+fn run_with(root: &Path, today: NaiveDate, dismissed: &HashSet<String>, zone: Zone, was_read: &HashSet<String>) -> Report {
     let t0 = std::time::Instant::now();
     let files = walk(root);
     let day = |ms: i64| zone.ms_to_local(ms).date();
@@ -305,9 +315,11 @@ pub(crate) fn run_in(root: &Path, today: NaiveDate, dismissed: &HashSet<String>,
     sort(&mut items);
     checks.push(Check { id: "broken-sources", title: "Broken sources", classic: true, ignored: 0, items });
 
-    // 3. Orphans.
+    // 3. Orphans. Not an initiative: it's a list of actions, reached from the Inbox, the brief and
+    // the Wiki's initiative filter, not by links (D-20261118-28).
     let mut items: Vec<Item> = wiki
         .iter()
+        .filter(|(f, _)| !crate::initiatives::is_initiative(&f.rel))
         .filter(|(f, _)| !inbound.contains_key(&lint_key(stem(name_of(&f.rel)))))
         .map(|(f, _)| Item { text: f.rel.clone(), page: Some(f.rel.clone()), ..Default::default() })
         .collect();
@@ -391,7 +403,8 @@ pub(crate) fn run_in(root: &Path, today: NaiveDate, dismissed: &HashSet<String>,
     sort(&mut items);
     checks.push(Check { id: "unlogged-writes", title: "Unlogged writes", classic: true, ignored: 0, items });
 
-    // 7. Uningested sources: files directly in sources/ that no page's sources: names.
+    // 7. Uningested sources: files directly in sources/ that no page's sources: names and no
+    // ingest has read.
     let cited: HashSet<String> = wiki
         .iter()
         .flat_map(|(_, t)| WIKILINK.captures_iter(sources_block(frontmatter_block(t))).map(|c| lint_key(c[1].trim())).collect::<Vec<_>>())
@@ -401,7 +414,7 @@ pub(crate) fn run_in(root: &Path, today: NaiveDate, dismissed: &HashSet<String>,
         .iter()
         .filter(|f| {
             let n = name_of(&f.rel);
-            !n.starts_with('.') && !cited.contains(&lint_key(stem(n))) && !cited.contains(&lint_key(n))
+            !n.starts_with('.') && !cited.contains(&lint_key(stem(n))) && !cited.contains(&lint_key(n)) && !was_read.contains(&f.rel)
         })
         .map(|f| Item { text: f.rel.clone(), page: Some(f.rel.clone()), ..Default::default() })
         .collect();
@@ -855,6 +868,8 @@ mod tests {
         );
         let r = run_in(t.path(), today(), &HashSet::new(), fixture::zone());
         let got: Vec<&str> = r.check("initiative-items").unwrap().items.iter().map(|i| i.text.as_str()).collect();
+        // Nothing links to it, and it isn't an orphan: initiatives are reached from the Inbox and the brief.
+        assert!(r.check("orphans").unwrap().items.iter().all(|i| !i.text.contains("initiatives/")));
         assert_eq!(
             got,
             [
@@ -938,6 +953,10 @@ mod tests {
         assert_eq!(changed[0].pages, ["wiki/concepts/Role Framework.md", "wiki/entities/Orbit App.md"]);
         let pending: Vec<String> = r.check("uningested-sources").unwrap().items.iter().map(|i| i.text.clone()).collect();
         assert_eq!(pending_sources(&root), pending);
+        // One an ingest read, with nothing in it worth citing, isn't pending.
+        let read: HashSet<String> = pending.iter().take(1).cloned().collect();
+        let after = run_with(&root, today(), &HashSet::new(), fixture::zone(), &read);
+        assert_eq!(after.check("uningested-sources").unwrap().items.len(), pending.len() - read.len());
         let safe = r.checks.iter().flat_map(|c| &c.items).filter(|i| i.safe).count();
         assert_eq!(r.needs_decision() + safe + stale.len(), r.total());
     }
