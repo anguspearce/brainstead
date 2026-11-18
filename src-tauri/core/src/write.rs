@@ -300,6 +300,16 @@ pub fn find_line(lines: &[String], line: usize, expected: &str) -> Option<usize>
 /// Edits one task line: finds it (as `find_line`), applies `f`, and writes the file if the line
 /// changed. Returns the line number and the line as written.
 pub fn edit_task(path: &Path, line: usize, expected: &str, f: impl FnOnce(&str) -> String) -> Result<(usize, String)> {
+    edit_line_where(path, line, expected, true, f)
+}
+
+/// Changes one line, found as `edit_task` finds it, whatever the line is: an initiative's action,
+/// which is a plain list item, not a task (D-20261118-08), or a line an undo puts back.
+pub fn edit_line(path: &Path, line: usize, expected: &str, f: impl FnOnce(&str) -> String) -> Result<(usize, String)> {
+    edit_line_where(path, line, expected, false, f)
+}
+
+fn edit_line_where(path: &Path, line: usize, expected: &str, task: bool, f: impl FnOnce(&str) -> String) -> Result<(usize, String)> {
     let l = lock(path);
     let _g = l.lock().unwrap();
     check_conflict_copies(path)?;
@@ -310,8 +320,8 @@ pub fn edit_task(path: &Path, line: usize, expected: &str, f: impl FnOnce(&str) 
     };
     let (mut lines, eol, trailing) = split_lines(&text);
     let i = find_line(&lines, line, expected)
-        .ok_or_else(|| WriteError::Stale("This task changed in the file since it was shown. It's been reloaded; try again.".into()))?;
-    if parse_line(&lines[i], i).is_none() {
+        .ok_or_else(|| WriteError::Stale("This line changed in the file since it was shown. It's been reloaded; try again.".into()))?;
+    if task && parse_line(&lines[i], i).is_none() {
         return Err(WriteError::Stale("That line isn't a task any more.".into()));
     }
     let new = f(&lines[i]);

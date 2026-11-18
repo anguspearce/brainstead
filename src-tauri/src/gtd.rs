@@ -250,7 +250,8 @@ pub async fn initiative_action_set(
             (_, Some(t)) if !t.is_empty() => "Made a task of",
             _ => "Changed",
         };
-        edit(&app, &path, line, &line_text, verb, |l| {
+        // An action is a plain list item, not a task: edited as any line is.
+        crate::edits::edit_any_line(&app, &path, line, &line_text, verb, |l| {
             brainstead_core::initiatives::with_action_line(l, &change).map_err(write::WriteError::Invalid)
         })
     })

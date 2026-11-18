@@ -252,13 +252,37 @@ pub(crate) fn edit(
     verb: &str,
     f: impl FnOnce(&str) -> Result<String, WriteError>,
 ) -> Res<Edited> {
+    edit_where(app, path, line, expected, verb, true, f)
+}
+
+/// As `edit`, for a line that isn't a task: an initiative's action (D-20261118-08).
+pub(crate) fn edit_any_line(
+    app: &AppHandle,
+    path: &str,
+    line: usize,
+    expected: &str,
+    verb: &str,
+    f: impl FnOnce(&str) -> Result<String, WriteError>,
+) -> Res<Edited> {
+    edit_where(app, path, line, expected, verb, false, f)
+}
+
+fn edit_where(
+    app: &AppHandle,
+    path: &str,
+    line: usize,
+    expected: &str,
+    verb: &str,
+    task: bool,
+    f: impl FnOnce(&str) -> Result<String, WriteError>,
+) -> Res<Edited> {
     let st = app.state::<AppState>();
     writable(&st)?;
     let svc = app.state::<VaultService>();
     let abs = vault_path(&svc, path)?;
     let mut err = None;
     // `f` sees the task inside any quote or callout markers, which stay in front.
-    let (i, new) = write::edit_task(&abs, line, expected, |l| {
+    let change = |l: &str| {
         let (pre, body) = brainstead_core::tasks::split_quote(l);
         match f(body) {
             Ok(n) => format!("{pre}{n}"),
@@ -267,7 +291,8 @@ pub(crate) fn edit(
                 l.to_string()
             }
         }
-    })?;
+    };
+    let (i, new) = if task { write::edit_task(&abs, line, expected, change) } else { write::edit_line(&abs, line, expected, change) }?;
     if let Some(e) = err {
         return Err(e.into());
     }
@@ -450,7 +475,7 @@ fn apply_undo(resolve: impl Fn(&str) -> Res<PathBuf>, e: &UndoEntry) -> Res<Vec<
     match &e.written {
         Some(lines) => write::restore_task(&abs, e.line, lines, &before)?,
         None => {
-            write::edit_task(&abs, e.line, &e.after, move |_| before).map_err(|err| match err {
+            write::edit_line(&abs, e.line, &e.after, move |_| before).map_err(|err| match err {
                 WriteError::Stale(_) => WriteError::Stale("That line has changed since, so it can't be undone.".into()),
                 other => other,
             })?;
