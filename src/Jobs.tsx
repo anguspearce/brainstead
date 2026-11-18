@@ -211,6 +211,29 @@ export function Jobs() {
         </div>
         <div className={`job ${here ? "" : "off"}`}>
           <div className="t">
+            <div className="pt">Daily brief</div>
+            <div className="faint">
+              Today's note in Briefs/: the themes of what came in since yesterday, your actions, what you're waiting for and what you can
+              archive.
+            </div>
+            <RunLine run={last("brief")} next={here && sch.briefEnabled ? (st?.next.brief ?? null) : null} running={running("brief")} />
+          </div>
+          <label className="jtime">
+            <span className="muted">Every day at</span>
+            <TimeField value={sch.briefTime ?? "07:00"} onChange={(t) => set({ briefTime: t })} label="Daily brief time" />
+          </label>
+          <button
+            type="button"
+            className="btn sm"
+            title={running("brief") ? "Stop the brief" : "Write today's brief now, whether or not it's scheduled"}
+            onClick={() => void (running("brief") ? api.reviewsStop("brief") : runNow("brief"))}
+          >
+            {running("brief") ? "Stop" : "Run now"}
+          </button>
+          <Switch label="Daily brief" on={!!sch.briefEnabled} onChange={(v) => set({ briefEnabled: v })} />
+        </div>
+        <div className={`job ${here ? "" : "off"}`}>
+          <div className="t">
             <div className="pt">Weekly summary</div>
             <div className="faint">What you did last week, written for you. Your weekly review shows it beside its steps.</div>
             <RunLine run={last("weekly")} next={here && sch.weeklyEnabled ? (st?.next.weekly ?? null) : null} running={running("weekly")} />
@@ -240,29 +263,6 @@ export function Jobs() {
             {running("weekly") ? "Stop" : "Run now"}
           </button>
           <Switch label="Weekly summary" on={sch.weeklyEnabled} onChange={(v) => set({ weeklyEnabled: v })} />
-        </div>
-        <div className={`job ${here ? "" : "off"}`}>
-          <div className="t">
-            <div className="pt">Daily brief</div>
-            <div className="faint">
-              Today's note in Briefs/: the themes of what came in since yesterday, your actions, what you're waiting for and what you can
-              archive.
-            </div>
-            <RunLine run={last("brief")} next={here && sch.briefEnabled ? (st?.next.brief ?? null) : null} running={running("brief")} />
-          </div>
-          <label className="jtime">
-            <span className="muted">Every day at</span>
-            <TimeField value={sch.briefTime ?? "07:00"} onChange={(t) => set({ briefTime: t })} label="Daily brief time" />
-          </label>
-          <button
-            type="button"
-            className="btn sm"
-            title={running("brief") ? "Stop the brief" : "Write today's brief now, whether or not it's scheduled"}
-            onClick={() => void (running("brief") ? api.reviewsStop("brief") : runNow("brief"))}
-          >
-            {running("brief") ? "Stop" : "Run now"}
-          </button>
-          <Switch label="Daily brief" on={!!sch.briefEnabled} onChange={(v) => set({ briefEnabled: v })} />
         </div>
       </div>
       <p className="faint">
