@@ -403,6 +403,15 @@ pub fn secret_delete(service: &str, account: &str) -> Result<(), String> {
     }
 }
 
+/// Quits the app bundle process `pid` belongs to, through AppleScript (a normal Quit).
+pub fn quit_other_copy(pid: u32) {
+    let Ok(out) = std::process::Command::new("ps").args(["-o", "comm=", "-p", &pid.to_string()]).output() else { return };
+    let exe = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let Some(bundle) = exe.find(".app/").map(|i| &exe[..i + 4]) else { return };
+    let script = format!("tell application \"{}\" to quit", bundle.replace('"', ""));
+    let _ = std::process::Command::new("osascript").args(["-e", &script]).output();
+}
+
 #[cfg(test)]
 mod tests {
     use objc2::msg_send;

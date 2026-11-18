@@ -314,3 +314,6 @@ pub fn secret_set(_service: &str, _account: &str, _value: &str) -> Result<(), St
 pub fn secret_delete(_service: &str, _account: &str) -> Result<(), String> {
     Ok(())
 }
+
+/// Nothing here: a second copy hands over to the first through the single-instance lock.
+pub fn quit_other_copy(_pid: u32) {}

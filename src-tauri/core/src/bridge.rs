@@ -79,10 +79,23 @@ fn read_bridge(path: &Path) -> std::io::Result<Vec<u8>> {
 struct Alive {
     pid: u32,
     at: u128,
+    /// A dev build (`make dev`), not the installed app (D-20261118-22).
+    #[serde(default)]
+    dev: bool,
 }
 
 pub fn write_alive(path: &Path, pid: u32) -> std::io::Result<()> {
-    write_json(path, &Alive { pid, at: now_ms() })
+    write_json(path, &Alive { pid, at: now_ms(), dev: cfg!(debug_assertions) })
+}
+
+/// Another copy of the app that's up on this app data folder: its process and whether it's a dev
+/// build. None when it's this one (`me`) or none has said it's up in the last six seconds.
+pub fn other_alive(data: &Path, me: u32) -> Option<(u32, bool)> {
+    read_bridge(&dir(data).join(ALIVE))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Alive>(&b).ok())
+        .filter(|a| a.pid != me && now_ms().saturating_sub(a.at) < 6_000)
+        .map(|a| (a.pid, a.dev))
 }
 
 /// Whether the app has said it's up in the last six seconds.
@@ -155,6 +168,21 @@ pub fn ask(data: &Path, req: &Request, timeout: Duration) -> Reply {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn another_copy_is_seen_by_its_heartbeat() {
+        let t = tempfile::tempdir().unwrap();
+        let d = dir(t.path());
+        std::fs::create_dir_all(&d).unwrap();
+        assert_eq!(other_alive(t.path(), 7), None, "none up");
+        write_alive(&d.join(ALIVE), 42).unwrap();
+        assert_eq!(other_alive(t.path(), 42), None, "that's this copy");
+        assert_eq!(other_alive(t.path(), 7), Some((42, cfg!(debug_assertions))));
+        // A heartbeat from before the dev flag reads as the installed app's.
+        std::fs::write(d.join(ALIVE), format!("{{\"pid\":5,\"at\":{}}}", now_ms())).unwrap();
+        assert_eq!(other_alive(t.path(), 7), Some((5, false)));
+    }
+
     use super::*;
     use serde_json::json;
 

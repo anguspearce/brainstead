@@ -24,6 +24,7 @@ Dev processes: `python3 tools/dev_stop.py` (`python` on Windows) lists the dev p
 |---|---|
 | `make dev` | Run with hot reload (Vite on localhost:1440) |
 | `make dev HOST=1` | The same, and the dev build registers itself as the extensions' helper, so the Teams, Outlook and Slack sign-ins are handed to it (its own Keychain entries, "Brainstead (dev)"). The installed app takes the helper back when it next starts |
+| | One copy at a time on the app data folder: a dev build that starts while the installed app runs asks it to quit (as its menu's Quit does, unsaved edits asked about first; by AppleScript for an installed app from before this rule) and waits for it; the installed app started while a dev build runs closes at once with a notification. Assistants' Brainstead tools open the installed app when no copy is up, so this keeps it from running beside `make dev` |
 | | On macOS, cargo's runner (`tools/dev-run.sh`, set in `src-tauri/.cargo/config.toml`) signs the app's debug binary with the certificate `signing.local` names before it runs, so the Keychain keeps trusting a dev build across rebuilds instead of asking for the sign-ins again |
 | `make help` | List the targets |
 | `make check` | In parallel: Rust tests and Clippy (core, MCP, app), TypeScript check, ESLint, Vitest, the tools' Python tests (`tools/*_test.py`), formatting and repo checks (`tools/check.py`; `python3 tools/check.py rust` runs one group). Builds into `src-tauri/target/check`, so `make dev` doesn't block it. ~15 s warm, minutes cold |

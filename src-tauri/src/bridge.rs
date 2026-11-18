@@ -56,7 +56,55 @@ pub fn start(app: AppHandle) {
     });
 }
 
+/// One copy at a time on the shared app data folder (D-20261118-22). A dev build that starts while
+/// the installed app runs (an assistant's Brainstead tools open it when no copy is up) asks it to
+/// quit, as its menu's Quit does (unsaved edits asked about first), and waits for it, so the two
+/// never sync, run jobs or hold the extensions' helper side by side. The installed app started
+/// while a dev build runs steps aside at once. False when this copy should not start.
+pub fn one_copy(app: &AppHandle) -> bool {
+    let data = platform::data_dir();
+    let me = std::process::id();
+    let Some((pid, dev)) = wire::other_alive(&data, me) else { return true };
+    if !cfg!(debug_assertions) {
+        if dev {
+            crate::applog!("startup: a dev build (pid {pid}) is running on this data; this copy doesn't start");
+            use tauri_plugin_notification::NotificationExt;
+            let _ = app
+                .notification()
+                .builder()
+                .title("Brainstead is already running")
+                .body("A development build of Brainstead is open, so this copy closed.")
+                .show();
+            return false;
+        }
+        return true;
+    }
+    if dev {
+        return true;
+    }
+    crate::applog!("startup: the installed app (pid {pid}) is running; asking it to quit");
+    let req = Request { id: wire::new_id(), action: STEP_ASIDE.into(), args: Value::Null, chat: None, model: None };
+    // An installed app from before this rule doesn't know the request: quit it as its Dock menu would.
+    if !wire::ask(&data, &req, Duration::from_secs(5)).ok {
+        platform::quit_other_copy(pid);
+    }
+    let t0 = Instant::now();
+    while t0.elapsed() < Duration::from_secs(60) && wire::other_alive(&data, me).is_some_and(|(p, d)| p == pid && !d) {
+        std::thread::sleep(Duration::from_millis(300));
+    }
+    true
+}
+
+/// What a dev build asks the installed app when it starts: quit.
+const STEP_ASIDE: &str = "app.step_aside";
+
 fn handle(app: &AppHandle, req: &Request) -> Reply {
+    if req.action == STEP_ASIDE {
+        crate::applog!("a dev build started: quitting so only one copy runs");
+        crate::tray::show_main(app);
+        let _ = app.emit_to("main", "quit-requested", "unasked");
+        return Reply { ok: true, result: Value::Null, error: None };
+    }
     let waiting = app.state::<Waiting>();
     // The window may still be loading when the app was opened for this request.
     let start = Instant::now();

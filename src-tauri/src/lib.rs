@@ -1133,11 +1133,17 @@ pub fn run() {
             if std::env::args().skip(1).any(|a| a == "--quit") {
                 std::process::exit(0);
             }
+            // One copy on this data at a time: the installed app and a dev build don't run side
+            // by side (D-20261118-22). Not for screenshot scenes, which run several at once.
+            if scene().is_none() && !bridge::one_copy(app.handle()) {
+                std::process::exit(0);
+            }
             // Runs an earlier session left waiting: nothing will take them now.
             ingest::settle_stale();
             // The capture extensions' host, registered with each browser (not by a screenshot demo,
             // and not by a dev build: that would point the browsers at target/debug).
-            if shares_instance_lock() && !cfg!(debug_assertions) {
+            let dev_host = std::env::var("BRAINSTEAD_DEV_HOST").is_ok_and(|v| v == "1");
+            if shares_instance_lock() && (!cfg!(debug_assertions) || dev_host) {
                 std::thread::spawn(nativehost::register);
             }
             nativehost::watch(app.handle().clone());

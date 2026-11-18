@@ -965,6 +965,13 @@ fn secret_service() -> String {
     }
 }
 
+/// Asks another copy of the app, by its process, to quit as its Dock menu's Quit does: for a dev
+/// build to have the installed app step aside when that copy doesn't take the request
+/// (`bridge::one_copy`). macOS: an AppleScript quit to its app bundle; elsewhere nothing.
+pub fn quit_other_copy(pid: u32) {
+    imp::quit_other_copy(pid)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
