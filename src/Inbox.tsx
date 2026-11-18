@@ -249,7 +249,9 @@ export function InboxScreen() {
   const [making, setMaking] = useState<string | null>(null);
   const [sugg, setSugg] = useState<Record<string, ClarifySuggestion>>({});
   const [thinking, setThinking] = useState(false);
-  const [done, setDone] = useState(0);
+  // Every item seen in the Inbox this visit: one that has left it, however (clarified here, ingested
+  // by a run, cleared by an assistant), counts as done, so the total holds still while the count climbs.
+  const [seen, setSeen] = useState<string[]>([]);
   // A capture by its file: two captures can share a line and the start of their text (two Teams
   // transcripts did), and then both rows were chosen at once.
   const key = (i: InboxItem) =>
@@ -322,7 +324,6 @@ export function InboxScreen() {
   const active = (projects ?? []).filter((p) => p.status === "active");
 
   const after = (msg: string) => {
-    setDone((n) => n + 1);
     setForm(null);
     setFiling(false);
     const next = items[idx + 1] ?? items[idx - 1] ?? null;
@@ -409,7 +410,6 @@ export function InboxScreen() {
     eachItem(order, one)
       .then(({ ok, failed }) => {
         const gone = new Set(ok.map(key));
-        setDone((d) => d + ok.length);
         setChecked((c) => c.filter((k) => !gone.has(k)));
         toast(
           eachSaid(
@@ -479,7 +479,14 @@ export function InboxScreen() {
       .finally(() => setThinking(false));
   };
 
-  const total = items.length + done;
+  const keys = items.map(key);
+  const keyList = keys.join("\n");
+  useEffect(() => {
+    const now = keyList ? keyList.split("\n") : [];
+    setSeen((s) => (now.every((k) => s.includes(k)) ? s : [...new Set([...s, ...now])]));
+  }, [keyList]);
+  const total = new Set([...seen, ...keys]).size;
+  const done = total - items.length;
   // What Suggest asks about: not transcripts, whose choice is the meeting note.
   const askable = items.filter((i) => !unsuggested(i));
   return (
