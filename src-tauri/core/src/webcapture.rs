@@ -18,7 +18,7 @@ use std::sync::LazyLock;
 
 /// The most threads one combined capture takes (the extension's popup has the same cap).
 pub const MAX_BATCH_THREADS: usize = 25;
-/// The heading of the divider the Teams and Outlook sync inserts before a meeting's folded-in chat;
+/// The heading of the divider the sync inserts before a meeting's folded-in chat;
 /// shared so `render` can tell a transcript carries chat and note it at the top.
 pub const MEETING_CHAT_HEADING: &str = "In-meeting chat";
 /// The largest capture accepted, in bytes of JSON.
@@ -27,7 +27,7 @@ pub const MAX_BYTES: usize = 16 * 1024 * 1024;
 #[derive(Debug, Clone, Deserialize)]
 pub struct Message {
     pub sender: String,
-    /// The sender's email address, when known (the Teams and Outlook sync sets it so "Don't sync this
+    /// The sender's email address, when known (the sync sets it so "Don't sync this
     /// sender" can read it back; the extensions don't). Rendered as a `**From:**` line.
     #[serde(default, rename = "fromAddress")]
     pub from_address: Option<String>,
@@ -41,7 +41,7 @@ pub struct Message {
     #[serde(default)]
     pub date: Option<String>,
     pub body: String,
-    /// Files that came with the message (the Teams and Outlook sync sets these; the extensions don't),
+    /// Files that came with the message (the sync sets these; the extensions don't),
     /// listed under the body.
     #[serde(default)]
     pub attachments: Vec<Attachment>,
@@ -444,7 +444,7 @@ pub fn write(vault: &Path, c: &Capture, now: DateTime<Local>) -> Result<String, 
 }
 
 /// Overwrites an existing source `rel` (vault-relative) with capture `c`, in place and atomically —
-/// for the Teams and Outlook sync topping up a chat day or an email thread as new messages arrive.
+/// for the sync topping up a chat day or an email thread as new messages arrive.
 /// Unlike [`write`], it keeps the same file name rather than claiming a free one, so the source grows
 /// instead of spawning copies. The file must already exist (the sync wrote it the first time); its
 /// name (which carries the day) is not recomputed.
@@ -625,7 +625,7 @@ mod tests {
         }
         let (_, text) = render(&tr(json!({"meetingDate": "2026-10-02", "meetingStart": "late"})), at(), "2026-10-03");
         assert!(text.contains("\n**Meeting:** 2026-10-02\n"));
-        // A chat carrying a day (the Teams and Outlook sync sets it to the conversation day) is named
+        // A chat carrying a day (the sync sets it to the conversation day) is named
         // by that day, not the capture day, and still shows no Meeting line (that's transcript-only).
         let chat = cap(json!({"type": "teams", "url": "https://teams.microsoft.com/v2/", "title": "Standup", "meetingDate": "2026-10-02",
             "messages": [{"sender": "Lena", "body": "Ready?"}]}));

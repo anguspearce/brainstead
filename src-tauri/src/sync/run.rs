@@ -56,7 +56,7 @@ fn run_inner(data: &Path) -> Report {
     let s = settings::load(&data.join("settings.json"));
     let vault = s.vault_path.as_deref().filter(|p| !p.trim().is_empty());
     if !s.sync_enabled && !s.sync_slack {
-        r.blocked = Some("Teams and Outlook sync is off.".into());
+        r.blocked = Some("Sync is off: switch on Teams and Outlook, or Slack, in Settings › Sync.".into());
         return r;
     }
     let Some(vault) = vault else {

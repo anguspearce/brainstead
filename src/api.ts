@@ -48,7 +48,7 @@ export interface Settings {
   /** Jobs & schedule: ingest a new source as it arrives (a capture, a file dropped or imported);
    *  and, in the daily check, ingest again the sources that changed since pages cited them. */
   ingestOnArrival?: boolean;
-  /** Teams and Outlook sync is on (Settings › Teams and Outlook sync; macOS only). */
+  /** Teams and Outlook sync is on (Settings › Sync; macOS only). */
   syncEnabled?: boolean;
   /** Channel conversation ids chosen to sync (1:1 and group chats always sync). */
   syncChannels?: string[];
@@ -407,13 +407,13 @@ export interface Captured {
   path: string | null;
   error: string | null;
   at: string;
-  /** Made by the Teams and Outlook sync rather than an extension button (ingested unattended). */
+  /** Made by the sync rather than an extension button (ingested unattended). */
   sync?: boolean;
   /** The item's own date/time (RFC 3339): a chat's last message, a mail's received time, a meeting's start. */
   itemDate?: string | null;
 }
 
-/** The Teams and Outlook sign-in state (Settings › Teams and Outlook sync). */
+/** The Teams and Outlook sign-in state (Settings › Sync). */
 export interface SyncSignIn {
   signedIn: boolean;
   handedOver: string | null;

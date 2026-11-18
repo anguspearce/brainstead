@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Today: what's overdue, due and deferred until today, what you're waiting for, a capture box,
-// and the notes you were in. Upcoming meetings show when Teams and Outlook sync is on (macOS), read
+// and the notes you were in. Upcoming meetings show when the sync (Teams and Outlook) is on (macOS), read
 // from the user's own Teams calendar — not Microsoft Graph (D-20261025-01).
 
 import { changes, decisions, health, held, pageName, startKnowledge } from "./knowledge";
@@ -337,7 +337,7 @@ function SideCard({ title, right, children }: { title: string; right?: React.Rea
   );
 }
 
-/** Today's remaining Teams meetings, from the sync's calendar (Settings › Teams and Outlook sync).
+/** Today's remaining Teams meetings, from the sync's calendar (Settings › Sync).
  *  Shows the last read at once and swaps in a fresh read only when it differs, so the card doesn't
  *  vanish or flicker while the calendar is re-read. Nothing shows when there are none, so a quiet
  *  day adds no clutter. */

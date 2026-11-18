@@ -58,7 +58,7 @@ const PANES: [SettingsPane, string, string][] = [
   ["assistants", "AI assistants", "cpu"],
   ["jobs", "Jobs & schedule", "calendar"],
   ["capture", "Capture extensions", "source"],
-  ["sync", "Teams and Outlook sync", "refresh"],
+  ["sync", "Sync", "refresh"],
   ["permissions", "Permissions", "shield"],
   ["about", "About", "info"],
 ];
@@ -1464,7 +1464,7 @@ const EXTENSIONS: {
     id: "slack-capture",
     ext: "slack",
     name: "Slack sync",
-    what: "Hands your open Slack tab's sign-in to Brainstead for Slack sync (Settings › Teams and Outlook sync); it captures nothing itself.",
+    what: "Hands your open Slack tab's sign-in to Brainstead for Slack sync (Settings › Sync); it captures nothing itself.",
   },
 ];
 
@@ -1532,7 +1532,7 @@ function SyncPane() {
   return (
     <>
       <section className="sgroup">
-        <h2 className="h3">Teams and Outlook sync</h2>
+        <h2 className="h3">Teams and Outlook</h2>
         <p className="muted">
           Brainstead reads your own Teams chats, meeting transcripts, Inbox mail and calendar and writes what's new into sources/, ready to
           ingest and listed in the Inbox — the same as a capture, without clicking. It uses the sign-in your open Teams tab already has,
@@ -1622,7 +1622,7 @@ function SyncPane() {
           <button
             type="button"
             className="btn"
-            title="Run one Teams and Outlook sync pass now"
+            title="Run one sync pass now: Teams and Outlook, and Slack, whichever are on"
             disabled={busy || !(enabled || s.syncSlack)}
             onClick={syncNow}
           >

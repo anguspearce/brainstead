@@ -626,7 +626,7 @@ function useDropToSources(): boolean {
   return over;
 }
 
-/** Run one Teams and Outlook sync pass from a button, reporting what it added. Shared by the Sources
+/** Run one sync pass from a button, reporting what it added. Shared by the Sources
  *  top bar and Settings' Sync now. */
 function SyncNowButton() {
   const s = useStore(settings);

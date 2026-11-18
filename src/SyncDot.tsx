@@ -4,7 +4,7 @@
 
 // The top bar's Teams and Outlook dot: green when both are handing over a live sign-in, amber when
 // something needs the user (gone stale, signed out, an old extension), grey when not signed in.
-// Shown only while the sync is on. Clicking it opens Settings › Teams and Outlook sync.
+// Shown only while the sync is on. Clicking it opens Settings › Sync.
 
 import { useEffect, useState } from "react";
 import { api, SyncSignIn } from "./api";
@@ -43,7 +43,7 @@ export function SyncDot() {
       type="button"
       className="ibtn syncdot"
       aria-label={text}
-      title={`${text} Click for Settings › Teams and Outlook sync.`}
+      title={`${text} Click for Settings › Sync.`}
       onClick={() => nav.go({ screen: "settings", pane: "sync" })}
     >
       <span className={`d ${tone}`} />

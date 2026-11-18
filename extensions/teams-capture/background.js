@@ -346,7 +346,7 @@ async function sendToBrainstead(message) {
   return res;
 }
 
-// ── Sign-in handover (Brainstead's Teams and Outlook sync, D-20261025-01) ──────────────
+// ── Sign-in handover (Brainstead's sync, D-20261025-01) ──────────────
 //
 // While a Teams tab is open, Brainstead can read the user's own chats, mail and calendar if it has
 // the page's sign-in. The page keeps it (MSAL's cache) in localStorage; this reads it from an open

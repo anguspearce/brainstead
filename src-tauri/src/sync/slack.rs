@@ -5,7 +5,7 @@
 //! Slack sync (D-20261118-01, D-20261118-07). The Slack extension hands over the open Slack tab's
 //! sign-in (each workspace's client token, and the session cookie); it's kept in the login Keychain
 //! (`platform::secret_*`), never a file. Each pass reads the user's own DMs and group DMs, the
-//! channels they picked (Settings › Teams and Outlook sync › Slack), and threads that mention them,
+//! channels they picked (Settings › Sync › Slack), and threads that mention them,
 //! with Slack's own Web API, read-only, and writes one source per conversation per day
 //! (`Slack. Chat. <name> - <day>.md`), each thread's replies under its first message, through the
 //! shared capture path. A day that gains messages (a thread revived later) is rewritten in place.

@@ -4,7 +4,7 @@ Brainstead keeps a wiki in your vault's `wiki/` folder: a page per person, team,
 
 It follows Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) pattern: raw material in `sources/`, pages the model maintains in `wiki/`, a catalogue in `index.md` and a record in `log.md`. Brainstead adds checked quotes, Changes, Knowledge health and a contradictions check.
 
-[Sources](#sources) · [Teams and Outlook sync](#teams-and-outlook-sync) · [Ingest](#ingest) · [Changes](#changes) · [Wiki pages](#wiki-pages) · [Knowledge health](#knowledge-health) · [Contradictions](#contradictions) · [Graph](#graph) · [Meeting notes and the other tools](#meeting-notes-and-the-other-tools)
+[Sources](#sources) · [Sync](#sync) · [Ingest](#ingest) · [Changes](#changes) · [Wiki pages](#wiki-pages) · [Knowledge health](#knowledge-health) · [Contradictions](#contradictions) · [Graph](#graph) · [Meeting notes and the other tools](#meeting-notes-and-the-other-tools)
 
 ## Sources
 
@@ -16,7 +16,7 @@ Sources (⌘0) are the files in `sources/`: emails, Teams chats and transcripts 
 
 - Drag files onto Sources, or click **Import**, to copy them in.
 - The **Outlook** and **Teams** Chrome extensions capture a thread, chat or meeting transcript into `sources/` with one click. Set them up in Settings › Capture extensions. Each capture also waits in the Inbox.
-- On macOS and Windows, **[Teams and Outlook sync](#teams-and-outlook-sync)** can do the capturing for you, reading your own chats, transcripts and Inbox mail into `sources/` without a click.
+- On macOS and Windows, **[Sync](#sync)** can do the capturing for you, reading your own chats, transcripts and Inbox mail into `sources/` without a click.
 - Each source is **New**, **Changed** (since the pages citing it were written) or **Ingested**.
 - A row's button is what the source usually becomes: **Meeting note** for a Teams transcript, **Draft reply** for an email or chat thread, otherwise **Ingest**. Its ▾ has the rest: **Make and ingest a meeting note** or **Draft a reply** where they fit, **Ingest into the wiki**, **Ask about this source** and **Compare with…**. A file's right-click menu offers the same.
 - Transcripts, emails and chats are known by their names (`Teams. Transcript. …`, `Email. …`, `Teams. Chat. …`), in `sources/` or any folder under it.
@@ -27,9 +27,9 @@ Sources (⌘0) are the files in `sources/`: emails, Teams chats and transcripts 
 
 Beside a source, its provenance says when it was ingested, by which model, and which wiki pages cite it, with the passages they cite.
 
-## Teams and Outlook sync
+## Sync
 
-On macOS and Windows, turn on **Teams and Outlook sync** (Settings › Teams and Outlook sync) to let Brainstead read your own Teams chats, meeting transcripts, Inbox mail and calendar and write what's new into `sources/` on its own, without the extension button. Each item lands in the Inbox and is ingested like any capture; the sync reads only and never sends or changes anything in Teams or Outlook.
+On macOS and Windows, turn on **Teams and Outlook** in Settings › Sync to let Brainstead read your own Teams chats, meeting transcripts, Inbox mail and calendar and write what's new into `sources/` on its own, without the extension button. Each item lands in the Inbox and is ingested like any capture; the sync reads only and never sends or changes anything in Teams or Outlook.
 
 It uses the tokens your open Teams tab already has. While Teams is open in your browser, the **Teams capture** extension hands those tokens to Brainstead every few minutes; Brainstead keeps the latest set (in the Keychain on macOS, Credential Manager on Windows) and uses only those, never minting its own — so keep Teams open in your browser. The extension keeps a background Teams tab fresh: it stops Chrome putting the tab to sleep, and reloads it when a token the sync uses is about to run out (never a tab you're looking at or one in a call, and at most once every 45 minutes). Mail is read with the token an open Outlook on the web tab holds, which the **Outlook capture** extension hands over every 15 minutes (Brainstead takes only that token from it), since Teams' page doesn't reliably keep one that can read mail; so keep Outlook open in Chrome too. Both extensions read the page's sign-in the same way, including the encrypted cache newer Microsoft pages keep. Chrome's Energy Saver (on by default on battery) freezes background tabs, and a frozen tab can't be read, so add `teams.cloud.microsoft`, `outlook.cloud.microsoft`, `teams.microsoft.com` and `outlook.office.com` under **Always keep these sites active** in Chrome's Settings › Performance; when a tab doesn't answer within 20 seconds the extension reloads it instead of waiting. The extension sends its version with each handover, and when the last handover came from an older copy than this build of Brainstead ships (Chrome only loads an updated unpacked extension when it's reloaded), the Sign-in card says so and asks you to reload it at chrome://extensions; the note clears at the next handover. While the sync is on, a dot in the top bar shows the sign-in at a glance (green connected, amber needs attention, grey not signed in), with the reason on hover; clicking it opens this pane. When Microsoft turns a token down (a 401: you were signed out, or the session ended), Brainstead stops using it and the Sign-in card says **Signed out:** with the services affected, until you sign in again in Chrome and a different token is handed over. The Sign-in card names any service whose token has gone stale. It uses Teams' and Outlook's own web services, not Microsoft Graph.
 

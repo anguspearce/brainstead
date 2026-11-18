@@ -91,7 +91,7 @@ async function start() {
     toast(`${c.what} captured`, { label: "Open", run: () => openDoc(c.path!) });
     // Settings › AI assistants › Ingest: a new source is ingested as it arrives.
     // A transcript gets its meeting note, written and ingested when Brainstead is sure of it, else it
-    // waits in the Inbox (src/meetingFlow.ts, D-20261118-05). A capture the Teams and Outlook sync
+    // waits in the Inbox (src/meetingFlow.ts, D-20261118-05). A capture the sync
     // made (c.sync) is handled unattended, so a change that fails a check is held.
     if (!settings.get().ingestOnArrival) return;
     if (isTranscriptPath(c.path)) void makeMeetingNotes([c.path], { unattended: c.sync === true });

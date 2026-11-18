@@ -1,11 +1,11 @@
 ---
-title: Settings › Teams and Outlook sync
+title: Settings › Sync
 kind: screen
 screens: [settings/sync]
 order: 36
 summary: Read your own Teams chats, meeting transcripts, Inbox mail and calendar into the vault on their own, without clicking capture.
 ---
-With **Teams and Outlook sync** on, Brainstead reads your own Teams chats, meeting transcripts, Inbox mail and calendar and writes what's new into the vault's `sources/` folder — the same files the [capture extensions](app:settings/capture) make, listed in the [Inbox](app:inbox) and ingested like any capture, but without a button press. It reads only; it never sends, replies or changes anything in Teams or Outlook. macOS and Windows.
+With **Teams and Outlook** on in this pane, Brainstead reads your own Teams chats, meeting transcripts, Inbox mail and calendar and writes what's new into the vault's `sources/` folder — the same files the [capture extensions](app:settings/capture) make, listed in the [Inbox](app:inbox) and ingested like any capture, but without a button press. It reads only; it never sends, replies or changes anything in Teams or Outlook. macOS and Windows.
 
 ## How it signs in
 It uses the tokens your open Teams tab already has. While Teams is open in your browser, the Teams extension hands those tokens to Brainstead every few minutes; Brainstead keeps the latest set in your computer's secure store (the Keychain on macOS, Credential Manager on Windows) and uses only those — it never mints its own, so its access never exceeds what your browser already has. So:

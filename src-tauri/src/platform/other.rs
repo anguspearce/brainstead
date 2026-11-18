@@ -307,7 +307,7 @@ pub fn secret_get(_service: &str, _account: &str) -> Option<String> {
 
 #[cfg(not(windows))]
 pub fn secret_set(_service: &str, _account: &str, _value: &str) -> Result<(), String> {
-    Err("Teams and Outlook sync needs a secret store, which isn't set up on this system.".into())
+    Err("The sync needs a secret store, which isn't set up on this system.".into())
 }
 
 #[cfg(not(windows))]

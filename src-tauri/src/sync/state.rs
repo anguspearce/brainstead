@@ -2,7 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! What the Teams and Outlook sync has already written, so it writes each thing once (D-20261025-02):
+//! What the sync has already written, so it writes each thing once (D-20261025-02):
 //! which day of each chat became a source, which mail messages were captured, and which meetings'
 //! transcripts were fetched. A small JSON file in the app data folder, capped so it can't grow
 //! without bound. It records progress only — never message text, and nothing secret.

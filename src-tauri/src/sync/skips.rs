@@ -4,7 +4,7 @@
 
 //! What to skip, learned from what the user deletes (D-20261118-15). Each synced email the user
 //! moves to the Trash counts against its sender, and each synced chat day against its chat; once one
-//! has been deleted [`AT`] times, Settings › Teams and Outlook sync suggests skipping it. Nothing is
+//! has been deleted [`AT`] times, Settings › Sync suggests skipping it. Nothing is
 //! skipped until the user says so (the window adds it to the skip list, then calls `forget`), and
 //! **Not this one** stops it being suggested again. Kept in the app data folder, never the vault.
 
@@ -160,7 +160,7 @@ pub fn on_delete(rel: &str, text: &str) {
     }
 }
 
-/// The suggestions, and the titles of chats learned, for Settings › Teams and Outlook sync.
+/// The suggestions, and the titles of chats learned, for Settings › Sync.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Listed {

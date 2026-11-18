@@ -79,7 +79,7 @@ pub struct Captured {
     pub path: Option<String>,
     pub error: Option<String>,
     pub at: String,
-    /// Made by the Teams and Outlook sync rather than an extension button, so the app can ingest it
+    /// Made by the sync rather than an extension button, so the app can ingest it
     /// unattended. Absent on older captures (reads as false).
     #[serde(default)]
     pub sync: bool,
@@ -144,7 +144,7 @@ fn handle(data: &Path, origin: &str, v: Value) -> Value {
 }
 
 /// Writes capture `c` into `vault`'s `sources/` and records it in the Inbox and `captures.json`, the
-/// way an extension capture is. `sync` marks a capture the Teams and Outlook sync made rather than a
+/// way an extension capture is. `sync` marks a capture the sync made rather than a
 /// button press (so the app can ingest it unattended). The vault path, or why it was refused; a
 /// refusal is recorded too, so it shows in the Inbox strip and Settings. Shared by the native host
 /// and the in-app sync (`sync::run`).
@@ -178,7 +178,7 @@ pub fn deliver(
     result
 }
 
-/// Writes a file the Teams and Outlook sync brought in (an email attachment) into `sources/` as
+/// Writes a file the sync brought in (an email attachment) into `sources/` as
 /// `name`, or a free name beside it, and notes it like a capture, so it reaches the Inbox and is
 /// ingested as it arrives. Its vault path.
 pub fn deliver_file(

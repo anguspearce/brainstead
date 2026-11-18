@@ -30,7 +30,7 @@ pub struct Settings {
     pub summaries_here: bool,
     /// When the user does the guided weekly review (Settings › Jobs & schedule).
     pub weekly_review: brainstead_core::reviews::WeeklyReview,
-    /// Teams and Outlook sync is on (Settings › Teams and Outlook sync; macOS only, D-20261025-01).
+    /// Teams and Outlook sync is on (Settings › Sync; macOS only, D-20261025-01).
     pub sync_enabled: bool,
     /// Channel conversation ids the user chose to sync (off by default; 1:1 and group chats always).
     pub sync_channels: Vec<String>,

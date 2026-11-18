@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Skips suggested from what the user deletes (src-tauri/src/sync/skips.rs, D-20261118-15):
-// accepting one puts its sender or chat on the sync's skip list, as Settings › Teams and Outlook sync
+// accepting one puts its sender or chat on the sync's skip list, as Settings › Sync
 // and the MCP's teams_sync both do it.
 
 import { api, SkipSuggestion } from "./api";

@@ -555,7 +555,7 @@ async function openRowAndSettle(convid, prevSignature, hintScrollTop) {
 
 // ---------------------------------------------------------- mail sign-in ----
 
-// Brainstead's Teams and Outlook sync reads mail with the token Outlook on the web already holds:
+// Brainstead's sync reads mail with the token Outlook on the web already holds:
 // every 15 minutes, while an Outlook tab is open, this hands that tab's Outlook token over
 // (D-20261028-02). Teams' own page stopped reliably keeping one that can read mail. The rest of the
 // sync's sign-in still comes from the Teams extension; Brainstead takes only the mail token from here.
