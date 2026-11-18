@@ -1,3 +1,7 @@
+// Copyright © 2026 Wayne Davies. Free software under the GNU General Public License, version 3 or later.
+// See LICENSE for the full text.
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /**
  * Guards one-key shortcuts that act on something (the Inbox's choices) against typing meant for
  * somewhere else: a password typed for a system prompt while the app had focus, or keys that reach
