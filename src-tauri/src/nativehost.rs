@@ -350,10 +350,13 @@ pub struct Browser {
 
 /// Registers the host with each installed browser (`platform::register_native_host`: a manifest
 /// in each browser's folder, or the registry on Windows), when it isn't already this. A dev build
-/// only reports: it leaves the installed app's registration alone.
+/// only reports: it leaves the installed app's registration alone, unless it was started with
+/// `BRAINSTEAD_DEV_HOST=1` (`make dev HOST=1`), to try the sign-in hand-overs in it (D-20261118-20).
+/// Then the hand-overs go to the dev build's own Keychain entries until the installed app next
+/// starts and takes the helper back.
 pub fn register() -> Vec<Browser> {
     let Ok(exe) = std::env::current_exe() else { return vec![] };
-    let may_write = !cfg!(debug_assertions);
+    let may_write = !cfg!(debug_assertions) || std::env::var("BRAINSTEAD_DEV_HOST").is_ok_and(|v| v == "1");
     platform::register_native_host(HOST, &manifest(&exe), may_write)
         .into_iter()
         .map(|h| Browser { name: h.browser.to_string(), registered: h.registered, current: h.current })

@@ -23,6 +23,7 @@ Dev processes: `python3 tools/dev_stop.py` (`python` on Windows) lists the dev p
 | Command | What it does |
 |---|---|
 | `make dev` | Run with hot reload (Vite on localhost:1440) |
+| `make dev HOST=1` | The same, and the dev build registers itself as the extensions' helper, so the Teams, Outlook and Slack sign-ins are handed to it (its own Keychain entries, "Brainstead (dev)"). The installed app takes the helper back when it next starts |
 | `make help` | List the targets |
 | `make check` | In parallel: Rust tests and Clippy (core, MCP, app), TypeScript check, ESLint, Vitest, the tools' Python tests (`tools/*_test.py`), formatting and repo checks (`tools/check.py`; `python3 tools/check.py rust` runs one group). Builds into `src-tauri/target/check`, so `make dev` doesn't block it. ~15 s warm, minutes cold |
 | `make test` | Same as `make check` |

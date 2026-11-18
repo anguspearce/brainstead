@@ -122,9 +122,9 @@ sign-check:
 	    && echo "signed with $(SIGN_ID)" || { echo "not signed with $(SIGN_ID)"; exit 1; }; \
 	else echo "no signing.local: copy signing.local.example and create the Brainstead Dev certificate"; exit 1; fi
 
-## Run the app in development, with hot reload (Vite on localhost:1440).
+## Run the app in development, with hot reload (Vite on localhost:1440). HOST=1 lets it take the browser extensions' helper over, to try the Teams, Outlook and Slack sign-ins in it.
 dev:
-	npm run tauri dev
+	BRAINSTEAD_DEV_HOST=$(HOST) npm run tauri dev
 
 ## List these targets.
 help:
