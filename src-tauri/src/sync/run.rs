@@ -52,7 +52,7 @@ pub fn run_once(data: &Path) -> Report {
 
 /// A pass, or with `from` a back-fill (D-20261118-23): Teams and Slack conversations from that day
 /// on, days already written topped up and days skipped before written now, and every thread in the
-/// Outlook Inbox, whatever its date. What it writes is marked a back-fill, so it waits in the Inbox
+/// Outlook Inbox with a message since that day. What it writes is marked a back-fill, so it waits in the Inbox
 /// rather than being ingested on arrival.
 pub fn run_from(data: &Path, from: Option<NaiveDate>) -> Report {
     if RUNNING.swap(true, Ordering::SeqCst) {
@@ -279,7 +279,8 @@ fn sync_mail(p: &Pass, st: &mut state::State, r: &mut Report) {
             return;
         }
     };
-    // A back-fill takes the whole Inbox, whatever its dates.
+    // A back-fill reads the whole Inbox, but takes only the threads with a message since its first
+    // day: a thread left in the Inbox for months stays out.
     let first_run = !st.initialized && p.from.is_none();
     let cutoff = p.cutoff.as_deref();
     // The conversations with a fresh Inbox message this pass (deduped, newest first already). Mail is
@@ -293,6 +294,11 @@ fn sync_mail(p: &Pass, st: &mut state::State, r: &mut Report) {
         // or, on the first run, older than the cap.
         if ignored(&m.from_address, &p.s.sync_ignore_senders) {
             continue;
+        }
+        if let Some(from) = p.from.as_deref() {
+            if m.received.with_timezone(&Local).format("%Y-%m-%d").to_string().as_str() < from {
+                continue;
+            }
         }
         if first_run {
             if let Some(cutoff) = cutoff {
@@ -321,7 +327,21 @@ fn sync_thread(p: &Pass, conversation_id: &str, st: &mut state::State, r: &mut R
     // unchanged thread costs no attachment calls.
     let capture = |st: &mut state::State, r: &mut Report| {
         let attachments = if p.s.sync_mail_attachments {
-            super::attachments::for_thread(&super::attachments::Target { data: p.data, vault: p.vault }, &msgs, st, &mut r.problems)
+            {
+                let since = p
+                    .from
+                    .as_deref()
+                    .and_then(|f| NaiveDate::parse_from_str(f, "%Y-%m-%d").ok())
+                    .and_then(|d| d.and_hms_opt(0, 0, 0))
+                    .and_then(|t| t.and_local_timezone(Local).earliest())
+                    .map(|t| t.with_timezone(&Utc));
+                super::attachments::for_thread(
+                    &super::attachments::Target { data: p.data, vault: p.vault, since },
+                    &msgs,
+                    st,
+                    &mut r.problems,
+                )
+            }
         } else {
             Vec::new()
         };

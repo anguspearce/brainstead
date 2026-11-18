@@ -1587,8 +1587,8 @@ function SyncPane() {
             <div className="t">
               <div className="pt">Fetch again</div>
               <div className="faint">
-                Teams and Slack conversations from this day on, and every email thread still in your Outlook Inbox, whatever its date. They
-                wait in the Inbox, not ingested as they arrive.
+                Teams and Slack conversations from this day on, and the threads in your Outlook Inbox with a message since then. They wait
+                in the Inbox, not ingested as they arrive.
               </div>
             </div>
             <DateField value={fetchFrom} onChange={setFetchFrom} label="Day to fetch from" />

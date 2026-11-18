@@ -253,7 +253,7 @@ fn pull_mail(
             }
         };
         let files = if attachments {
-            super::attachments::for_thread(&super::attachments::Target { data, vault }, &thread, st, &mut out.problems)
+            super::attachments::for_thread(&super::attachments::Target { data, vault, since: None }, &thread, st, &mut out.problems)
         } else {
             Vec::new()
         };
