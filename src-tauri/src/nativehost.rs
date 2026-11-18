@@ -87,6 +87,17 @@ pub struct Captured {
     /// start — so the Inbox shows when it happened, not when it was captured. None for a button capture.
     #[serde(default, rename = "itemDate")]
     pub item_date: Option<String>,
+    /// Fetched again by a back-fill (Settings › Sync › Fetch again): it waits in the Inbox, with no
+    /// ingest on arrival and no notification, so hundreds of them don't start hundreds of runs.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub backfill: bool,
+}
+
+/// Set while a back-fill pass runs ([`crate::sync::run`]): what it delivers is marked `backfill`.
+pub static BACKFILL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn backfilling() -> bool {
+    BACKFILL.load(std::sync::atomic::Ordering::SeqCst)
 }
 
 fn extension_of(origin: &str) -> &'static str {
@@ -173,6 +184,7 @@ pub fn deliver(
             at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             sync,
             item_date,
+            backfill: backfilling(),
         },
     );
     result
@@ -201,6 +213,7 @@ pub fn deliver_file(
             at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             sync: true,
             item_date,
+            backfill: backfilling(),
         },
     );
     result
@@ -307,7 +320,7 @@ pub fn watch(app: tauri::AppHandle) {
                 let _ = app.emit("capture", &c);
                 // A notification too when Brainstead isn't the window in front.
                 let focused = app.get_webview_window("main").and_then(|w| w.is_focused().ok()).unwrap_or(false);
-                if !focused {
+                if !focused && !c.backfill {
                     use tauri_plugin_notification::NotificationExt;
                     let (title, body) = match (&c.path, &c.error) {
                         (Some(p), _) => {
@@ -521,6 +534,7 @@ mod tests {
             at: format!("2026-10-03T10:{:02}:{:02}.000Z", i / 60, i % 60),
             sync: false,
             item_date: None,
+            backfill: false,
         };
         // An older install: captures.json only. Its captures seed the Inbox list.
         write_list(&data.path().join("captures.json"), &[cap(0)]);

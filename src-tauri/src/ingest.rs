@@ -116,7 +116,8 @@ pub struct Step {
 #[serde(rename_all = "camelCase")]
 pub struct Run {
     pub id: String,
-    /// ingest, or meeting (a note from a transcript).
+    /// ingest, actions (an ingest for actions and decisions only, of a source the wiki already
+    /// has: D-20261118-23), or meeting (a note from a transcript).
     #[serde(default = "ingest_kind")]
     pub kind: String,
     /// For a meeting note: its type, name and date.
@@ -366,24 +367,41 @@ pub fn settle_stale() {
 /// `unattended`: an assistant session nobody is watching asked, so its changes are treated as a
 /// scheduled run's.
 #[tauri::command]
-pub fn ingest_start(app: AppHandle, paths: Vec<String>, unattended: Option<bool>) -> Res<Vec<String>> {
-    ingest_start_for(&app, paths, unattended.unwrap_or(false).then_some("scheduled"), None)
+/// `mode`: `actions` reads each source for its actions and decisions only; `auto` does that for a
+/// source a wiki page already cites and a full ingest for the rest; a full ingest when left out.
+pub fn ingest_start(app: AppHandle, paths: Vec<String>, unattended: Option<bool>, mode: Option<String>) -> Res<Vec<String>> {
+    let actions = match mode.as_deref() {
+        None | Some("full") => vec![false; paths.len()],
+        Some("actions") => vec![true; paths.len()],
+        Some("auto") => app
+            .state::<VaultService>()
+            .with_index(|ix, _| ix.ingested(&paths).map_err(|e| e.to_string()))
+            .map_err(|e| EditError::from(format!("Couldn't tell which sources the wiki has: {e}")))?,
+        Some(m) => return Err(EditError::from(format!("{m} isn't an ingest mode: full, actions or auto."))),
+    };
+    queue_ingests(&app, paths, &actions, unattended.unwrap_or(false).then_some("scheduled"), None)
 }
 
 /// [`ingest_start`] for a job: its trigger, and the group its changes go in.
 pub fn ingest_start_for(app: &AppHandle, paths: Vec<String>, trigger: Option<&str>, group: Option<&str>) -> Res<Vec<String>> {
+    let full = vec![false; paths.len()];
+    queue_ingests(app, paths, &full, trigger, group)
+}
+
+/// Queues an ingest of each path; one whose `actions` is true reads it for actions and decisions only.
+fn queue_ingests(app: &AppHandle, paths: Vec<String>, actions: &[bool], trigger: Option<&str>, group: Option<&str>) -> Res<Vec<String>> {
     let app = app.clone();
     let root = root(&app)?;
     let model = crate::ask::job_model(&app, "ingest", trigger == Some("scheduled"));
     let mut runs = Vec::new();
-    for p in paths {
+    for (i, p) in paths.into_iter().enumerate() {
         brainstead_core::trash::safe_rel(&p).map_err(EditError::from)?;
         if !root.join(&p).is_file() {
             return Err(brainstead_core::write::WriteError::NotFound(format!("{p} isn't in the vault.")).into());
         }
         let r = Run {
             id: proposals::new_id(),
-            kind: ingest_kind(),
+            kind: if actions.get(i).copied().unwrap_or(false) { "actions".into() } else { ingest_kind() },
             note: None,
             source: p,
             started: proposals::now_local(),
@@ -438,7 +456,7 @@ fn run(app: &AppHandle, r: &mut Run) {
         Ok(()) => {
             r.status = "done".into();
             // Read in full, its actions taken: out of the Inbox (D-20261118-09).
-            if r.kind == "ingest" {
+            if r.kind == "ingest" || r.kind == "actions" {
                 crate::gtd::ingested(&r.source);
             }
         }
@@ -581,7 +599,11 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
         SourceText::Text(t) => t.clone(),
         SourceText::Parts(x) | SourceText::Image(x) => x.text(),
     };
+    let actions_only = r.kind == "actions";
     let pages = step(app, r, 2, |r| {
+        if actions_only {
+            return Ok((vec![], "Not needed: its actions and decisions only".into()));
+        }
         let m = brainstead_core::names::mentions(&body, &wiki_pages(&root));
         let pages: Vec<(String, String)> =
             m.iter().filter_map(|m| std::fs::read_to_string(root.join(&m.page)).ok().map(|t| (m.page.clone(), t))).collect();
@@ -600,7 +622,11 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
     let tracking = core_ingest::Tracking::read(&root, owner(app));
     let answer = step(app, r, 3, |r| {
         let today = chrono::Local::now().format("%A %-d %B %Y").to_string();
-        let prompt = core_ingest::prompt(&source, &pages, &brainstead_core::catalogue::render(&root), &today, &tracking);
+        let catalogue = if actions_only { String::new() } else { brainstead_core::catalogue::render(&root) };
+        let mut prompt = core_ingest::prompt(&source, &pages, &catalogue, &today, &tracking);
+        if actions_only {
+            prompt.push_str(core_ingest::ACTIONS_ONLY);
+        }
         let system = brainstead_core::ask::system_prompt(&crate::ask::today(), false);
         let images: Vec<PathBuf> = picture.iter().cloned().collect();
         let out = crate::ask::run_with_images(app, Job::Ingest, &r.id, &prompt, &model, None, &system, None, &images, &mut |_| {});
@@ -610,7 +636,12 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
         if let Some(e) = out.error {
             return Err(e);
         }
-        let a = core_ingest::parse_answer(&out.text)?;
+        let mut a = core_ingest::parse_answer(&out.text)?;
+        if actions_only {
+            // Its pages are in the wiki already: whatever page changes came anyway are left out.
+            a.pages.clear();
+            a.summary = None;
+        }
         let n = a.pages.len() + usize::from(a.summary.is_some());
         let found = a.actions.len() + a.decisions.len();
         let also = if found > 0 { format!(", {}", plural(found, "action or decision")) } else { String::new() };

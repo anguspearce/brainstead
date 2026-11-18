@@ -675,7 +675,9 @@ async function projectPath(name: string, activeOnly = false): Promise<string> {
 // ---- inbox
 
 /** An item's id for clarify_inbox: an action by its id (lines repeat across initiatives). */
-const inboxKey = (i: InboxItem) => (i.kind === "action" && i.action?.id ? `action:${i.action.id}` : `${i.kind}:${i.line + 1}`);
+// A capture by its file: captures have no line, so by line two would share an id.
+const inboxKey = (i: InboxItem) =>
+  i.kind === "action" && i.action?.id ? `action:${i.action.id}` : i.kind === "capture" ? `capture:${i.path}` : `${i.kind}:${i.line + 1}`;
 
 /** How many items Suggest asks about at once, as the Inbox's Suggest for all (first 20) does. */
 const SUGGEST_AT_MOST = 20;
@@ -1540,9 +1542,17 @@ async function startRun(a: Args, r: McpRequest): Promise<string> {
         throw new Error(
           `${own.join(", ")} can't be ingested: wiki pages are what an ingest writes, and Templates/ holds the app's templates, so the file menu doesn't offer Ingest on them.`,
         );
-      const ids = await api.ingestStart(sources, unattended);
+      const mode = str(a, "mode") ?? "full";
+      if (!["full", "actions", "auto"].includes(mode)) throw new Error("mode is full, actions or auto.");
+      const ids = await api.ingestStart(sources, unattended, mode as "full" | "actions" | "auto");
       noted(`started ingesting ${sources.length} source${sources.length === 1 ? "" : "s"}`);
-      return `Ingesting ${sources.join(", ")} (run ${ids.join(", ")}). Its page changes are made and listed in Changes${unattended ? "; any that fail a check are held for the user" : ""}; run_status shows how it's going.`;
+      const what =
+        mode === "actions"
+          ? "for their actions and decisions only"
+          : mode === "auto"
+            ? "(those the wiki already cites for their actions and decisions only)"
+            : "";
+      return `Ingesting ${sources.join(", ")}${what ? ` ${what}` : ""} (run ${ids.join(", ")}). Its changes are made and listed in Changes${unattended ? "; any that fail a check are held for the user" : ""}; run_status shows how it's going.`;
     }
     case "daily_check":
       await api.dailyCheckRunNow(unattended);
@@ -2370,6 +2380,20 @@ async function syncTool(a: Args): Promise<string> {
     const r = await api.syncNow();
     if (r.blocked) return `Didn't run: ${r.blocked}`;
     return `Synced: ${r.chats} chat day(s), ${r.mail} email(s), ${r.transcripts} transcript(s).${r.problems.length ? ` Problems: ${r.problems.join("; ")}.` : ""}`;
+  }
+  if (action === "fetch_again") {
+    const from = str(a, "from")?.trim();
+    if (!from || !/^\d{4}-\d{2}-\d{2}$/.test(from)) throw new Error("from is the first day to fetch Teams and Slack from, as YYYY-MM-DD.");
+    const r = await api.syncNow(from);
+    if (r.blocked) return `Didn't run: ${r.blocked}`;
+    const paths = [...new Set(r.paths)];
+    return [
+      `Fetched again from ${from}: ${r.chats} chat day(s), ${r.mail} email thread(s). They wait in the Inbox, not ingested on arrival.`,
+      r.problems.length ? `Problems: ${r.problems.join("; ")}.` : "",
+      paths.length ? `Sources written or topped up:\n${paths.map((p) => `- ${p}`).join("\n")}` : "Nothing new.",
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
   if (action === "ignore" || action === "unignore") {
     const sender = str(a, "sender")?.trim().toLowerCase();

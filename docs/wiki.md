@@ -43,6 +43,7 @@ It uses the tokens your open Teams tab already has. While Teams is open in your 
 - A topped-up source becomes **Changed** in Sources; with the daily check's "ingest changed sources again" on, the wiki catches up to it about once a day rather than on every new message.
 - **Today** shows your remaining meetings for the day while the sync is on.
 - **Sync now** in Settings runs a pass at once and reports what it added. A Microsoft service that doesn't answer is reported there; it never stops capturing.
+- **Fetch again** in Settings › Sync back-fills from a day you pick: Teams and Slack conversations from that day on, and every thread still in the Outlook Inbox, whatever its date (D-20261118-23). Sources already there are topped up rather than doubled. What it fetches waits in the Inbox, with no ingest on arrival and no notifications. An ingest can then read each one for its actions and decisions only (mode `actions`, or `auto` for those a wiki page already cites), so a source the wiki has isn't written into its pages twice.
 - **On demand, through an assistant.** With sync on, an assistant can pull a topic in for you: ask something like “read the last week's emails, Teams chats and meeting transcripts about the Fit programme and write a note on how it's going”. It gathers the matching sources into `sources/` (reusing what's already there, fetching only what's missing) and then reads them to write your note (the `pull_teams_outlook` tool).
 
 ## Ingest

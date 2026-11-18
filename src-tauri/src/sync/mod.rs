@@ -76,10 +76,21 @@ pub fn sync_sign_out_outlook() -> Result<(), String> {
     auth::forget_mail()
 }
 
-/// Runs one sync pass now (Settings › "Sync now").
+/// Runs one sync pass now (Settings › "Sync now"), or with `from` (`YYYY-MM-DD`) a back-fill from
+/// that day (Settings › Sync › Fetch again, D-20261118-23).
 #[tauri::command]
-pub async fn sync_now() -> run::Report {
-    tauri::async_runtime::spawn_blocking(|| run::run_once(&platform::data_dir())).await.unwrap_or_default()
+pub async fn sync_now(from: Option<String>) -> Result<run::Report, String> {
+    let from = match from.as_deref().map(str::trim).filter(|f| !f.is_empty()) {
+        Some(f) => {
+            let d = chrono::NaiveDate::parse_from_str(f, "%Y-%m-%d").map_err(|_| format!("{f} isn't a date (YYYY-MM-DD)."))?;
+            if d > chrono::Local::now().date_naive() {
+                return Err("The day to fetch from is in the future.".into());
+            }
+            Some(d)
+        }
+        None => None,
+    };
+    Ok(tauri::async_runtime::spawn_blocking(move || run::run_from(&platform::data_dir(), from)).await.unwrap_or_default())
 }
 
 /// On-demand pull for an assistant: gather the chats, mail and transcripts about `query` over the

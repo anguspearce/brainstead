@@ -126,15 +126,26 @@ fn call(
 ) -> Result<Value, String> {
     let mut form: Vec<(&str, String)> = vec![("token", ws.token.clone())];
     form.extend(params.iter().cloned());
-    let resp = client
-        .post(format!("{}api/{method}", ws.url))
-        .header("Cookie", format!("d={cookie}"))
-        .form(&form)
-        .send()
-        .map_err(|e| format!("Slack {method}: {e}"))?;
-    if resp.status().as_u16() == 429 {
-        return Err(format!("Slack {method}: rate limited, it carries on next time"));
-    }
+    // Rate limited: wait as long as Slack says (at most half a minute), up to three times, so a
+    // back-fill's many calls get through; then it carries on next pass.
+    let mut tries = 0;
+    let resp = loop {
+        let resp = client
+            .post(format!("{}api/{method}", ws.url))
+            .header("Cookie", format!("d={cookie}"))
+            .form(&form)
+            .send()
+            .map_err(|e| format!("Slack {method}: {e}"))?;
+        if resp.status().as_u16() != 429 {
+            break resp;
+        }
+        tries += 1;
+        if tries > 3 {
+            return Err(format!("Slack {method}: rate limited, it carries on next time"));
+        }
+        let wait = resp.headers().get("retry-after").and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<u64>().ok()).unwrap_or(5);
+        std::thread::sleep(std::time::Duration::from_secs(wait.clamp(1, 30)));
+    };
     let v: Value = resp.json().map_err(|e| format!("Slack {method}: {e}"))?;
     if v["ok"].as_bool() == Some(true) {
         Ok(v)
@@ -379,7 +390,15 @@ pub fn conv_of(data: &Path, rel: &str) -> Option<String> {
 // ── A pass ─────────────────────────────────────────────────────────────────────────────────────
 
 /// One Slack pass over every handed-over workspace. Adds to `r`.
-pub fn sync(data: &Path, vault: &Path, s: &crate::settings::Settings, cutoff: Option<&str>, r: &mut super::run::Report) {
+/// With `from`, a back-fill (D-20261118-23): every conversation from that day on.
+pub fn sync(
+    data: &Path,
+    vault: &Path,
+    s: &crate::settings::Settings,
+    cutoff: Option<&str>,
+    from: Option<chrono::NaiveDate>,
+    r: &mut super::run::Report,
+) {
     let Some(sign_in) = load() else {
         r.problems.push("Slack isn't signed in: open Slack in the browser with the Slack extension loaded.".into());
         return;
@@ -387,7 +406,7 @@ pub fn sync(data: &Path, vault: &Path, s: &crate::settings::Settings, cutoff: Op
     let client = super::client();
     let mut prog = progress(data);
     for ws in &sign_in.workspaces {
-        if let Err(e) = workspace(&client, ws, &sign_in.cookie, data, vault, s, cutoff, &mut prog, r) {
+        if let Err(e) = workspace(&client, ws, &sign_in.cookie, data, vault, s, (cutoff, from), &mut prog, r) {
             r.problems.push(format!("{}: {e}", if ws.name.is_empty() { &ws.id } else { &ws.name }));
         }
     }
@@ -404,12 +423,16 @@ fn workspace(
     data: &Path,
     vault: &Path,
     s: &crate::settings::Settings,
-    cutoff: Option<&str>,
+    (cutoff, from): (Option<&str>, Option<chrono::NaiveDate>),
     prog: &mut Progress,
     r: &mut super::run::Report,
 ) -> Result<(), String> {
     let me = call(client, ws, cookie, "auth.test", &[])?["user_id"].as_str().unwrap_or("").to_string();
-    let since = Utc::now() - chrono::Duration::days(LOOK_BACK_DAYS);
+    let local_midnight =
+        |d: chrono::NaiveDate| d.and_hms_opt(0, 0, 0).and_then(|t| t.and_local_timezone(Local).earliest()).map(|t| t.with_timezone(&Utc));
+    // A back-fill looks back to its first day, for every conversation.
+    let back_to = from.and_then(local_midnight);
+    let since = back_to.unwrap_or_else(|| Utc::now() - chrono::Duration::days(LOOK_BACK_DAYS));
     // A conversation seen for the first time starts as far back as History on first sync says
     // (everything for 0), never less than the usual week.
     let first_since = match cutoff.and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok()) {
@@ -418,6 +441,7 @@ fn workspace(
         }
         None => DateTime::<Utc>::UNIX_EPOCH,
     };
+    let first_since = back_to.unwrap_or(first_since);
     // Those seen before this pass, so marking one seen below doesn't change its start mid-pass.
     let seen_before: Vec<String> = prog.seen.clone();
     let since_for = |id: &str| if seen_before.iter().any(|s| s == id) { since } else { first_since };
@@ -464,7 +488,8 @@ fn workspace(
     }
     let wanted = |c: &Conv| (c.kind != "channel" || s.slack_channels.contains(&c.id)) && !s.sync_ignore_chats.contains(&c.id);
     let wanted_convs: Vec<Conv> = convs.iter().filter(|c| wanted(c)).cloned().collect();
-    let mut chosen: Vec<Conv> = pick(&wanted_convs, prog, |id| since_for(id).timestamp(), MOST_CONVERSATIONS);
+    let mut chosen: Vec<Conv> =
+        pick(&wanted_convs, prog, |id| since_for(id).timestamp(), if from.is_some() { usize::MAX } else { MOST_CONVERSATIONS });
 
     // Threads that mention the user in channels not picked: those threads alone.
     let mut only: HashMap<String, Vec<String>> = HashMap::new();
@@ -568,7 +593,7 @@ fn workspace(
         };
         let url = format!("{}archives/{}", ws.url, c.id);
         for (day, day_tops) in by_day(&tops) {
-            if first && cutoff.is_some_and(|cut| day.as_str() < cut) {
+            if first && from.is_none() && cutoff.is_some_and(|cut| day.as_str() < cut) {
                 continue;
             }
             let mut replies: HashMap<String, Vec<Msg>> = HashMap::new();
@@ -598,10 +623,12 @@ fn workspace(
                     if brainstead_core::webcapture::rewrite(vault, &path, &cap, Local::now()).is_ok() {
                         prog.counts.insert(key, n);
                         r.chats += 1;
+                        r.paths.push(path);
                     }
                 }
                 _ => match crate::nativehost::deliver(data, Some(vault), false, "slack", &cap, true, when.map(|t| t.to_rfc3339())) {
                     Ok(path) => {
+                        r.paths.push(path.clone());
                         prog.paths.insert(key.clone(), path);
                         prog.counts.insert(key, n);
                         r.chats += 1;

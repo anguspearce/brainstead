@@ -93,7 +93,8 @@ async function start() {
     // A transcript gets its meeting note, written and ingested when Brainstead is sure of it, else it
     // waits in the Inbox (src/meetingFlow.ts, D-20261118-05). A capture the sync
     // made (c.sync) is handled unattended, so a change that fails a check is held.
-    if (!settings.get().ingestOnArrival) return;
+    // A back-fill's sources wait in the Inbox (Settings › Sync › Fetch again).
+    if (!settings.get().ingestOnArrival || c.backfill) return;
     if (isTranscriptPath(c.path)) void makeMeetingNotes([c.path], { unattended: c.sync === true });
     else ingest([c.path], c.sync === true);
   });

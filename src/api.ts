@@ -413,6 +413,8 @@ export interface Captured {
   sync?: boolean;
   /** The item's own date/time (RFC 3339): a chat's last message, a mail's received time, a meeting's start. */
   itemDate?: string | null;
+  /** Fetched again by a back-fill: it waits in the Inbox, not ingested on arrival. */
+  backfill?: boolean;
 }
 
 /** The Teams and Outlook sign-in state (Settings › Sync). */
@@ -440,6 +442,8 @@ export interface SyncReport {
   transcripts: number;
   problems: string[];
   blocked: string | null;
+  /** The sources written or topped up. */
+  paths: string[];
 }
 
 /** An upcoming meeting for the Today screen. */
@@ -895,7 +899,7 @@ export interface SavedCheck {
 
 export interface IngestRun {
   id: string;
-  /** ingest, or meeting (a meeting note drafted from a transcript). */
+  /** ingest, actions (actions and decisions only, of a source the wiki has) or meeting (a meeting note drafted from a transcript). */
   kind?: string;
   /** A meeting note's type, name and date. */
   note?: NoteSpec | null;
@@ -1169,7 +1173,9 @@ export const api = {
   pageFacts: (path: string) => invoke<PageFact[]>("page_facts", { path }),
   onContradictionsChanged: (f: () => void): Promise<UnlistenFn> => listen("contradictions-changed", () => f()),
   /** `unattended`: an assistant nobody is watching asked, so its changes are held when a check fails. */
-  ingestStart: (paths: string[], unattended = false) => invoke<string[]>("ingest_start", { paths, unattended }),
+  /** `mode`: full (default), actions (actions and decisions only) or auto (actions only for a source the wiki cites). */
+  ingestStart: (paths: string[], unattended = false, mode?: "full" | "actions" | "auto") =>
+    invoke<string[]>("ingest_start", mode ? { paths, unattended, mode } : { paths, unattended }),
   wikiMeta: () => invoke<WikiMeta[]>("wiki_meta"),
   /** A PowerPoint or Excel file's text by slide or sheet. */
   sourceParts: (path: string) => invoke<{ kind: string; parts: { label: string; text: string }[] }>("source_parts", { path }),
@@ -1449,7 +1455,8 @@ export const api = {
   syncSignInState: () => invoke<SyncSignIn>("sync_sign_in_state"),
   syncSignOut: () => invoke<void>("sync_sign_out"),
   syncSignOutOutlook: () => invoke<void>("sync_sign_out_outlook"),
-  syncNow: () => invoke<SyncReport>("sync_now"),
+  /** One sync pass; with `from` (YYYY-MM-DD), a back-fill from that day (Settings › Sync › Fetch again). */
+  syncNow: (from?: string) => invoke<SyncReport>("sync_now", from ? { from } : {}),
   syncTodayMeetings: () => invoke<SyncMeeting[]>("sync_today_meetings"),
   /** The last calendar read's meetings that haven't ended — instant, no network. */
   syncCachedMeetings: () => invoke<SyncMeeting[]>("sync_cached_meetings"),

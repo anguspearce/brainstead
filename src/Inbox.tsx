@@ -498,7 +498,8 @@ export function InboxScreen() {
             {/* Counted over this visit: what's clarified stays counted, so the number climbs as the bar fills. */}
             <span className="faint small wprog">{items.length ? `Item ${done + idx + 1} of ${total}` : "All clear"}</span>
             <span className="pbar">
-              <i style={{ width: `${(done / total) * 100}%` }} />
+              {/* As far as the item open: Item 1 of 4 is a quarter of the way. */}
+              <i style={{ width: `${((items.length ? done + idx + 1 : total) / total) * 100}%` }} />
             </span>
           </>
         )}

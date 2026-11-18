@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { Fragment, useEffect, useState } from "react";
+import { DateField } from "./DatePicker";
+import { localToday } from "./md/taskQuery";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, AppInfo, CliInfo, CliName, Skill, SkipSuggestion, Theme } from "./api";
 import { acceptSkip, unskipChat } from "./skips";
@@ -1477,6 +1479,8 @@ function SyncPane() {
   const [loadingChannels, setLoadingChannels] = useState(false);
   const [report, setReport] = useState<import("./api").SyncReport | null>(null);
   const [busy, setBusy] = useState(false);
+  // Fetch again: a week back by default.
+  const [fetchFrom, setFetchFrom] = useState<string | null>(() => localToday(new Date(Date.now() - 7 * 86400000)));
   const [newIgnore, setNewIgnore] = useState("");
   const [skips, setSkips] = useState<{ suggestions: SkipSuggestion[]; chatNames: Record<string, string> } | null>(null);
   const loadSkips = () =>
@@ -1515,11 +1519,11 @@ function SyncPane() {
     if (v && !ignore.includes(v)) settings.update({ syncIgnoreSenders: [...ignore, v] });
     setNewIgnore("");
   };
-  const syncNow = () => {
+  const syncNow = (from?: string) => {
     setBusy(true);
     setReport(null);
     api
-      .syncNow()
+      .syncNow(from)
       .then((r) => {
         setReport(r);
         if (r.blocked) toast(r.blocked, undefined, "bad");
@@ -1572,10 +1576,30 @@ function SyncPane() {
               className="btn sm"
               title="Run one sync pass now: Teams and Outlook, and Slack, whichever are on"
               disabled={busy || !(enabled || mail || s.syncSlack)}
-              onClick={syncNow}
+              onClick={() => syncNow()}
             >
               <Icon name="refresh" size={13} className={busy ? "spin" : undefined} />
               {busy ? "Syncing…" : "Sync now"}
+            </button>
+          </div>
+          <div className="srow">
+            <Icon name="history" style={{ color: "var(--ink3)" }} />
+            <div className="t">
+              <div className="pt">Fetch again</div>
+              <div className="faint">
+                Teams and Slack conversations from this day on, and every email thread still in your Outlook Inbox, whatever its date. They
+                wait in the Inbox, not ingested as they arrive.
+              </div>
+            </div>
+            <DateField value={fetchFrom} onChange={setFetchFrom} label="Day to fetch from" />
+            <button
+              type="button"
+              className="btn sm"
+              title="Fetch Teams and Slack again from the day picked, and the whole Outlook Inbox; what's already in Sources is topped up, not doubled"
+              disabled={busy || !fetchFrom || fetchFrom > localToday() || !(enabled || mail || s.syncSlack)}
+              onClick={() => fetchFrom && syncNow(fetchFrom)}
+            >
+              {busy ? "Fetching…" : "Fetch"}
             </button>
           </div>
         </div>

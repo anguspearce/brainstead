@@ -370,6 +370,10 @@ fn cut(s: &str, n: usize) -> String {
     }
 }
 
+/// Added to the prompt of an actions-only ingest (D-20261118-23): a source the wiki already has,
+/// read again only for its actions and decisions, so its pages aren't written twice.
+pub const ACTIONS_ONLY: &str = "\n# Actions and decisions only\n\nThis source is in the wiki already: its pages have what it says. Give only `actions` and `decisions` (step 6); leave `pages` empty and `summary` null.\n";
+
 /// The message to the model: the workflow, the source, the pages it mentions with their text,
 /// and every wiki page by name and description (`catalogue`, `catalogue::render`), for a source
 /// that doesn't name what it's about.

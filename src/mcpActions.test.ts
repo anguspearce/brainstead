@@ -201,7 +201,7 @@ describe("MCP actions", () => {
     answers.change_submit = () => ({ id: "c9", applied: true, page: path, flags: [], message: "Moved it to the Trash." });
     calls.length = 0;
     const origin = { kind: "chat", run: "s1", trigger: "scheduled" };
-    expect(await run("inbox.clarify", { item: "capture:1", becomes: "delete", origin })).toBe(
+    expect(await run("inbox.clarify", { item: `capture:${path}`, becomes: "delete", origin })).toBe(
       "Clarified as deleted. Moved it to the Trash.",
     );
     expect(calls.find(([c]) => c === "health_link_ghost")![1]).toMatchObject({ to: "Meeting. Offsite - 2026-10-06.md", unattended: true });
@@ -263,13 +263,17 @@ describe("MCP actions", () => {
     });
     // A capture: trashed through Changes, and not marked done, so restored it's back in the Inbox.
     calls.length = 0;
-    await run("inbox.clarify", { item: "capture:1", becomes: "delete" });
+    await run("inbox.clarify", { item: "capture:sources/Email. Thread. Hi - 2026-10-02.md", becomes: "delete" });
     expect(calls.map(([c]) => c)).toEqual(["inbox_list", "changes_submit_many"]);
     expect(submitted()[0]).toMatchObject({ kind: "trash", instruction: { op: "trash" } });
     // Held: the capture stays in the Inbox until the user accepts.
     calls.length = 0;
     answers.changes_submit_many = outcomes(false);
-    const out = (await run("inbox.clarify", { item: "capture:1", becomes: "next", context: "office" })) as string;
+    const out = (await run("inbox.clarify", {
+      item: "capture:sources/Email. Thread. Hi - 2026-10-02.md",
+      becomes: "next",
+      context: "office",
+    })) as string;
     expect(calls.some(([c]) => c === "inbox_capture_done")).toBe(false);
     expect(out).toContain("stays in the Inbox");
     await expect(run("inbox.clarify", { item: "task:99", becomes: "next" })).rejects.toThrow(/No Inbox item/);
@@ -328,6 +332,38 @@ describe("MCP actions", () => {
     await run("inbox.clarify", { item: "action:a-2", becomes: "delete" });
     expect(submitted()[0].instruction).toMatchObject({ new: [expect.stringContaining('{"status":"dropped"}')] });
     await expect(run("inbox.clarify", { item: "action:a-2", becomes: "reference" })).rejects.toThrow(/doesn't offer reference/);
+  });
+
+  it("fetches again from a day, as Settings › Sync's Fetch again does, and lists what it wrote", async () => {
+    answers.sync_now = () => ({
+      chats: 2,
+      mail: 1,
+      transcripts: 0,
+      problems: [],
+      blocked: null,
+      paths: [
+        "sources/Slack. Chat. Lena - 2026-11-10.md",
+        "sources/Email. Thread. Plan - 2026-11-03.md",
+        "sources/Slack. Chat. Lena - 2026-11-10.md",
+      ],
+    });
+    calls.length = 0;
+    const out = (await run("sync", { action: "fetch_again", from: "2026-11-09" })) as string;
+    expect(calls.filter(([c]) => c === "sync_now").map(([, x]) => x)).toEqual([{ from: "2026-11-09" }]);
+    expect(out).toContain("Fetched again from 2026-11-09: 2 chat day(s), 1 email thread(s)");
+    expect(out.match(/Lena - 2026-11-10/g)).toHaveLength(1);
+    await expect(run("sync", { action: "fetch_again", from: "last week" })).rejects.toThrow(/YYYY-MM-DD/);
+  });
+
+  it("ingests for actions only, or chooses by whether the wiki has the source", async () => {
+    answers.ingest_start = () => ["r1"];
+    calls.length = 0;
+    const out = (await run("run.start", { run: "ingest", sources: ["sources/Email. Plan.md"], mode: "auto" })) as string;
+    expect(calls.filter(([c]) => c === "ingest_start").map(([, x]) => (x as { mode: string }).mode)).toEqual(["auto"]);
+    expect(out).toContain("for their actions and decisions only");
+    await expect(run("run.start", { run: "ingest", sources: ["sources/Email. Plan.md"], mode: "some" })).rejects.toThrow(
+      /full, actions or auto/,
+    );
   });
 
   it("skips a sender or chat suggested from what the user deletes, or stops suggesting it", async () => {
@@ -1578,7 +1614,7 @@ describe("MCP actions", () => {
       expect(out).toMatch(/22 items to clarify:\nCaptures:\n- Email\. Hi .*\nScratchpad:\n- Ask Maya .*\nTo Do list › Other:\n- Task 10/);
       const asked = (calls.find(([c]) => c === "clarify_suggest")![1]!.items as { id: string }[]).map((i) => i.id);
       expect(asked).toHaveLength(20);
-      expect(asked.slice(0, 2)).toEqual(["capture:1", "thought:3"]);
+      expect(asked.slice(0, 2)).toEqual(["capture:sources/Email. Hi.md", "thought:3"]);
       expect(((await data("inbox.list")).items as { group: string }[])[0].group).toBe("Captures");
     });
 

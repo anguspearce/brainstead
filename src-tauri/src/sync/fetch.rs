@@ -303,6 +303,24 @@ pub fn inbox(client: &Client, top: usize) -> Result<Vec<Mail>, String> {
     Ok(parse_mail(&body))
 }
 
+/// The whole Inbox, newest first, page by page, at most `most` messages.
+pub fn inbox_all(client: &Client, most: usize) -> Result<Vec<Mail>, String> {
+    let mut url = format!(
+        "https://outlook.office.com/api/v2.0/me/mailfolders/inbox/messages?$top=100&$orderby=ReceivedDateTime%20desc&$select={MAIL_SELECT}"
+    );
+    let mut out = Vec::new();
+    loop {
+        let body = api::get_json(client, Service::Outlook, &url)?;
+        out.extend(parse_mail(&body));
+        match body["@odata.nextLink"].as_str() {
+            Some(next) if out.len() < most => url = next.to_string(),
+            _ => break,
+        }
+    }
+    out.truncate(most);
+    Ok(out)
+}
+
 /// The ConversationIndex as an extended property (PidTagConversationIndex), for the reply tree.
 const INDEX_EXPAND: &str = "&$expand=SingleValueExtendedProperties($filter=PropertyId%20eq%20'Binary%200x0071')";
 

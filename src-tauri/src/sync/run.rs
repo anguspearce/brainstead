@@ -8,7 +8,7 @@
 //! what-counts-as-new follow D-20261025-02. Everything fails soft: one call failing is reported and
 //! the pass carries on, so a changed Microsoft endpoint never breaks capture.
 
-use chrono::{Duration, Local, Timelike, Utc};
+use chrono::{Duration, Local, NaiveDate, Timelike, Utc};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -23,6 +23,8 @@ const EVERY_MIN: u64 = 15;
 const TRANSCRIPT_LOOKBACK_HOURS: i64 = 48;
 /// How many recent Inbox messages to consider each pass.
 const MAIL_TOP: usize = 40;
+/// The most Inbox messages a back-fill reads (the whole Inbox, short of a vast one).
+const BACKFILL_MAIL: usize = 2000;
 
 /// A pass only runs one at a time (the timer and a manual "Sync now" could overlap).
 static RUNNING: AtomicBool = AtomicBool::new(false);
@@ -38,20 +40,32 @@ pub struct Report {
     pub problems: Vec<String>,
     /// Set when the pass couldn't start at all (not signed in, read-only, off).
     pub blocked: Option<String>,
+    /// The sources written or topped up, in the order written.
+    pub paths: Vec<String>,
 }
 
 /// Runs one sync pass. Safe to call from the timer or a command; overlapping calls return a
 /// `blocked` report rather than running twice.
 pub fn run_once(data: &Path) -> Report {
+    run_from(data, None)
+}
+
+/// A pass, or with `from` a back-fill (D-20261118-23): Teams and Slack conversations from that day
+/// on, days already written topped up and days skipped before written now, and every thread in the
+/// Outlook Inbox, whatever its date. What it writes is marked a back-fill, so it waits in the Inbox
+/// rather than being ingested on arrival.
+pub fn run_from(data: &Path, from: Option<NaiveDate>) -> Report {
     if RUNNING.swap(true, Ordering::SeqCst) {
         return Report { blocked: Some("A sync is already running.".into()), ..Default::default() };
     }
-    let report = run_inner(data);
+    nativehost::BACKFILL.store(from.is_some(), Ordering::SeqCst);
+    let report = run_inner(data, from);
+    nativehost::BACKFILL.store(false, Ordering::SeqCst);
     RUNNING.store(false, Ordering::SeqCst);
     report
 }
 
-fn run_inner(data: &Path) -> Report {
+fn run_inner(data: &Path, from: Option<NaiveDate>) -> Report {
     let mut r = Report::default();
     let s = settings::load(&data.join("settings.json"));
     let vault = s.vault_path.as_deref().filter(|p| !p.trim().is_empty());
@@ -69,7 +83,7 @@ fn run_inner(data: &Path) -> Report {
     }
     // Slack on its own sign-in (D-20261118-01), whether or not Teams and Outlook are on.
     if s.sync_slack {
-        super::slack::sync(data, Path::new(vault), &s, cutoff_day(s.sync_initial_days).as_deref(), &mut r);
+        super::slack::sync(data, Path::new(vault), &s, cutoff_day(s.sync_initial_days).as_deref(), from, &mut r);
     }
     if !s.sync_enabled && !s.mail_on() {
         return r;
@@ -85,7 +99,15 @@ fn run_inner(data: &Path) -> Report {
     let mut st = state::load(data);
     // The first-sync history limit (Settings): a day/message older than this is skipped so a big
     // mailbox or long chat history can't flood the Inbox. 0 means no limit.
-    let p = Pass { client: super::client(), sign_in, data, vault, s: &s, cutoff: cutoff_day(s.sync_initial_days) };
+    let p = Pass {
+        client: super::client(),
+        sign_in,
+        data,
+        vault,
+        s: &s,
+        cutoff: cutoff_day(s.sync_initial_days),
+        from: from.map(|d| d.format("%Y-%m-%d").to_string()),
+    };
 
     // Teams (chats, transcripts) and Outlook (mail) each on its own switch and its own tab's sign-in.
     if s.sync_enabled {
@@ -114,6 +136,8 @@ struct Pass<'a> {
     vault: &'a Path,
     s: &'a settings::Settings,
     cutoff: Option<String>,
+    /// A back-fill's first day (`YYYY-MM-DD`), see [`run_from`].
+    from: Option<String>,
 }
 
 /// The earliest local day the first sync keeps (`YYYY-MM-DD`), from the "load N days on first sync"
@@ -133,7 +157,10 @@ fn deliver(
     r: &mut Report,
 ) -> Option<String> {
     match nativehost::deliver(data, Some(vault), false, ext, c, true, when.map(|t| t.to_rfc3339())) {
-        Ok(path) => Some(path),
+        Ok(path) => {
+            r.paths.push(path.clone());
+            Some(path)
+        }
         Err(e) => {
             r.problems.push(e);
             None
@@ -145,7 +172,10 @@ fn deliver(
 /// and becomes "changed since cited", which the daily check re-ingests. Returns whether it was written.
 fn rewrite(vault: &Path, path: &str, c: &brainstead_core::webcapture::Capture, r: &mut Report) -> bool {
     match brainstead_core::webcapture::rewrite(vault, path, c, Local::now()) {
-        Ok(()) => true,
+        Ok(()) => {
+            r.paths.push(path.to_string());
+            true
+        }
         Err(e) => {
             r.problems.push(e.to_string());
             false
@@ -162,7 +192,9 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
         }
     };
     let me = fetch::my_name(&p.sign_in);
-    let cutoff = p.cutoff.as_deref();
+    // A back-fill starts every chat at its first day; otherwise a chat seen for the first time starts
+    // at the first-sync cutoff.
+    let cutoff = p.from.as_deref().or(p.cutoff.as_deref());
     for conv in convs {
         // 1:1 and group chats always; channels only when opted in; meeting chats are left to the
         // transcript flow; anything else is skipped.
@@ -191,7 +223,10 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
         for (day, day_msgs) in fetch::by_local_day(&msgs) {
             let count = day_msgs.len();
             let when = day_msgs.last().map(|m| m.time);
-            if st.chat_day_done(&conv.id, &day) {
+            // A back-fill writes a day the first sync skipped (marked done, but no file).
+            let skipped = st.chat_day_path(&conv.id, &day).is_none();
+            let refill = p.from.as_deref().is_some_and(|f| day.as_str() >= f) && skipped;
+            if st.chat_day_done(&conv.id, &day) && !refill {
                 // Already written: top it up in place if it has gained messages (D-20261025-07). Days
                 // written before top-up tracking adopt their current count once, without a rewrite.
                 if !st.chat_day_counted(&conv.id, &day) {
@@ -217,14 +252,13 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
                 }
                 continue;
             }
-            // First time for this day: on a chat's first sync, skip (and mark) days older than the cap.
-            if first_seen {
-                if let Some(cutoff) = cutoff {
-                    if day.as_str() < cutoff {
-                        st.mark_chat_day(&conv.id, &day, None);
-                        continue;
-                    }
+            // First time for this day: on a chat's first sync, skip (and mark) days older than the cap;
+            // a back-fill leaves days before its first day as they are.
+            if (first_seen || p.from.is_some()) && cutoff.is_some_and(|c| day.as_str() < c) {
+                if first_seen {
+                    st.mark_chat_day(&conv.id, &day, None);
                 }
+                continue;
             }
             if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &p.sign_in.origin, &day, &partner) {
                 if let Some(path) = deliver(p.data, p.vault, &cap, "teams", when, r) {
@@ -238,14 +272,15 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
 }
 
 fn sync_mail(p: &Pass, st: &mut state::State, r: &mut Report) {
-    let mail = match fetch::inbox(&p.client, MAIL_TOP) {
+    let mail = match if p.from.is_some() { fetch::inbox_all(&p.client, BACKFILL_MAIL) } else { fetch::inbox(&p.client, MAIL_TOP) } {
         Ok(m) => m,
         Err(e) => {
             r.problems.push(format!("Couldn't read the Inbox: {e}"));
             return;
         }
     };
-    let first_run = !st.initialized;
+    // A back-fill takes the whole Inbox, whatever its dates.
+    let first_run = !st.initialized && p.from.is_none();
     let cutoff = p.cutoff.as_deref();
     // The conversations with a fresh Inbox message this pass (deduped, newest first already). Mail is
     // grouped one source per thread (D-20261025-07): an Inbox message flags its thread for syncing.
