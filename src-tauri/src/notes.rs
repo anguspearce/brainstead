@@ -256,13 +256,19 @@ pub async fn rename_commit(app: AppHandle, plan: RenamePlan) -> Res<String> {
 
 #[tauri::command]
 pub async fn trash_move(app: AppHandle, path: String) -> Res<TrashEntry> {
+    trash_move_as(app, path, true).await
+}
+
+/// [`trash_move`]; `learn` false for a move Brainstead makes itself (an ingest trashing a chat-day
+/// nothing came of), which mustn't count towards skipping the chat.
+pub async fn trash_move_as(app: AppHandle, path: String, learn: bool) -> Res<TrashEntry> {
     writing(move || {
         writable(&app.state::<AppState>())?;
         let svc = app.state::<VaultService>();
         let root = root(&svc)?;
         let layer = svc.with_index(|ix, _| Ok(ix.summary(&path)?.map(|s| s.layer))).ok().flatten().unwrap_or_else(|| "note".into());
         // A synced email or chat the user deletes counts towards a skip suggestion (D-20261118-15).
-        let learnt = path.starts_with("sources/").then(|| std::fs::read_to_string(root.join(&path)).ok()).flatten();
+        let learnt = (learn && path.starts_with("sources/")).then(|| std::fs::read_to_string(root.join(&path)).ok()).flatten();
         let e = trash::move_to_trash(&root, &path, &layer)?;
         if let Some(t) = learnt {
             crate::sync::skips::on_delete(&path, &t);

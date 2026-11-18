@@ -281,7 +281,9 @@ fn apply(app: &AppHandle, root: &Path, mut c: Change, base: Option<String>) -> R
             format!("Renamed {} to {to}", c.page)
         }
         Instruction::Trash => {
-            let e = tauri::async_runtime::block_on(crate::notes::trash_move(app.clone(), c.page.clone()))?;
+            // An ingest's own move (a chat-day nothing came of) isn't the user deleting the chat.
+            let learn = c.origin.kind != "ingest";
+            let e = tauri::async_runtime::block_on(crate::notes::trash_move_as(app.clone(), c.page.clone(), learn))?;
             c.trash = Some(e.id);
             format!("Moved {} to the Trash", c.page)
         }

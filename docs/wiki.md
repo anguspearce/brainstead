@@ -52,7 +52,7 @@ It uses the tokens your open Teams tab already has. While Teams is open in your 
 
 Ingests wait in one queue, whoever started them, and run one at a time, oldest source first, so a newer source has the last word on a page. The queue survives quitting or restarting Brainstead: at the next start, the ingests still waiting are taken again from the beginning. One that was already making its changes is stopped instead, so nothing is made twice, and so is one that has waited more than a week.
 
-A document, email thread or transcript also gets a summary page in `wiki/summaries/`. A day of a Teams or Slack chat doesn't: its news goes on the pages it mentions and its actions on your initiatives.
+A document, email thread or transcript also gets a summary page in `wiki/summaries/`. A day of a Teams or Slack chat doesn't: its news goes on the pages it mentions and its actions on your initiatives, and a day the ingest finds nothing in at all is moved to the Trash, a change in Changes with Revert, which doesn't count towards skipping the chat (D-20261118-29).
 
 Brainstead, not the AI, decides where text goes on a page:
 

@@ -522,6 +522,7 @@ fn run(app: &AppHandle, r: &mut Run) {
             // Read in full, its actions taken: out of the Inbox (D-20261118-09).
             if r.kind == "ingest" || r.kind == "actions" {
                 crate::gtd::ingested(&r.source);
+                trash_if_quiet(app, r);
             }
         }
         Err(e) if stopped(r) => {
@@ -547,6 +548,41 @@ fn run(app: &AppHandle, r: &mut Run) {
             _ => format!("{link}: {}", r.error.clone().unwrap_or_default()),
         })
         .show();
+}
+
+/// A day of a Teams or Slack chat whose ingest found nothing (no page change, no action or
+/// decision, nothing a check dropped) goes to the Trash, as a change in Changes with Revert, so
+/// Sources keeps only what the wiki or an initiative rests on (D-20261118-29). It doesn't count
+/// towards skipping the chat; a day that gains messages later comes back as a new source.
+fn quiet_chat_day(r: &Run) -> bool {
+    let name = brainstead_core::lint::name_of(&r.source);
+    let chat_day = name.starts_with("Teams. Chat. ") || name.starts_with("Slack. Chat. ");
+    chat_day && r.planned == 0 && r.dropped.is_empty()
+}
+
+fn trash_if_quiet(app: &AppHandle, r: &mut Run) {
+    if !quiet_chat_day(r) {
+        return;
+    }
+    let origin = Origin {
+        kind: "ingest".into(),
+        chat: Some(r.id.clone()),
+        label: Some(format!("Ingest of {}", brainstead_core::lint::name_of(&r.source))),
+        run: Some(r.group.clone().unwrap_or_else(|| r.id.clone())),
+        trigger: r.trigger.clone(),
+    };
+    let s = crate::changes::Submit::new(
+        &r.source,
+        proposals::Kind::Trash,
+        "Moved to the Trash: nothing in it for the wiki or your initiatives",
+        "A chat day its ingest found nothing in.",
+        origin,
+        brainstead_core::changes::Instruction::Trash,
+    );
+    match crate::changes::submit(app, s) {
+        Ok(o) => r.proposals.push(o.id),
+        Err(e) => crate::applog!("ingest {}: {} not trashed: {}", r.id, r.source, e.message()),
+    }
 }
 
 /// Marks step `i` running, runs `f`, records how it went.
@@ -1078,6 +1114,21 @@ mod tests {
             logged: false,
             planned: 0,
         }
+    }
+
+    #[test]
+    fn only_a_chat_day_nothing_came_of_is_trashed() {
+        let mut r = run("done", "2026-11-18 23:10", &["done"]);
+        r.source = "sources/Slack. Chat. Jonas - 2026-11-16.md".into();
+        assert!(quiet_chat_day(&r));
+        r.planned = 1;
+        assert!(!quiet_chat_day(&r));
+        r.planned = 0;
+        r.dropped.push(Dropped { page: "wiki/entities/Jonas.md".into(), reason: "quote not found".into() });
+        assert!(!quiet_chat_day(&r));
+        r.dropped.clear();
+        r.source = "sources/Email. Thread. Launch - 2026-11-16.md".into();
+        assert!(!quiet_chat_day(&r));
     }
 
     #[test]
