@@ -498,6 +498,70 @@ pub async fn inbox_move_task(
     .await
 }
 
+/// The initiatives, for Move to…'s list: (name, path, status), A to Z.
+#[tauri::command]
+pub fn initiatives_list(app: AppHandle) -> Res<Vec<(String, String, String)>> {
+    let root = root(&app.state::<VaultService>())?;
+    let mut v: Vec<_> = brainstead_core::initiatives::all(&root).into_iter().map(|i| (i.name, i.path, i.status)).collect();
+    v.sort_by_key(|x| x.0.to_lowercase());
+    Ok(v)
+}
+
+/// Moves an initiative's action, whole, to another initiative's Actions (D-20261118-26), as the
+/// Inbox's and the page's Move to… do; its task's link follows it. ⌘Z undoes it.
+#[tauri::command]
+pub async fn initiative_action_move(app: AppHandle, path: String, line: usize, line_text: String, to: String) -> Res<String> {
+    writing(move || {
+        writable(&app.state::<AppState>())?;
+        let svc = app.state::<VaultService>();
+        let root = root(&svc)?;
+        if !brainstead_core::initiatives::is_initiative(&path) || !brainstead_core::initiatives::is_initiative(&to) {
+            return Err(EditError::from("Both pages must be initiatives.".to_string()));
+        }
+        let (from_abs, to_abs) = (vault_path(&svc, &path)?, vault_path(&svc, &to)?);
+        let id = line_text.trim_end().rsplit(' ').next().and_then(|w| w.strip_prefix('^')).unwrap_or("").to_string();
+        if id.is_empty() {
+            return Err(EditError::from("The action has no id (^a-…) to move it by.".to_string()));
+        }
+        let mut chs = write::rewrite_pair(&from_abs, &to_abs, |a, b| {
+            let lines: Vec<String> = a.lines().map(str::to_string).collect();
+            if write::find_line(&lines, line, &line_text).is_none() {
+                return Err(write::WriteError::Stale(
+                    "This action changed in the file since it was shown. It's been reloaded; try again.".into(),
+                ));
+            }
+            brainstead_core::initiatives::move_action(a, b, &id).map_err(write::WriteError::Invalid)
+        })?
+        .to_vec();
+        // The task made from it links it by page: pointed at the new one.
+        let (from_name, to_name) = (brainstead_core::filename::stem(&path).to_string(), brainstead_core::filename::stem(&to).to_string());
+        let task_note = brainstead_core::initiatives::parse(&path, &chs[0].before.clone().unwrap_or_default())
+            .actions
+            .into_iter()
+            .find(|a| a.id == id)
+            .and_then(|a| a.task)
+            .and_then(|t| {
+                let name = t.trim().trim_start_matches("[[").trim_end_matches("]]").split(['|', '#']).next()?.trim().to_string();
+                svc.with_index(|ix, _| brainstead_core::names::resolve(ix, &name)).ok()?.exact.map(|(p, _)| p)
+            });
+        if let Some(note) = task_note {
+            let abs = root.join(&note);
+            if let Ok(src) = std::fs::read_to_string(&abs) {
+                if let Some(new) = brainstead_core::initiatives::relink_task(&src, &from_name, &to_name, &id) {
+                    write::write_atomic(&abs, new.as_bytes(), false)?;
+                    chs.push(FileChange { path: abs, version: write::version(new.as_bytes()), before: Some(src) });
+                }
+            }
+        }
+        let label = format!("Moved an action to {to_name}");
+        push_files(&app, &root, label.clone(), &chs);
+        let paths: Vec<PathBuf> = chs.iter().map(|c| c.path.clone()).collect();
+        written(&app, &paths);
+        Ok(label)
+    })
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

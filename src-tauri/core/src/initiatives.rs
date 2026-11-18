@@ -648,6 +648,91 @@ pub fn with_decision(page: &str, date: Option<&str>, text: &str, quotes: &[Quote
     Ok((out, id))
 }
 
+/// What links a task to the action it was made from: the action's block on its initiative, shown as
+/// the initiative's name (`[[Orbit launch#^a-7110|Orbit launch]]`), so ticking the task can
+/// mark the action done (D-20261118-26).
+pub fn task_link(initiative: &str, id: &str) -> String {
+    let id = id.trim().trim_start_matches('^');
+    format!("[[{initiative}#^{id}|{initiative}]]")
+}
+
+/// Where a task made from an action stands, as its line says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TaskState {
+    Open,
+    Done,
+    Cancelled,
+}
+
+/// The state of the task in `text` that links action `id` (`#^id`), if one does.
+pub fn task_state(text: &str, id: &str) -> Option<TaskState> {
+    let id = id.trim().trim_start_matches('^');
+    if id.is_empty() {
+        return None;
+    }
+    let want = format!("#^{id}");
+    text.lines().filter(|l| l.contains(&want)).find_map(|l| {
+        // `#^id` ends the link or its alias part, so a longer id isn't taken for this one.
+        let at = l.find(&want)? + want.len();
+        if !matches!(l[at..].chars().next(), Some(']') | Some('|')) {
+            return None;
+        }
+        let t = crate::tasks::parse_line(l, 0)?;
+        Some(match t.status.as_str() {
+            "-" => TaskState::Cancelled,
+            _ if t.done => TaskState::Done,
+            _ => TaskState::Open,
+        })
+    })
+}
+
+/// What an action becomes when its task is now `now` and was `last` when last looked at (None the
+/// first time): ticked, it's done; cancelled, dropped; opened again, open. Only a change of the
+/// task's moves the action, so an action marked done by an ingest isn't reopened by its open task.
+pub fn follow_task(action: Status, last: Option<TaskState>, now: TaskState) -> Option<Status> {
+    if last == Some(now) {
+        return None;
+    }
+    let want = match now {
+        TaskState::Done => Status::Done,
+        TaskState::Cancelled => Status::Dropped,
+        TaskState::Open if last.is_some() => Status::Open,
+        TaskState::Open => return None,
+    };
+    (want != action).then_some(want)
+}
+
+/// Moves action `key` (its id or its words exactly) from one initiative page to another's Actions,
+/// whole: its line, its quotes and its block id. Returns the two pages as they become.
+pub fn move_action(from: &str, to: &str, key: &str) -> Result<(String, String), String> {
+    let (_, _, items) = section_items(from, "Actions").ok_or("That page has no Actions section.")?;
+    let it = find_item(&items, key).ok_or_else(|| format!("No action {key} on that page."))?;
+    let id = split_head(it.head).1;
+    if !id.is_empty() && to.lines().any(|l| BLOCK_ID.captures(l).is_some_and(|c| c[1] == id)) {
+        return Err(format!("The other initiative has a ^{id} already."));
+    }
+    let mut block = from[it.start..it.end].to_string();
+    if !block.ends_with('\n') {
+        block.push('\n');
+    }
+    let new_from = format!("{}{}", &from[..it.start], &from[it.end..]);
+    let new_to = insert_in_section(to, "Actions", &block, None)?;
+    Ok((new_from, new_to))
+}
+
+/// A task note's text with the link to action `id` pointed at another initiative: None when no
+/// line links it.
+pub fn relink_task(text: &str, from: &str, to: &str, id: &str) -> Option<String> {
+    let id = id.trim().trim_start_matches('^');
+    let old = task_link(from, id);
+    let bare = format!("[[{from}#^{id}]]");
+    if !text.contains(&old) && !text.contains(&bare) {
+        return None;
+    }
+    Some(text.replace(&old, &task_link(to, id)).replace(&bare, &task_link(to, id)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -880,5 +965,41 @@ mod tests {
         let (out, _) = with_decision(p, None, "Go", &[], "s").unwrap();
         assert!(out.contains("Going.\n\n## Decisions\n\n- Go ^d-"), "{out}");
         assert!(out.find("## Decisions").unwrap() < out.find("## Timeline").unwrap());
+    }
+
+    #[test]
+    fn a_task_made_from_an_action_moves_it_when_it_changes() {
+        let l = format!("- [x] Book the room {} ✅ 2026-11-19", task_link("Orbit launch", "a-7110"));
+        assert_eq!(l, "- [x] Book the room [[Orbit launch#^a-7110|Orbit launch]] ✅ 2026-11-19");
+        assert_eq!(task_state(&l, "a-7110"), Some(TaskState::Done));
+        assert_eq!(task_state(&l, "a-711"), None);
+        assert_eq!(task_state("- [-] x [[P#^a-1|P]]", "a-1"), Some(TaskState::Cancelled));
+        assert_eq!(task_state("- [ ] x [[P#^a-1]]", "a-1"), Some(TaskState::Open));
+        assert_eq!(task_state("Just a link [[P#^a-1]]", "a-1"), None);
+        assert_eq!(follow_task(Status::Open, None, TaskState::Done), Some(Status::Done));
+        assert_eq!(follow_task(Status::Open, None, TaskState::Open), None);
+        assert_eq!(follow_task(Status::Open, Some(TaskState::Open), TaskState::Cancelled), Some(Status::Dropped));
+        // Marked done by an ingest while its task stays open: left as it is.
+        assert_eq!(follow_task(Status::Done, Some(TaskState::Open), TaskState::Open), None);
+        assert_eq!(follow_task(Status::Done, Some(TaskState::Done), TaskState::Open), Some(Status::Open));
+        assert_eq!(follow_task(Status::Done, Some(TaskState::Open), TaskState::Done), None);
+    }
+
+    #[test]
+    fn an_action_moves_whole_to_another_initiative() {
+        let to = "---\ntype: initiative\n---\n\nOther.\n\n## Actions\n\n- Keep me [owner:: me] [status:: open] ^a-9999\n\n## Decisions\n";
+        let (from, to) = move_action(PAGE, to, "a-2222").unwrap();
+        assert!(!from.contains("^a-2222"));
+        assert!(from.contains("^a-1111"));
+        let at = to.find("^a-2222").unwrap();
+        assert!(to.find("^a-9999").unwrap() < at && at < to.find("## Decisions").unwrap());
+        assert!(move_action(PAGE, &to, "a-1111").is_ok());
+        assert!(move_action(PAGE, &to, "a-2222").unwrap_err().contains("already"));
+        let note = "- [ ] Book it [[Unfiled#^a-2222|Unfiled]]\n";
+        assert_eq!(
+            relink_task(note, "Unfiled", "Orbit launch", "a-2222").unwrap(),
+            "- [ ] Book it [[Orbit launch#^a-2222|Orbit launch]]\n"
+        );
+        assert!(relink_task(note, "Unfiled", "Hiring", "a-1").is_none());
     }
 }

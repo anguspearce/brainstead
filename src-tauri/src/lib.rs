@@ -2,6 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+mod actiontasks;
 mod applog;
 mod ask;
 mod bridge;
@@ -1037,6 +1038,8 @@ pub fn run() {
             notes::initiative_page,
             gtd::initiative_action_line,
             gtd::initiative_action_set,
+            gtd::initiative_action_move,
+            gtd::initiatives_list,
             notes::vault_create,
             notes::vault_add_examples,
             notes::draft_write,

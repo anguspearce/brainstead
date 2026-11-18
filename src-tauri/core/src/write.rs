@@ -916,6 +916,32 @@ pub fn move_task(from: &Path, line: usize, expected: &str, to: &Path, name: &str
     ))
 }
 
+/// Rewrites two notes together: `f` gets their texts and gives what they become. Both are written,
+/// or neither (the first is put back when the second fails).
+pub fn rewrite_pair(a: &Path, b: &Path, f: impl FnOnce(&str, &str) -> Result<(String, String)>) -> Result<[FileChange; 2]> {
+    if a == b {
+        return Err(WriteError::Invalid("Both are the same note.".into()));
+    }
+    let (la, lb) = (lock(a), lock(b));
+    let (first, second) = if a < b { (&la, &lb) } else { (&lb, &la) };
+    let _g1 = first.lock().unwrap();
+    let _g2 = second.lock().unwrap();
+    check_conflict_copies(a)?;
+    check_conflict_copies(b)?;
+    let (src_a, src_b) = (read_note(a)?, read_note(b)?);
+    let (new_a, new_b) = f(&src_a, &src_b)?;
+    write_atomic(b, new_b.as_bytes(), false)?;
+    if let Err(e) = write_atomic(a, new_a.as_bytes(), false) {
+        write_atomic(b, src_b.as_bytes(), false)
+            .map_err(|r| WriteError::Io(format!("{e}; and putting {} back failed too: {r}", b.display())))?;
+        return Err(e);
+    }
+    Ok([
+        FileChange { path: a.to_path_buf(), version: version(new_a.as_bytes()), before: Some(src_a) },
+        FileChange { path: b.to_path_buf(), version: version(new_b.as_bytes()), before: Some(src_b) },
+    ])
+}
+
 /// Undoes whole-file changes: each file goes back to its text before (a file the change created
 /// is deleted), but only when every one of them is still as the change left it. All or none.
 pub fn restore_files(changes: &[FileChange]) -> Result<()> {

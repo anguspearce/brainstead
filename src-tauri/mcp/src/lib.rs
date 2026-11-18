@@ -391,7 +391,7 @@ pub fn tools() -> Vec<Value> {
                 "reason": reason
             }), &["name"])),
         tool("set_action", "Add or change an initiative's action", Change,
-            "Adds an action to an initiative's Actions, or changes one (needs the app), leaving every other line of the page as it was. Without action it adds one: give text and owner (me for the user's own; delegated with person for one the user handed to someone, a waiting-for; other with person for someone else's own). With action (its id from list_initiatives, or its words exactly) it changes only what's given: reassign it with owner and person (a delegated one is stamped [since:: today], kept while it stays with the same person; one with no due date comes back to the Inbox a week after), mark it done or dropped with status, set or clear (\"\") due. Quotes are added under the action, each once: copy them word for word from the note or source; a quote that isn't in its source is flagged. Recorded in Changes, where the user can revert it.",
+            "Adds an action to an initiative's Actions, or changes one (needs the app), leaving every other line of the page as it was. Without action it adds one: give text and owner (me for the user's own; delegated with person for one the user handed to someone, a waiting-for; other with person for someone else's own). With action (its id from list_initiatives, or its words exactly) it changes only what's given: reassign it with owner and person (a delegated one is stamped [since:: today], kept while it stays with the same person; one with no due date comes back to the Inbox a week after), mark it done or dropped with status, set or clear (\"\") due; or with move_to, move it whole, with its quotes, to another initiative, as Move to… does (the task made from it follows it), changing nothing else. Quotes are added under the action, each once: copy them word for word from the note or source; a quote that isn't in its source is flagged. Recorded in Changes, where the user can revert it.",
             schema(json!({
                 "initiative": {"type": "string", "description": "The initiative, by name or path."},
                 "action": {"type": "string", "description": "The action to change: its id (a-3f9c) or its words exactly. Leave out to add one."},
@@ -401,6 +401,7 @@ pub fn tools() -> Vec<Value> {
                 "status": {"type": "string", "enum": ["open", "done", "dropped"]},
                 "due": {"type": "string", "description": "YYYY-MM-DD; \"\" clears it."},
                 "quotes": quotes_arg.clone(),
+                "move_to": {"type": "string", "description": "With action: another initiative, by name or path, to move the action to, whole. Nothing else changes."},
                 "reason": reason
             }), &["initiative"])),
         tool("add_decision", "Add a decision to an initiative", Change,
@@ -2340,10 +2341,76 @@ struct ActionArgs {
     due: Option<String>,
     #[serde(default)]
     quotes: Vec<QuoteArg>,
+    /// Another initiative to move the action to, whole.
+    move_to: Option<String>,
     #[serde(default)]
     reason: String,
     #[serde(default)]
     unattended: bool,
+}
+
+/// set_action's move_to: the action, whole, onto another initiative, as Move to… does
+/// (D-20261118-26); the task made from it, if any, linked to it there.
+fn move_action(ctx: &Ctx, a: &ActionArgs, to: &str) -> Result<String, String> {
+    let key = a.action.as_deref().ok_or("Give action: the one to move, by its id or its words.")?;
+    if a.text.is_some() || a.owner.is_some() || a.person.is_some() || a.status.is_some() || a.due.is_some() || !a.quotes.is_empty() {
+        return Err("Moving an action changes nothing else: move it, then change it on its new initiative.".into());
+    }
+    let ix = ctx.index()?;
+    let from = initiative_page(ctx, &a.initiative)?;
+    let to = initiative_page(ctx, to)?;
+    if from == to {
+        return Err("The action is on that initiative already.".into());
+    }
+    let (before_from, before_to) = (read_text(ctx, &from)?, read_text(ctx, &to)?);
+    let action = initiatives::parse(&from, &before_from)
+        .actions
+        .into_iter()
+        .find(|x| x.id == key.trim().trim_start_matches('^') || x.text == key.trim())
+        .ok_or_else(|| format!("No action {key} on {}.", filename::stem(&from)))?;
+    let (after_from, after_to) = initiatives::move_action(&before_from, &before_to, &action.id)?;
+    let (from_name, to_name) = (filename::stem(&from).to_string(), filename::stem(&to).to_string());
+    let title = format!("Action moved from {from_name}");
+    let mut out = vec![send_initiative(
+        ctx,
+        &ix,
+        &to,
+        &before_to,
+        &after_to,
+        Why { title: &title, reason: &a.reason, unattended: a.unattended },
+        vec![],
+    )?];
+    let title = format!("Action moved to {to_name}");
+    out.push(send_initiative(
+        ctx,
+        &ix,
+        &from,
+        &before_from,
+        &after_from,
+        Why { title: &title, reason: &a.reason, unattended: a.unattended },
+        vec![],
+    )?);
+    // Its task's link, pointed at the new page.
+    let note = action.task.as_deref().and_then(|t| {
+        let name = t.trim().trim_start_matches("[[").trim_end_matches("]]").split(['|', '#']).next()?.trim().to_string();
+        brainstead_core::names::resolve(&ix, &name).ok()?.exact.map(|(p, _)| p)
+    });
+    if let Some(note) = note {
+        let text = read_text(ctx, &note)?;
+        if let Some(new) = initiatives::relink_task(&text, &from_name, &to_name, &action.id) {
+            let c = change(
+                ctx,
+                &note,
+                Kind::Edit,
+                "Its task links the action on its new initiative",
+                &a.reason,
+                a.unattended,
+                changes::from_texts(Some(&text), &new),
+            );
+            out.push(send(ctx, c, vec![])?);
+        }
+    }
+    Ok(out.join("\n"))
 }
 
 /// A quote as the page writes it: its source with the anchor after `#`.
@@ -2378,6 +2445,9 @@ fn send_initiative(ctx: &Ctx, ix: &Index, rel: &str, before: &str, after: &str, 
 }
 
 fn set_action(ctx: &Ctx, a: ActionArgs) -> Result<String, String> {
+    if let Some(to) = a.move_to.clone() {
+        return move_action(ctx, &a, &to);
+    }
     let ix = ctx.index()?;
     let rel = initiative_page(ctx, &a.initiative)?;
     let before = read_text(ctx, &rel)?;

@@ -50,6 +50,7 @@ import {
   trashCapture,
 } from "./inboxActions";
 import { keyLabel } from "./platform";
+import { MoveAction } from "./MoveAction";
 import { isStrayKey } from "./strayKeys";
 import { usePanes } from "./PaneResizer";
 import { PANES } from "./panes";
@@ -165,6 +166,11 @@ const CHOICE: Record<string, { key: string; label: (i: InboxItem) => string; tip
     label: () => SOURCE_ACTION.ask.label(false),
     tip: () => `${SOURCE_ACTION.ask.tip(false)}; it stays in the Inbox`,
   },
+  move: {
+    key: "T",
+    label: () => "Move to…",
+    tip: () => "Move the action to another initiative, with its quotes; it stays in the Inbox",
+  },
   next: { key: "N", label: () => "Next action", tip: () => "Make it a next action; you set its project, context and due date first" },
   project: { key: "P", label: () => "New project", tip: () => "Start a new project from it" },
   waiting: { key: "W", label: () => "Waiting for", tip: () => "Make it a task tagged waiting-for, to chase later" },
@@ -247,6 +253,7 @@ export function InboxScreen() {
   const [form, setForm] = useState<{ mode: "next" | "waiting"; c: Clarified } | null>(null);
   const [filing, setFiling] = useState(false);
   const [making, setMaking] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
   const [sugg, setSugg] = useState<Record<string, ClarifySuggestion>>({});
   const [thinking, setThinking] = useState(false);
   // Every item seen in the Inbox this visit: one that has left it, however (clarified here, ingested
@@ -373,6 +380,8 @@ export function InboxScreen() {
         return act(() => doneNow(i), "Done, and out of the Inbox");
       case "someday":
         return act(() => settle(i, taskLine({ ...full, tag: "someday-maybe" }), proj, "Next actions"), "Moved to Someday / maybe");
+      case "move":
+        return setMoving(true);
       case "reference":
         if (i.kind === "capture") return act(() => captureDone(i.path), "Kept in Sources");
         return setFiling(true);
@@ -429,7 +438,7 @@ export function InboxScreen() {
   // Keys: the choices, J / K between items, ↩ the suggestion; with several ticked, their choices.
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (!cur || form || filing || making || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!cur || form || filing || making || moving || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       // Its meeting note under way: J / K still move, nothing acts on it.
       if (busy(cur) && !many && !["j", "k", "ArrowDown", "ArrowUp"].includes(e.key)) return;
       if ((e.target as HTMLElement)?.closest?.("input, textarea, [contenteditable]")) return;
@@ -762,6 +771,9 @@ export function InboxScreen() {
             )
           }
         />
+      )}
+      {moving && cur?.kind === "action" && (
+        <MoveAction path={cur.path} line={cur.line} lineText={cur.lineText} onClose={() => setMoving(false)} />
       )}
       {filing && cur && (
         <FileAsReference item={cur} onClose={() => setFiling(false)} onDone={(to) => act(() => settle(cur, null), `Filed in ${to}`)} />

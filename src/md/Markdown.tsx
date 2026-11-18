@@ -265,6 +265,21 @@ export interface MarkdownProps {
   scripts?: boolean;
   /** A template: its Templater tags are drawn as coloured code (src/notes/templaterSyntax.ts). */
   templater?: boolean;
+  /** An initiative page: each action under Actions gets a Move to… button, called with its
+   *  0-based line in `content` (D-20261118-26). */
+  onMoveAction?: (line: number) => void;
+}
+
+/** The 0-based lines of an initiative page's actions: the list items under `## Actions` that end
+ *  in a block id. */
+export function actionLines(content: string): number[] {
+  const out: number[] = [];
+  let inActions = false;
+  content.split(/\r?\n/).forEach((l, i) => {
+    if (/^#{1,6}\s/.test(l)) inActions = /^##\s+Actions\s*$/i.test(l);
+    else if (inActions && /^[-*+]\s/.test(l) && /\s\^[A-Za-z0-9-]+\s*$/.test(l)) out.push(i);
+  });
+  return out;
 }
 
 /** The source line of the task list item being drawn, for its checkbox. */
@@ -286,7 +301,7 @@ export function Markdown(props: MarkdownProps) {
   );
 }
 
-function MarkdownView({ content, path, root, q, onTick, cites, onCites, scripts = false, templater = false }: MarkdownProps) {
+function MarkdownView({ content, path, root, q, onTick, cites, onCites, scripts = false, templater = false, onMoveAction }: MarkdownProps) {
   const { body, offset, raw } = useMemo(() => {
     const b = splitFrontmatter(content).body;
     // Lines before the body (the properties), so a list item's line in the body maps to the file.
@@ -300,6 +315,12 @@ function MarkdownView({ content, path, root, q, onTick, cites, onCites, scripts 
     tickRef.current = onTick;
   });
   const tickable = !!onTick;
+  const moveRef = useRef(onMoveAction);
+  useEffect(() => {
+    moveRef.current = onMoveAction;
+  });
+  const moving = !!onMoveAction;
+  const movable = useMemo(() => (moving ? new Set(actionLines(content)) : null), [content, moving]);
   const targets = useMemo(() => wikiTargets(body), [body]);
   const resolved = useResolved(targets);
   const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
@@ -466,11 +487,27 @@ function MarkdownView({ content, path, root, q, onTick, cites, onCites, scripts 
         const task = tickable && line !== undefined && isTask;
         // A done task's own text is struck through, not the tasks nested under it.
         const body = isTask && node && isDone(node) ? strikeOwnText(children) : children;
-        return <li {...props}>{task ? <TaskLine.Provider value={line - 1 + offset}>{body}</TaskLine.Provider> : body}</li>;
+        const at = line !== undefined ? line - 1 + offset : -1;
+        const move = movable?.has(at) ? (
+          <button
+            type="button"
+            className="btn ghost sm mdmove"
+            title="Move this action to another initiative, with its quotes"
+            onClick={() => moveRef.current?.(at)}
+          >
+            Move to…
+          </button>
+        ) : null;
+        return (
+          <li {...props}>
+            {task ? <TaskLine.Provider value={at}>{body}</TaskLine.Provider> : body}
+            {move}
+          </li>
+        );
       },
       input: ({ type, checked }) => (type === "checkbox" ? <TaskCheckbox checked={!!checked} onTick={tickRef} /> : null),
     }),
-    [resolved, path, root, dir, tickable, offset, citeOrder, scripts],
+    [resolved, path, root, dir, tickable, offset, citeOrder, scripts, movable],
   );
 
   return (

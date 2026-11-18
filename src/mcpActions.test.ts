@@ -322,7 +322,9 @@ describe("MCP actions", () => {
       ["Me. To Do List.md", "add_task"],
       ["wiki/initiatives/Orbit launch.md", "lines"],
     ]);
-    expect(submitted()[0].instruction).toMatchObject({ line: "- [ ] Maya: Book the room [[Orbit launch]] #waiting-for 📅 2026-11-01" });
+    expect(submitted()[0].instruction).toMatchObject({
+      line: "- [ ] Maya: Book the room [[Orbit launch#^a-2|Orbit launch]] #waiting-for 📅 2026-11-01",
+    });
     expect(submitted()[1].instruction).toMatchObject({
       at: 12,
       old: [act.lineText],

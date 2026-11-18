@@ -19,6 +19,7 @@ import { Icon } from "./icons";
 import { lineText } from "./md/highlight";
 import { headingSlug } from "./md/plugins";
 import { Markdown } from "./md/Markdown";
+import { MoveAction } from "./MoveAction";
 import { nav, openDoc, place, setLeaveGuard } from "./nav";
 import { bodyStartsWithH1, DOC_ACCENTS, DOC_STYLES, useDocLook } from "./docLook";
 import { DatePicker } from "./DatePicker";
@@ -480,6 +481,8 @@ export function DocScreen() {
   const isWiki = s?.layer === "wiki" && isMarkdown(s.path);
   const pageText = liveText ?? doc?.content ?? "";
   const [cites, setCites] = useState<{ listed: string[]; order: string[] }>({ listed: [], order: [] });
+  // An initiative's action being moved (its 0-based line), from its Move to… button.
+  const [moveLine, setMoveLine] = useState<number | null>(null);
   const sourceNames = isWiki ? getList(rendered, "sources").map(linkName).join("\n") : "";
   // Again when the vault changes: a source may have been added or renamed.
   const vv = useVaultVersion();
@@ -859,6 +862,7 @@ export function DocScreen() {
                       onCites={(order) => setCites((c) => ({ listed: c.listed, order }))}
                       scripts={s.layer === "note" && scriptsAllowed(s.path, doc.meta.frontmatter)}
                       templater={isTemplate}
+                      onMoveAction={canEdit && !dirty && s.path.startsWith("wiki/initiatives/") ? setMoveLine : undefined}
                     />
                   </div>
                 </div>
@@ -959,6 +963,9 @@ export function DocScreen() {
             </div>
           </div>
         </Dialog>
+      )}
+      {moveLine !== null && doc && s && (
+        <MoveAction path={s.path} line={moveLine} lineText={doc.content.split(/\r?\n/)[moveLine] ?? ""} onClose={() => setMoveLine(null)} />
       )}
     </main>
   );

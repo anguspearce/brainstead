@@ -788,12 +788,12 @@ async function clarify(a: Args, r: McpRequest): Promise<string> {
   // The choices the Inbox offers this kind of item (inboxChoices); meeting and reply are other tools'.
   const may = inboxChoices(i);
   const becomes = str(a, "becomes") ?? "";
-  if (!may.includes(becomes) || ["meeting", "reply", "ask"].includes(becomes)) {
+  if (!may.includes(becomes) || ["meeting", "reply", "ask", "move"].includes(becomes)) {
     const own = may
-      .filter((b) => b === "meeting" || b === "reply")
-      .map((b) => (b === "meeting" ? "start_run meeting_note" : "draft_reply"));
+      .filter((b) => b === "meeting" || b === "reply" || b === "move")
+      .map((b) => (b === "meeting" ? "start_run meeting_note" : b === "move" ? "set_action with move_to" : "draft_reply"));
     // Ask about this source is the assistant reading it (read_section), not a clarify.
-    const here = may.filter((b) => b !== "meeting" && b !== "reply" && b !== "ask");
+    const here = may.filter((b) => b !== "meeting" && b !== "reply" && b !== "ask" && b !== "move");
     throw new Error(
       `The Inbox doesn't offer ${becomes || "that"} for this item. It can be: ${here.join(", ")}${own.length ? `; or use ${own.join(" or ")}` : ""}.`,
     );

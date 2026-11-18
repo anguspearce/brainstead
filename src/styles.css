@@ -2031,6 +2031,21 @@ html[data-platform]:not([data-platform="macos"]) .top.focusbar {
 .prose ol {
   padding-left: 24px;
 }
+
+/* An initiative's action: Move to… shows on hover, at the item's right. */
+.prose li:has(> .mdmove) {
+  position: relative;
+}
+.prose .mdmove {
+  position: absolute;
+  top: 0;
+  right: 0;
+  opacity: 0;
+}
+.prose li:hover > .mdmove,
+.prose .mdmove:focus-visible {
+  opacity: 1;
+}
 .prose li > p {
   margin: 0;
 }

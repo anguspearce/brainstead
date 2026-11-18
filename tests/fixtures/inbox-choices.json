@@ -7,7 +7,7 @@
         "kind": "action",
         "path": "wiki/initiatives/Orbit launch.md"
       },
-      "choices": ["next", "waiting", "someday", "done", "delete"]
+      "choices": ["next", "waiting", "someday", "done", "move", "delete"]
     },
     {
       "kind": "thought",

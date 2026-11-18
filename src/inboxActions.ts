@@ -22,8 +22,8 @@ export function inboxChoices(i: InboxItem): string[] {
   // An initiative's action: a task (a waiting-for when it's delegated), done or dropped.
   if (i.kind === "action")
     return i.action?.owner === "delegated"
-      ? ["waiting", "next", "someday", "done", "delete"]
-      : ["next", "waiting", "someday", "done", "delete"];
+      ? ["waiting", "next", "someday", "done", "move", "delete"]
+      : ["next", "waiting", "someday", "done", "move", "delete"];
   if (i.kind !== "capture") return ["next", "project", "waiting", "done", "someday", "reference", "delete"];
   // A capture's source actions first, as Sources offers them (src/sourceActions.ts).
   const own: string[] = sourceActions(i.path);
@@ -100,9 +100,13 @@ export const taskWent = (toProject?: string | null) => `[[${(toProject ?? "Me. T
 export function actionTaskText(i: InboxItem): string {
   const a = i.action;
   const who = a?.owner === "delegated" && a.person ? `${a.person}: ` : "";
-  const link = a && a.initiative !== "Unfiled" ? ` [[${a.initiative}]]` : "";
+  // The action's block, shown as its initiative: ticking the task marks the action done (D-20261118-26).
+  const link = a ? ` ${taskLink(a.initiative, a.id)}` : "";
   return `${who}${i.text.trim()}${link}`;
 }
+
+/** A task's link to the action it was made from (brainstead_core::initiatives::task_link). */
+export const taskLink = (initiative: string, id: string) => `[[${initiative}#^${id.replace(/^\^/, "")}|${initiative}]]`;
 
 /** An action's line changed in place (done, dropped, made a task). */
 export const setAction = (i: InboxItem, change: ActionEdit) => api.initiativeActionSet(i.path, i.line, i.lineText, change);

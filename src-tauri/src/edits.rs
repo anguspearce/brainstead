@@ -114,6 +114,7 @@ pub fn written(app: &AppHandle, paths: &[PathBuf]) {
     match svc.refresh(paths) {
         Ok(ch) if !ch.is_empty() => {
             let _ = app.emit("vault-changed", &ch);
+            crate::actiontasks::vault_changed(app, &ch.changed);
         }
         Ok(_) => {}
         Err(e) => crate::applog!("re-index after write: {e}"),

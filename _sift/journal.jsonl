@@ -548,3 +548,4 @@
 {"commit": "87b0e256", "detail": "D-20261118-23 - Back-fill for initiatives: whole Outlook Inbox, Teams and Slack from Monday of last week", "id": "j-20261118-205528-36ea", "kind": "decision-ref", "ts": "2026-11-18T20:55:28Z", "who": "waynetd777@users.noreply.github.com"}
 {"commit": "44f3678e", "detail": "D-20261118-24 - Ingest queue survives a restart", "id": "j-20261118-213948-f93d", "kind": "decision-ref", "ts": "2026-11-18T21:39:48Z", "who": "waynetd777@users.noreply.github.com"}
 {"commit": "ed085c51", "detail": "D-20261118-25 - Fetch again: only mail since its first day", "id": "j-20261118-214435-d4e6", "kind": "decision-ref", "ts": "2026-11-18T21:44:35Z", "who": "waynetd777@users.noreply.github.com"}
+{"commit": "cf8fd0b3", "detail": "D-20261118-26 - An action's task closes it; actions move between initiatives", "id": "j-20261118-215947-d8e4", "kind": "decision-ref", "ts": "2026-11-18T21:59:47Z", "who": "waynetd777@users.noreply.github.com"}

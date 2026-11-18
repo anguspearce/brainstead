@@ -1124,6 +1124,13 @@ fn initiatives_are_listed_made_and_changed_through_the_app() {
     assert!(t.contains("Note:"), "{t}");
     assert!(refused(&f.ctx, "set_action", json!({"initiative": rel, "action": "Nothing like it"})).contains("no action"));
     assert!(refused(&f.ctx, "set_action", json!({"initiative": "Orbit App", "text": "x", "owner": "me"})).contains("isn't an initiative"));
+    // Moving one changes nothing else, and needs another initiative.
+    assert!(
+        refused(&f.ctx, "set_action", json!({"initiative": rel, "action": "Brief the support team", "move_to": rel})).contains("already")
+    );
+    let moved = json!({"initiative": rel, "action": "Brief the support team", "move_to": "Orbit launch", "due": "2026-12-01"});
+    assert!(refused(&f.ctx, "set_action", moved).contains("changes nothing else"));
+    assert!(refused(&f.ctx, "set_action", json!({"initiative": rel, "move_to": rel})).contains("Give action"));
 
     let (t, c) = submitted(
         &f,

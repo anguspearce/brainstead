@@ -69,17 +69,20 @@ const action = (owner: "me" | "delegated", initiative = "Orbit launch"): InboxIt
 
 describe("an initiative's action in the Inbox", () => {
   it("leads with a task for the user's own and a waiting-for for a delegated one", () => {
-    expect([inboxChoices(action("me")), leadChoice(action("me"))]).toEqual([["next", "waiting", "someday", "done", "delete"], "next"]);
+    expect([inboxChoices(action("me")), leadChoice(action("me"))]).toEqual([
+      ["next", "waiting", "someday", "done", "move", "delete"],
+      "next",
+    ]);
     expect([inboxChoices(action("delegated")), leadChoice(action("delegated"))]).toEqual([
-      ["waiting", "next", "someday", "done", "delete"],
+      ["waiting", "next", "someday", "done", "move", "delete"],
       "waiting",
     ]);
     expect(inboxItemKind(action("delegated"))).toEqual({ icon: "waiting", label: "Waiting for Maya, overdue" });
   });
 
-  it("becomes a task naming whose it is and linking its initiative (not Unfiled)", () => {
-    expect(actionTaskText(action("delegated"))).toBe("Maya: Book the room [[Orbit launch]]");
-    expect(actionTaskText(action("me", "Unfiled"))).toBe("Book the room");
+  it("becomes a task naming whose it is and linking the action, shown as its initiative", () => {
+    expect(actionTaskText(action("delegated"))).toBe("Maya: Book the room [[Orbit launch#^a-2|Orbit launch]]");
+    expect(actionTaskText(action("me", "Unfiled"))).toBe("Book the room [[Unfiled#^a-2|Unfiled]]");
   });
 
   it("accepted, makes the task and marks the action with where it went; dropped or done, marks it", async () => {
