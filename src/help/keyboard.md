@@ -81,9 +81,11 @@ Keys are shown for this computer: Windows uses Ctrl, Alt and Shift where the Mac
 ## Inbox
 - `J` `K` `↑` `↓` — Next, previous
 - `↩` — Accept the suggestion
+- `T` — Task: a task on the To Do list as it is, nothing to fill in
 - `N` `P` `W` — Next action, new project, waiting for
-- `2` `S` — Done in two minutes, someday
-- `R` — File as reference, or keep a capture in Sources
+- `D` `S` — Done (in two minutes), someday
+- `F` `K` — File as reference; keep a capture in Sources
+- `M` — Move an action to another initiative
 - `⌫` — Delete (a capture goes to the Trash)
 - `I` — Ingest into the wiki (a capture)
 - `M` — Make a meeting note (a transcript)

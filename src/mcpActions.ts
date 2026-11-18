@@ -176,6 +176,8 @@ import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from 
 import { captureDefault, isMac, keyLabel, terminalApp, vaultFile } from "./platform";
 
 const TODO_LIST = "Me. To Do List.md";
+/** The To Do list's heading for a task with nothing more to set (brainstead_core::inbox::TODO_TASKS). */
+const TODO_TASKS = "To Do";
 const SCRATCHPAD = "Me. Scratchpad.md";
 /** A project's heading a waiting task goes under, as the Inbox files it. */
 const WAITING_FOR = "Waiting for";
@@ -854,6 +856,19 @@ export async function clarifyChanges(
         return { said: `a next action${proj ? ` in ${projectName(proj)}` : ""}`, changes: await task(taskLine(fields)) };
       case "waiting":
         return { said: "waiting for", changes: await task(taskLine({ ...fields, tag: "waiting-for" }), WAITING_FOR) };
+      case "task":
+        // As the Inbox's Task: on the To Do list's To Do, nothing more to set.
+        return {
+          said: "a task on the To Do list",
+          changes: [
+            sub(a, r, TODO_LIST, "task", `Add “${taskWords(taskLine(fields))}”`, {
+              op: "add_task",
+              line: taskLine(fields),
+              heading: TODO_TASKS,
+            }),
+            await mark({ task: taskWent(null) }, `Made a task of “${short}”`),
+          ],
+        };
       case "someday":
         return { said: "someday / maybe", changes: await task(taskLine({ ...fields, tag: "someday-maybe" })) };
       case "done":
@@ -861,7 +876,7 @@ export async function clarifyChanges(
       case "delete":
         return { said: "dropped", changes: [await mark({ status: "dropped" }, `Drop “${short}”`)] };
       default:
-        throw new Error("An action becomes next, waiting, someday, done or delete (dropped).");
+        throw new Error("An action becomes next, task, waiting, someday, done or delete (dropped).");
     }
   }
   const captureDone = i.kind === "capture" ? () => markCaptureDone(i.path) : undefined;
@@ -907,6 +922,15 @@ export async function clarifyChanges(
       };
     case "someday":
       return { said: "someday / maybe", changes: settle(taskLine({ ...fields, tag: "someday-maybe" }), proj), after: captureDone };
+    case "task": {
+      // As the Inbox's Task: on the To Do list's To Do as it is, nothing more to set.
+      const line = taskLine({ text: fields.text });
+      return {
+        said: "a task on the To Do list",
+        changes: [...takeOut(), sub(a, r, TODO_LIST, "task", `Add “${taskWords(line)}”`, { op: "add_task", line, heading: TODO_TASKS })],
+        after: captureDone,
+      };
+    }
     case "project": {
       const name = str(a, "project_name") ?? text;
       const note = await api.changeProjectNote(name, "active", str(a, "area") ?? null, str(a, "done_looks_like") ?? null);

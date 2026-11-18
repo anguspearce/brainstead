@@ -498,6 +498,29 @@ pub async fn inbox_move_task(
     .await
 }
 
+/// The Inbox's Task: `text` as a task at the end of the To Do list's To Do, with nothing more to
+/// set, so it's off the Inbox (which reads only Other). ⌘Z undoes it.
+#[tauri::command]
+pub async fn todo_add_task(app: AppHandle, text: String) -> Res<Edited> {
+    writing(move || {
+        writable(&app.state::<AppState>())?;
+        let svc = app.state::<VaultService>();
+        let root = root(&svc)?;
+        let t = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        if t.is_empty() {
+            return Err(invalid("Nothing to add.".into()));
+        }
+        let item = format!("- [ ] {t}");
+        let abs = root.join(inbox::TODO_LIST);
+        let (i, ch) = write::add_task_under_todo(&abs, inbox::TODO_TASKS, &item)?;
+        let label = format!("Added “{}” to the To Do list", task_label(&item));
+        let undo = push_files(&app, &root, label, std::slice::from_ref(&ch));
+        written(&app, &[abs]);
+        Ok(Edited { line: i, line_text: item, undo: Some(undo) })
+    })
+    .await
+}
+
 /// The initiatives, for Move to…'s list: (name, path, status), A to Z.
 #[tauri::command]
 pub fn initiatives_list(app: AppHandle) -> Res<Vec<(String, String, String)>> {

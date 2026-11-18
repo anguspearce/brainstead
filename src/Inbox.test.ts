@@ -18,15 +18,15 @@ describe("choices for several ticked items", () => {
       cap("sources/Teams. Transcript. Steerco - 2026-10-02.md"),
       cap("sources/Teams. Transcript. Standup - 2026-10-03.md"),
     ];
-    expect(choices(transcripts)).toEqual(["M meeting", "I ingest", "R reference", "⌫ delete"]);
-    expect(choices([task(3), task(4)])).toEqual(["2 done", "S someday", "⌫ delete"]);
+    expect(choices(transcripts)).toEqual(["M meeting", "I ingest", "K reference", "⌫ delete"]);
+    expect(choices([task(3), task(4)])).toEqual(["T task", "D done", "S someday", "⌫ delete"]);
     // A transcript and a PDF share only ingesting, keeping and trashing.
-    expect(choices([transcripts[0], cap("sources/Orbit App plan.pdf")])).toEqual(["I ingest", "R reference", "⌫ delete"]);
+    expect(choices([transcripts[0], cap("sources/Orbit App plan.pdf")])).toEqual(["I ingest", "K reference", "⌫ delete"]);
   });
 
   it("keep in Sources only when all are captures, and say how many", () => {
     const mixed = [task(3), cap("sources/Orbit App plan.pdf")];
-    expect(choices(mixed)).toEqual(["S someday", "⌫ delete"]);
+    expect(choices(mixed)).toEqual(["T task", "S someday", "⌫ delete"]);
     const [, , label, tip] = bulkChoices(mixed).find(([, b]) => b === "delete")!;
     expect([label, tip]).toEqual(["Delete 2", keyLabel("Delete them from the Inbox (captures go to the Trash); ⌘Z undoes one at a time")]);
     expect(bulkChoices([cap("sources/a.pdf"), cap("sources/b.pdf"), cap("sources/c.pdf")]).find(([, b]) => b === "reference")![2]).toBe(

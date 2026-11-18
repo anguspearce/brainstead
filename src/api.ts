@@ -1502,6 +1502,8 @@ export const api = {
   skipSuggestionForget: (key: string) => invoke<void>("skip_suggestion_forget", { key }),
   /** An initiative action's line after `edit`, not written (clarify_inbox sends it as a change). */
   initiativeActionLine: (lineText: string, edit: ActionEdit) => invoke<string>("initiative_action_line", { lineText, edit }),
+  /** The Inbox's Task: a task at the end of the To Do list's To Do, nothing more to set; ⌘Z undoes it. */
+  todoAddTask: (text: string) => invoke<Edited>("todo_add_task", { text }),
   /** The initiatives: [name, path, status], A to Z. */
   initiativesList: () => invoke<[string, string, string][]>("initiatives_list"),
   /** Moves an action, whole, to another initiative (its task's link follows); ⌘Z undoes it. Says what it did. */

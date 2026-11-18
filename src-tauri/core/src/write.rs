@@ -799,6 +799,42 @@ pub fn append_under(lines: &mut Vec<String>, name: &str, item: &str) -> usize {
     }
 }
 
+/// Adds `item` at the end of the To Do list's `name` section, whatever its level (the To Do list's
+/// headings are `####`). With no such heading, one is made just above Other, at Other's level (or at
+/// the end, `## name`, with no Other either). Returns the item's line.
+pub fn append_under_todo(lines: &mut Vec<String>, name: &str, item: &str) -> usize {
+    let code = code_lines(lines);
+    let level = |i: usize| if code.get(i).copied().unwrap_or(false) { None } else { heading(&lines[i]) };
+    let named = |want: &str| (0..lines.len()).find_map(|i| level(i).filter(|(_, t)| t.eq_ignore_ascii_case(want)).map(|(n, _)| (i, n)));
+    let Some((h, n)) = named(name.trim()) else {
+        let Some((o, n)) = named("Other") else { return append_under(lines, name, item) };
+        let marks = "#".repeat(n);
+        lines.splice(o..o, [format!("{marks} {}", name.trim()), String::new(), item.to_string(), String::new()]);
+        return o + 2;
+    };
+    let end = (h + 1..lines.len()).find(|&i| level(i).is_some_and(|(m, _)| m <= n)).unwrap_or(lines.len());
+    match (h + 1..end).rev().find(|&i| !lines[i].trim().is_empty()) {
+        Some(last) => {
+            lines.insert(last + 1, item.to_string());
+            last + 1
+        }
+        None => {
+            let mut fill = vec![String::new(), item.to_string()];
+            if end < lines.len() {
+                fill.push(String::new());
+            }
+            lines.splice(h + 1..end, fill);
+            h + 2
+        }
+    }
+}
+
+/// Adds a task line at the end of the To Do list's `name` section ([`append_under_todo`]).
+pub fn add_task_under_todo(path: &Path, name: &str, task_line: &str) -> Result<(usize, FileChange)> {
+    one_task_line(task_line)?;
+    rewrite(path, |lines| Ok(append_under_todo(lines, name, task_line)))
+}
+
 fn one_task_line(task_line: &str) -> Result<()> {
     if task_line.contains(['\n', '\r']) || parse_line(task_line, 0).is_none() {
         return Err(WriteError::Invalid("That isn't one task line.".into()));

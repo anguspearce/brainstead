@@ -42,7 +42,7 @@ Each action is one list item: what's to be done, then whose it is, its status an
 
 You can write and edit them by hand; [Knowledge health](app:health) says when one has no owner, a status or date that doesn't read, or a quote that isn't in the note it cites. Assistants add and change them for you too, each change listed in [Changes](app:review).
 
-To move an action to another initiative, hover over it on the initiative's page and choose **Move to…**: it moves whole, with its quotes, and a task made from it follows it. (`T` in the [Inbox](app:inbox) does the same.)
+To move an action to another initiative, hover over it on the initiative's page and choose **Move to…**: it moves whole, with its quotes, and a task made from it follows it. (`M` in the [Inbox](app:inbox) does the same.)
 
 An action made a task in the Inbox links its task to it: the task ends with the initiative's name, which links the action. Tick the task, wherever you tick it, and the action is marked done; cancel it and the action is dropped; open it again and so is the action. Each of these is listed in [Changes](app:review). Tasks made before this link existed aren't followed.
 

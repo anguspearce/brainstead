@@ -1040,6 +1040,7 @@ pub fn run() {
             gtd::initiative_action_set,
             gtd::initiative_action_move,
             gtd::initiatives_list,
+            gtd::todo_add_task,
             notes::vault_create,
             notes::vault_add_examples,
             notes::draft_write,

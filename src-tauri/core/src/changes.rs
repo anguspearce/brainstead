@@ -44,7 +44,8 @@ pub enum Instruction {
     /// The page's whole text: a new page, or one written over.
     Page { content: String },
     /// A task line, at the end of a project's Next actions (or its `heading`, Waiting for as the
-    /// Inbox files a waiting task) or the top of the To Do list's Other.
+    /// Inbox files a waiting task) or the top of the To Do list's Other (or, with `heading`, the end
+    /// of that heading: To Do, as the Inbox's Task makes one).
     AddTask {
         line: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -96,7 +97,12 @@ impl Instruction {
                     return Err(format!("That task is in {name} already."));
                 }
                 if page == crate::inbox::TODO_LIST {
-                    crate::write::insert_other(&mut lines, line);
+                    match heading {
+                        Some(h) => {
+                            crate::write::append_under_todo(&mut lines, h, line);
+                        }
+                        None => crate::write::insert_other(&mut lines, line),
+                    }
                 } else {
                     crate::write::append_under(&mut lines, heading.as_deref().unwrap_or(crate::projects::NEXT_ACTIONS), line);
                 }
@@ -927,6 +933,15 @@ mod tests {
         // Under the heading given: a waiting task in the project's Waiting for, as the Inbox files it.
         let w = Instruction::AddTask { line: "- [ ] Lena's quote #waiting-for".into(), heading: Some("Waiting for".into()) };
         assert!(w.text(page, Some(&two)).unwrap().ends_with("## Waiting for\n\n- [ ] Lena's quote #waiting-for\n"));
+        // On the To Do list: the top of Other, or with a heading (the Inbox's Task) the end of To Do.
+        let todo = "#### To Do\n\n- [ ] One\n\n#### Other\n\n- [ ] Raw\n";
+        let bare = "#### Other\n\n- [ ] Raw\n";
+        let made = Instruction::AddTask { line: "- [ ] Two".into(), heading: Some(crate::inbox::TODO_TASKS.into()) };
+        assert_eq!(made.text(crate::inbox::TODO_LIST, Some(bare)).unwrap(), "#### To Do\n\n- [ ] Two\n\n#### Other\n\n- [ ] Raw\n");
+        let t = Instruction::AddTask { line: "- [ ] Two".into(), heading: Some(crate::inbox::TODO_TASKS.into()) };
+        assert_eq!(t.text(crate::inbox::TODO_LIST, Some(todo)).unwrap(), "#### To Do\n\n- [ ] One\n- [ ] Two\n\n#### Other\n\n- [ ] Raw\n");
+        let o = Instruction::AddTask { line: "- [ ] Two".into(), heading: None };
+        assert!(o.text(crate::inbox::TODO_LIST, Some(todo)).unwrap().contains("#### Other\n\n- [ ] Two\n- [ ] Raw"));
     }
 
     #[test]

@@ -19,6 +19,8 @@ use crate::write::{self, FileChange, Result, WriteError};
 
 pub const SCRATCHPAD: &str = "Me. Scratchpad.md";
 pub const TODO_LIST: &str = "Me. To Do List.md";
+/// The To Do list's heading for tasks with nothing more to say: where the Inbox's Task puts one.
+pub const TODO_TASKS: &str = "To Do";
 
 static STAMP: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^##\s+(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s*$").unwrap());
 

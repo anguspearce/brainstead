@@ -7,7 +7,7 @@
         "kind": "action",
         "path": "wiki/initiatives/Orbit launch.md"
       },
-      "choices": ["next", "waiting", "someday", "done", "move", "delete"]
+      "choices": ["next", "task", "waiting", "someday", "done", "move", "delete"]
     },
     {
       "kind": "thought",
@@ -15,7 +15,7 @@
         "kind": "thought",
         "path": "Me. Scratchpad.md"
       },
-      "choices": ["next", "project", "waiting", "done", "someday", "reference", "delete"]
+      "choices": ["next", "task", "project", "waiting", "done", "someday", "reference", "delete"]
     },
     {
       "kind": "task",
@@ -23,7 +23,7 @@
         "kind": "task",
         "path": "Me. To Do List.md"
       },
-      "choices": ["next", "project", "waiting", "done", "someday", "reference", "delete"]
+      "choices": ["next", "task", "project", "waiting", "done", "someday", "reference", "delete"]
     },
     {
       "kind": "transcript",
@@ -39,7 +39,7 @@
         "kind": "capture",
         "path": "sources/Email. Thread. Re Orbit App launch - 2026-10-02.md"
       },
-      "choices": ["reply", "ingest", "ask", "next", "project", "waiting", "someday", "reference", "delete"]
+      "choices": ["reply", "ingest", "ask", "next", "task", "project", "waiting", "someday", "reference", "delete"]
     },
     {
       "kind": "thread",
@@ -47,7 +47,7 @@
         "kind": "capture",
         "path": "sources/Teams. Chat. Standup - 2026-10-03.md"
       },
-      "choices": ["reply", "ingest", "ask", "next", "project", "waiting", "someday", "reference", "delete"]
+      "choices": ["reply", "ingest", "ask", "next", "task", "project", "waiting", "someday", "reference", "delete"]
     },
     {
       "kind": "capture",
@@ -55,7 +55,7 @@
         "kind": "capture",
         "path": "sources/Orbit App plan.pdf"
       },
-      "choices": ["ingest", "ask", "next", "project", "someday", "reference", "delete"]
+      "choices": ["ingest", "ask", "next", "task", "project", "someday", "reference", "delete"]
     },
     {
       "kind": "file",
@@ -63,7 +63,7 @@
         "kind": "capture",
         "path": "sources/Orbit App data.zip"
       },
-      "choices": ["next", "project", "someday", "reference", "delete"]
+      "choices": ["next", "task", "project", "someday", "reference", "delete"]
     }
   ]
 }

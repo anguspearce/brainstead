@@ -22,19 +22,19 @@ export function inboxChoices(i: InboxItem): string[] {
   // An initiative's action: a task (a waiting-for when it's delegated), done or dropped.
   if (i.kind === "action")
     return i.action?.owner === "delegated"
-      ? ["waiting", "next", "someday", "done", "move", "delete"]
-      : ["next", "waiting", "someday", "done", "move", "delete"];
-  if (i.kind !== "capture") return ["next", "project", "waiting", "done", "someday", "reference", "delete"];
+      ? ["waiting", "next", "task", "someday", "done", "move", "delete"]
+      : ["next", "task", "waiting", "someday", "done", "move", "delete"];
+  if (i.kind !== "capture") return ["next", "task", "project", "waiting", "done", "someday", "reference", "delete"];
   // A capture's source actions first, as Sources offers them (src/sourceActions.ts).
   const own: string[] = sourceActions(i.path);
   if (isTranscriptPath(i.path)) return [...own, "reference", "delete"];
-  if (isThread(i.path)) return [...own, "next", "project", "waiting", "someday", "reference", "delete"];
-  return [...own, "next", "project", "someday", "reference", "delete"];
+  if (isThread(i.path)) return [...own, "next", "task", "project", "waiting", "someday", "reference", "delete"];
+  return [...own, "next", "task", "project", "someday", "reference", "delete"];
 }
 
 /** The choices that make it something to do (GTD's "is it actionable?"); the rest file, park or
  *  drop it. */
-const NEEDS_DOING = new Set(["reply", "next", "waiting", "project", "done"]);
+const NEEDS_DOING = new Set(["reply", "next", "task", "waiting", "project", "done"]);
 
 /** An item's choices as the Inbox groups them: those that make it something to do, those that
  *  don't, in inboxChoices' order, and whether it can be asked about (Ask leaves it in the Inbox,
@@ -164,6 +164,23 @@ export async function settleInboxItem(
     if (toProject) await api.projectAddTask(toProject, line.replace(/^- \[ \] /, ""), heading);
     else await api.capture("task", line.replace(/^- \[ \] /, ""), "");
   }
+  if (i.kind === "capture") return captureDone(i.path);
+  return api.inboxRemoveThought(i.line, i.block ?? i.lineText);
+}
+
+/** Task: the item as a task at the end of the To Do list's To Do, as it is (an action's due date
+ *  and its link come with it), then out of the Inbox: an action marked with where its task went, a
+ *  task's line or a thought taken out, a capture marked done. */
+export async function makeTask(i: InboxItem, text: string): Promise<unknown> {
+  const words = text.replace(/^- \[.\] /, "").trim();
+  const line = i.kind === "action" && i.action?.due && !/📅/.test(words) ? `${words} 📅 ${i.action.due}` : words;
+  // A task on the To Do list's Other leaves it first, so adding above it doesn't move its line.
+  if (i.kind === "task") {
+    await api.taskReplace({ path: i.path, line: i.line, lineText: i.lineText }, [], "Made a task of");
+    return api.todoAddTask(line);
+  }
+  await api.todoAddTask(line);
+  if (i.kind === "action") return setAction(i, { task: taskWent(null) });
   if (i.kind === "capture") return captureDone(i.path);
   return api.inboxRemoveThought(i.line, i.block ?? i.lineText);
 }

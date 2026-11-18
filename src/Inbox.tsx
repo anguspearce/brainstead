@@ -44,6 +44,7 @@ import {
   inboxChoices,
   inboxItemKind,
   leadChoice,
+  makeTask,
   newReferenceNote,
   settleInboxItem,
   suggestKind,
@@ -152,65 +153,87 @@ const isTranscript = (i: InboxItem) => i.kind === "capture" && isTranscriptPath(
 const unsuggested = (i: InboxItem) => isTranscript(i) || i.kind === "action";
 
 /** Each choice's key, label and tip for one item (what `inboxChoices` gives it, in that order). */
-const CHOICE: Record<string, { key: string; label: (i: InboxItem) => string; tip: (i: InboxItem) => string }> = {
-  // A capture's source actions, named as Sources names them (src/sourceActions.ts).
-  meeting: { key: SOURCE_ACTION.meeting.key, label: () => SOURCE_ACTION.meeting.label(false), tip: () => SOURCE_ACTION.meeting.tip(false) },
-  reply: { key: SOURCE_ACTION.reply.key, label: () => SOURCE_ACTION.reply.label(false), tip: () => SOURCE_ACTION.reply.tip(false) },
-  ingest: {
-    key: SOURCE_ACTION.ingest.key,
-    label: () => SOURCE_ACTION.ingest.label(false),
-    tip: () => `${SOURCE_ACTION.ingest.tip(false)}, and take it out of the Inbox`,
-  },
-  ask: {
-    key: SOURCE_ACTION.ask.key,
-    label: () => SOURCE_ACTION.ask.label(false),
-    tip: () => `${SOURCE_ACTION.ask.tip(false)}; it stays in the Inbox`,
-  },
-  move: {
-    key: "T",
-    label: () => "Move to…",
-    tip: () => "Move the action to another initiative, with its quotes; it stays in the Inbox",
-  },
-  next: { key: "N", label: () => "Next action", tip: () => "Make it a next action; you set its project, context and due date first" },
-  project: { key: "P", label: () => "New project", tip: () => "Start a new project from it" },
-  waiting: { key: "W", label: () => "Waiting for", tip: () => "Make it a task tagged waiting-for, to chase later" },
-  done: {
-    key: "2",
-    label: (i) => (i.kind === "action" ? "Done" : "Done now (under 2 min)"),
-    tip: (i) =>
-      i.kind === "action"
-        ? keyLabel("It's done already, or takes two minutes: mark the action done on its initiative; ⌘Z undoes")
-        : "It takes two minutes: do it now, and this marks it done",
-  },
-  someday: { key: "S", label: () => "Someday / maybe", tip: () => "Park it as a task tagged someday-maybe" },
-  reference: {
-    key: "R",
-    label: (i) => (i.kind === "capture" ? "Keep in Sources" : "File as reference"),
-    tip: (i) =>
-      i.kind === "capture"
-        ? "Keep the capture in Sources and take it out of the Inbox"
-        : "Add it as a bullet to the end of a note you pick",
-  },
-  delete: {
-    key: "⌫",
-    label: (i) => (i.kind === "capture" ? "Move to the Trash" : i.kind === "action" ? "Drop" : "Delete"),
-    tip: (i) =>
-      i.kind === "capture"
-        ? "Move the captured file to the vault’s Trash"
-        : i.kind === "action"
-          ? keyLabel("It isn't happening: mark the action dropped on its initiative; ⌘Z undoes")
-          : keyLabel("Delete it from the Inbox; ⌘Z undoes"),
-  },
+/** Each choice's key is its name's first letter where it can be: unique among the choices one item
+ *  shows (Done and Draft a reply never meet, nor Move to… and a meeting note). */
+const CHOICE: Record<string, { key: string | ((i: InboxItem) => string); label: (i: InboxItem) => string; tip: (i: InboxItem) => string }> =
+  {
+    // A capture's source actions, named as Sources names them (src/sourceActions.ts).
+    meeting: {
+      key: SOURCE_ACTION.meeting.key,
+      label: () => SOURCE_ACTION.meeting.label(false),
+      tip: () => SOURCE_ACTION.meeting.tip(false),
+    },
+    reply: { key: SOURCE_ACTION.reply.key, label: () => SOURCE_ACTION.reply.label(false), tip: () => SOURCE_ACTION.reply.tip(false) },
+    ingest: {
+      key: SOURCE_ACTION.ingest.key,
+      label: () => SOURCE_ACTION.ingest.label(false),
+      tip: () => `${SOURCE_ACTION.ingest.tip(false)}, and take it out of the Inbox`,
+    },
+    ask: {
+      key: SOURCE_ACTION.ask.key,
+      label: () => SOURCE_ACTION.ask.label(false),
+      tip: () => `${SOURCE_ACTION.ask.tip(false)}; it stays in the Inbox`,
+    },
+    task: {
+      key: "T",
+      label: () => "Task",
+      tip: (i) =>
+        i.kind === "action"
+          ? "Make it a task on the To Do list as it is, due date and all, with nothing more to fill in"
+          : "Make it a task on the To Do list as it is, with nothing more to fill in",
+    },
+    move: {
+      key: "M",
+      label: () => "Move to…",
+      tip: () => "Move the action to another initiative, with its quotes; it stays in the Inbox",
+    },
+    next: { key: "N", label: () => "Next action", tip: () => "Make it a next action; you set its project, context and due date first" },
+    project: { key: "P", label: () => "New project", tip: () => "Start a new project from it" },
+    waiting: { key: "W", label: () => "Waiting for", tip: () => "Make it a task tagged waiting-for, to chase later" },
+    done: {
+      key: "D",
+      label: (i) => (i.kind === "action" ? "Done" : "Done now (under 2 min)"),
+      tip: (i) =>
+        i.kind === "action"
+          ? keyLabel("It's done already, or takes two minutes: mark the action done on its initiative; ⌘Z undoes")
+          : "It takes two minutes: do it now, and this marks it done",
+    },
+    someday: { key: "S", label: () => "Someday / maybe", tip: () => "Park it as a task tagged someday-maybe" },
+    reference: {
+      key: (i) => (i.kind === "capture" ? "K" : "F"),
+      label: (i) => (i.kind === "capture" ? "Keep in Sources" : "File as reference"),
+      tip: (i) =>
+        i.kind === "capture"
+          ? "Keep the capture in Sources and take it out of the Inbox"
+          : "Add it as a bullet to the end of a note you pick",
+    },
+    delete: {
+      key: "⌫",
+      label: (i) => (i.kind === "capture" ? "Move to the Trash" : i.kind === "action" ? "Drop" : "Delete"),
+      tip: (i) =>
+        i.kind === "capture"
+          ? "Move the captured file to the vault’s Trash"
+          : i.kind === "action"
+            ? keyLabel("It isn't happening: mark the action dropped on its initiative; ⌘Z undoes")
+            : keyLabel("Delete it from the Inbox; ⌘Z undoes"),
+    },
+  };
+
+/** A choice's key for this item. */
+const keyOf = (b: string, i: InboxItem) => {
+  const k = CHOICE[b].key;
+  return typeof k === "function" ? k(i) : k;
 };
 
 /** The choices that can be made for several ticked items at once, in order. */
-const BULK = ["meeting", "ingest", "done", "someday", "reference", "delete"];
+const BULK = ["meeting", "ingest", "task", "done", "someday", "reference", "delete"];
 const BULK_LABEL: Record<string, (n: number, caps: boolean) => [string, string, string]> = {
   meeting: (n) => ["M", followThrough().ingest ? `Make and ingest ${n} meeting notes` : `Make ${n} meeting notes`, meetingTip(n)],
   ingest: (n) => ["I", `Ingest ${n} into the wiki`, "Have the AI read each into the wiki and take it out of the Inbox"],
-  done: (n) => ["2", `Mark ${n} done`, "Each took two minutes: done, and out of the Inbox"],
+  task: (n) => ["T", `Make ${n} tasks`, "Make each a task on the To Do list as it is, with nothing more to fill in"],
+  done: (n) => ["D", `Mark ${n} done`, "Each took two minutes: done, and out of the Inbox"],
   someday: (n) => ["S", `Move ${n} to Someday / maybe`, "Park each as a task tagged someday-maybe"],
-  reference: (n) => ["R", `Keep ${n} in Sources`, "Keep the captures in Sources and take them out of the Inbox"],
+  reference: (n) => ["K", `Keep ${n} in Sources`, "Keep the captures in Sources and take them out of the Inbox"],
   delete: (n, caps) => [
     "⌫",
     caps ? `Move ${n} to the Trash` : `Delete ${n}`,
@@ -232,6 +255,7 @@ export function bulkChoices(ps: InboxItem[]) {
 }
 /** What a choice made for several items says, once done. */
 const DONE_ALL: Record<string, string> = {
+  task: "Made tasks on the To Do list",
   ingest: "Ingesting: their changes are listed in Changes",
   done: "Done, and out of the Inbox",
   someday: "Moved to Someday / maybe",
@@ -382,6 +406,8 @@ export function InboxScreen() {
         return act(() => settle(i, taskLine({ ...full, tag: "someday-maybe" }), proj, "Next actions"), "Moved to Someday / maybe");
       case "move":
         return setMoving(true);
+      case "task":
+        return act(() => makeTask(i, base.text), "Made a task on the To Do list");
       case "reference":
         if (i.kind === "capture") return act(() => captureDone(i.path), "Kept in Sources");
         return setFiling(true);
@@ -408,6 +434,7 @@ export function InboxScreen() {
     const one = (i: InboxItem): Promise<unknown> => {
       if (b === "ingest" || b === "reference") return captureDone(i.path);
       if (b === "done") return doneNow(i);
+      if (b === "task") return makeTask(i, startText(i));
       if (b === "someday") return settle(i, taskLine({ text: startText(i), project: null, tag: "someday-maybe" }), null, "Next actions");
       if (i.kind === "capture") return trashCapture(i.path);
       return settle(i, null);
@@ -452,7 +479,7 @@ export function InboxScreen() {
       }
       const s = unsuggested(cur) ? undefined : sugg[key(cur)];
       const map: Record<string, string> = Object.fromEntries(
-        inboxChoices(cur).map((b) => [CHOICE[b].key === "⌫" ? "Backspace" : CHOICE[b].key.toLowerCase(), b]),
+        inboxChoices(cur).map((b) => [keyOf(b, cur) === "⌫" ? "Backspace" : keyOf(b, cur).toLowerCase(), b]),
       );
       if (e.key === "j" || e.key === "ArrowDown") setSel(key(items[Math.min(items.length - 1, idx + 1)]));
       else if (e.key === "k" || e.key === "ArrowUp") setSel(key(items[Math.max(0, idx - 1)]));
@@ -717,11 +744,11 @@ export function InboxScreen() {
                                 key={b}
                                 type="button"
                                 className={`key ${b === leadChoice(cur) && !sugg[key(cur)] ? "rec" : ""}`}
-                                title={`${c.tip(cur)} (${c.key})`}
+                                title={`${c.tip(cur)} (${keyOf(b, cur)})`}
                                 onClick={() => outcome(cur, { becomes: b })}
                               >
                                 <span className="grow">{c.label(cur)}</span>
-                                <span className="kbd">{c.key}</span>
+                                <span className="kbd">{keyOf(b, cur)}</span>
                               </button>
                             );
                           })}
@@ -734,12 +761,12 @@ export function InboxScreen() {
                 <button
                   type="button"
                   className="btn sm ghost iask"
-                  title={`${CHOICE.ask.tip(cur)} (${CHOICE.ask.key})`}
+                  title={`${CHOICE.ask.tip(cur)} (${keyOf("ask", cur)})`}
                   onClick={() => outcome(cur, { becomes: "ask" })}
                 >
                   <Icon name="ask" size={13} />
                   {CHOICE.ask.label(cur)}
-                  <span className="kbd">{CHOICE.ask.key}</span>
+                  <span className="kbd">{keyOf("ask", cur)}</span>
                 </button>
               )}
             </>

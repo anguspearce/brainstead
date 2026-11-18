@@ -330,6 +330,14 @@ describe("MCP actions", () => {
       old: [act.lineText],
       new: [expect.stringContaining('{"task":"[[Me. To Do List]]"}')],
     });
+    // Task: on the To Do list's To Do as it is, nothing more to set.
+    calls.length = 0;
+    await run("inbox.clarify", { item: "action:a-2", becomes: "task" });
+    expect(submitted()[0]).toMatchObject({
+      page: "Me. To Do List.md",
+      instruction: { op: "add_task", heading: "To Do", line: "- [ ] Maya: Book the room [[Orbit launch#^a-2|Orbit launch]] 📅 2026-11-01" },
+    });
+    expect(submitted()[1].instruction).toMatchObject({ new: [expect.stringContaining('{"task":"[[Me. To Do List]]"}')] });
     calls.length = 0;
     await run("inbox.clarify", { item: "action:a-2", becomes: "delete" });
     expect(submitted()[0].instruction).toMatchObject({ new: [expect.stringContaining('{"status":"dropped"}')] });
