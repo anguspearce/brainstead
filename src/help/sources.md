@@ -33,7 +33,7 @@ Markdown, text, PDF, Word, PowerPoint and Excel files and images (not SVG) can b
 - **Ingest** in the top bar ingests every new and changed source, one after another. Teams transcripts get meeting notes instead.
 - You can also choose **Ingest into the wiki** from a note's ⋯ or right-click menu, or press `I` on a capture in the [Inbox](app:inbox).
 
-Ingests run one at a time, oldest source first, so a newer source has the last word on a page.
+Ingests run one at a time, oldest source first, so a newer source has the last word on a page. Quitting or restarting Brainstead doesn't lose the ones waiting: they carry on at the next start. One that was in the middle of making its changes is stopped instead, so nothing is made twice; ingest it again to finish it.
 
 The AI drafts changes to the wiki pages the source mentions, and every quote is checked against the source. What the source adds goes in as:
 

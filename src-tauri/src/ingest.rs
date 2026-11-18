@@ -348,18 +348,68 @@ fn enqueue(app: &AppHandle, runs: Vec<Run>) {
     });
 }
 
-/// Runs left "queued" or "running" by an app that closed (or a request that failed half way):
-/// marked stopped at start, as nothing will take them.
-pub fn settle_stale() {
-    for mut r in all_runs().into_iter().filter(|r| r.status == "queued" || r.status == "running") {
+/// What happens at start to a run an earlier session left "queued" or "running" (the app closed, or
+/// was restarted, with runs waiting): one that hadn't begun making its changes is taken again from
+/// the start, so a long queue survives a restart; one that was making them, or that waited longer
+/// than [`RESUME_DAYS`], is stopped, so nothing is made twice.
+fn left_over(r: &Run, today: chrono::NaiveDate) -> Option<Run> {
+    if r.status != "queued" && r.status != "running" {
+        return None;
+    }
+    let making = r.steps.last().is_some_and(|s| s.status != "waiting");
+    let started = chrono::NaiveDate::parse_from_str(r.started.get(..10).unwrap_or(""), "%Y-%m-%d").ok();
+    let fresh = started.is_some_and(|d| (today - d).num_days() <= RESUME_DAYS);
+    let mut r = r.clone();
+    if making || !fresh {
         r.status = "stopped".into();
         r.finished = Some(proposals::now_local());
-        r.error = Some("Brainstead closed before it finished.".into());
+        r.error = Some(
+            if making { "Brainstead closed while it was making its changes." } else { "Brainstead closed before it finished." }.into(),
+        );
         for s in r.steps.iter_mut().filter(|s| s.status == "waiting" || s.status == "running") {
             s.status = "skipped".into();
         }
-        save_run(&r);
+    } else {
+        r.status = "queued".into();
+        r.error = None;
+        r.dropped.clear();
+        r.pages.clear();
+        for s in r.steps.iter_mut() {
+            *s = Step { name: s.name.clone(), status: "waiting".into(), detail: String::new(), ms: 0 };
+        }
     }
+    Some(r)
+}
+
+/// A run left waiting longer than this many days is stopped at start rather than taken again.
+const RESUME_DAYS: i64 = 7;
+
+/// At start: the runs an earlier session left waiting are queued again, once the vault is open (it
+/// opens a moment after start); those that can't be (see [`left_over`]) are marked stopped.
+pub fn resume_stale(app: &AppHandle) {
+    let today = chrono::Local::now().date_naive();
+    let mut again = Vec::new();
+    for r in all_runs().iter().filter_map(|r| left_over(r, today)) {
+        if r.status == "queued" {
+            again.push(r);
+        } else {
+            save_run(&r);
+        }
+    }
+    if again.is_empty() {
+        return;
+    }
+    crate::applog!("ingest: taking {} run(s) left waiting by the last session", again.len());
+    let app = app.clone();
+    std::thread::spawn(move || {
+        for _ in 0..120 {
+            if app.state::<VaultService>().root().is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+        enqueue(&app, again);
+    });
 }
 
 /// Ingests these sources (or notes) one after another, in the background, oldest first, after
@@ -993,6 +1043,43 @@ fn meeting_steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn run(status: &str, started: &str, steps: &[&str]) -> Run {
+        Run {
+            id: "r1".into(),
+            kind: ingest_kind(),
+            note: None,
+            source: "sources/a.md".into(),
+            started: started.into(),
+            finished: None,
+            model: "m".into(),
+            status: status.into(),
+            steps: steps.iter().map(|s| Step { name: "x".into(), status: (*s).into(), detail: "d".into(), ms: 1 }).collect(),
+            proposals: vec![],
+            trigger: None,
+            group: None,
+            dropped: vec![],
+            pages: vec![],
+            error: None,
+            logged: false,
+            planned: 0,
+        }
+    }
+
+    #[test]
+    fn a_run_left_waiting_is_taken_again_unless_it_was_making_its_changes_or_is_old() {
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 11, 19).unwrap();
+        let again = left_over(&run("running", "2026-11-18 23:10", &["done", "running", "waiting"]), today).unwrap();
+        assert_eq!(again.status, "queued");
+        assert!(again.steps.iter().all(|s| s.status == "waiting" && s.detail.is_empty()));
+        assert_eq!(left_over(&run("queued", "2026-11-18 23:10", &["waiting", "waiting"]), today).unwrap().status, "queued");
+        let making = left_over(&run("running", "2026-11-18 23:10", &["done", "running"]), today).unwrap();
+        assert_eq!(making.status, "stopped");
+        assert_eq!(making.error.as_deref(), Some("Brainstead closed while it was making its changes."));
+        assert_eq!(left_over(&run("queued", "2026-11-01 09:00", &["waiting"]), today).unwrap().status, "stopped");
+        assert!(left_over(&run("done", "2026-11-18 23:10", &["done"]), today).is_none());
+    }
+
     use brainstead_core::proposals::Quote;
 
     #[test]

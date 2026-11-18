@@ -50,7 +50,7 @@ It uses the tokens your open Teams tab already has. While Teams is open in your 
 
 **Ingest** reads a source and has the AI draft changes to the wiki pages it mentions, each claim with a quote from the source. Brainstead checks every quote. A change with none of its quotes found is dropped; one with some missing is kept and flagged. The source is added to each page's `sources:` list, and misheard names in it are fixed. A run shows its steps as it goes, with **Stop**.
 
-Ingests wait in one queue, whoever started them, and run one at a time, oldest source first, so a newer source has the last word on a page.
+Ingests wait in one queue, whoever started them, and run one at a time, oldest source first, so a newer source has the last word on a page. The queue survives quitting or restarting Brainstead: at the next start, the ingests still waiting are taken again from the beginning. One that was already making its changes is stopped instead, so nothing is made twice, and so is one that has waited more than a week.
 
 A document, email thread or transcript also gets a summary page in `wiki/summaries/`. A day of a Teams or Slack chat doesn't: its news goes on the pages it mentions and its actions on your initiatives.
 

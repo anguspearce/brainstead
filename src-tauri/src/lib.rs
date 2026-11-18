@@ -1138,8 +1138,8 @@ pub fn run() {
             if scene().is_none() && !bridge::one_copy(app.handle()) {
                 std::process::exit(0);
             }
-            // Runs an earlier session left waiting: nothing will take them now.
-            ingest::settle_stale();
+            // Runs an earlier session left waiting are taken again (those it was making changes for are stopped).
+            ingest::resume_stale(app.handle());
             // The capture extensions' host, registered with each browser (not by a screenshot demo,
             // and not by a dev build: that would point the browsers at target/debug).
             let dev_host = std::env::var("BRAINSTEAD_DEV_HOST").is_ok_and(|v| v == "1");
