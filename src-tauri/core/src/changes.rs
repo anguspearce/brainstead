@@ -936,10 +936,17 @@ mod tests {
         // On the To Do list: the top of Other, or with a heading (the Inbox's Task) the end of To Do.
         let todo = "#### To Do\n\n- [ ] One\n\n#### Other\n\n- [ ] Raw\n";
         let bare = "#### Other\n\n- [ ] Raw\n";
+        // Below the section's query, when it lists nothing itself.
+        let query = "#### To Do\n\n```dataview\nTASK\n```\n\n#### Other\n";
+        let q = Instruction::AddTask { line: "- [ ] Two".into(), heading: Some(crate::inbox::TODO_TASKS.into()) };
+        assert_eq!(
+            q.text(crate::inbox::TODO_LIST, Some(query)).unwrap(),
+            "#### To Do\n\n```dataview\nTASK\n```\n\n- [ ] Two\n\n#### Other\n"
+        );
         let made = Instruction::AddTask { line: "- [ ] Two".into(), heading: Some(crate::inbox::TODO_TASKS.into()) };
         assert_eq!(made.text(crate::inbox::TODO_LIST, Some(bare)).unwrap(), "#### To Do\n\n- [ ] Two\n\n#### Other\n\n- [ ] Raw\n");
         let t = Instruction::AddTask { line: "- [ ] Two".into(), heading: Some(crate::inbox::TODO_TASKS.into()) };
-        assert_eq!(t.text(crate::inbox::TODO_LIST, Some(todo)).unwrap(), "#### To Do\n\n- [ ] One\n- [ ] Two\n\n#### Other\n\n- [ ] Raw\n");
+        assert_eq!(t.text(crate::inbox::TODO_LIST, Some(todo)).unwrap(), "#### To Do\n\n- [ ] Two\n- [ ] One\n\n#### Other\n\n- [ ] Raw\n");
         let o = Instruction::AddTask { line: "- [ ] Two".into(), heading: None };
         assert!(o.text(crate::inbox::TODO_LIST, Some(todo)).unwrap().contains("#### Other\n\n- [ ] Two\n- [ ] Raw"));
     }

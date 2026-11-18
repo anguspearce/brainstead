@@ -40,7 +40,7 @@ The Inbox (⌘2) lists what you've captured but not decided: first the **Actions
 | Key | Choice |
 |---|---|
 | `N` | Next action, with its project, context, effort and due date |
-| `T` | Task: on the To Do list's To Do as it is, nothing to fill in |
+| `T` | Task: at the top of the To Do list's To Do as it is (unranked, so it sorts first), nothing to fill in |
 | `P` | A new project |
 | `W` | Waiting for |
 | `D` | Done now (under 2 min); `D` is Draft a reply on an email thread, which has no Done |

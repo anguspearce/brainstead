@@ -21,7 +21,7 @@ The sidebar shows how many items are waiting.
 Click an item, or move with `J` and `K` (or `↑` and `↓`), to open it. The choices come in two lists, GTD's question: **It needs doing** (Draft a reply, Next action, Task, New project, Waiting for, Done now) and **It doesn't need doing** (a meeting note, Ingest into the wiki, Someday / maybe, File as reference or Keep in Sources, Delete or Move to the Trash). **Ask about this source** sits under them, as it leaves the item in the Inbox. Choose with a button or its key:
 
 - `N` **Next action**: a form for the text, project, context, effort and due date. It needs a project or a context, or it would land back in the Inbox; until then **Save** stays off.
-- `T` **Task**: makes it a task under **To Do** on your To Do list as it is, with nothing to fill in (an action's due date comes with it).
+- `T` **Task**: makes it a task at the top of **To Do** on your To Do list as it is (with no rank, so it sorts first), with nothing to fill in (an action's due date comes with it).
 - `P` **New project**: opens New project with the item as its name.
 - `W` **Waiting for**: the same form; the task gets `#waiting-for`.
 - `D` **Done now (under 2 min)**: a task is ticked (a recurring one gets its next occurrence), a thought removed, a capture taken out of the Inbox.

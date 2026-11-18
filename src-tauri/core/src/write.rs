@@ -799,9 +799,10 @@ pub fn append_under(lines: &mut Vec<String>, name: &str, item: &str) -> usize {
     }
 }
 
-/// Adds `item` at the end of the To Do list's `name` section, whatever its level (the To Do list's
-/// headings are `####`). With no such heading, one is made just above Other, at Other's level (or at
-/// the end, `## name`, with no Other either). Returns the item's line.
+/// Adds `item` at the top of the To Do list's `name` section, whatever its level (the To Do list's
+/// headings are `####`): above its first list item, or after what the section holds (a query) when
+/// it has none. With no such heading, one is made just above Other, at Other's level (or at the end,
+/// `## name`, with no Other either). Returns the item's line.
 pub fn append_under_todo(lines: &mut Vec<String>, name: &str, item: &str) -> usize {
     let code = code_lines(lines);
     let level = |i: usize| if code.get(i).copied().unwrap_or(false) { None } else { heading(&lines[i]) };
@@ -813,10 +814,15 @@ pub fn append_under_todo(lines: &mut Vec<String>, name: &str, item: &str) -> usi
         return o + 2;
     };
     let end = (h + 1..lines.len()).find(|&i| level(i).is_some_and(|(m, _)| m <= n)).unwrap_or(lines.len());
+    let listed = (h + 1..end).find(|&i| !code.get(i).copied().unwrap_or(false) && LIST_ITEM.is_match(&lines[i]));
+    if let Some(first) = listed {
+        lines.insert(first, item.to_string());
+        return first;
+    }
     match (h + 1..end).rev().find(|&i| !lines[i].trim().is_empty()) {
         Some(last) => {
-            lines.insert(last + 1, item.to_string());
-            last + 1
+            lines.splice(last + 1..last + 1, [String::new(), item.to_string()]);
+            last + 2
         }
         None => {
             let mut fill = vec![String::new(), item.to_string()];
@@ -829,7 +835,10 @@ pub fn append_under_todo(lines: &mut Vec<String>, name: &str, item: &str) -> usi
     }
 }
 
-/// Adds a task line at the end of the To Do list's `name` section ([`append_under_todo`]).
+/// A list item's line: `- …`, `* …`, `+ …` or `1. …`, indented or not.
+static LIST_ITEM: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*(?:[-*+]|\d+[.)])\s").unwrap());
+
+/// Adds a task line at the top of the To Do list's `name` section ([`append_under_todo`]).
 pub fn add_task_under_todo(path: &Path, name: &str, task_line: &str) -> Result<(usize, FileChange)> {
     one_task_line(task_line)?;
     rewrite(path, |lines| Ok(append_under_todo(lines, name, task_line)))
