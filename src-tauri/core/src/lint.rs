@@ -549,7 +549,12 @@ pub(crate) fn run_in(root: &Path, today: NaiveDate, dismissed: &HashSet<String>,
 
     // Initiatives' actions and decisions (D-20261118-08): lines that don't read, and quotes that
     // aren't in the note or source they cite (only those Brainstead has the text of: markdown).
-    let texts: HashMap<String, &String> = md.iter().map(|(f, t)| (lint_key(stem(name_of(&f.rel))), t)).collect();
+    // By name, every file of it: a source and its summary page share one (an email thread and
+    // wiki/summaries/ of the same name), and the quote is in the source.
+    let mut texts: HashMap<String, Vec<&String>> = HashMap::new();
+    for (f, t) in md.iter() {
+        texts.entry(lint_key(stem(name_of(&f.rel)))).or_default().push(t);
+    }
     let mut items = Vec::new();
     for (f, text) in wiki.iter().filter(|(f, _)| crate::initiatives::is_initiative(&f.rel)) {
         let i = crate::initiatives::parse(&f.rel, text);
@@ -561,8 +566,8 @@ pub(crate) fn run_in(root: &Path, today: NaiveDate, dismissed: &HashSet<String>,
         for (what, quotes) in quoted {
             for q in quotes {
                 let target = q.source.split('#').next().unwrap_or("").trim();
-                let Some(src) = texts.get(&lint_key(name_of(target).trim_end_matches(".md"))) else { continue };
-                if !crate::reviews::prep::quote_in(&q.text, src) {
+                let Some(srcs) = texts.get(&lint_key(name_of(target).trim_end_matches(".md"))) else { continue };
+                if !srcs.iter().any(|src| crate::reviews::prep::quote_in(&q.text, src)) {
                     items.push(Item {
                         text: format!("{name}: “{what}” quotes words that aren't in {target}"),
                         page: Some(f.rel.clone()),
@@ -842,6 +847,8 @@ mod tests {
             std::fs::write(p, text).unwrap();
         };
         w("sources/Mail. Pricing.md", "Lena: Can you send the revised pricing by Tuesday?\n");
+        // Its summary page has the same name: the quote is still found, in the source.
+        w("wiki/summaries/Mail. Pricing.md", "Lena asked for the revised pricing.\n");
         w(
             "wiki/initiatives/Acme renewal.md",
             "---\ntype: initiative\n---\n# Acme renewal\n\n## Actions\n\n- Send pricing [owner:: me] ^a-1\n  - \"can you send the revised pricing\" — [[Mail. Pricing]]\n- Book legal [status:: open] ^a-2\n  - \"Legal is booked\" — [[Mail. Pricing#Branch 2]]\n",
