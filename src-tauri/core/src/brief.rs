@@ -165,6 +165,47 @@ fn action_line(i: &Initiative, a: &ini::Action, today: &str) -> String {
     format!("- {who}{} — [[{}]]{when}", a.text, ini_link(i))
 }
 
+/// Sources read with nothing in them, as one line: how many, then the conversations or threads
+/// they came from, most first, with how many days each (a chat is a source a day), the first few
+/// named and the rest counted. None when there are none.
+fn quiet_line(rels: &[&str]) -> Option<String> {
+    if rels.is_empty() {
+        return None;
+    }
+    let mut by: Vec<(String, usize)> = Vec::new();
+    for rel in rels {
+        let stem = crate::lint::stem(crate::lint::name_of(rel));
+        let what = ["Slack. Chat. ", "Teams. Chat. ", "Email. Thread. ", "Email. ", "Teams. Transcript. "]
+            .iter()
+            .find_map(|p| stem.strip_prefix(p))
+            .unwrap_or(stem);
+        // The date the sync puts at a name's end goes: one conversation, several days.
+        let what = what.rsplit_once(" - ").filter(|(_, d)| DAY_END.is_match(d)).map_or(what, |(w, _)| w).trim().to_string();
+        match by.iter_mut().find(|(w, _)| *w == what) {
+            Some((_, n)) => *n += 1,
+            None => by.push((what, 1)),
+        }
+    }
+    by.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.to_lowercase().cmp(&b.0.to_lowercase())));
+    const NAMED: usize = 5;
+    let mut named: Vec<String> = by.iter().take(NAMED).map(|(w, n)| if *n > 1 { format!("{w} ({n})") } else { w.clone() }).collect();
+    if by.len() > NAMED {
+        named.push(format!("{} more", by.len() - NAMED));
+    }
+    let list = match named.len() {
+        1 => named[0].clone(),
+        n => format!("{} and {}", named[..n - 1].join(", "), named[n - 1]),
+    };
+    let n = rels.len();
+    Some(format!(
+        "- {n} source{} read with nothing in {} for your initiatives or the wiki: {list}. They're in Sources; nothing needs doing.",
+        if n == 1 { "" } else { "s" },
+        if n == 1 { "it" } else { "them" }
+    ))
+}
+
+static DAY_END: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| regex::Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap());
+
 /// The brief, whole: its properties, then Themes (the model's, or a line saying nothing came in),
 /// Your actions, Waiting for and You can archive.
 pub fn render(inputs: &Inputs, themes: Option<&str>) -> String {
@@ -218,8 +259,9 @@ pub fn render(inputs: &Inputs, themes: Option<&str>) -> String {
             archive.push(format!("- [[{}]]: every action is done or dropped; set its status to done", ini_link(i)));
         }
     }
-    for a in inputs.arrived.iter().filter(|a| a.quiet) {
-        archive.push(format!("- [[{}]]: read, and nothing in it was an action, a decision or news for the wiki", link(&a.rel)));
+    let quiet: Vec<&str> = inputs.arrived.iter().filter(|a| a.quiet).map(|a| a.rel.as_str()).collect();
+    if let Some(line) = quiet_line(&quiet) {
+        archive.push(line);
     }
     out.push_str("## You can archive\n\n");
     if archive.is_empty() {
@@ -291,7 +333,7 @@ mod tests {
         );
         assert_eq!(
             section("You can archive"),
-            "- [[Pilot]]: every action is done or dropped; set its status to done\n- [[Email. Thread. Newsletter - 2026-11-17]]: read, and nothing in it was an action, a decision or news for the wiki"
+            "- [[Pilot]]: every action is done or dropped; set its status to done\n- 1 source read with nothing in it for your initiatives or the wiki: Newsletter. They're in Sources; nothing needs doing."
         );
         // No tasks: nothing in it is a checkbox.
         assert!(!text.contains("- [ ]"));
@@ -308,6 +350,26 @@ mod tests {
         let p = prompt(&i).unwrap();
         assert!(p.contains("## [[Email. Thread. Launch - 2026-11-17]]\n\n# Launch\n\nThe launch moves to 28 November."), "{p}");
         assert!(p.contains("- [[Orbit launch]]: 5 open action(s)"), "{p}");
+    }
+
+    #[test]
+    fn sources_nothing_came_of_are_one_line_by_conversation() {
+        let rels = [
+            "sources/Slack. Chat. Jonas - 2026-11-12.md",
+            "sources/Slack. Chat. Jonas - 2026-11-13.md",
+            "sources/Slack. Chat. Jonas - 2026-11-16.md",
+            "sources/Slack. Chat. Lena - 2026-11-16.md",
+            "sources/Teams. Chat. Lena - 2026-11-17.md",
+            "sources/Email. Thread. Launch - 2026-11-17.md",
+            "sources/Slack. Chat. Ops - 2026-11-17.md",
+            "sources/Slack. Chat. Pricing - 2026-11-17.md",
+            "sources/Slack. Chat. Support - 2026-11-17.md",
+        ];
+        assert_eq!(
+            quiet_line(&rels).unwrap(),
+            "- 9 sources read with nothing in them for your initiatives or the wiki: Jonas (3), Lena (2), Launch, Ops, Pricing and 1 more. They're in Sources; nothing needs doing."
+        );
+        assert!(quiet_line(&[]).is_none());
     }
 
     #[test]
