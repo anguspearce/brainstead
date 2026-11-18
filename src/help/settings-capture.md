@@ -3,9 +3,9 @@ title: Settings › Capture extensions
 kind: screen
 screens: [settings/capture]
 order: 35
-summary: Set up the Outlook and Teams browser extensions that capture emails, chats and transcripts into the vault.
+summary: Set up the Outlook and Teams browser extensions that capture emails, chats and transcripts into the vault, and the Slack sync extension.
 ---
-Two browser extensions send what's open in Outlook on the web or Teams into the vault's `sources/` folder, ready to ingest and listed in the [Inbox](app:inbox). They work even while Brainstead is closed.
+Two browser extensions send what's open in Outlook on the web or Teams into the vault's `sources/` folder, ready to ingest and listed in the [Inbox](app:inbox). They work even while Brainstead is closed. A third, **Slack sync**, captures nothing itself: it hands your open Slack tab's sign-in to Brainstead for [Slack sync](app:settings/sync). Load it the same way.
 
 ## What each extension captures
 - **Outlook capture**: the open email thread in Outlook on the web, or the threads ticked in the list.

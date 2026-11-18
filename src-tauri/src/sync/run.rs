@@ -55,7 +55,7 @@ fn run_inner(data: &Path) -> Report {
     let mut r = Report::default();
     let s = settings::load(&data.join("settings.json"));
     let vault = s.vault_path.as_deref().filter(|p| !p.trim().is_empty());
-    if !s.sync_enabled {
+    if !s.sync_enabled && !s.sync_slack {
         r.blocked = Some("Teams and Outlook sync is off.".into());
         return r;
     }
@@ -65,6 +65,13 @@ fn run_inner(data: &Path) -> Report {
     };
     if s.read_only {
         r.blocked = Some("The vault is read-only.".into());
+        return r;
+    }
+    // Slack on its own sign-in (D-20261118-01), whether or not Teams and Outlook are on.
+    if s.sync_slack {
+        super::slack::sync(data, Path::new(vault), &s, cutoff_day(s.sync_initial_days).as_deref(), &mut r);
+    }
+    if !s.sync_enabled {
         return r;
     }
     let Some(sign_in) = auth::load() else {

@@ -16,6 +16,7 @@ pub mod html;
 pub mod pull;
 pub mod run;
 pub mod skips;
+pub mod slack;
 pub mod state;
 
 use reqwest::blocking::Client;

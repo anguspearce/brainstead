@@ -2340,6 +2340,14 @@ async function syncTool(a: Args): Promise<string> {
       `1:1 and group chats sync automatically; channels chosen: ${(s.syncChannels ?? []).length}.`,
       ignore.length ? `Mail skipped from: ${ignore.join(", ")}.` : "No senders skipped.",
       chats.length ? `Chats skipped: ${chats.map((c) => learned?.chatNames[c] ?? c).join(", ")}.` : "No chats skipped.",
+      await api
+        .slackSignInState()
+        .then((x) =>
+          s.syncSlack
+            ? `Slack sync is on${x.signedIn ? `, signed in to ${x.workspaces.join(", ")}` : ", not signed in (open Slack in the browser with the Slack sync extension)"}; channels chosen: ${(s.slackChannels ?? []).length}.`
+            : "Slack sync is off.",
+        )
+        .catch(() => "Slack sync: unknown."),
       learned?.suggestions.length
         ? `${learned.suggestions.length} skip(s) suggested from what the user deletes (action suggestions lists them).`
         : "No skips suggested.",
@@ -2376,6 +2384,24 @@ async function syncTool(a: Args): Promise<string> {
     const chosen = new Set(s.syncChannels ?? []);
     return chans.length ? chans.map((c) => `- ${c.topic} (${chosen.has(c.id) ? "on" : "off"}) · ${c.id}`).join("\n") : "No channels found.";
   }
+  if (action === "slack_on" || action === "slack_off") {
+    settings.update({ syncSlack: action === "slack_on" });
+    return `Slack sync turned ${action === "slack_on" ? "on" : "off"}.`;
+  }
+  if (action === "slack_channels") {
+    const chans = await api.slackChannels();
+    const chosen = new Set(s.slackChannels ?? []);
+    return chans.length
+      ? chans.map((c) => `- ${c.name} in ${c.workspace} (${chosen.has(c.id) ? "on" : "off"}) · ${c.id}`).join("\n")
+      : "No Slack channels found.";
+  }
+  if (action === "slack_channel" || action === "slack_unchannel") {
+    const id = str(a, "id")?.trim();
+    if (!id) throw new Error("id is the Slack channel's id (action slack_channels lists them).");
+    const have = s.slackChannels ?? [];
+    settings.update({ slackChannels: action === "slack_channel" ? [...new Set([...have, id])] : have.filter((x) => x !== id) });
+    return `${action === "slack_channel" ? "Syncing" : "No longer syncing"} Slack channel ${id}.`;
+  }
   if (action === "suggestions") {
     const { suggestions } = await api.skipSuggestions();
     if (!suggestions.length) return "No skips suggested: nothing has been deleted often enough.";
@@ -2402,7 +2428,7 @@ async function syncTool(a: Args): Promise<string> {
     return `Syncing chat ${id} again.`;
   }
   throw new Error(
-    "action is get, on, off, now, channels, channel, unchannel, ignore, unignore, suggestions, accept, dismiss or unskip_chat.",
+    "action is get, on, off, now, channels, channel, unchannel, ignore, unignore, suggestions, accept, dismiss, unskip_chat, slack_on, slack_off, slack_channels, slack_channel or slack_unchannel.",
   );
 }
 
@@ -3462,6 +3488,7 @@ const settingRows = (): SettingRow[] => [
   ["syncEnabled", "Teams and Outlook sync", "Sync Teams and Outlook", "bool", false],
   ["syncInitialDays", "Teams and Outlook sync", "Days of history to load on first sync (0 = no limit)", "number", 7],
   ["syncMailAttachments", "Teams and Outlook sync", "Bring in email attachments", "bool", true],
+  ["syncSlack", "Teams and Outlook sync", "Slack sync", "bool", false],
   ["refreshStale", "AI assistants", "Also refresh pages whose sources changed", "bool", false],
   ["summariesHere", "Jobs & schedule", "Brainstead runs the daily and weekly summaries", "bool", false],
   ["holdSummaries", "Jobs & schedule", "Hold the summaries for me", "bool", false],

@@ -60,7 +60,7 @@ pub fn subject_of(rel: &str, text: &str, chat_of: impl Fn(&str) -> Option<String
         let from = text.lines().find_map(|l| l.trim().strip_prefix("**From:**"))?.trim().to_ascii_lowercase();
         return (!from.is_empty() && from.contains('@')).then(|| ("sender".into(), from.clone(), from));
     }
-    if name.starts_with("Teams. Chat. ") {
+    if name.starts_with("Teams. Chat. ") || name.starts_with("Slack. Chat. ") {
         let id = chat_of(rel)?;
         let title = text.lines().find_map(|l| l.strip_prefix("# ")).map(str::trim).unwrap_or(&id).to_string();
         return Some(("chat".into(), id, title));
@@ -142,7 +142,12 @@ pub fn chat_names(l: &Learned) -> BTreeMap<String, String> {
 /// The conversation a synced chat day's source came from, by where the sync wrote it.
 pub fn chat_of(data: &Path, rel: &str) -> Option<String> {
     let st = super::state::load(data);
-    st.chat_paths.iter().find(|(_, p)| p.as_str() == rel).and_then(|(k, _)| k.split('\n').next()).map(str::to_string)
+    st.chat_paths
+        .iter()
+        .find(|(_, p)| p.as_str() == rel)
+        .and_then(|(k, _)| k.split('\n').next())
+        .map(str::to_string)
+        .or_else(|| super::slack::conv_of(data, rel))
 }
 
 /// A source the user is moving to the Trash: counted, if it's a synced email or chat. Never stops

@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAp708C7cjdb/k2VY4BIA9y+xnUq3F1CslTokhBae8WHLROiBYBUIZV29INVpDLmCaW8hOww8PMmbADzMdMpiRmDZwhHmjQXFVSH1/qMBtr+1JNbtiM3lTduWb5PxprQqqMG8orpzd3uXiR53u6c6BzgJwGX1hP9fXLogP9CXAeJOIXYke6lMxYFjsCEN19qVbaeIUouEj40CsGCH9caAOzTDLyUgRojQB92uLPhaK0RU56oFIE1URTlKdm8n7pj1vJTpjUpp7MaY/spCOrPGnoX/pB9lXcJmWbGiSWHNdW5KLrgbUDKUofm44uvo6r4cAV/Wjb6rWZNTv7mM5/punXwIDAQAB",
+  "name": "Brainstead — Slack sync",
+  "description": "Hands your open Slack tab's sign-in to Brainstead, so it can read your own Slack conversations into its sources.",
+  "version": "1.0.0",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Brainstead's Slack sync",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "permissions": ["nativeMessaging", "scripting", "storage", "tabs", "alarms", "cookies"],
+  "host_permissions": ["https://app.slack.com/*", "https://*.slack.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  }
+}

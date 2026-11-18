@@ -33,6 +33,9 @@ The first time it runs — and the first time it sees each new chat — it loads
 
 - **After you remove one**: a chat day or email thread you've moved to the Trash (or deleted, or whose Trash was emptied) isn't brought back. If it gets new messages, they start a fresh source (the whole thread, or the whole day) that lands in the Inbox, so nothing new is missed. Attachments already brought in are linked again, not downloaded twice, and one you've removed is listed as removed. A source renamed outside Brainstead counts as removed too, so its next new message starts a fresh copy.
 
+## Slack
+With **Slack sync** on (under Slack, in this pane) and Slack open in a browser tab with the **Slack sync** extension loaded (Settings › [Capture extensions](app:settings/capture)), Brainstead reads your own Slack conversations every 15 minutes, read-only, into `sources/`: your DMs and group DMs, the channels you switch on under **Show my channels**, and threads that mention you. Each conversation's day is one source, `Slack. Chat. <name> - <date>`, with each thread's replies under its first message; a thread that gets more replies later updates its day's source rather than starting a new one. The Slack desktop app can stay open alongside the tab. The first sync loads the same number of days as Teams. **Sign out** forgets the Slack sign-in on this computer. Slack chats you keep deleting are suggested for **Chats to skip**, as Teams chats are.
+
 ## Keeping the wiki in step
 A chat day or a thread that's already been ingested and then gets more messages shows as **Changed** in Sources. With the daily check's **ingest changed sources again** on (Settings › AI assistants), the wiki catches up about once a day rather than re-ingesting on every new message; otherwise ingest it when you like from Sources.
 

@@ -1,0 +1,59 @@
+<!doctype html>
+<!-- Copyright © 2026 Wayne Davies. Free software under the GNU General Public License, version 3 or later. -->
+<!-- See LICENSE for the full text. -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Brainstead's Slack sync</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #21313c;
+        --muted: #4b5c66;
+        --accent: #4a154b;
+        --on-accent: #ffffff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #1f2124;
+          --fg: #eceff1;
+          --muted: #b3c0c8;
+          --accent: #7c3a7e;
+          --on-accent: #ffffff;
+        }
+      }
+      body {
+        margin: 0;
+        padding: 14px;
+        width: 280px;
+        font: 13px/1.4 system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      p {
+        margin: 0 0 10px;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      button {
+        border: 0;
+        border-radius: 6px;
+        padding: 7px 12px;
+        background: var(--accent);
+        color: var(--on-accent);
+        font: inherit;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <p>Brainstead reads your own Slack conversations while a Slack tab is open in this browser. Keep one open; the desktop app can stay open too.</p>
+    <p id="status" class="muted">Checking…</p>
+    <button id="go" type="button" title="Hand the sign-in to Brainstead now">Hand over now</button>
+    <script src="popup.js"></script>
+  </body>
+</html>

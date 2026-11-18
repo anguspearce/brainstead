@@ -66,6 +66,7 @@ export function inboxItemKind(i: InboxItem): { icon: string; label: string } {
   const name = i.path.split("/").pop() ?? "";
   if (/^Email\. /.test(name)) return { icon: "mail", label: "Email" };
   if (/^Teams\. /.test(name)) return { icon: "chat", label: "Teams chat" };
+  if (/^Slack\. /.test(name)) return { icon: "chat", label: "Slack conversation" };
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   if (ext === "docx" || ext === "doc") return { icon: "file-word", label: "Word document" };
   if (ext === "pdf") return { icon: "file-pdf", label: "PDF" };

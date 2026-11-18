@@ -56,6 +56,10 @@ export interface Settings {
   syncIgnoreSenders?: string[];
   /** 1:1 and group chats the sync skips, by conversation id. */
   syncIgnoreChats?: string[];
+  /** Slack sync (the Slack extension hands the sign-in over). */
+  syncSlack?: boolean;
+  /** Slack channel ids to sync. */
+  slackChannels?: string[];
   /** How many days of history the first sync loads (0 = no limit). */
   syncInitialDays?: number;
   /** Bring a synced email's attachments into sources/ (PDF and Office files up to 30 MB). On by default. */
@@ -1433,7 +1437,7 @@ export const api = {
       /** Each extension's version in the folder, by its folder name (teams-capture). */
       versions: Record<string, string>;
     }>("capture_status"),
-  captureReveal: (which: "outlook-capture" | "teams-capture") => invoke<void>("capture_reveal", { which }),
+  captureReveal: (which: "outlook-capture" | "teams-capture" | "slack-capture") => invoke<void>("capture_reveal", { which }),
   onCapture: (f: (c: Captured) => void): Promise<UnlistenFn> => listen<Captured>("capture", (e) => f(e.payload)),
   // Teams and Outlook sync (src-tauri/src/sync/). macOS only.
   syncSignInState: () => invoke<SyncSignIn>("sync_sign_in_state"),
@@ -1443,6 +1447,9 @@ export const api = {
   /** The last calendar read's meetings that haven't ended — instant, no network. */
   syncCachedMeetings: () => invoke<SyncMeeting[]>("sync_cached_meetings"),
   syncListChannels: () => invoke<{ id: string; topic: string }[]>("sync_list_channels"),
+  slackSignInState: () => invoke<{ signedIn: boolean; workspaces: string[]; handedOver: string | null }>("slack_sign_in_state"),
+  slackSignOut: () => invoke<void>("slack_sign_out"),
+  slackChannels: () => invoke<{ id: string; name: string; workspace: string }[]>("slack_channels"),
   syncPull: (query: string, days: number, kinds?: string[]) =>
     invoke<{
       items: { kind: string; title: string; date: string; path: string; alreadyHad: boolean }[];

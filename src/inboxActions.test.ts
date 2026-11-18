@@ -157,6 +157,7 @@ describe("each kind of Inbox item's choices", () => {
     expect(icon("sources/Teams. Transcript. Steerco - 2026-10-02.md")).toBe("mic");
     expect(icon("sources/emails/Email. Thread. Re Launch - 2026-10-02.md")).toBe("mail");
     expect(icon("sources/Teams. Chat. Standup - 2026-10-03.md")).toBe("chat");
+    expect(inboxItemKind(cap("sources/slack/Slack. Chat. Lena - 2026-11-16.md"))).toEqual({ icon: "chat", label: "Slack conversation" });
     expect(
       ["Plan.docx", "Plan.PDF", "Deck.pptx", "Budget.xlsx", "Board.png", "Minutes.md", "Data.zip"].map((f) => icon(`sources/${f}`)),
     ).toEqual(["file-word", "file-pdf", "slides", "sheet", "image", "note", "source"]);

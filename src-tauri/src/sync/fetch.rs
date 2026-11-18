@@ -201,6 +201,7 @@ pub fn chat_capture(conv: &Conv, day_msgs: &[ChatMessage], me: &str, url_base: &
         .iter()
         .map(|m| Message {
             branch: None,
+            replies: Vec::new(),
             sender: m.sender.clone(),
             from_address: None,
             to: None,
@@ -535,6 +536,7 @@ pub fn thread_capture(msgs: &[Mail], attachments: &[Vec<Attachment>], continues:
         .map(|(i, branch)| (i, &msgs[i], branch))
         .map(|(i, m, branch)| Message {
             branch,
+            replies: Vec::new(),
             sender: m.from.clone(),
             from_address: Some(m.from_address.clone()).filter(|a| !a.is_empty()),
             to: Some(m.to.clone()).filter(|t| !t.is_empty()),
@@ -636,6 +638,7 @@ fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
         vec![divider(brainstead_core::webcapture::MEETING_CHAT_HEADING, "Messages typed in the meeting chat during the meeting:")];
     out.extend(msgs.iter().map(|m| Message {
         branch: None,
+        replies: Vec::new(),
         sender: m.sender.clone(),
         from_address: None,
         to: None,
@@ -692,6 +695,7 @@ pub fn transcript_capture(client: &Client, s: &SignIn, ev: &Event) -> Result<Opt
 fn divider(heading: &str, note: &str) -> Message {
     Message {
         branch: None,
+        replies: Vec::new(),
         sender: heading.to_string(),
         from_address: None,
         to: None,
@@ -755,6 +759,7 @@ pub fn parse_transcript(body: &Value, ev: &Event) -> Result<Option<Capture>, Str
             }
             Some(Message {
                 branch: None,
+                replies: Vec::new(),
                 sender: e["speakerDisplayName"].as_str().filter(|s| !s.is_empty()).unwrap_or("Unknown").to_string(),
                 from_address: None,
                 to: None,

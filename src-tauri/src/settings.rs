@@ -40,6 +40,13 @@ pub struct Settings {
     /// deletes, `sync::skips`).
     #[serde(default)]
     pub sync_ignore_chats: Vec<String>,
+    /// Slack sync is on (D-20261118-01): DMs and group DMs, the channels in `slack_channels`, and
+    /// threads that mention the user, while a Slack tab hands its sign-in over.
+    #[serde(default)]
+    pub sync_slack: bool,
+    /// Slack channel ids to sync (off unless picked).
+    #[serde(default)]
+    pub slack_channels: Vec<String>,
     /// How many days of history the first sync loads (a chat the first time it's seen, and the first
     /// mail run), so a big mailbox or long chat history can't flood the Inbox. 0 means no limit.
     pub sync_initial_days: u32,
@@ -66,6 +73,8 @@ impl Default for Settings {
             sync_channels: Vec::new(),
             sync_ignore_senders: Vec::new(),
             sync_ignore_chats: Vec::new(),
+            sync_slack: false,
+            slack_channels: Vec::new(),
             sync_initial_days: 7,
             sync_mail_attachments: true,
             ui: Default::default(),

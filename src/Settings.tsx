@@ -1447,7 +1447,12 @@ function PermissionsPane() {
   );
 }
 
-const EXTENSIONS: { id: "outlook-capture" | "teams-capture"; ext: "outlook" | "teams"; name: string; what: string }[] = [
+const EXTENSIONS: {
+  id: "outlook-capture" | "teams-capture" | "slack-capture";
+  ext: "outlook" | "teams" | "slack";
+  name: string;
+  what: string;
+}[] = [
   {
     id: "outlook-capture",
     ext: "outlook",
@@ -1455,6 +1460,12 @@ const EXTENSIONS: { id: "outlook-capture" | "teams-capture"; ext: "outlook" | "t
     what: "The open email thread in Outlook on the web, or the threads ticked in the list.",
   },
   { id: "teams-capture", ext: "teams", name: "Teams capture", what: "The open Teams chat or channel thread, or a meeting's transcript." },
+  {
+    id: "slack-capture",
+    ext: "slack",
+    name: "Slack sync",
+    what: "Hands your open Slack tab's sign-in to Brainstead for Slack sync (Settings › Teams and Outlook sync); it captures nothing itself.",
+  },
 ];
 
 /** The Outlook and Teams extensions: where to load them from, whether the browsers know Brainstead's helper, the last captures. */
@@ -1612,7 +1623,7 @@ function SyncPane() {
             type="button"
             className="btn"
             title="Run one Teams and Outlook sync pass now"
-            disabled={busy || !enabled}
+            disabled={busy || !(enabled || s.syncSlack)}
             onClick={syncNow}
           >
             <Icon name="refresh" size={13} />
@@ -1777,7 +1788,105 @@ function SyncPane() {
           </div>
         )}
       </section>
+
+      <SlackSync />
     </>
+  );
+}
+
+/** Slack sync (D-20261118-01): its switch, the sign-in the Slack extension handed over, and the
+ *  channels to sync. DMs and group DMs sync always, and threads that mention you. */
+function SlackSync() {
+  const s = useStore(settings);
+  const [state, setState] = useState<Awaited<ReturnType<typeof api.slackSignInState>> | null>(null);
+  const [channels, setChannels] = useState<{ id: string; name: string; workspace: string }[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const refresh = () =>
+    api
+      .slackSignInState()
+      .then(setState)
+      .catch(() => setState(null));
+  useEffect(() => void refresh(), []);
+  const chosen = s.slackChannels ?? [];
+  const load = () => {
+    setLoading(true);
+    setErr(null);
+    api
+      .slackChannels()
+      .then(setChannels)
+      .catch((e) => setErr(String(e)))
+      .finally(() => setLoading(false));
+  };
+  return (
+    <section className="sgroup">
+      <h2 className="h3">Slack</h2>
+      <p className="faint">
+        Brainstead reads your own Slack DMs and group DMs, the channels you choose here, and threads that mention you, one source per
+        conversation per day, while Slack is open in a browser tab (the desktop app can stay open too). The Slack sync extension hands the
+        tab's sign-in over: load it from Settings › Capture extensions. It reads only.
+      </p>
+      <div className="card">
+        <div className="srow">
+          <Icon name="chat" style={{ color: state?.signedIn ? "var(--green)" : "var(--ink3)" }} />
+          <div className="t">
+            <div className="pt">Slack sync</div>
+            <div className="faint">
+              {state?.signedIn
+                ? `Signed in to ${state.workspaces.join(", ")}${state.handedOver ? `, handed over ${new Date(state.handedOver).toLocaleString()}` : ""}.`
+                : "Not signed in: open Slack in Chrome with the Slack sync extension loaded."}
+            </div>
+          </div>
+          {state?.signedIn && (
+            <button
+              type="button"
+              className="btn sm"
+              title="Forget the Slack sign-in on this computer"
+              onClick={() => void api.slackSignOut().then(refresh)}
+            >
+              Sign out
+            </button>
+          )}
+          <Switch label="Slack sync" on={!!s.syncSlack} onChange={(v) => settings.update({ syncSlack: v })} />
+        </div>
+      </div>
+      <div className="row">
+        <button
+          type="button"
+          className="btn sm"
+          title="List your Slack channels to choose which to sync"
+          disabled={!state?.signedIn || loading}
+          onClick={load}
+        >
+          <Icon name="refresh" size={13} className={loading ? "spin" : undefined} />
+          {loading ? "Loading…" : channels ? "Refresh channel list" : "Show my channels"}
+        </button>
+      </div>
+      {err && (
+        <div className="doc-banner warn" role="alert">
+          <Icon name="info" size={14} />
+          <span>{err}</span>
+        </div>
+      )}
+      {channels && channels.length === 0 && <p className="faint">No channels found.</p>}
+      {channels && channels.length > 0 && (
+        <div className="card">
+          {channels.map((c) => (
+            <div key={c.id} className="srow">
+              <div className="t">
+                <div className="pt">{c.name}</div>
+                <div className="faint">{c.workspace}</div>
+              </div>
+              <Switch
+                label={`Sync ${c.name}`}
+                on={chosen.includes(c.id)}
+                onChange={(v) => settings.update({ slackChannels: v ? [...chosen, c.id] : chosen.filter((x) => x !== c.id) })}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1812,10 +1921,11 @@ function CapturePane() {
   return (
     <>
       <section className="sgroup">
-        <h2 className="h3">Outlook and Teams in the browser</h2>
+        <h2 className="h3">Outlook, Teams and Slack in the browser</h2>
         <p className="muted">
           Two browser extensions send what's open in Outlook on the web or Teams into the vault's sources/ folder, ready to ingest and
-          listed in the Inbox. They reach Brainstead through a small helper the browser starts, so they work while Brainstead is closed.
+          listed in the Inbox. They reach Brainstead through a small helper the browser starts, so they work while Brainstead is closed. The
+          third hands your open Slack tab's sign-in over for Slack sync.
         </p>
         {s.readOnly && (
           <div className="doc-banner warn" role="status">

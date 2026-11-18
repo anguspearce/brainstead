@@ -23,6 +23,8 @@ pub const HOST: &str = "com.wayned.brainstead";
 /// The extensions' IDs, fixed by the public keys in their manifests.
 pub const OUTLOOK_ID: &str = "fpaoobjjngaheckceaomekehpndbendk";
 pub const TEAMS_ID: &str = "ibmlhbfpbgehbnmkfmllkinogjgcagad";
+/// The Slack extension (D-20261118-01): it only hands over the Slack tab's sign-in.
+pub const SLACK_ID: &str = "gnfhdlhfdpfajnamjgbcafnhjdmhpafo";
 /// How many captures `captures.json` keeps.
 const KEEP: usize = 50;
 
@@ -92,6 +94,7 @@ fn extension_of(origin: &str) -> &'static str {
     match id {
         Some(TEAMS_ID) => "teams",
         Some(OUTLOOK_ID) => "outlook",
+        Some(SLACK_ID) => "slack",
         _ => "other",
     }
 }
@@ -108,11 +111,19 @@ fn handle(data: &Path, origin: &str, v: Value) -> Value {
     if ext == "other" {
         return json!({"ok": false, "message": "Brainstead only takes captures from its own Outlook and Teams extensions."});
     }
+    // The Slack extension only hands over a sign-in; it never sends a capture.
+    if ext == "slack" && v.get("type").and_then(Value::as_str) != Some("sign-in") {
+        return json!({"ok": false, "message": "The Slack extension only hands over the sign-in."});
+    }
     // The Teams extension hands over the open tab's sign-in, so the app can sync the user's own
     // chats, mail and calendar (D-20261025-01). It carries no capture to write.
     if v.get("type").and_then(Value::as_str) == Some("sign-in") {
         // The Outlook extension hands over only the mail token, from an Outlook on the web tab.
-        let accepted = if ext == "outlook" { crate::sync::accept_mail_handover(&v) } else { crate::sync::accept_handover(&v) };
+        let accepted = match ext.as_str() {
+            "outlook" => crate::sync::accept_mail_handover(&v),
+            "slack" => crate::sync::slack::accept_handover(&v),
+            _ => crate::sync::accept_handover(&v),
+        };
         return match accepted {
             Ok(()) => json!({"ok": true}),
             Err(message) => json!({"ok": false, "message": message}),
@@ -318,7 +329,11 @@ fn manifest(exe: &Path) -> Value {
         "description": "Brainstead: captures from the Outlook and Teams extensions",
         "path": exe,
         "type": "stdio",
-        "allowed_origins": [format!("chrome-extension://{OUTLOOK_ID}/"), format!("chrome-extension://{TEAMS_ID}/")],
+        "allowed_origins": [
+            format!("chrome-extension://{OUTLOOK_ID}/"),
+            format!("chrome-extension://{TEAMS_ID}/"),
+            format!("chrome-extension://{SLACK_ID}/")
+        ],
     })
 }
 
@@ -398,7 +413,7 @@ pub async fn capture_status(app: tauri::AppHandle) -> Result<CaptureStatus, Stri
         // A stable folder for Load unpacked, refreshed from this build's copy.
         let folder = shipped(&app).and_then(|from| {
             let to = data.join("extensions");
-            ["outlook-capture", "teams-capture"]
+            ["outlook-capture", "teams-capture", "slack-capture"]
                 .iter()
                 .try_for_each(|d| copy_dir(&from.join(d), &to.join(d)))
                 .ok()
@@ -406,7 +421,7 @@ pub async fn capture_status(app: tauri::AppHandle) -> Result<CaptureStatus, Stri
         });
         let mut recent = recent(&data);
         recent.truncate(10);
-        let versions = ["outlook-capture", "teams-capture"]
+        let versions = ["outlook-capture", "teams-capture", "slack-capture"]
             .iter()
             .filter_map(|d| {
                 let b = std::fs::read(data.join("extensions").join(d).join("manifest.json")).ok()?;
@@ -423,7 +438,7 @@ pub async fn capture_status(app: tauri::AppHandle) -> Result<CaptureStatus, Stri
 /// Shows an extension's folder (as `capture_status` copied it) in Finder, for Load unpacked.
 #[tauri::command]
 pub fn capture_reveal(which: String) -> Result<(), String> {
-    if !["outlook-capture", "teams-capture"].contains(&which.as_str()) {
+    if !["outlook-capture", "teams-capture", "slack-capture"].contains(&which.as_str()) {
         return Err("No such extension.".into());
     }
     platform::reveal(&platform::data_dir().join("extensions").join(which))
@@ -523,6 +538,6 @@ mod tests {
     fn the_manifest_allows_only_the_two_extensions() {
         let m = manifest(Path::new("/Applications/Brainstead.app/Contents/MacOS/Brainstead"));
         assert_eq!(m["name"], HOST);
-        assert_eq!(m["allowed_origins"].as_array().unwrap().len(), 2);
+        assert_eq!(m["allowed_origins"].as_array().unwrap().len(), 3);
     }
 }

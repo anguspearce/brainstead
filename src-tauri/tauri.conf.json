@@ -87,7 +87,8 @@
     },
     "resources": {
       "../extensions/outlook-capture/": "extensions/outlook-capture/",
-      "../extensions/teams-capture/": "extensions/teams-capture/"
+      "../extensions/teams-capture/": "extensions/teams-capture/",
+      "../extensions/slack-capture/": "extensions/slack-capture/"
     }
   },
   "plugins": {
