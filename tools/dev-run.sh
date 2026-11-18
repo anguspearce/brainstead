@@ -10,7 +10,12 @@
 bin="$1"
 case "$(basename "$bin")" in
 Brainstead | brainstead)
-  id=$(sed -n 's/^APPLE_SIGNING_IDENTITY *= *//p' "$(dirname "$0")/../signing.local" 2>/dev/null)
+  # DEV_SIGNING_IDENTITY first: an Apple Development certificate has a Team ID, and the Keychain
+  # knows a build by its team. A self-signed one has none, so the Keychain goes by the exact build
+  # and asks again after each rebuild, once for every sign-in it keeps.
+  local_file="$(dirname "$0")/../signing.local"
+  id=$(sed -n 's/^DEV_SIGNING_IDENTITY *= *//p' "$local_file" 2>/dev/null)
+  [ -n "$id" ] || id=$(sed -n 's/^APPLE_SIGNING_IDENTITY *= *//p' "$local_file" 2>/dev/null)
   if [ -n "$id" ]; then
     codesign --force --sign "$id" "$bin" 2>/dev/null || echo "dev-run: couldn't sign with \"$id\"; the Keychain may ask again" >&2
   fi

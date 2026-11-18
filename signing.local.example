@@ -7,3 +7,9 @@
 # rebuilds. Brainstead has its own certificate: never reuse a sibling app's certificate,
 # because macOS ties those grants to the signing identity.
 APPLE_SIGNING_IDENTITY = Brainstead Dev
+
+# Optional: what `make dev` signs its debug build with (tools/dev-run.sh), when it isn't the one
+# above. Use an "Apple Development" certificate (Xcode → Settings → Accounts makes one), named or
+# by its SHA-1 from `security find-identity -v -p codesigning`. It has a Team ID, so the Keychain
+# trusts every rebuild; with a self-signed one it asks for each sign-in again after a rebuild.
+# DEV_SIGNING_IDENTITY = Apple Development: Maya Example (ABCDE12345)
