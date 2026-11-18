@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! `index.md`'s catalogue of the wiki (§7 skill verdicts: "regenerated catalogue, kept current"):
-//! every entity, concept and summary page with its description, by kind, between
+//! every entity, concept, initiative and summary page with its description, by kind, between
 //! `<!-- brainstead:index -->` markers so the rest of the file stays the user's. the daily check
 //! brings it up to date; adding the markers the first time is a proposal.
 
@@ -15,7 +15,7 @@ pub const END: &str = "<!-- /brainstead:index -->";
 /// The catalogue, markers included.
 pub fn render(root: &Path) -> String {
     let mut out = format!("{START}\n");
-    for (sub, title) in [("entities", "Entities"), ("concepts", "Concepts"), ("summaries", "Summaries")] {
+    for (sub, title) in [("entities", "Entities"), ("concepts", "Concepts"), ("initiatives", "Initiatives"), ("summaries", "Summaries")] {
         let Ok(rd) = std::fs::read_dir(root.join("wiki").join(sub)) else { continue };
         let mut rows: Vec<(String, String)> = rd
             .flatten()

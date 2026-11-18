@@ -487,18 +487,21 @@ export function WikiScreen() {
   );
 }
 
-/** New wiki page: a concept or an entity, written at once (the user's own page, not a model's) and
- *  opened in Edit. */
+/** New wiki page: a concept, an entity or an initiative, written at once (the user's own page, not a
+ *  model's) and opened in Edit. */
+type WikiKind = "concept" | "entity" | "initiative";
+const WIKI_FOLDER: Record<WikiKind, string> = { concept: "concepts", entity: "entities", initiative: "initiatives" };
+
 function NewWikiPage({ at, onClose }: { at: DOMRect; onClose: () => void }) {
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<"concept" | "entity">("concept");
+  const [kind, setKind] = useState<WikiKind>("concept");
   const n = name.trim();
   const ok = !!n && !/[\\/:*?"<>|#^[\]]/.test(n);
   const make = async () => {
     if (!ok) return;
-    const path = `wiki/${kind === "concept" ? "concepts" : "entities"}/${n}.md`;
+    const path = `wiki/${WIKI_FOLDER[kind]}/${n}.md`;
     try {
-      await api.docCreate(path, filedPage(n, kind, ""));
+      await api.docCreate(path, kind === "initiative" ? await api.initiativePage(n) : filedPage(n, kind, ""));
       onClose();
       openDoc(path);
     } catch (e) {
@@ -518,17 +521,18 @@ function NewWikiPage({ at, onClose }: { at: DOMRect; onClose: () => void }) {
             onKeyDown={(e) => e.key === "Enter" && void make()}
           />
         </label>
-        <Seg<"concept" | "entity">
+        <Seg<WikiKind>
           label="Kind"
           value={kind}
           onChange={setKind}
           options={[
             ["concept", "Concept", "An idea, a process, a topic"],
             ["entity", "Entity", "A person, a team, a product, a company"],
+            ["initiative", "Initiative", "Something you're tracking, with its actions and decisions"],
           ]}
         />
         <div className="row">
-          <span className="faint small grow">In wiki/{kind === "concept" ? "concepts" : "entities"}/</span>
+          <span className="faint small grow">In wiki/{WIKI_FOLDER[kind]}/</span>
           <span title={ok ? "Create the page and open it (↩)" : "Type a name the page can be saved under"}>
             <button type="button" className="btn sm pri" disabled={!ok} onClick={() => void make()}>
               Create

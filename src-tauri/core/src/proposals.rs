@@ -534,7 +534,7 @@ pub fn valid_new_page(rel: &str) -> Result<(), String> {
         && !rel.contains(['\\', ':', '*', '?', '"', '<', '>', '|', '\n']);
     if !ok {
         return Err(format!(
-            "A new wiki page goes in wiki/entities/<Name>.md, wiki/concepts/<Name>.md or wiki/summaries/<Name>.md, not {rel}. A new note is create_note."
+            "A new wiki page goes in wiki/entities/<Name>.md, wiki/concepts/<Name>.md, wiki/initiatives/<Name>.md (create_initiative makes one) or wiki/summaries/<Name>.md, not {rel}. A new note is create_note."
         ));
     }
     Ok(())

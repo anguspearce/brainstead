@@ -78,7 +78,7 @@ Changes lists every change assistants and runs made to the vault, newest first, 
 
 <a href="images/index.md#the-wiki-and-sources"><picture><source media="(prefers-color-scheme: dark)" srcset="images/wiki-page-dark.png"><img alt="A wiki page: its current state with numbered citations, and the Sources and Linked from cards" src="images/wiki-page-light.png"></picture></a>
 
-Every entity and concept page has one layout: opening text, **Current state**, topical sections, a **Timeline** of dated entries (`### YYYY-MM-DD — title`, or a month, quarter or half) newest first, each with a `Source:` line, and **See also**. Summaries are left as they are.
+Every entity, concept and initiative page has one layout: opening text, **Current state**, topical sections, a **Timeline** of dated entries (`### YYYY-MM-DD — title`, or a month, quarter or half) newest first, each with a `Source:` line, and **See also**. Summaries are left as they are.
 
 The Wiki (⌘9) lists the pages by type and tag with their health: **Held**, **Stale**, **Check** or **Healthy**. On a page:
 
@@ -86,7 +86,18 @@ The Wiki (⌘9) lists the pages by type and tag with their health: **Held**, **S
 - The **Facts** card lists the page's checked facts: the latest value of each, what it replaced, and its source. Older pages may have none until they're next ingested.
 - A banner says when another page disagrees.
 
-**New wiki page** makes an entity or concept page you write yourself.
+**New wiki page** makes an entity, concept or initiative page you write yourself.
+
+### Initiatives
+
+An initiative is something you're tracking: a page in `wiki/initiatives/` (`status:` active, paused or done) with **Actions** and **Decisions**. Each action is a plain list item (not a checkbox, so Tasks doesn't list it) with whose it is, its status and a due date as inline fields, and the quotes it came from under it:
+
+```markdown
+- Send the revised pricing [owner:: me] [status:: open] [due:: 2026-11-25] ^a-3f9c
+  - "Can you send the revised pricing by Tuesday?" — [[Mail. Pricing - 2026-11-17]]
+```
+
+`[owner:: me]` is yours, `[delegated:: Lena]` one you handed to Lena (a waiting-for), `[owner:: Lena]` Lena's own; the status is open, done or dropped. Decisions are dated items, newest first, with their quotes the same way. Knowledge health flags an action with no owner, a status or date that doesn't read, an id used twice, or a quote that isn't in the note it cites. Assistants list, make and change them with `list_initiatives`, `create_initiative`, `set_action` and `add_decision`, each change in Changes.
 
 ## Knowledge health
 

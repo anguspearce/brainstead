@@ -54,6 +54,8 @@ In Edit and Source you can also replace: type in **Replace with**, then click **
 ## Tick tasks and run queries
 Tick a task's box in View or Edit. In View with nothing unsaved, it's saved at once (`⌘Z` undoes it); otherwise it joins your unsaved edits. Hover a date icon for its meaning. In Edit, typing `due:`, `defer:`, `start:` or `created:` in a task opens a date picker.
 
+Inline fields such as `[status:: open]` show as small labels in View; the text itself is unchanged.
+
 `tasks` and `dataview` code blocks are live lists of tasks or notes. **Insert a query** builds one; see [Task and Dataview queries](help:queries).
 
 ## Read callouts and other blocks

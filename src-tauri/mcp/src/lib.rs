@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use brainstead_core::changes::{self, Instruction};
 use brainstead_core::proposals::{self, Kind, Origin, Patch, Quote, SourceText};
 use brainstead_core::search::SearchRequest;
-use brainstead_core::{bridge, extract, filename, images, lint, paths, projects, write, Index};
+use brainstead_core::{bridge, extract, filename, images, initiatives, lint, paths, projects, write, Index};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use unicode_normalization::UnicodeNormalization;
@@ -325,6 +325,11 @@ pub fn tools() -> Vec<Value> {
     let detail =
         json!({"type": "boolean", "description": "true for the full rows (see the description); a shorter line each when left out."});
     let layers = json!({"type": "array", "items": {"type": "string", "enum": ["notes", "wiki", "sources", "templates"]}, "description": "Only these parts of the vault; all when left out."});
+    let quotes_arg = json!({"type": "array", "description": "The quotes it rests on, each from a note or source.", "items": schema(json!({
+        "source": {"type": "string", "description": "The note or source's name or path."},
+        "anchor": {"type": "string", "description": "A heading in it (Branch 2), if the quote is under one."},
+        "text": {"type": "string", "description": "Word for word from the source."}
+    }), &["source", "text"])});
     let edit_schema = schema(
         json!({
             "page": page,
@@ -371,6 +376,42 @@ pub fn tools() -> Vec<Value> {
                 "subject": {"type": "string", "description": "What the fact is about, by name: Orbit App."},
                 "attribute": {"type": "string", "description": "Which fact: go_live_date, owner, status, role… (synonyms count)."}
             }), &[])),
+        tool("list_initiatives", "List initiatives", Read,
+            "The initiatives the user is tracking: wiki pages in wiki/initiatives/, each with its status (active, paused or done), what it's about and how many actions are open: the user's own, delegated (waiting for someone) and other people's. Give initiative for one in full: its open actions (done and dropped ones too with all) with their ids, owners, due dates and quotes, and its decisions. Change them with set_action and add_decision.",
+            schema(json!({
+                "initiative": {"type": "string", "description": "One initiative, by name or path, to see in full."},
+                "status": {"type": "string", "enum": ["active", "paused", "done", "all"], "description": "Only initiatives with this status; active and paused when left out."},
+                "all": {"type": "boolean", "description": "With initiative: done and dropped actions too."}
+            }), &[])),
+        tool("create_initiative", "Create an initiative", Change,
+            "Makes an initiative page in wiki/initiatives/, as New wiki page does with Initiative chosen: in the page shape, with empty Actions and Decisions sections (needs the app). Recorded in Changes, where the user can revert it. Add its actions with set_action and decisions with add_decision.",
+            schema(json!({
+                "name": {"type": "string", "description": "The initiative's name, as its page is titled: Acme renewal."},
+                "about": {"type": "string", "description": "What it is, one sentence: its opening line and description."},
+                "reason": reason
+            }), &["name"])),
+        tool("set_action", "Add or change an initiative's action", Change,
+            "Adds an action to an initiative's Actions, or changes one (needs the app), leaving every other line of the page as it was. Without action it adds one: give text and owner (me for the user's own; delegated with person for one the user handed to someone, a waiting-for; other with person for someone else's own). With action (its id from list_initiatives, or its words exactly) it changes only what's given: reassign it with owner and person, mark it done or dropped with status, set or clear (\"\") due. Quotes are added under the action, each once: copy them word for word from the note or source; a quote that isn't in its source is flagged. Recorded in Changes, where the user can revert it.",
+            schema(json!({
+                "initiative": {"type": "string", "description": "The initiative, by name or path."},
+                "action": {"type": "string", "description": "The action to change: its id (a-3f9c) or its words exactly. Leave out to add one."},
+                "text": {"type": "string", "description": "What's to be done, one line."},
+                "owner": {"type": "string", "enum": ["me", "delegated", "other"], "description": "me: the user's own; delegated: the user handed it to person; other: person's own."},
+                "person": {"type": "string", "description": "Who it's delegated to, or whose it is, as the vault names them: Lena."},
+                "status": {"type": "string", "enum": ["open", "done", "dropped"]},
+                "due": {"type": "string", "description": "YYYY-MM-DD; \"\" clears it."},
+                "quotes": quotes_arg.clone(),
+                "reason": reason
+            }), &["initiative"])),
+        tool("add_decision", "Add a decision to an initiative", Change,
+            "Adds a decision to an initiative's Decisions, newest first by date (needs the app). Copy its quotes word for word from the note or source; a quote that isn't in its source is flagged. Recorded in Changes, where the user can revert it.",
+            schema(json!({
+                "initiative": {"type": "string", "description": "The initiative, by name or path."},
+                "text": {"type": "string", "description": "What was decided, one line."},
+                "date": {"type": "string", "description": "When, YYYY-MM-DD."},
+                "quotes": quotes_arg.clone(),
+                "reason": reason
+            }), &["initiative", "text"])),
         tool("pending_sources", "Sources not yet in the wiki", Read,
             "Files in sources/ with their Status, as the Sources screen gives it: New (no wiki page cites it yet in its sources: property), Changed (changed since the pages citing it) or Ingested. Without status, the ones still to ingest, New and Changed: notes, PDFs, Office files and images (whose text is read from the picture), each path ready to pass to start_run's ingest (a Teams transcript is written up with start_run meeting_note instead); a file an ingest can't read is never listed as one to ingest, and status all marks it. An empty list means the wiki is up to date with Sources.",
             schema(json!({"status": {"type": "string", "enum": ["all", "new", "changed", "ingested"], "description": "The Sources screen's Status: only New, Changed or Ingested sources, or all; New and Changed when left out."}}), &[])),
@@ -1144,6 +1185,10 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
         "backlinks" => Ok(backlinks(ctx, parse(obj)?)?.into()),
         "resolve_entity" => Ok(resolve_entity(ctx, parse(obj)?)?.into()),
         "facts" => Ok(facts(ctx, parse(obj)?)?.into()),
+        "list_initiatives" => Ok(list_initiatives(ctx, parse(obj)?)?.into()),
+        "create_initiative" => Ok(create_initiative(ctx, parse(obj)?)?.into()),
+        "set_action" => Ok(set_action(ctx, parse(obj)?)?.into()),
+        "add_decision" => Ok(add_decision(ctx, parse(obj)?)?.into()),
         "pending_sources" => Ok(pending_sources(ctx, parse(obj)?)?.into()),
         "provenance" => act("source.provenance", obj),
         // The app's report when it's open, as the screen shows it; else the core's checks.
@@ -2132,6 +2177,252 @@ fn resolve_entity(ctx: &Ctx, a: NameArgs) -> Result<String, String> {
         out.push_str(&format!("- {p} ({:.0}% alike)\n", s * 100.0));
     }
     Ok(out)
+}
+
+#[derive(Deserialize)]
+struct InitiativesArgs {
+    initiative: Option<String>,
+    status: Option<String>,
+    #[serde(default)]
+    all: bool,
+}
+
+/// Every initiative page, read.
+fn initiatives(ctx: &Ctx) -> Vec<initiatives::Initiative> {
+    let Ok(rd) = std::fs::read_dir(ctx.vault.join(initiatives::FOLDER)) else { return vec![] };
+    let mut out: Vec<_> = rd
+        .flatten()
+        .filter_map(|e| {
+            let rel = format!("{}/{}", initiatives::FOLDER, e.file_name().to_string_lossy());
+            initiatives::is_initiative(&rel).then(|| std::fs::read_to_string(e.path()).ok().map(|t| initiatives::parse(&rel, &t)))?
+        })
+        .collect();
+    out.sort_by_key(|i| i.name.to_lowercase());
+    out
+}
+
+/// The initiative page `name` means: by name or path, and only an initiative.
+fn initiative_page(ctx: &Ctx, name: &str) -> Result<String, String> {
+    // By its name in wiki/initiatives/ first: one made since the index last caught up is there too.
+    let given = bare(name).replace('\\', "/");
+    let stem = given.strip_prefix(&format!("{}/", initiatives::FOLDER)).unwrap_or(&given).trim_end_matches(".md").to_string();
+    let rel = format!("{}/{stem}.md", initiatives::FOLDER);
+    if !stem.is_empty() && !stem.contains('/') && ctx.vault.join(&rel).is_file() {
+        return Ok(rel);
+    }
+    match find_page(ctx, &ctx.index()?, name)? {
+        PageRef::Found(rel) if initiatives::is_initiative(&rel) => Ok(rel),
+        PageRef::Found(rel) => {
+            Err(format!("{rel} isn't an initiative: initiatives are the pages in wiki/initiatives/ (list_initiatives)."))
+        }
+        PageRef::NotThere(_) => {
+            Err(format!("There's no initiative called {name}: list_initiatives lists them, create_initiative makes one."))
+        }
+    }
+}
+
+fn owner_words(a: &initiatives::Action) -> String {
+    match (a.owner, a.person.as_deref()) {
+        (Some(initiatives::Owner::Me), _) => "mine".into(),
+        (Some(initiatives::Owner::Delegated), Some(p)) => format!("delegated to {p}"),
+        (Some(initiatives::Owner::Other), Some(p)) => format!("{p}'s"),
+        _ => "no owner".into(),
+    }
+}
+
+fn list_initiatives(ctx: &Ctx, a: InitiativesArgs) -> Result<String, String> {
+    use initiatives::{Owner, Status};
+    if let Some(name) = a.initiative.as_deref().filter(|n| !n.trim().is_empty()) {
+        let rel = initiative_page(ctx, name)?;
+        let i = initiatives::parse(&rel, &read_text(ctx, &rel)?);
+        let mut out = format!("{} ({}, {rel})", i.name, i.status);
+        if !i.description.is_empty() {
+            out.push_str(&format!(": {}", i.description));
+        }
+        let shown: Vec<_> = i.actions.iter().filter(|x| a.all || x.status == Status::Open).collect();
+        out.push_str(&format!("\n\nActions ({} shown of {}):", shown.len(), i.actions.len()));
+        for x in shown {
+            let id = if x.id.is_empty() { String::new() } else { format!(" [{}]", x.id) };
+            let due = x.due.as_deref().map(|d| format!(", due {d}")).unwrap_or_default();
+            out.push_str(&format!("\n- {}{id}: {}, {}{due}", x.text, owner_words(x), x.status.as_str()));
+            for q in &x.quotes {
+                out.push_str(&format!("\n  “{}” from [[{}]]", q.text, q.source));
+            }
+        }
+        out.push_str(&format!("\n\nDecisions ({}):", i.decisions.len()));
+        for d in &i.decisions {
+            let when = d.date.as_deref().map(|d| format!("{d}: ")).unwrap_or_default();
+            out.push_str(&format!("\n- {when}{} [{}]", d.text, d.id));
+            for q in &d.quotes {
+                out.push_str(&format!("\n  “{}” from [[{}]]", q.text, q.source));
+            }
+        }
+        for p in &i.problems {
+            out.push_str(&format!("\nNote: {}.", p.text));
+        }
+        return Ok(out);
+    }
+    let want = a.status.as_deref().unwrap_or("");
+    let all = initiatives(ctx);
+    let shown: Vec<_> = all
+        .iter()
+        .filter(|i| match want {
+            "all" => true,
+            "" => i.status != "done",
+            w => i.status == w,
+        })
+        .collect();
+    if shown.is_empty() {
+        return Ok(if all.is_empty() {
+            "There are no initiatives yet: create_initiative makes one.".into()
+        } else {
+            "No initiatives with that status.".into()
+        });
+    }
+    let mut out = format!("{} initiative(s):", shown.len());
+    for i in shown {
+        let open = |o: Owner| i.actions.iter().filter(|x| x.status == Status::Open && x.owner == Some(o)).count();
+        out.push_str(&format!(
+            "\n- {} ({}): {} open: {} mine, {} delegated, {} other people's; {} decision(s) · {}",
+            i.name,
+            i.status,
+            i.actions.iter().filter(|x| x.status == Status::Open).count(),
+            open(Owner::Me),
+            open(Owner::Delegated),
+            open(Owner::Other),
+            i.decisions.len(),
+            i.path
+        ));
+        if !i.description.is_empty() {
+            out.push_str(&format!(" — {}", i.description));
+        }
+    }
+    Ok(out)
+}
+
+#[derive(Deserialize)]
+struct NewInitiativeArgs {
+    name: String,
+    #[serde(default)]
+    about: String,
+    #[serde(default)]
+    reason: String,
+    #[serde(default)]
+    unattended: bool,
+}
+
+fn create_initiative(ctx: &Ctx, a: NewInitiativeArgs) -> Result<String, String> {
+    let name = a.name.trim();
+    if name.is_empty() || name.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|', '#', '^', '[', ']', '\n']) || name.starts_with('.') {
+        return Err("Give the initiative a name a page can have: no slashes, brackets, # or ^.".into());
+    }
+    let rel = format!("{}/{name}.md", initiatives::FOLDER);
+    let ix = ctx.index()?;
+    if let Ok(PageRef::Found(there)) = find_page(ctx, &ix, name) {
+        return Err(format!("{there} is already called {name}: give the initiative another name."));
+    }
+    let content = initiatives::new_page(name, &a.about);
+    let c = change(ctx, &rel, Kind::New, &format!("New initiative {name}"), &a.reason, a.unattended, Instruction::Page { content });
+    send(ctx, c, vec![])
+}
+
+#[derive(Deserialize)]
+struct ActionArgs {
+    initiative: String,
+    action: Option<String>,
+    text: Option<String>,
+    owner: Option<initiatives::Owner>,
+    person: Option<String>,
+    status: Option<initiatives::Status>,
+    due: Option<String>,
+    #[serde(default)]
+    quotes: Vec<QuoteArg>,
+    #[serde(default)]
+    reason: String,
+    #[serde(default)]
+    unattended: bool,
+}
+
+/// A quote as the page writes it: its source with the anchor after `#`.
+fn page_quote(q: &QuoteArg) -> initiatives::Quote {
+    let source = bare(&q.source).to_string();
+    let source = match q.anchor.as_deref().map(str::trim).filter(|a| !a.is_empty()) {
+        Some(a) if !source.contains('#') => format!("{source}#{a}"),
+        _ => source,
+    };
+    initiatives::Quote { text: q.text.clone(), source }
+}
+
+/// A change's line in Changes, why it was made, and whether anyone is watching.
+struct Why<'a> {
+    title: &'a str,
+    reason: &'a str,
+    unattended: bool,
+}
+
+/// Sends an initiative page's new text as a change, its quotes checked as edit_page's are.
+fn send_initiative(ctx: &Ctx, ix: &Index, rel: &str, before: &str, after: &str, why: Why, quotes: Vec<QuoteArg>) -> Result<String, String> {
+    let after = proposals::bump_updated(before, after, &ctx.today.to_string());
+    if after == before.replace("\r\n", "\n") {
+        return Err("That changes nothing on the page: it's already so.".into());
+    }
+    let mut quotes: Vec<Quote> =
+        quotes.into_iter().map(|q| Quote { source: q.source, anchor: q.anchor, text: q.text, checked: None, path: None }).collect();
+    let problems = proposals::mark_quotes(&mut quotes, |s| source_text(ctx, ix, s))?;
+    let mut c = change(ctx, rel, Kind::Edit, why.title, why.reason, why.unattended, changes::from_texts(Some(before), &after));
+    c["quotes"] = serde_json::to_value(&quotes).unwrap_or_default();
+    send(ctx, c, problems.iter().map(|p| format!("Note: {p}")).collect())
+}
+
+fn set_action(ctx: &Ctx, a: ActionArgs) -> Result<String, String> {
+    let ix = ctx.index()?;
+    let rel = initiative_page(ctx, &a.initiative)?;
+    let before = read_text(ctx, &rel)?;
+    let edit = initiatives::ActionEdit {
+        id: a.action.clone(),
+        text: a.text.clone(),
+        owner: a.owner,
+        person: a.person.clone(),
+        status: a.status,
+        due: a.due.clone(),
+        quotes: a.quotes.iter().map(page_quote).collect(),
+    };
+    let seed = format!("{}{}", ctx.session, ctx.today);
+    let (after, id) = initiatives::with_action(&before, &edit, &seed)?;
+    let name = filename::stem(&rel);
+    let title = match &a.action {
+        None => format!("New action on {name}"),
+        Some(_) => format!("Action changed on {name}"),
+    };
+    let why = Why { title: &title, reason: &a.reason, unattended: a.unattended };
+    let out = send_initiative(ctx, &ix, &rel, &before, &after, why, a.quotes)?;
+    Ok(format!("{out}\nThe action's id is {id}."))
+}
+
+#[derive(Deserialize)]
+struct DecisionArgs {
+    initiative: String,
+    text: String,
+    date: Option<String>,
+    #[serde(default)]
+    quotes: Vec<QuoteArg>,
+    #[serde(default)]
+    reason: String,
+    #[serde(default)]
+    unattended: bool,
+}
+
+fn add_decision(ctx: &Ctx, a: DecisionArgs) -> Result<String, String> {
+    let ix = ctx.index()?;
+    let rel = initiative_page(ctx, &a.initiative)?;
+    let before = read_text(ctx, &rel)?;
+    let quotes: Vec<_> = a.quotes.iter().map(page_quote).collect();
+    let seed = format!("{}{}", ctx.session, ctx.today);
+    let (after, id) = initiatives::with_decision(&before, a.date.as_deref(), &a.text, &quotes, &seed)?;
+    let title = format!("New decision on {}", filename::stem(&rel));
+    let why = Why { title: &title, reason: &a.reason, unattended: a.unattended };
+    let out = send_initiative(ctx, &ix, &rel, &before, &after, why, a.quotes)?;
+    Ok(format!("{out}\nThe decision's id is {id}."))
 }
 
 #[derive(Deserialize)]

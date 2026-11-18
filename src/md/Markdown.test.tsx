@@ -63,6 +63,24 @@ describe("Markdown", () => {
     expect(container.querySelector('[id="^q3"]')?.textContent).toBe("Para with a block.");
   });
 
+  it("takes a list item's block id off its own line when a list is nested under it", () => {
+    const { container } = md('- Send pricing [owner:: me] ^a-3f9c\n  - "a quote"\n- Plain ^a-1\n');
+    const li = container.querySelector('[id="^a-3f9c"]');
+    expect(li).toBeTruthy();
+    expect(container.textContent).not.toContain("^a-3f9c");
+    expect(container.textContent).not.toContain("^a-1");
+    expect(li?.querySelector("li")?.textContent).toContain("a quote");
+  });
+
+  it("shows inline fields as labels, a linked name still a link, and not in code", () => {
+    const { container } = md("- Book legal [delegated:: [[Lena]]] [status:: open] ^a-1\n\n`[due:: 2026-01-01]`\n");
+    const fields = [...container.querySelectorAll(".mdfield")];
+    expect(fields.map((f) => f.getAttribute("data-field"))).toEqual(["delegated", "status"]);
+    expect(fields[1].textContent).toBe("status open");
+    expect(fields[0].querySelector("a")?.textContent).toBe("Lena");
+    expect(container.querySelector("code")?.textContent).toBe("[due:: 2026-01-01]");
+  });
+
   it("folds the system note", () => {
     md("> **This is a system note** — Master task list.\n\nBody");
     expect(screen.getByText("System note").closest("details")).toBeTruthy();

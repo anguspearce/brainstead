@@ -65,6 +65,13 @@ pub async fn doc_create(app: AppHandle, path: String, content: String) -> Res<St
     .await
 }
 
+/// A new initiative page's text: core's, so New wiki page and the MCP's create_initiative make the
+/// same page.
+#[tauri::command]
+pub fn initiative_page(name: String, about: String) -> String {
+    brainstead_core::initiatives::new_page(&name, &about)
+}
+
 /// Makes a new vault called `name` inside `parent`, filled with the starter notes, and returns its
 /// path. The window then opens it, read-write: unlike a folder the user chose, it isn't their data
 /// yet.

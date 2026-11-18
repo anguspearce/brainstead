@@ -1324,6 +1324,8 @@ export const api = {
   docSave: (path: string, content: string, base: string) => invoke<string>("doc_save", { path, content, base }),
   /** Creates a new file (vault-relative); refuses with `exists`. Returns its version. */
   docCreate: (path: string, content: string) => invoke<string>("doc_create", { path, content }),
+  /** A new initiative page's text, as create_initiative makes it. */
+  initiativePage: (name: string, about = "") => invoke<string>("initiative_page", { name, about }),
   /** Makes a new vault called `name` inside `parent`, filled with the example notes; returns its path. */
   vaultCreate: (parent: string, name: string) => invoke<string>("vault_create", { parent, name }),
   /** Adds the example notes the open vault doesn't have; returns how many were added. */

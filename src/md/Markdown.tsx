@@ -29,6 +29,7 @@ import { Mermaid } from "./Mermaid";
 import { remarkDisplayMath, remarkPandocMath } from "./math";
 import { MathTex } from "./MathTex";
 import { rehypeAnchors, sanitizeSchema, splitFrontmatter, stripRanks } from "./plugins";
+import { remarkInlineFields } from "./fields";
 import { DataviewBlock, DataviewInline } from "./Dataview";
 import { TaskBlock } from "./TaskBlock";
 import { DateChipData, remarkFieldEmoji, remarkTaskDates } from "./dateChips";
@@ -484,6 +485,7 @@ function MarkdownView({ content, path, root, q, onTick, cites, onCites, scripts 
           [remarkMath, { singleDollarTextMath: false }],
           remarkPandocMath,
           remarkDisplayMath,
+          remarkInlineFields,
           remarkWikilinks,
           remarkTaskDates,
           remarkFieldEmoji,

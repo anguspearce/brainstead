@@ -46,7 +46,9 @@ export function rehypeAnchors() {
         return;
       }
       if (el.tagName !== "p" && el.tagName !== "li") return;
-      const last = el.children[el.children.length - 1];
+      // A list item's id ends its own line, before any list nested under it.
+      const own = el.children.filter((c) => !(c.type === "element" && (c.tagName === "ul" || c.tagName === "ol")));
+      const last = [...own].reverse().find((c) => !(c.type === "text" && !c.value.trim()));
       if (last?.type !== "text") return;
       const m = /\s\^([A-Za-z0-9-]+)\s*$/.exec((last as Text).value);
       if (!m) return;
@@ -70,7 +72,7 @@ export const sanitizeSchema = {
     // dataMath: `$$…$$` within a line (src/md/math.ts).
     code: [...(defaultSchema.attributes?.code ?? []), "className", "dataMath"],
     // dataTp: a template tag's token and where it starts (src/notes/templaterSyntax.ts).
-    span: [...(defaultSchema.attributes?.span ?? []), "dataTdate", "dataTag", "dataFemoji", "dataTp"],
+    span: [...(defaultSchema.attributes?.span ?? []), "dataTdate", "dataTag", "dataFemoji", "dataTp", "dataField"],
     li: [...(defaultSchema.attributes?.li ?? []), "dataStatus"],
     blockquote: [...(defaultSchema.attributes?.blockquote ?? []), "dataCallout", "dataFold"],
     p: [...(defaultSchema.attributes?.p ?? []), "dataCalloutTitle"],

@@ -29,6 +29,7 @@ pub mod images;
 pub mod inbox;
 pub mod index;
 pub mod ingest;
+pub mod initiatives;
 pub mod links;
 pub mod lint;
 pub mod lists;

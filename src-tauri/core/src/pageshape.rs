@@ -963,9 +963,10 @@ pub fn check(old: &str, new: &str, report: &Report, is_source: &dyn Fn(&str) -> 
     out
 }
 
-/// The wiki pages that have the shape: entities and concepts (summaries are left as they are).
+/// The wiki pages that have the shape: entities, concepts and initiatives (summaries are left as
+/// they are).
 pub fn shaped(rel: &str) -> bool {
-    (rel.starts_with("wiki/entities/") || rel.starts_with("wiki/concepts/")) && rel.ends_with(".md")
+    (rel.starts_with("wiki/entities/") || rel.starts_with("wiki/concepts/") || rel.starts_with("wiki/initiatives/")) && rel.ends_with(".md")
 }
 
 /// One page's dry run: what reshaping it would do.

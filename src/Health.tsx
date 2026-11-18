@@ -338,7 +338,9 @@ export const CHECK_TIPS: Record<string, string> = {
   "no-current-state":
     "Wiki pages with a Timeline but no Current state section; Write Current state has the model write one from the page's newest entries",
   "page-shape":
-    "Entity and concept pages not laid out as opening text, Current state, topics, Timeline (newest first) and See also; Reshape pages moves their sections",
+    "Entity, concept and initiative pages not laid out as opening text, Current state, topics, Timeline (newest first) and See also; Reshape pages moves their sections",
+  "initiative-items":
+    "Initiative actions with no owner, a status or due date that doesn't read, an id used twice, or a quote that isn't in the note or source it cites",
   "system-callouts": 'System notes whose "This is a system note" header has gone; Fix puts it back as Brainstead last saw it',
 };
 
@@ -439,6 +441,8 @@ function Row({ check, i, on }: { check: string; i: LintItem; on: Handlers }) {
         return `${pageName(page ?? "")} · ${i.count} backlinks · ${i.detail}`;
       case "page-shape":
         return pageName(page ?? "");
+      case "initiative-items":
+        return i.text;
       default:
         return page ? (check === "uningested-sources" || check === "unreferenced-images" ? page : pageName(page)) : i.text;
     }

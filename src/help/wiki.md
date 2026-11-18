@@ -26,10 +26,24 @@ Each page has a health chip; hover one for what it means:
 - **Healthy**: nothing to do.
 
 ## Make a new page
-Click **New wiki page**, type a name, choose **Concept** or **Entity** and press `↩`. The page is created in `wiki/concepts/` or `wiki/entities/` and opens for you to write. It is your own page, so it isn't listed in Changes.
+Click **New wiki page**, type a name, choose **Concept**, **Entity** or **Initiative** and press `↩`. The page is created in `wiki/concepts/`, `wiki/entities/` or `wiki/initiatives/` and opens for you to write. It is your own page, so it isn't listed in Changes.
+
+## Track an initiative
+An initiative is something you're tracking: a page in `wiki/initiatives/` with **Actions** and **Decisions** sections. Its `status:` is active, paused or done.
+
+Each action is one list item: what's to be done, then whose it is, its status and, if it has one, a due date. Under it go the quotes it came from:
+
+```markdown
+- Send the revised pricing [owner:: me] [status:: open] [due:: 2026-11-25] ^a-3f9c
+  - "Can you send the revised pricing by Tuesday?" — [[Mail. Pricing - 2026-11-17]]
+```
+
+`[owner:: me]` is yours, `[delegated:: Lena]` is one you handed to Lena (you're waiting for her), and `[owner:: Lena]` is Lena's own. The status is open, done or dropped. Each decision is a dated item, newest first: `- 2026-11-12 — Annual billing ^d-91c2`, with its quotes under it the same way. Actions are plain list items, not checkboxes, so they don't show up in Tasks.
+
+You can write and edit them by hand; [Knowledge health](app:health) says when one has no owner, a status or date that doesn't read, or a quote that isn't in the note it cites. Assistants add and change them for you too, each change listed in [Changes](app:review).
 
 ## Read a wiki page
-Entity and concept pages share one layout: the opening text, **Current state**, the page's topics, a **Timeline** of dated entries (newest first, each with a **Source** line), then **See also**. [Knowledge health](app:health) lists pages laid out another way, and **Reshape pages** there fixes them.
+Entity, concept and initiative pages share one layout: the opening text, **Current state**, the page's topics, a **Timeline** of dated entries (newest first, each with a **Source** line), then **See also**. [Knowledge health](app:health) lists pages laid out another way, and **Reshape pages** there fixes them.
 
 Under the title are the page's aliases, its `updated:` date and its source count. A link to a source shows as a small number: click it to open the source at the passage cited. The **Sources** card lists them in the same order.
 

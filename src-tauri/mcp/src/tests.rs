@@ -1068,3 +1068,59 @@ fn add_image_sends_the_bytes_to_the_app() {
     std::fs::write(&inside, png).unwrap();
     assert!(refused(&f.ctx, "add_image", json!({"path": inside})).contains("![[images/in-vault.png]]"));
 }
+
+#[test]
+fn initiatives_are_listed_made_and_changed_through_the_app() {
+    let f = fixture();
+    assert!(ok(&f.ctx, "list_initiatives", json!({})).contains("no initiatives yet"));
+    let (_, c) = submitted(&f, "create_initiative", json!({"name": "Orbit launch", "about": "Getting the Orbit App to staff."}));
+    assert_eq!((c["kind"].as_str(), c["page"].as_str()), (Some("new"), Some("wiki/initiatives/Orbit launch.md")));
+    let page = c["instruction"]["content"].as_str().unwrap().to_string();
+    assert!(page.contains("type: initiative") && page.contains("## Actions"), "{page}");
+    assert!(refused(&f.ctx, "create_initiative", json!({"name": "Orbit App"})).contains("already called"));
+    assert!(refused(&f.ctx, "create_initiative", json!({"name": "a/b"})).contains("name"));
+
+    // As the app would have made it.
+    let rel = "wiki/initiatives/Orbit launch.md";
+    std::fs::create_dir_all(f.ctx.vault.join("wiki/initiatives")).unwrap();
+    std::fs::write(f.ctx.vault.join(rel), &page).unwrap();
+    let quote = json!([{"source": "Roadmap Update 2026-09-18", "text": "Staff soft launch remains on track for 14 November."}]);
+    let (t, c) = submitted(
+        &f,
+        "set_action",
+        json!({"initiative": rel, "text": "Brief the support team", "owner": "delegated", "person": "Lena", "due": "2026-11-10", "quotes": quote}),
+    );
+    assert!(t.contains("The action's id is a-"), "{t}");
+    let after = made(&f, &c);
+    assert!(after.contains("- Brief the support team [delegated:: Lena] [status:: open] [due:: 2026-11-10] ^a-"), "{after}");
+    assert!(after.contains("  - \"Staff soft launch remains on track for 14 November.\" — [[Roadmap Update 2026-09-18]]"), "{after}");
+    assert_eq!(c["quotes"][0]["checked"], true, "{c}");
+    std::fs::write(f.ctx.vault.join(rel), &after).unwrap();
+
+    let listed = ok(&f.ctx, "list_initiatives", json!({}));
+    assert!(listed.contains("Orbit launch (active): 1 open: 0 mine, 1 delegated"), "{listed}");
+    let one = ok(&f.ctx, "list_initiatives", json!({"initiative": rel}));
+    assert!(one.contains("Brief the support team [a-") && one.contains("delegated to Lena, open, due 2026-11-10"), "{one}");
+
+    // Reassigned to the user, by its words; a quote not in its source is flagged.
+    let bad = json!([{"source": "Roadmap Update 2026-09-18", "text": "Lena handed it back"}]);
+    let (t, c) = submitted(
+        &f,
+        "set_action",
+        json!({"initiative": "Orbit launch.md", "action": "Brief the support team", "owner": "me", "quotes": bad}),
+    );
+    assert!(made(&f, &c).contains("- Brief the support team [owner:: me] [status:: open] [due:: 2026-11-10] ^a-"));
+    assert_eq!(c["quotes"][0]["checked"], false, "{c}");
+    assert!(t.contains("Note:"), "{t}");
+    assert!(refused(&f.ctx, "set_action", json!({"initiative": rel, "action": "Nothing like it"})).contains("no action"));
+    assert!(refused(&f.ctx, "set_action", json!({"initiative": "Orbit App", "text": "x", "owner": "me"})).contains("isn't an initiative"));
+
+    let (t, c) = submitted(
+        &f,
+        "add_decision",
+        json!({"initiative": rel, "date": "2026-09-18", "text": "Staff first, customers in Q1", "quotes": [{"source": "Roadmap Update 2026-09-18", "text": "Launching to customers follows in Q1."}]}),
+    );
+    assert!(t.contains("The decision's id is d-"), "{t}");
+    assert!(made(&f, &c).contains("## Decisions\n\n- 2026-09-18 — Staff first, customers in Q1 ^d-"));
+    assert!(refused(&f.ctx, "add_decision", json!({"initiative": rel, "text": "x", "date": "18 Sep"})).contains("YYYY-MM-DD"));
+}

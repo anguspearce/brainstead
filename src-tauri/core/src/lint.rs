@@ -20,7 +20,7 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::reviews::Zone;
 
-pub(crate) const WIKI_SUBDIRS: [&str; 3] = ["entities", "concepts", "summaries"];
+pub(crate) const WIKI_SUBDIRS: [&str; 4] = ["entities", "concepts", "initiatives", "summaries"];
 const LOG: &str = "log.md";
 /// A wiki page unchanged this long, that other notes link to, is worth a look.
 pub const STALE_DAYS: i64 = 90;
@@ -459,7 +459,7 @@ pub(crate) fn run_in(root: &Path, today: NaiveDate, dismissed: &HashSet<String>,
     // Brainstead's own. Possible duplicates.
     let mut entries: Vec<(String, Vec<String>)> = Vec::new();
     for (f, text) in &wiki {
-        if !(f.rel.starts_with("wiki/entities/") || f.rel.starts_with("wiki/concepts/")) {
+        if !crate::pageshape::shaped(&f.rel) {
             continue;
         }
         let fm = crate::frontmatter::split(text);
@@ -546,6 +546,36 @@ pub(crate) fn run_in(root: &Path, today: NaiveDate, dismissed: &HashSet<String>,
         .map(|(f, _)| Item { text: format!("{}: no Current state", f.rel), page: Some(f.rel.clone()), ..Default::default() })
         .collect();
     checks.push(Check { id: "no-current-state", title: "Pages with no Current state", classic: false, ignored: 0, items });
+
+    // Initiatives' actions and decisions (D-20261118-08): lines that don't read, and quotes that
+    // aren't in the note or source they cite (only those Brainstead has the text of: markdown).
+    let texts: HashMap<String, &String> = md.iter().map(|(f, t)| (lint_key(stem(name_of(&f.rel))), t)).collect();
+    let mut items = Vec::new();
+    for (f, text) in wiki.iter().filter(|(f, _)| crate::initiatives::is_initiative(&f.rel)) {
+        let i = crate::initiatives::parse(&f.rel, text);
+        let name = stem(name_of(&f.rel));
+        for p in &i.problems {
+            items.push(Item { text: format!("{name}: {}", p.text), page: Some(f.rel.clone()), ..Default::default() });
+        }
+        let quoted = i.actions.iter().map(|a| (&a.text, &a.quotes)).chain(i.decisions.iter().map(|d| (&d.text, &d.quotes)));
+        for (what, quotes) in quoted {
+            for q in quotes {
+                let target = q.source.split('#').next().unwrap_or("").trim();
+                let Some(src) = texts.get(&lint_key(name_of(target).trim_end_matches(".md"))) else { continue };
+                if !crate::reviews::prep::quote_in(&q.text, src) {
+                    items.push(Item {
+                        text: format!("{name}: “{what}” quotes words that aren't in {target}"),
+                        page: Some(f.rel.clone()),
+                        name: Some(target.to_string()),
+                        detail: Some(q.text.clone()),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+    }
+    sort(&mut items);
+    checks.push(Check { id: "initiative-items", title: "Initiative actions and decisions to check", classic: false, ignored: 0, items });
 
     Report {
         checks,
@@ -801,6 +831,30 @@ mod tests {
 
     fn today() -> NaiveDate {
         NaiveDate::from_ymd_opt(2026, 10, 2).unwrap()
+    }
+
+    #[test]
+    fn checks_initiatives_actions_and_their_quotes() {
+        let t = tempfile::tempdir().unwrap();
+        let w = |rel: &str, text: &str| {
+            let p = t.path().join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, text).unwrap();
+        };
+        w("sources/Mail. Pricing.md", "Lena: Can you send the revised pricing by Tuesday?\n");
+        w(
+            "wiki/initiatives/Acme renewal.md",
+            "---\ntype: initiative\n---\n# Acme renewal\n\n## Actions\n\n- Send pricing [owner:: me] ^a-1\n  - \"can you send the revised pricing\" — [[Mail. Pricing]]\n- Book legal [status:: open] ^a-2\n  - \"Legal is booked\" — [[Mail. Pricing#Branch 2]]\n",
+        );
+        let r = run_in(t.path(), today(), &HashSet::new(), fixture::zone());
+        let got: Vec<&str> = r.check("initiative-items").unwrap().items.iter().map(|i| i.text.as_str()).collect();
+        assert_eq!(
+            got,
+            [
+                "Acme renewal: “Book legal” has no owner: add [owner:: me], [delegated:: <name>] or [owner:: <name>]",
+                "Acme renewal: “Book legal” quotes words that aren't in Mail. Pricing",
+            ]
+        );
     }
 
     #[test]

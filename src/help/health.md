@@ -11,7 +11,7 @@ Knowledge health checks the wiki and its sources whenever the vault changes. **N
 The checks come in two groups.
 
 - **Wiki checks**: missing pages (linked but never written), broken sources, orphan pages (nothing links to them), missing cross-links, stale `updated:` dates, unlogged writes (pages changed after `log.md` was last written), sources not yet ingested, and images nothing uses.
-- **More checks**: possible duplicates, stale pages others rely on, sources changed since they were cited, pages not in the page shape, pages with no Current state, claims with no citation (found by the [contradictions](app:contradictions) check), and system notes missing their header.
+- **More checks**: possible duplicates, stale pages others rely on, sources changed since they were cited, pages not in the page shape, pages with no Current state, initiative actions and decisions to check (no owner, a status or date that doesn't read, an id used twice, or a quote that isn't in its source), claims with no citation (found by the [contradictions](app:contradictions) check), and system notes missing their header.
 
 A system note's header is the "This is a system note" callout at the top of notes such as the To Do list, which Brainstead looks for. **Fix** puts it back as Brainstead last saw it.
 
@@ -43,7 +43,7 @@ A fixed issue leaves the list as soon as its fix is made, and the checks rerun w
 - **Sources not yet ingested**: **Ingest** starts the same ingest as [Sources](app:sources); its page changes are listed in [Changes](app:review). A source that can't be ingested, such as an SVG or a zip file, shows **Can't ingest**.
 
 ## Put pages in the page shape
-Every entity and concept page has the same layout: the opening text, **Current state**, its topics (such as Architecture), a **Timeline**, then **See also**. Each Timeline entry is a heading starting with its date, newest first, with a line under it naming the note it came from:
+Every entity, concept and initiative page has the same layout: the opening text, **Current state**, its topics (such as Architecture), a **Timeline**, then **See also**. Each Timeline entry is a heading starting with its date, newest first, with a line under it naming the note it came from:
 
 ```
 ### 2026-10-02 — Steerco: launch moves to 28 November

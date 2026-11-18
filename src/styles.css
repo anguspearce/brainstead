@@ -4088,6 +4088,22 @@ button.rnhead {
 .prose .mdtag:hover {
   text-decoration: underline;
 }
+
+/* Inline fields in View (src/md/fields.ts): `[status:: open]` as a quiet label, its key faint. */
+.prose .mdfield {
+  font-style: normal;
+  font-size: 0.86em;
+  color: var(--ink2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 5px;
+  margin: 0 1px;
+  white-space: nowrap;
+}
+.prose .mdfield-k {
+  font-style: normal;
+  color: var(--ink3);
+}
 .docsurf :is(.editor .cm-tag, .prose .mdtag) {
   color: var(--doc-accent);
   background: color-mix(in srgb, var(--doc-accent) 12%, transparent);
