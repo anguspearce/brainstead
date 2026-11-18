@@ -3,7 +3,7 @@
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAp708C7cjdb/k2VY4BIA9y+xnUq3F1CslTokhBae8WHLROiBYBUIZV29INVpDLmCaW8hOww8PMmbADzMdMpiRmDZwhHmjQXFVSH1/qMBtr+1JNbtiM3lTduWb5PxprQqqMG8orpzd3uXiR53u6c6BzgJwGX1hP9fXLogP9CXAeJOIXYke6lMxYFjsCEN19qVbaeIUouEj40CsGCH9caAOzTDLyUgRojQB92uLPhaK0RU56oFIE1URTlKdm8n7pj1vJTpjUpp7MaY/spCOrPGnoX/pB9lXcJmWbGiSWHNdW5KLrgbUDKUofm44uvo6r4cAV/Wjb6rWZNTv7mM5/punXwIDAQAB",
   "name": "Brainstead — Slack sync",
   "description": "Hands your open Slack tab's sign-in to Brainstead, so it can read your own Slack conversations into its sources.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
