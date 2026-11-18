@@ -135,9 +135,11 @@ The Windows installer is unsigned, so SmartScreen warns on first run (More info,
 
 Ad-hoc builds lose Full Disk Access on every rebuild. To fix:
 
-1. Create a self-signed code-signing certificate named `Brainstead Dev` (see `signing.local.example`). One per app.
+1. Use an Apple Development certificate (Xcode → Settings → Accounts), or else create a self-signed code-signing certificate named `Brainstead Dev` (see `signing.local.example`; one per app).
 2. Copy `signing.local.example` to `signing.local` (untracked) and put the certificate's name in it.
 3. Give the installed app Full Disk Access once.
+
+Prefer the Apple Development certificate. It has a Team ID, and the Keychain trusts every build signed by a team. A self-signed certificate has none, so the Keychain goes by the exact build and asks for each sign-in it keeps (Teams and Outlook, Slack) after every update or rebuild. Switching certificates means granting Full Disk Access again and allowing the Keychain prompts once.
 
 Open at login works only in the installed app, not `make dev`.
 

@@ -1,5 +1,8 @@
-# Copy to signing.local (untracked) and set the name of the self-signed certificate in your
-# login keychain that `make app` should sign the bundle with. Creating one: Keychain Access →
+# Copy to signing.local (untracked) and set the name of the certificate in your login keychain
+# that `make app` should sign the bundle with. Best is an "Apple Development" certificate (Xcode →
+# Settings → Accounts makes one; its full name, Team ID in brackets included): it has a Team ID,
+# so the Keychain trusts every build and stops asking for the sign-ins after each update. Or a
+# self-signed one, which the Keychain trusts one build at a time. Creating that: Keychain Access →
 # Certificate Assistant → Create a Certificate, name "Brainstead Dev", identity type
 # "Self-Signed Root", certificate type "Code Signing".
 #

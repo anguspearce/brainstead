@@ -11,7 +11,8 @@ APP      := src-tauri/target/release/bundle/macos/Brainstead.app
 
 # The signing certificate is named in signing.local, which is untracked: the name of a keychain
 # identity is local to the machine that holds it. Copy signing.local.example and put your own
-# self-signed certificate's name in it. Without one the build is signed ad hoc, and macOS forgets
+# certificate's name in it (an Apple Development one, or a self-signed one; it's matched as fixed
+# text, so a name with a Team ID in brackets works). Without one the build is signed ad hoc, and macOS forgets
 # Brainstead's permissions (Full Disk Access, Keychain items) after every rebuild. Brainstead has
 # its own certificate, "Brainstead Dev": never a sibling app's (the archived build plan, §2).
 -include signing.local
@@ -73,7 +74,7 @@ app:
 	@echo "version $$(python3 tools/bump_version.py $(VERSION)), build $(BUILD)"
 	BRAINSTEAD_BUILD=$(BUILD) $(RELEASE_ENV) RUSTFLAGS="$(RELEASE_RUSTFLAGS)" npm run tauri build -- --config '{"bundle":{"macOS":{"bundleVersion":"$(BUILD)"}}}'
 	@if [ -n "$(SIGN_ID)" ]; then \
-	  codesign -dv --verbose=2 "$(APP)" 2>&1 | grep -E "^Authority=$(SIGN_ID)" >/dev/null \
+	  codesign -dv --verbose=2 "$(APP)" 2>&1 | grep -Fx "Authority=$(SIGN_ID)" >/dev/null \
 	    && echo "signed with $(SIGN_ID)" \
 	    || { echo "WARNING: app is not signed with $(SIGN_ID)"; exit 1; }; \
 	else echo "note: no signing.local, so the app is signed ad hoc"; fi
@@ -118,7 +119,7 @@ screenshots:
 sign-check:
 	@codesign -dv --verbose=2 "/Applications/Brainstead.app" 2>&1 | grep -E "^(Identifier|Authority|Signature|TeamIdentifier)"
 	@if [ -n "$(SIGN_ID)" ]; then \
-	  codesign -dv --verbose=2 "/Applications/Brainstead.app" 2>&1 | grep -qE "^Authority=$(SIGN_ID)$$" \
+	  codesign -dv --verbose=2 "/Applications/Brainstead.app" 2>&1 | grep -qFx "Authority=$(SIGN_ID)" \
 	    && echo "signed with $(SIGN_ID)" || { echo "not signed with $(SIGN_ID)"; exit 1; }; \
 	else echo "no signing.local: copy signing.local.example and create the Brainstead Dev certificate"; exit 1; fi
 
