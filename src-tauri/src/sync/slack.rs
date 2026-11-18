@@ -27,6 +27,8 @@ const ACCOUNT: &str = "slack-sign-in";
 const LOOK_BACK_DAYS: i64 = 7;
 /// The most conversations a pass reads, most recently active first, so Slack's rate limits hold.
 const MOST_CONVERSATIONS: usize = 40;
+/// The most messages a pass reads from one conversation's history (a page is 200).
+const MOST_MESSAGES: usize = 1000;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Workspace {
@@ -332,17 +334,19 @@ pub struct Progress {
     pub read_at: BTreeMap<String, i64>,
 }
 
-/// Which conversations a pass reads, at most `limit` (D-20261118-19): those changed since they were
-/// last read (most recent first), then those Slack gives no time for, then the unchanged ones, each
-/// of the last two longest-unread first. Only those active since `since_for` (or of unknown time).
+/// Which conversations a pass reads, at most `limit` (D-20261118-19): those changed in the window
+/// since they were last read (most recent first), then those Slack gives no recent time for, then
+/// the unchanged ones, each of the last two longest-unread first. Slack's `updated` only orders
+/// them: a DM's isn't when it last had a message, so none is left out for an old one.
 pub fn pick(convs: &[Conv], prog: &Progress, since_for: impl Fn(&str) -> i64, limit: usize) -> Vec<Conv> {
-    let mut in_window: Vec<&Conv> = convs.iter().filter(|c| c.updated == 0 || c.updated >= since_for(&c.id)).collect();
+    let mut in_window: Vec<&Conv> = convs.iter().collect();
     let read_at = |c: &Conv| prog.read_at.get(&c.id).copied().unwrap_or(0);
-    let changed = |c: &Conv| c.updated > 0 && prog.updated_read.get(&c.id).is_none_or(|u| *u < c.updated);
+    let recent = |c: &Conv| c.updated > 0 && c.updated >= since_for(&c.id);
+    let changed = |c: &Conv| recent(c) && prog.updated_read.get(&c.id).is_none_or(|u| *u < c.updated);
     in_window.sort_by_key(|c| {
         let rank = if changed(c) {
             0
-        } else if c.updated == 0 {
+        } else if !recent(c) {
             1
         } else {
             2
@@ -469,7 +473,19 @@ fn workspace(
         if let Ok(v) = call(client, ws, cookie, "search.messages", &[("query", q), ("count", "40".into()), ("sort", "timestamp".into())]) {
             for m in v["messages"]["matches"].as_array().into_iter().flatten() {
                 let Some(ch) = m["channel"]["id"].as_str() else { continue };
-                if chosen.iter().any(|c| c.id == ch) || s.sync_ignore_chats.iter().any(|x| x == ch) {
+                if s.sync_ignore_chats.iter().any(|x| x == ch) {
+                    continue;
+                }
+                // One of the user's own conversations (a DM, a group DM, a picked channel): read it
+                // whole, this pass, not just the thread that names them.
+                if let Some(c) = wanted_convs.iter().find(|c| c.id == ch) {
+                    if !chosen.iter().any(|x| x.id == ch) {
+                        chosen.push(c.clone());
+                    }
+                    continue;
+                }
+                // A channel they didn't pick: only the threads that name them, every one of them.
+                if chosen.iter().any(|c| c.id == ch) && !only.contains_key(ch) {
                     continue;
                 }
                 // The thread's first message: from the permalink's thread_ts, else the message itself.
@@ -499,21 +515,48 @@ fn workspace(
     for c in &chosen {
         let first = !prog.seen.contains(&c.id);
         let oldest = format!("{}.000000", since_for(&c.id).timestamp().max(0));
-        let msgs = match call(
-            client,
-            ws,
-            cookie,
-            "conversations.history",
-            &[("channel", c.id.clone()), ("oldest", oldest), ("limit", "200".into())],
-        ) {
-            Ok(v) => parse_msgs(&v),
-            Err(e) => {
-                r.problems.push(e);
-                continue;
+        let oldest_day = since_for(&c.id).with_timezone(&Local).format("%Y-%m-%d").to_string();
+        // Page by page, up to MOST_MESSAGES, so a busy week isn't cut at Slack's page size.
+        let mut msgs: Vec<Msg> = Vec::new();
+        let mut cursor = String::new();
+        let mut more = false;
+        let mut failed = None;
+        loop {
+            let mut params = vec![("channel", c.id.clone()), ("oldest", oldest.clone()), ("limit", "200".to_string())];
+            if !cursor.is_empty() {
+                params.push(("cursor", cursor.clone()));
             }
-        };
+            match call(client, ws, cookie, "conversations.history", &params) {
+                Ok(v) => {
+                    msgs.extend(parse_msgs(&v));
+                    more = v["has_more"].as_bool() == Some(true);
+                    cursor = v["response_metadata"]["next_cursor"].as_str().unwrap_or("").to_string();
+                    if !more || cursor.is_empty() || msgs.len() >= MOST_MESSAGES {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    failed = Some(e);
+                    break;
+                }
+            }
+        }
+        if let Some(e) = failed.filter(|_| msgs.is_empty()) {
+            r.problems.push(e);
+            continue;
+        }
         prog.updated_read.insert(c.id.clone(), c.updated);
         prog.read_at.insert(c.id.clone(), Utc::now().timestamp());
+        // Counts only, never what was said: enough to see where messages go missing.
+        crate::applog!(
+            "slack: {} {} from {}: {} message(s){}{}",
+            c.kind,
+            &c.id[..c.id.len().min(4)],
+            &oldest_day,
+            msgs.len(),
+            if more { ", more not read" } else { "" },
+            if only.contains_key(&c.id) { ", mentions only" } else { "" }
+        );
         let tops: Vec<Msg> = match only.get(&c.id) {
             Some(threads) => msgs.into_iter().filter(|m| threads.contains(&m.ts)).collect(),
             None => msgs,
@@ -702,8 +745,10 @@ mod tests {
         let again = pick(&convs, &prog, |_| 0, 40);
         assert_eq!((again[0].id.as_str(), again[1].id.as_str()), ("D05", "D09"));
         assert!(again.iter().position(|c| c.id == "G1").unwrap() < again.iter().position(|c| c.id == "D49").unwrap());
-        // Quiet longer than the window: left out.
-        assert!(pick(&[conv("D99", 10)], &Progress::default(), |_| 100, 40).is_empty());
+        // A DM whose `updated` is old (it isn't when it last had a message) is still read, after
+        // the ones that changed.
+        let old_dm = pick(&[conv("D99", 10), conv("D98", 500)], &Progress::default(), |_| 100, 40);
+        assert_eq!(old_dm.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["D98", "D99"]);
     }
 
     #[test]
