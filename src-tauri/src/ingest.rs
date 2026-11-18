@@ -435,7 +435,13 @@ fn run(app: &AppHandle, r: &mut Run) {
     let now = proposals::now_local();
     r.finished = Some(now);
     match result {
-        Ok(()) => r.status = "done".into(),
+        Ok(()) => {
+            r.status = "done".into();
+            // Read in full, its actions taken: out of the Inbox (D-20261118-09).
+            if r.kind == "ingest" {
+                crate::gtd::ingested(&r.source);
+            }
+        }
         Err(e) if stopped(r) => {
             r.status = "stopped".into();
             r.error = Some(e);
@@ -589,11 +595,12 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
         return Err("Stopped.".into());
     }
 
-    // 4. The model.
+    // 4. The model, told the user's initiatives so it can take the source's actions into them.
     let model = r.model.clone();
+    let tracking = core_ingest::Tracking::read(&root, owner(app));
     let answer = step(app, r, 3, |r| {
         let today = chrono::Local::now().format("%A %-d %B %Y").to_string();
-        let prompt = core_ingest::prompt(&source, &pages, &brainstead_core::catalogue::render(&root), &today);
+        let prompt = core_ingest::prompt(&source, &pages, &brainstead_core::catalogue::render(&root), &today, &tracking);
         let system = brainstead_core::ask::system_prompt(&crate::ask::today(), false);
         let images: Vec<PathBuf> = picture.iter().cloned().collect();
         let out = crate::ask::run_with_images(app, Job::Ingest, &r.id, &prompt, &model, None, &system, None, &images, &mut |_| {});
@@ -605,7 +612,9 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
         }
         let a = core_ingest::parse_answer(&out.text)?;
         let n = a.pages.len() + usize::from(a.summary.is_some());
-        Ok((a, format!("{} drafted", plural(n, "page change"))))
+        let found = a.actions.len() + a.decisions.len();
+        let also = if found > 0 { format!(", {}", plural(found, "action or decision")) } else { String::new() };
+        Ok((a, format!("{} drafted{also}", plural(n, "page change"))))
     })?;
     if stopped(r) {
         return Err("Stopped.".into());
@@ -622,7 +631,8 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
                 .and_then(|x| x.exact.map(|(p, _)| p))
                 .filter(|p| p.starts_with("wiki/"))
         };
-        let (planned, dropped) = core_ingest::plan(&source, &answer, read, resolve, &today, core_ingest::page_budget(pages.len()));
+        let planned = core_ingest::plan(&source, &answer, read, resolve, &today, core_ingest::page_budget(pages.len()));
+        let (planned, dropped) = core_ingest::plan_tracking(&source, &answer, &tracking, read, &r.id, &today, planned);
         let d = format!("{} kept, {} dropped", planned.len(), dropped.len());
         r.dropped = dropped;
         Ok((planned, d))

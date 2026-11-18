@@ -1201,7 +1201,8 @@ function Assistants() {
             <div className="t">
               <div className="pt">Ingest new sources as they arrive</div>
               <div className="faint">
-                An email or chat captured from the browser, or a file dropped or imported into Sources, is ingested straight away.
+                An email or chat captured from the browser, or a file dropped or imported into Sources, is ingested straight away. A
+                transcript gets its meeting note when Brainstead is sure of it.
               </div>
             </div>
             <Switch

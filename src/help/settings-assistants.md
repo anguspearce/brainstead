@@ -19,7 +19,7 @@ What assistants and runs change is made at once and listed in [Changes](app:revi
 ## Ingest
 The **Meeting notes** and **Ingest** groups hold the switches about ingesting.
 
-With **Ingest new sources as they arrive** on, an email or chat captured from the browser, or a file dropped or imported into Sources, is ingested straight away, as [Sources](app:sources) would. A Teams transcript isn't: it waits for its meeting note.
+With **Ingest new sources as they arrive** on, an email or chat captured from the browser, or a file dropped or imported into Sources, is ingested straight away, as [Sources](app:sources) would, and leaves the Inbox once it's read. A Teams transcript gets its meeting note instead: when Brainstead is sure of the note's type, name and date, the note is written and ingested and the transcript moved to the Trash, as **Make and ingest a meeting note** does; otherwise the transcript waits in the Inbox for you to check.
 
 Under **Meeting notes**, **Ingest a meeting note once it's made** and **Then move the transcript to the Trash** (both on) are what happens after a note is written from a transcript. With both off, Brainstead asks after each note.
 

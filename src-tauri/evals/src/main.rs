@@ -242,13 +242,19 @@ fn ingest_once(s: &Scenario, root: &Path, model: &str) -> Result<(ingest::Source
     let m = names::mentions(&text, &wiki_pages(root));
     let pages: Vec<(String, String)> =
         m.iter().filter_map(|x| std::fs::read_to_string(root.join(&x.page)).ok().map(|t| (x.page.clone(), t))).collect();
-    let answer =
-        ask_model(model, &ingest::prompt(&src, &pages, &brainstead_core::catalogue::render(root), "Friday 2 October 2026"), root, None)
-            .and_then(|a| ingest::parse_answer(&a))?;
+    let tracking = ingest::Tracking::read(root, s.owner.clone());
+    let answer = ask_model(
+        model,
+        &ingest::prompt(&src, &pages, &brainstead_core::catalogue::render(root), "Friday 2 October 2026", &tracking),
+        root,
+        None,
+    )
+    .and_then(|a| ingest::parse_answer(&a))?;
     let read = |r: &str| std::fs::read_to_string(root.join(r)).ok();
     let resolve =
         |n: &str| m.iter().find(|x| brainstead_core::lint::stem(brainstead_core::lint::name_of(&x.page)) == n).map(|x| x.page.clone());
-    let (planned, dropped) = ingest::plan(&src, &answer, read, resolve, "2026-10-02", ingest::page_budget(pages.len()));
+    let planned = ingest::plan(&src, &answer, read, resolve, "2026-10-02", ingest::page_budget(pages.len()));
+    let (planned, dropped) = ingest::plan_tracking(&src, &answer, &tracking, read, "eval", "2026-10-02", planned);
     Ok((src, planned, dropped))
 }
 

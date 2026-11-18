@@ -192,6 +192,14 @@ fn forget_done(file: &Path, path: &str) -> Result<(), EditError> {
     })
 }
 
+/// A source an ingest finished with: it leaves the Inbox whether or not a page cites it now, as its
+/// actions are on its initiatives (D-20261118-09). Kept in Sources.
+pub fn ingested(path: &str) {
+    if let Err(e) = mark_done(&captures_done_file(), path) {
+        crate::applog!("inbox: couldn't mark {path} ingested: {}", e.message());
+    }
+}
+
 /// A capture clarified in the Inbox (made a task, ingested or kept): it leaves the Inbox.
 #[tauri::command]
 pub async fn inbox_capture_done(path: String) -> Res<()> {

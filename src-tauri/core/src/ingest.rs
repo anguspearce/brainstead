@@ -108,6 +108,118 @@ pub struct Answer {
     pub summary: Option<SummaryAnswer>,
     #[serde(default)]
     pub pages: Vec<PageAnswer>,
+    /// Actions the source makes or changes, for the user's initiatives (D-20261118-09).
+    #[serde(default)]
+    pub actions: Vec<ActionAnswer>,
+    #[serde(default)]
+    pub decisions: Vec<DecisionAnswer>,
+}
+
+/// An action the source makes, or one already on an initiative it changes (by `id`): merged, done,
+/// or handed on. Strings rather than enums, so one odd value drops that action, not the answer.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ActionAnswer {
+    /// The initiative's path or name; none for an action that fits no initiative (Unfiled).
+    #[serde(default)]
+    pub initiative: Option<String>,
+    /// The id of an action already listed, when it's that one.
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub text: Option<String>,
+    /// me, delegated or other.
+    #[serde(default)]
+    pub owner: Option<String>,
+    #[serde(default)]
+    pub person: Option<String>,
+    /// open, done or dropped.
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub due: Option<String>,
+    #[serde(default)]
+    pub quote: String,
+    #[serde(default)]
+    pub anchor: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DecisionAnswer {
+    #[serde(default)]
+    pub initiative: Option<String>,
+    #[serde(default)]
+    pub date: Option<String>,
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub quote: String,
+    #[serde(default)]
+    pub anchor: Option<String>,
+}
+
+/// What an ingest is told about the user's initiatives: those not done, Unfiled among them, and
+/// who the user is, so it can tell their actions from others'.
+#[derive(Debug, Clone, Default)]
+pub struct Tracking {
+    pub initiatives: Vec<crate::initiatives::Initiative>,
+    /// The user's name, as Settings › General has it.
+    pub me: Option<String>,
+}
+
+impl Tracking {
+    /// The vault's initiatives that aren't done.
+    pub fn read(root: &std::path::Path, me: Option<String>) -> Tracking {
+        use crate::initiatives as ini;
+        let mut initiatives: Vec<ini::Initiative> = std::fs::read_dir(root.join(ini::FOLDER))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| {
+                let rel = format!("{}/{}", ini::FOLDER, e.file_name().to_string_lossy());
+                let text = std::fs::read_to_string(e.path()).ok()?;
+                ini::is_initiative(&rel).then(|| ini::parse(&rel, &text))
+            })
+            .filter(|i| i.status != "done")
+            .collect();
+        initiatives.sort_by_key(|i| (i.path == ini::UNFILED, i.name.to_lowercase()));
+        Tracking { initiatives, me }
+    }
+
+    fn section(&self) -> String {
+        use crate::initiatives::{Owner, Status};
+        let me = self.me.as_deref().map(|m| format!("The user is {m}. ")).unwrap_or_default();
+        let mut out = format!(
+            "\n# The user's initiatives\n\n{me}These are the things the user is tracking, with their open actions (each with its id) and decisions. {} is where actions that fit no initiative go.\n\n",
+            crate::initiatives::UNFILED
+        );
+        if self.initiatives.is_empty() {
+            out.push_str("None yet: every action goes to Unfiled.\n");
+        }
+        for i in &self.initiatives {
+            let about = if i.description.is_empty() { String::new() } else { format!(": {}", i.description) };
+            out.push_str(&format!("## {} — {} ({}){about}\n\n", i.path, i.name, i.status));
+            let open: Vec<_> = i.actions.iter().filter(|a| a.status == Status::Open && !a.id.is_empty()).collect();
+            for a in &open {
+                let who = match (a.owner, a.person.as_deref()) {
+                    (Some(Owner::Me), _) => "the user's".to_string(),
+                    (Some(Owner::Delegated), Some(p)) => format!("delegated by the user to {p}"),
+                    (Some(Owner::Other), Some(p)) => format!("{p}'s"),
+                    _ => "no owner".to_string(),
+                };
+                let due = a.due.as_deref().map(|d| format!(", due {d}")).unwrap_or_default();
+                out.push_str(&format!("- [{}] {} ({who}{due})\n", a.id, a.text));
+            }
+            if open.is_empty() {
+                out.push_str("No open actions.\n");
+            }
+            for d in i.decisions.iter().take(10) {
+                let when = d.date.as_deref().map(|d| format!("{d}: ")).unwrap_or_default();
+                out.push_str(&format!("- Decided {when}{}\n", d.text));
+            }
+            out.push('\n');
+        }
+        out
+    }
 }
 
 /// The day a source is from, by its name: a `YYYY-MM-DD` in it (a note's date, a capture's), or a
@@ -254,7 +366,7 @@ fn cut(s: &str, n: usize) -> String {
 /// The message to the model: the workflow, the source, the pages it mentions with their text,
 /// and every wiki page by name and description (`catalogue`, `catalogue::render`), for a source
 /// that doesn't name what it's about.
-pub fn prompt(src: &Source, pages: &[(String, String)], catalogue: &str, today: &str) -> String {
+pub fn prompt(src: &Source, pages: &[(String, String)], catalogue: &str, today: &str, tracking: &Tracking) -> String {
     let mut out = format!("{}\n\nToday is {today}.\n\n# The source: {}\n\nLink it as [[{}]].\n\n", WORKFLOW.trim(), src.rel, src.link());
     out.push_str(&cut(&src.body(), SOURCE_CHARS));
     out.push_str("\n\n# Wiki pages the source mentions\n\n");
@@ -270,6 +382,7 @@ pub fn prompt(src: &Source, pages: &[(String, String)], catalogue: &str, today: 
         out.push_str(&cut(&fit_catalogue(catalogue, CATALOGUE_CHARS), CATALOGUE_CHARS));
         out.push('\n');
     }
+    out.push_str(&tracking.section());
     if src.is_journal() {
         out.push_str("\nThis source is a journal note: give no summary page.\n");
     }
@@ -568,6 +681,219 @@ pub fn plan(
     (out, dropped)
 }
 
+/// The initiative an answer names: its page, by path or name, or Unfiled for none.
+fn initiative_rel(named: Option<&str>, tracking: &Tracking) -> Result<String, String> {
+    use crate::initiatives as ini;
+    let named = named
+        .map(|n| n.trim().trim_start_matches("[[").trim_end_matches("]]").trim())
+        .filter(|n| !n.is_empty() && !n.eq_ignore_ascii_case("null"));
+    let Some(n) = named else { return Ok(ini::UNFILED.to_string()) };
+    let key = |s: &str| s.trim_end_matches(".md").rsplit('/').next().unwrap_or("").to_lowercase();
+    let want = key(n);
+    tracking
+        .initiatives
+        .iter()
+        .find(|i| key(&i.path) == want || i.name.to_lowercase() == want)
+        .map(|i| i.path.clone())
+        .or_else(|| (want == "unfiled").then(|| ini::UNFILED.to_string()))
+        .ok_or_else(|| format!("There's no initiative called {n}."))
+}
+
+fn owner_of(s: Option<&str>) -> Result<Option<crate::initiatives::Owner>, String> {
+    use crate::initiatives::Owner;
+    match s.map(|s| s.trim().to_lowercase()).as_deref() {
+        None | Some("") => Ok(None),
+        Some("me") => Ok(Some(Owner::Me)),
+        Some("delegated") => Ok(Some(Owner::Delegated)),
+        Some("other") => Ok(Some(Owner::Other)),
+        Some(o) => Err(format!("“{o}” isn't an owner (me, delegated or other).")),
+    }
+}
+
+fn status_of(s: Option<&str>) -> Result<Option<crate::initiatives::Status>, String> {
+    use crate::initiatives::Status;
+    match s.map(|s| s.trim().to_lowercase()).as_deref() {
+        None | Some("") => Ok(None),
+        Some("open") => Ok(Some(Status::Open)),
+        Some("done") => Ok(Some(Status::Done)),
+        Some("dropped") => Ok(Some(Status::Dropped)),
+        Some(o) => Err(format!("“{o}” isn't a status (open, done or dropped).")),
+    }
+}
+
+/// An initiative page as `plan_tracking` changes it: its text so far, the change's quotes and
+/// warnings, and what was done to it.
+struct Edited {
+    rel: String,
+    text: String,
+    quotes: Vec<Quote>,
+    warnings: Vec<String>,
+    done: Vec<String>,
+}
+
+/// The answer's actions and decisions, put on their initiatives' pages (D-20261118-09): one change
+/// per page, added to the page's change from `plan` when it has one. An action or decision whose
+/// quote isn't in the source is dropped (kept, flagged, from an image); an action named by `id` is
+/// that action changed (merged, done, handed on), never a second one. Unfiled is made the first
+/// time it's needed.
+pub fn plan_tracking(
+    src: &Source,
+    answer: &Answer,
+    tracking: &Tracking,
+    read: impl Fn(&str) -> Option<String>,
+    seed: &str,
+    today: &str,
+    planned: (Vec<Planned>, Vec<Dropped>),
+) -> (Vec<Planned>, Vec<Dropped>) {
+    use crate::initiatives as ini;
+    let (mut out, mut dropped) = planned;
+    let link = src.link();
+    let cite = format!("[[{link}]]");
+    let quoted = |q: &str, anchor: Option<&str>| ini::Quote {
+        text: q.trim().to_string(),
+        source: match anchor.map(str::trim).filter(|a| !a.is_empty()) {
+            Some(a) => format!("{link}#{a}"),
+            None => link.clone(),
+        },
+    };
+    let mut pages: Vec<Edited> = Vec::new();
+    let page_text = |rel: &str, pages: &mut Vec<Edited>| -> Option<usize> {
+        if let Some(i) = pages.iter().position(|p| p.rel == rel) {
+            return Some(i);
+        }
+        let text =
+            out.iter().find(|p| p.page == rel).map(|p| p.after.clone()).or_else(|| read(rel)).or_else(|| {
+                (rel == ini::UNFILED).then(|| ini::new_page("Unfiled", "Actions from your sources that fit no initiative yet."))
+            })?;
+        pages.push(Edited { rel: rel.to_string(), text, quotes: vec![], warnings: vec![], done: vec![] });
+        Some(pages.len() - 1)
+    };
+    let check = |what: &str, quote: &str, anchor: Option<&str>| -> Result<Option<String>, String> {
+        if quote.trim().is_empty() {
+            return Err(format!("{what} has no quote."));
+        }
+        if src.holds(quote, anchor) {
+            Ok(None)
+        } else if src.is_image() {
+            Ok(Some(format!("This quote isn't in the text read from the image, so “{what}” is unchecked: {}", short(quote))))
+        } else {
+            Err(format!("The quote for “{what}” isn't in the source."))
+        }
+    };
+    for a in &answer.actions {
+        let what = a.text.clone().or_else(|| a.id.clone()).unwrap_or_else(|| "an action".into());
+        let made = (|| -> Result<(String, Option<String>, Quote), String> {
+            let rel = initiative_rel(a.initiative.as_deref(), tracking)?;
+            let warning = check(&what, &a.quote, a.anchor.as_deref())?;
+            let edit = ini::ActionEdit {
+                id: a.id.clone().filter(|i| !i.trim().is_empty()),
+                text: a.text.clone(),
+                owner: owner_of(a.owner.as_deref())?,
+                person: a.person.clone().filter(|p| !p.trim().is_empty()),
+                status: status_of(a.status.as_deref())?,
+                due: a.due.clone().filter(|d| !d.trim().is_empty()),
+                quotes: vec![quoted(&a.quote, a.anchor.as_deref())],
+            };
+            let i = page_text(&rel, &mut pages).ok_or_else(|| format!("{rel} isn't there."))?;
+            let (after, _) = ini::with_action(&pages[i].text, &edit, &format!("{seed}\n{rel}"))?;
+            pages[i].text = after;
+            pages[i].done.push(if edit.id.is_some() { format!("updated “{what}”") } else { format!("added “{what}”") });
+            let q = Quote {
+                source: link.clone(),
+                anchor: a.anchor.clone(),
+                text: a.quote.clone(),
+                checked: Some(warning.is_none()),
+                path: Some(src.rel.clone()),
+            };
+            Ok((rel, warning, q))
+        })();
+        match made {
+            Ok((rel, warning, q)) => {
+                let p = pages.iter_mut().find(|p| p.rel == rel).expect("made above");
+                p.quotes.push(q);
+                p.warnings.extend(warning);
+            }
+            Err(reason) => dropped.push(Dropped {
+                page: a.initiative.clone().unwrap_or_else(|| ini::UNFILED.into()),
+                reason: format!("Action “{what}”: {reason}"),
+            }),
+        }
+    }
+    for d in &answer.decisions {
+        let what = d.text.trim().to_string();
+        let made = (|| -> Result<(String, Option<String>, Quote), String> {
+            let rel = initiative_rel(d.initiative.as_deref(), tracking)?;
+            let warning = check(&what, &d.quote, d.anchor.as_deref())?;
+            let i = page_text(&rel, &mut pages).ok_or_else(|| format!("{rel} isn't there."))?;
+            let have = ini::parse(&rel, &pages[i].text);
+            if have.decisions.iter().any(|x| x.text.eq_ignore_ascii_case(&what)) {
+                return Err("It's there already.".into());
+            }
+            let date = d.date.clone().filter(|x| !x.trim().is_empty()).or_else(|| source_day(&src.rel));
+            let (after, _) = ini::with_decision(
+                &pages[i].text,
+                date.as_deref(),
+                &what,
+                &[quoted(&d.quote, d.anchor.as_deref())],
+                &format!("{seed}\n{rel}"),
+            )?;
+            pages[i].text = after;
+            pages[i].done.push(format!("decided “{what}”"));
+            let q = Quote {
+                source: link.clone(),
+                anchor: d.anchor.clone(),
+                text: d.quote.clone(),
+                checked: Some(warning.is_none()),
+                path: Some(src.rel.clone()),
+            };
+            Ok((rel, warning, q))
+        })();
+        match made {
+            Ok((rel, warning, q)) => {
+                let p = pages.iter_mut().find(|p| p.rel == rel).expect("made above");
+                p.quotes.push(q);
+                p.warnings.extend(warning);
+            }
+            Err(reason) => dropped.push(Dropped {
+                page: d.initiative.clone().unwrap_or_else(|| ini::UNFILED.into()),
+                reason: format!("Decision “{what}”: {reason}"),
+            }),
+        }
+    }
+    for Edited { rel, mut text, quotes, warnings, done } in pages {
+        if done.is_empty() {
+            continue;
+        }
+        if let Some(t) = crate::fixname::with_list_value(&text, &["sources"], &cite) {
+            text = t;
+        }
+        let summary = done.join(", ");
+        match out.iter_mut().find(|p| p.page == rel) {
+            Some(p) => {
+                p.after = text;
+                p.title = format!("{}; {summary}", p.title);
+                p.quotes.extend(quotes);
+                p.warnings.extend(warnings);
+            }
+            None => {
+                let before = read(&rel);
+                let after = match &before {
+                    Some(b) => proposals::bump_updated(b, &text, today),
+                    None => text,
+                };
+                if before.as_deref().is_some_and(|b| b.replace("\r\n", "\n") == after) {
+                    continue;
+                }
+                let kind = if before.is_some() { Kind::Edit } else { Kind::New };
+                let name = crate::lint::stem(crate::lint::name_of(&rel)).to_string();
+                let title = format!("{name}: {summary}");
+                out.push(Planned { page: rel, kind, title, before, after, quotes, claims: vec![], entry: None, warnings });
+            }
+        }
+    }
+    (out, dropped)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -711,7 +1037,7 @@ mod tests {
         assert_eq!(dropped[0].reason, "A journal note gets no summary page.");
         // Without anchors to check, a markdown source's quotes are found anywhere in it.
         assert!(planned.iter().any(|p| p.page == "wiki/concepts/Pen test.md"));
-        assert!(prompt(&note, &[], "", "Friday").contains("give no summary page"));
+        assert!(prompt(&note, &[], "", "Friday", &Tracking::default()).contains("give no summary page"));
     }
 
     #[test]
@@ -748,6 +1074,7 @@ mod tests {
             &[("wiki/entities/Orbit App.md".into(), PAGE.into())],
             "- [[Orbit App]] — The staff app.",
             "Friday 2 October 2026",
+            &Tracking::default(),
         );
         assert!(p.contains("# Every wiki page") && p.contains("- [[Orbit App]] — The staff app."));
         assert!(p.starts_with("# Ingest a source into the wiki"));
@@ -788,8 +1115,9 @@ mod tests {
         assert!(planned.iter().all(|p| p.warnings.contains(&IMAGE_WARNING.to_string())));
         assert!(orbit.after.contains("[[Whiteboard photo.png]]"));
         // The prompt labels the text; with none, it says so.
-        assert!(prompt(&src, &[], "", "Sunday").contains("## Text read from the image (may be incomplete)\n\nOrbit App launch"));
-        assert!(prompt(&image(""), &[], "", "Sunday").contains("no text was found in it"));
+        assert!(prompt(&src, &[], "", "Sunday", &Tracking::default())
+            .contains("## Text read from the image (may be incomplete)\n\nOrbit App launch"));
+        assert!(prompt(&image(""), &[], "", "Sunday", &Tracking::default()).contains("no text was found in it"));
     }
 
     #[test]
@@ -865,5 +1193,115 @@ mod tests {
         assert!(removes_text(page, &page.replace("- two", "- 2")));
         assert!(removes_text(page, &page.replace("type: entity", "type: concept")));
         assert!(removes_text(page, &page.replace("sources: [\"[[A]]\"]", "sources: [\"[[B]]\"]")));
+    }
+}
+
+#[cfg(test)]
+mod tracking_tests {
+    use super::*;
+    use crate::initiatives as ini;
+
+    const LAUNCH: &str = "---\ntype: initiative\nname: Orbit launch\nstatus: active\nsources: []\n---\n\nGetting the Orbit App out.\n\n## Current state\n\nOn track.\n\n## Actions\n\n- Draft the support FAQ [owner:: me] [status:: open] ^a-1111\n\n## Decisions\n\n- 2026-09-18 — Staff first ^d-1111\n";
+    const MAIL: &str = "Maya: Sam, can you hand the support FAQ to Lena? Lena: Happy to take the FAQ, I'll have it by Friday.\nMaya: Also, please book the launch room for 14 November.\nWe agreed to launch on 14 November.\nSomeone should water the office plants.\n";
+
+    fn src() -> Source {
+        Source { rel: "sources/Email. Launch prep - 2026-10-02.md".into(), text: SourceText::Text(MAIL.into()) }
+    }
+
+    fn tracking() -> Tracking {
+        Tracking { initiatives: vec![ini::parse("wiki/initiatives/Orbit launch.md", LAUNCH)], me: Some("Sam".into()) }
+    }
+
+    fn read(rel: &str) -> Option<String> {
+        (rel == "wiki/initiatives/Orbit launch.md").then(|| LAUNCH.to_string())
+    }
+
+    fn planned(json: &str) -> (Vec<Planned>, Vec<Dropped>) {
+        let a = parse_answer(json).unwrap();
+        plan_tracking(&src(), &a, &tracking(), read, "run-1", "2026-10-02", (vec![], vec![]))
+    }
+
+    #[test]
+    fn the_prompt_names_the_user_and_lists_open_actions_by_id() {
+        let p = prompt(&src(), &[], "", "Friday 2 October 2026", &tracking());
+        assert!(p.contains("The user is Sam."), "{p}");
+        assert!(p.contains("## wiki/initiatives/Orbit launch.md — Orbit launch (active)"), "{p}");
+        assert!(p.contains("- [a-1111] Draft the support FAQ (the user's)"), "{p}");
+        assert!(p.contains("- Decided 2026-09-18: Staff first"), "{p}");
+    }
+
+    #[test]
+    fn a_handed_on_action_is_reassigned_and_a_new_one_added() {
+        let (out, dropped) = planned(
+            r#"{"actions": [
+              {"initiative": "wiki/initiatives/Orbit launch.md", "id": "a-1111", "owner": "delegated", "person": "Lena", "due": "2026-10-09", "quote": "Lena: Happy to take the FAQ, I'll have it by Friday."},
+              {"initiative": "Orbit launch", "text": "Book the launch room", "owner": "me", "quote": "please book the launch room for 14 November"}
+            ], "decisions": [
+              {"initiative": "wiki/initiatives/Orbit launch.md", "date": "2026-10-02", "text": "Launch on 14 November", "quote": "We agreed to launch on 14 November."},
+              {"initiative": "wiki/initiatives/Orbit launch.md", "text": "Staff first", "quote": "We agreed to launch on 14 November."}
+            ]}"#,
+        );
+        assert_eq!(out.len(), 1, "{out:?}");
+        let p = &out[0];
+        assert_eq!((p.page.as_str(), p.kind), ("wiki/initiatives/Orbit launch.md", Kind::Edit));
+        let i = ini::parse(&p.page, &p.after);
+        assert_eq!(i.actions.len(), 2, "{}", p.after);
+        let faq = &i.actions[0];
+        assert_eq!(
+            (faq.id.as_str(), faq.owner, faq.person.as_deref(), faq.due.as_deref()),
+            ("a-1111", Some(ini::Owner::Delegated), Some("Lena"), Some("2026-10-09"))
+        );
+        assert_eq!(faq.quotes[0].source, "Email. Launch prep - 2026-10-02");
+        assert_eq!((i.actions[1].text.as_str(), i.actions[1].owner), ("Book the launch room", Some(ini::Owner::Me)));
+        assert_eq!(i.decisions[0].text, "Launch on 14 November");
+        assert_eq!(i.decisions.len(), 2, "the decision already there isn't added again");
+        assert!(p.after.contains("sources: [\"[[Email. Launch prep - 2026-10-02]]\"]"), "{}", p.after);
+        assert!(p.quotes.iter().all(|q| q.checked == Some(true)) && p.quotes.len() == 3, "{:?}", p.quotes);
+        assert_eq!(dropped.len(), 1);
+        assert!(dropped[0].reason.contains("It's there already"), "{dropped:?}");
+        assert!(p.title.contains("updated “a-1111”") && p.title.contains("added “Book the launch room”"), "{}", p.title);
+    }
+
+    #[test]
+    fn an_action_that_fits_no_initiative_goes_to_unfiled_and_a_bad_quote_is_dropped() {
+        let (out, dropped) = planned(
+            r#"{"actions": [
+              {"initiative": null, "text": "Water the office plants", "owner": "other", "person": "Someone", "quote": "Someone should water the office plants."},
+              {"initiative": "wiki/initiatives/Orbit launch.md", "text": "Order cake", "owner": "me", "quote": "Sam will order the cake"},
+              {"initiative": "Nowhere", "text": "x", "owner": "me", "quote": "Someone should water"},
+              {"initiative": "Orbit launch", "text": "y", "owner": "boss", "quote": "Someone should water"}
+            ]}"#,
+        );
+        assert_eq!(out.len(), 1, "{out:?}");
+        assert_eq!((out[0].page.as_str(), out[0].kind), (ini::UNFILED, Kind::New));
+        let u = ini::parse(ini::UNFILED, &out[0].after);
+        assert_eq!((u.name.as_str(), u.actions[0].text.as_str()), ("Unfiled", "Water the office plants"));
+        let why: Vec<&str> = dropped.iter().map(|d| d.reason.as_str()).collect();
+        assert!(why[0].contains("isn't in the source"), "{why:?}");
+        assert!(why[1].contains("no initiative called Nowhere"), "{why:?}");
+        assert!(why[2].contains("isn't an owner"), "{why:?}");
+    }
+
+    #[test]
+    fn a_page_change_and_its_actions_are_one_change() {
+        let a = parse_answer(
+            r#"{"actions": [{"initiative": "Orbit launch", "id": "a-1111", "status": "done", "quote": "Happy to take the FAQ"}]}"#,
+        )
+        .unwrap();
+        let earlier = Planned {
+            page: "wiki/initiatives/Orbit launch.md".into(),
+            kind: Kind::Edit,
+            title: "Launch date set".into(),
+            before: Some(LAUNCH.into()),
+            after: LAUNCH.replace("On track.", "Launching 14 November."),
+            quotes: vec![],
+            claims: vec![],
+            entry: None,
+            warnings: vec![],
+        };
+        let (out, _) = plan_tracking(&src(), &a, &tracking(), read, "r", "2026-10-02", (vec![earlier], vec![]));
+        assert_eq!(out.len(), 1);
+        assert!(out[0].after.contains("Launching 14 November.") && out[0].after.contains("[status:: done] ^a-1111"), "{}", out[0].after);
+        assert_eq!(out[0].title, "Launch date set; updated “a-1111”");
     }
 }

@@ -10,7 +10,7 @@ The Inbox is GTD's clarify step: everything captured but not yet decided. For ea
 ## What lands in the Inbox
 There's a band per source:
 
-- **Captures**: emails, Teams chats and transcripts from the browser capture extensions, and any other source in `sources/` that isn't ingested yet (a file dropped onto or imported into [Sources](app:sources), or put in the folder from outside Brainstead). They stay until you clarify them or they're ingested.
+- **Captures**: emails, Teams chats and transcripts from the browser capture extensions, and any other source in `sources/` that isn't ingested yet (a file dropped onto or imported into [Sources](app:sources), or put in the folder from outside Brainstead). They stay until you clarify them or they're ingested: once an ingest has read one, however it was started (here, from [Sources](app:sources), or on its own as it arrived), it leaves the Inbox and stays in Sources, even if no wiki page cites it. Its actions are on your [initiatives](help:wiki).
 - **Scratchpad**: each thought in the Scratchpad (a `## 2026-10-03 09:15` block). Clarifying it removes the block.
 - **To Do list › Other**: tasks under `#### Other` on the To Do list, where Quick capture puts them. A task leaves once it has a project, a context, `#waiting-for`, `#someday-maybe` or `#followup`, or its box isn't empty (done, cancelled or in progress). Until then it stays off Next actions in [Tasks](app:tasks).
 

@@ -27,6 +27,8 @@ use serde::{Deserialize, Serialize};
 use crate::markdown;
 
 pub const FOLDER: &str = "wiki/initiatives";
+/// Where ingest puts actions that fit no initiative (D-20261118-02).
+pub const UNFILED: &str = "wiki/initiatives/Unfiled.md";
 pub const ACTIONS: &str = "Actions";
 pub const DECISIONS: &str = "Decisions";
 
