@@ -1539,8 +1539,8 @@ function SyncPane() {
     <>
       <section className="sgroup">
         <p className="muted">
-          Brainstead reads your own Teams chats and transcripts, Outlook mail and calendar, and Slack conversations into sources/,
-          read-only, each with the sign-in its browser tab hands over (Settings › Capture extensions).
+          Brainstead reads your own Teams chats, transcripts and calendar, Outlook mail, and Slack conversations into sources/,
+          read-only, each with the sign-in its own browser tab hands over (Settings › Capture extensions).
         </p>
         <div className="card">
           <label className="srow">
