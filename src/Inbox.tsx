@@ -50,6 +50,7 @@ import {
   trashCapture,
 } from "./inboxActions";
 import { keyLabel } from "./platform";
+import { isStrayKey } from "./strayKeys";
 import { usePanes } from "./PaneResizer";
 import { PANES } from "./panes";
 
@@ -436,7 +437,8 @@ export function InboxScreen() {
         const c = bulkChoices(picked).find(([k]) => (k === "⌫" ? "Backspace" : k.toLowerCase()) === e.key);
         if (!c) return;
         e.preventDefault();
-        if (!e.repeat) actAll(picked, c[1]);
+        // Typing meant for somewhere else (a password prompt, the window just back in front) acts on nothing.
+        if (!e.repeat && !isStrayKey(e)) actAll(picked, c[1]);
         return;
       }
       const s = unsuggested(cur) ? undefined : sugg[key(cur)];
@@ -447,7 +449,7 @@ export function InboxScreen() {
       else if (e.key === "k" || e.key === "ArrowUp") setSel(key(items[Math.max(0, idx - 1)]));
       else if ((e.key === "Enter" && s) || map[e.key]) {
         // A held key repeats: it acts once, and not again while that action is still under way.
-        if (!e.repeat && !inFlight.current) outcome(cur, e.key === "Enter" && s ? s : { becomes: map[e.key] });
+        if (!e.repeat && !inFlight.current && !isStrayKey(e)) outcome(cur, e.key === "Enter" && s ? s : { becomes: map[e.key] });
       } else return;
       e.preventDefault();
     };

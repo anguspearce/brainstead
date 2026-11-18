@@ -30,6 +30,8 @@ Click an item, or move with `J` and `K` (or `↑` and `↓`), to open it. The ch
 
 After each choice the next item opens, and a toast offers Undo.
 
+The keys ignore typing that wasn't meant for the Inbox: a key in the second and a half after Brainstead comes back to the front, and keys pressed in quick succession, as when a password goes to the wrong window. Press the key again on its own.
+
 To do the same to several items, tick their boxes (the box in a section's header ticks or unticks every item in it). With more than one ticked, the pane lists them and offers what can be done to all at once: **Make and ingest N meeting notes** (all transcripts), **Ingest N into the wiki** and **Keep N in Sources** (all captures), **Mark N done**, **Move N to Someday / maybe**, and **Delete N** (captures go to the Trash; **Move N to the Trash** when every ticked item is a capture), with the same keys. Next action, Waiting for and New project need a form each, so they're one item at a time: click an item to clarify it alone. One that can't be done doesn't stop the rest: it stays ticked, and the message says how many were done and why one failed ("4 done, 1 failed: …"). `⌘Z` undoes one item at a time.
 
 ## Where clarified items go
