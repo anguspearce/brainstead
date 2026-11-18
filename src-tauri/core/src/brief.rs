@@ -237,8 +237,13 @@ pub fn themes_of(answer: &str) -> String {
     let t = t.strip_prefix("```markdown").or_else(|| t.strip_prefix("```md")).or_else(|| t.strip_prefix("```")).unwrap_or(t);
     let t = t.strip_suffix("```").unwrap_or(t).trim();
     let t = t.strip_prefix("## Themes").or_else(|| t.strip_prefix("# Themes")).unwrap_or(t);
-    t.trim().to_string()
+    // A "See [[…]], [[…]] and [[…]]." the model added anyway: the brief names no sources.
+    SEE.replace_all(t.trim(), "").to_string()
 }
+
+/// A sentence that only lists links: `See [[A]], [[B]] and [[C]].`
+static SEE: std::sync::LazyLock<regex::Regex> =
+    std::sync::LazyLock::new(|| regex::Regex::new(r" ?\bSee (?:\[\[[^\]]+\]\](?:, | and |,? and )?)+\.?").unwrap());
 
 #[cfg(test)]
 mod tests {
@@ -309,5 +314,9 @@ mod tests {
     fn the_models_themes_without_fence_or_heading() {
         assert_eq!(themes_of("```markdown\n## Themes\n\n**A.** b\n```"), "**A.** b");
         assert_eq!(themes_of("**A.** b"), "**A.** b");
+        assert_eq!(
+            themes_of("**Launch** It moved. See [[Mail - 1]], [[Chat - 2]] and [[Chat - 3]]. Initiative: [[Orbit launch]]."),
+            "**Launch** It moved. Initiative: [[Orbit launch]]."
+        );
     }
 }
