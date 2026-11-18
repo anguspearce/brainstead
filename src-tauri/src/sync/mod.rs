@@ -15,6 +15,7 @@ pub mod fetch;
 pub mod html;
 pub mod pull;
 pub mod run;
+pub mod skips;
 pub mod state;
 
 use reqwest::blocking::Client;

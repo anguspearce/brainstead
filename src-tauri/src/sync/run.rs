@@ -155,7 +155,7 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
             ConvKind::Channel => p.s.sync_channels.iter().any(|c| c == &conv.id),
             ConvKind::Meeting | ConvKind::Other => false,
         };
-        if !take {
+        if !take || p.s.sync_ignore_chats.contains(&conv.id) {
             continue;
         }
         let msgs = match fetch::chat_messages(&p.client, &p.sign_in, &conv.id) {

@@ -4,7 +4,8 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { api, AppInfo, CliInfo, CliName, Skill, Theme } from "./api";
+import { api, AppInfo, CliInfo, CliName, Skill, SkipSuggestion, Theme } from "./api";
+import { acceptSkip, unskipChat } from "./skips";
 import { extensionOutdatedText, rejectedText } from "./syncStatus";
 import appIconDark from "../src-tauri/icons/128x128@2x.png";
 import appIconLight from "../src-tauri/icons/about-light.png";
@@ -1466,6 +1467,13 @@ function SyncPane() {
   const [report, setReport] = useState<import("./api").SyncReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [newIgnore, setNewIgnore] = useState("");
+  const [skips, setSkips] = useState<{ suggestions: SkipSuggestion[]; chatNames: Record<string, string> } | null>(null);
+  const loadSkips = () =>
+    api
+      .skipSuggestions()
+      .then(setSkips)
+      .catch(() => setSkips(null));
+  useEffect(() => void loadSkips(), [s.syncIgnoreSenders, s.syncIgnoreChats]);
   const refresh = () =>
     api
       .syncSignInState()
@@ -1626,6 +1634,45 @@ function SyncPane() {
         ))}
       </section>
 
+      {!!skips?.suggestions.length && (
+        <section className="sgroup">
+          <h2 className="h3">Suggested from what you delete</h2>
+          <p className="faint">
+            You've moved these to the Trash again and again. Skip one and the sync leaves it out from now on; nothing is skipped until you
+            say so.
+          </p>
+          <div className="card">
+            {skips.suggestions.map((x) => (
+              <div key={x.key} className="srow">
+                <Icon name={x.kind === "chat" ? "chat" : "mail"} style={{ color: "var(--ink3)" }} />
+                <div className="t">
+                  <div className={`pt ${x.kind === "sender" ? "mono" : ""}`}>{x.label}</div>
+                  <div className="faint">
+                    {x.kind === "chat" ? "Chat" : "Sender"} · deleted {x.deletes} times, last on {x.last}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn sm"
+                  title={x.kind === "chat" ? `Stop syncing the chat ${x.label}` : `Stop syncing mail from ${x.label}`}
+                  onClick={() => void acceptSkip(x).then(loadSkips)}
+                >
+                  Skip
+                </button>
+                <button
+                  type="button"
+                  className="btn sm ghost"
+                  title="Keep syncing it, and don't suggest it again"
+                  onClick={() => void api.skipSuggestionDismiss(x.key).then(loadSkips)}
+                >
+                  Not this one
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="sgroup">
         <h2 className="h3">Mail to skip</h2>
         <p className="faint">
@@ -1671,6 +1718,31 @@ function SyncPane() {
           </div>
         )}
       </section>
+
+      {(s.syncIgnoreChats ?? []).length > 0 && (
+        <section className="sgroup">
+          <h2 className="h3">Chats to skip</h2>
+          <p className="faint">These chats don't sync. Skip one from a suggestion above.</p>
+          <div className="card">
+            {(s.syncIgnoreChats ?? []).map((id) => (
+              <div key={id} className="srow">
+                <Icon name="chat" style={{ color: "var(--ink3)" }} />
+                <div className="t">
+                  <div className="pt">{skips?.chatNames[id] ?? id}</div>
+                </div>
+                <button
+                  type="button"
+                  className="btn sm"
+                  title={`Sync ${skips?.chatNames[id] ?? "this chat"} again`}
+                  onClick={() => void unskipChat(id).then(loadSkips)}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="sgroup">
         <h2 className="h3">Channels</h2>

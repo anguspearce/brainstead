@@ -330,6 +330,36 @@ describe("MCP actions", () => {
     await expect(run("inbox.clarify", { item: "action:a-2", becomes: "reference" })).rejects.toThrow(/doesn't offer reference/);
   });
 
+  it("skips a sender or chat suggested from what the user deletes, or stops suggesting it", async () => {
+    const sugg = [
+      {
+        key: "sender:offers@shop.example",
+        kind: "sender",
+        value: "offers@shop.example",
+        label: "offers@shop.example",
+        deletes: 4,
+        last: "2026-11-18",
+      },
+      { key: "chat:19:abc", kind: "chat", value: "19:abc", label: "Lunch club", deletes: 3, last: "2026-11-17" },
+    ];
+    answers.skip_suggestions = () => ({ suggestions: sugg, chatNames: { "19:abc": "Lunch club" } });
+    settings.update({ syncIgnoreSenders: [], syncIgnoreChats: [] });
+    expect(await run("sync", { action: "suggestions" })).toContain("- Chat Lunch club: deleted 3 times, last on 2026-11-17 · chat:19:abc");
+    calls.length = 0;
+    await run("sync", { action: "accept", key: "chat:19:abc" });
+    expect(settings.get().syncIgnoreChats).toEqual(["19:abc"]);
+    expect(calls.filter(([c]) => c === "skip_suggestion_forget").map(([, x]) => x)).toEqual([{ key: "chat:19:abc" }]);
+    await run("sync", { action: "accept", key: "sender:offers@shop.example" });
+    expect(settings.get().syncIgnoreSenders).toEqual(["offers@shop.example"]);
+    calls.length = 0;
+    await run("sync", { action: "dismiss", key: "sender:offers@shop.example" });
+    expect(calls.filter(([c]) => c === "skip_suggestion_dismiss").map(([, x]) => x)).toEqual([{ key: "sender:offers@shop.example" }]);
+    await expect(run("sync", { action: "accept", key: "sender:nobody" })).rejects.toThrow(/No skip suggestion/);
+    await run("sync", { action: "unskip_chat", id: "19:abc" });
+    expect(settings.get().syncIgnoreChats).toEqual([]);
+    settings.update({ syncIgnoreSenders: undefined, syncIgnoreChats: undefined });
+  });
+
   it("makes and changes projects through Changes", async () => {
     answers.projects_list = () => [{ name: "Orbit App launch", path: "Project. Orbit App launch.md", status: "active" }];
     answers.change_project_note = (a) => ({ path: `Project. ${a!.name}.md`, content: "---\nstatus: active\n---\n" });

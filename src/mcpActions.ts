@@ -76,6 +76,7 @@ import {
   taskWent,
   trashCapture,
 } from "./inboxActions";
+import { acceptSkip, unskipChat } from "./skips";
 import {
   ADVISORY,
   byRun,
@@ -2329,6 +2330,8 @@ async function syncTool(a: Args): Promise<string> {
       s.syncEnabled ? api.syncTodayMeetings().catch(() => api.syncCachedMeetings()) : Promise.resolve([]),
     ]);
     const ignore = s.syncIgnoreSenders ?? [];
+    const learned = await api.skipSuggestions().catch(() => null);
+    const chats = s.syncIgnoreChats ?? [];
     return [
       `Teams and Outlook sync is ${s.syncEnabled ? "on" : "off"}.`,
       state.signedIn
@@ -2336,6 +2339,10 @@ async function syncTool(a: Args): Promise<string> {
         : "Not signed in — open Teams in the browser so the extension hands the sign-in over.",
       `1:1 and group chats sync automatically; channels chosen: ${(s.syncChannels ?? []).length}.`,
       ignore.length ? `Mail skipped from: ${ignore.join(", ")}.` : "No senders skipped.",
+      chats.length ? `Chats skipped: ${chats.map((c) => learned?.chatNames[c] ?? c).join(", ")}.` : "No chats skipped.",
+      learned?.suggestions.length
+        ? `${learned.suggestions.length} skip(s) suggested from what the user deletes (action suggestions lists them).`
+        : "No skips suggested.",
       meetings.length
         ? `Upcoming meetings today:\n${meetings.map((m) => `- ${new Date(m.start).toISOString().slice(11, 16)} ${m.subject}`).join("\n")}`
         : "No more meetings today.",
@@ -2369,7 +2376,34 @@ async function syncTool(a: Args): Promise<string> {
     const chosen = new Set(s.syncChannels ?? []);
     return chans.length ? chans.map((c) => `- ${c.topic} (${chosen.has(c.id) ? "on" : "off"}) · ${c.id}`).join("\n") : "No channels found.";
   }
-  throw new Error("action is get, on, off, now, channels, channel, unchannel, ignore or unignore.");
+  if (action === "suggestions") {
+    const { suggestions } = await api.skipSuggestions();
+    if (!suggestions.length) return "No skips suggested: nothing has been deleted often enough.";
+    return suggestions
+      .map((x) => `- ${x.kind === "chat" ? "Chat" : "Sender"} ${x.label}: deleted ${x.deletes} times, last on ${x.last} · ${x.key}`)
+      .join("\n");
+  }
+  if (action === "accept" || action === "dismiss") {
+    const key = str(a, "key");
+    const { suggestions } = await api.skipSuggestions();
+    const x = suggestions.find((y) => y.key === key);
+    if (!x) throw new Error(`No skip suggestion ${key ?? ""}: action suggestions lists them, each with its key.`);
+    if (action === "accept") {
+      await acceptSkip(x);
+      return `Skipping ${x.kind === "chat" ? "the chat" : "mail from"} ${x.label} from now on.`;
+    }
+    await api.skipSuggestionDismiss(x.key);
+    return `${x.label} won't be suggested again.`;
+  }
+  if (action === "unskip_chat") {
+    const id = str(a, "id")?.trim();
+    if (!id || !(s.syncIgnoreChats ?? []).includes(id)) throw new Error("id is a skipped chat's conversation id, as get lists them.");
+    await unskipChat(id);
+    return `Syncing chat ${id} again.`;
+  }
+  throw new Error(
+    "action is get, on, off, now, channels, channel, unchannel, ignore, unignore, suggestions, accept, dismiss or unskip_chat.",
+  );
 }
 
 /** On-demand pull from Teams and Outlook: gather the chats, mail and transcripts about a topic over

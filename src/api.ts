@@ -54,6 +54,8 @@ export interface Settings {
   syncChannels?: string[];
   /** Senders or domains whose mail the sync skips ("Don't sync this sender"). */
   syncIgnoreSenders?: string[];
+  /** 1:1 and group chats the sync skips, by conversation id. */
+  syncIgnoreChats?: string[];
   /** How many days of history the first sync loads (0 = no limit). */
   syncInitialDays?: number;
   /** Bring a synced email's attachments into sources/ (PDF and Office files up to 30 MB). On by default. */
@@ -521,6 +523,18 @@ export interface ProjectRow {
 }
 
 /** Something to clarify: a Scratchpad block or a To Do `#### Other` task. */
+/** A skip suggested from what the user deletes (src-tauri/src/sync/skips.rs). */
+export interface SkipSuggestion {
+  key: string;
+  kind: "sender" | "chat";
+  /** The address, or the chat's conversation id: what goes on the skip list. */
+  value: string;
+  /** The address, or the chat's title. */
+  label: string;
+  deletes: number;
+  last: string;
+}
+
 /** An initiative's action waiting in the Inbox (D-20261118-12): the user's own, or delegated and
  *  overdue. */
 export interface InboxAction {
@@ -1462,6 +1476,9 @@ export const api = {
   projectsSetArea: (paths: string[], from: string, to: string) => invoke<string>("projects_set_area", { paths, from, to }),
   /** `block` is the item's block, checked before it's removed. */
   inboxRemoveThought: (line: number, text: string) => invoke<string | null>("inbox_remove_thought", { line, text }),
+  skipSuggestions: () => invoke<{ suggestions: SkipSuggestion[]; chatNames: Record<string, string> }>("skip_suggestions"),
+  skipSuggestionDismiss: (key: string) => invoke<void>("skip_suggestion_dismiss", { key }),
+  skipSuggestionForget: (key: string) => invoke<void>("skip_suggestion_forget", { key }),
   /** An initiative action's line after `edit`, not written (clarify_inbox sends it as a change). */
   initiativeActionLine: (lineText: string, edit: ActionEdit) => invoke<string>("initiative_action_line", { lineText, edit }),
   /** Changes an initiative action's line in place (accepted, done, dropped); ⌘Z undoes it. */

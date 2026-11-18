@@ -261,7 +261,12 @@ pub async fn trash_move(app: AppHandle, path: String) -> Res<TrashEntry> {
         let svc = app.state::<VaultService>();
         let root = root(&svc)?;
         let layer = svc.with_index(|ix, _| Ok(ix.summary(&path)?.map(|s| s.layer))).ok().flatten().unwrap_or_else(|| "note".into());
+        // A synced email or chat the user deletes counts towards a skip suggestion (D-20261118-15).
+        let learnt = path.starts_with("sources/").then(|| std::fs::read_to_string(root.join(&path)).ok()).flatten();
         let e = trash::move_to_trash(&root, &path, &layer)?;
+        if let Some(t) = learnt {
+            crate::sync::skips::on_delete(&path, &t);
+        }
         // Unsaved edits go into the trash with the note, and come back if it's restored.
         app.state::<Drafts>().rename(&path, &trashed_draft(&e.id));
         moved(&app, &path, None, &trashed_draft(&e.id));
