@@ -1348,6 +1348,14 @@ body.presizing * {
 .sgroup p {
   margin: 0;
 }
+
+/* A sub-heading inside a Settings section (Teams channels, Mail to skip). */
+.sgroup .ssub {
+  margin: 8px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink2);
+}
 .srow {
   display: flex;
   align-items: center;

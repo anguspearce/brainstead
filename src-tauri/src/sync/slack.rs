@@ -379,7 +379,17 @@ fn workspace(
 ) -> Result<(), String> {
     let me = call(client, ws, cookie, "auth.test", &[])?["user_id"].as_str().unwrap_or("").to_string();
     let since = Utc::now() - chrono::Duration::days(LOOK_BACK_DAYS);
-    let oldest = format!("{}.000000", since.timestamp());
+    // A conversation seen for the first time starts as far back as History on first sync says
+    // (everything for 0), never less than the usual week.
+    let first_since = match cutoff.and_then(|d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok()) {
+        Some(d) => {
+            d.and_hms_opt(0, 0, 0).and_then(|t| t.and_local_timezone(Local).earliest()).map_or(since, |t| t.with_timezone(&Utc)).min(since)
+        }
+        None => DateTime::<Utc>::UNIX_EPOCH,
+    };
+    // Those seen before this pass, so marking one seen below doesn't change its start mid-pass.
+    let seen_before: Vec<String> = prog.seen.clone();
+    let since_for = |id: &str| if seen_before.iter().any(|s| s == id) { since } else { first_since };
 
     // People's names, asked once each.
     let names: std::cell::RefCell<HashMap<String, String>> = Default::default();
@@ -422,7 +432,8 @@ fn workspace(
         }
     }
     let wanted = |c: &Conv| (c.kind != "channel" || s.slack_channels.contains(&c.id)) && !s.sync_ignore_chats.contains(&c.id);
-    let mut chosen: Vec<Conv> = convs.iter().filter(|c| wanted(c) && (c.updated == 0 || c.updated >= since.timestamp())).cloned().collect();
+    let mut chosen: Vec<Conv> =
+        convs.iter().filter(|c| wanted(c) && (c.updated == 0 || c.updated >= since_for(&c.id).timestamp())).cloned().collect();
     chosen.sort_by_key(|c| std::cmp::Reverse(c.updated));
     chosen.truncate(MOST_CONVERSATIONS);
 
@@ -462,12 +473,13 @@ fn workspace(
 
     for c in &chosen {
         let first = !prog.seen.contains(&c.id);
+        let oldest = format!("{}.000000", since_for(&c.id).timestamp().max(0));
         let msgs = match call(
             client,
             ws,
             cookie,
             "conversations.history",
-            &[("channel", c.id.clone()), ("oldest", oldest.clone()), ("limit", "200".into())],
+            &[("channel", c.id.clone()), ("oldest", oldest), ("limit", "200".into())],
         ) {
             Ok(v) => parse_msgs(&v),
             Err(e) => {

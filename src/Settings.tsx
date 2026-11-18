@@ -1529,47 +1529,67 @@ function SyncPane() {
       .catch((e) => toast(`Couldn't list channels: ${e}`, undefined, "bad"))
       .finally(() => setLoadingChannels(false));
   };
+  const teamsStatus = signIn?.signedIn
+    ? `Signed in, handed over ${signIn.handedOver ? ago(new Date(signIn.handedOver).getTime()) : "recently"}. Keep Teams, and Outlook for mail, open in browser tabs.`
+    : "Not signed in: open Teams in Chrome with the Teams capture extension loaded. The sign-in arrives within a few minutes.";
   return (
     <>
       <section className="sgroup">
-        <h2 className="h3">Teams and Outlook</h2>
         <p className="muted">
-          Brainstead reads your own Teams chats, meeting transcripts, Inbox mail and calendar and writes what's new into sources/, ready to
-          ingest and listed in the Inbox — the same as a capture, without clicking. It uses the sign-in your open Teams tab already has,
-          handed over by the Teams extension, so keep Teams open in your browser; it reads only, and nothing leaves this computer but the
-          calls to Microsoft.
+          Brainstead reads your own Teams chats and transcripts, Outlook mail and calendar, and Slack conversations into sources/,
+          read-only, each with the sign-in its browser tab hands over (Settings › Capture extensions).
         </p>
-        <Switch label="Sync Teams and Outlook" on={enabled} onChange={(v) => settings.update({ syncEnabled: v })} />
-        <label className="srow" style={{ gap: 8 }}>
-          <span>On first sync, load the last</span>
-          <input
-            type="number"
-            className="input"
-            style={{ width: "4.5em" }}
-            min={0}
-            max={3650}
-            title="How many days of history the first sync loads for each chat and the mailbox (0 = no limit). Stops a big mailbox or long chat history flooding the Inbox."
-            value={s.syncInitialDays ?? 7}
-            onChange={(e) => settings.update({ syncInitialDays: Math.max(0, Math.min(3650, Math.floor(Number(e.target.value) || 0))) })}
-          />
-          <span>days (0 = everything).</span>
-        </label>
-        <div className="srow">
-          <Icon name="mail" style={{ color: (s.syncMailAttachments ?? true) ? "var(--green)" : "var(--ink3)" }} />
-          <div className="t">
-            <div className="pt">Bring in email attachments</div>
-            <div className="faint">
-              PDF, Word, PowerPoint, Excel and text files up to 30 MB, each its own source, linked from its thread. Others are listed by
-              name.
+        <div className="card">
+          <label className="srow">
+            <Icon name="history" style={{ color: "var(--ink3)" }} />
+            <div className="t">
+              <div className="pt">History on first sync</div>
+              <div className="faint">How many days each new chat, channel and the mailbox starts with. 0 loads everything.</div>
             </div>
+            <input
+              type="number"
+              className="input"
+              style={{ width: "4.5em" }}
+              min={0}
+              max={3650}
+              aria-label="Days of history on first sync"
+              title="Days of history the first sync loads for each chat, channel and the mailbox (0 = no limit), so a long history can't flood the Inbox"
+              value={s.syncInitialDays ?? 7}
+              onChange={(e) => settings.update({ syncInitialDays: Math.max(0, Math.min(3650, Math.floor(Number(e.target.value) || 0))) })}
+            />
+          </label>
+          <div className="srow">
+            <Icon name="refresh" style={{ color: "var(--ink3)" }} />
+            <div className="t">
+              <div className="pt">Sync now</div>
+              <div className="faint">It runs on its own every 15 minutes. Run it now to check it's working.</div>
+            </div>
+            <button
+              type="button"
+              className="btn sm"
+              title="Run one sync pass now: Teams and Outlook, and Slack, whichever are on"
+              disabled={busy || !(enabled || s.syncSlack)}
+              onClick={syncNow}
+            >
+              <Icon name="refresh" size={13} className={busy ? "spin" : undefined} />
+              {busy ? "Syncing…" : "Sync now"}
+            </button>
           </div>
-          <Switch
-            label="Bring in email attachments"
-            on={s.syncMailAttachments ?? true}
-            onChange={(v) => settings.update({ syncMailAttachments: v })}
-          />
         </div>
-        {s.readOnly && enabled && (
+        {report && !report.blocked && (
+          <p className="faint" role="status">
+            Added {report.chats} chat {report.chats === 1 ? "day" : "days"}, {report.mail} {report.mail === 1 ? "email" : "emails"} and{" "}
+            {report.transcripts} {report.transcripts === 1 ? "transcript" : "transcripts"}.
+            {report.problems.length > 0 && ` ${report.problems.length} problem${report.problems.length === 1 ? "" : "s"}.`}
+          </p>
+        )}
+        {report?.problems?.map((p, i) => (
+          <div key={i} className="doc-banner warn" role="alert">
+            <Icon name="info" size={14} />
+            <span>{p}</span>
+          </div>
+        ))}
+        {s.readOnly && (enabled || s.syncSlack) && (
           <div className="doc-banner warn" role="status">
             <Icon name="info" size={14} />
             <span>Read-only is on (Settings › Vault), so the sync is paused until it's switched off.</span>
@@ -1578,16 +1598,14 @@ function SyncPane() {
       </section>
 
       <section className="sgroup">
-        <h2 className="h3">Sign-in</h2>
+        <h2 className="h3">Teams and Outlook</h2>
         <div className="card">
           <div className="srow">
-            <Icon name={signIn?.signedIn ? "check" : "info"} style={{ color: signIn?.signedIn ? "var(--green)" : "var(--ink3)" }} />
+            <Icon name="chat" style={{ color: enabled && signIn?.signedIn ? "var(--green)" : "var(--ink3)" }} />
             <div className="t">
-              <div className="pt">{signIn?.signedIn ? "Signed in" : "Not signed in"}</div>
+              <div className="pt">Sync Teams and Outlook</div>
               <div className="faint">
-                {signIn?.signedIn
-                  ? `Handed over ${signIn.handedOver ? ago(new Date(signIn.handedOver).getTime()) : "recently"}. Keep Teams, and Outlook for mail, open in Chrome tabs; the extensions keep it fresh.`
-                  : "Open Teams in Chrome (with the Teams extension loaded) so it can hand the sign-in over. It arrives within a few minutes."}
+                {teamsStatus}
                 {signIn?.signedIn && signIn.stale.length > 0 && (
                   <div style={{ color: "var(--amber)" }}>
                     Gone stale: {signIn.stale.join(", ")}. Those wait until Teams renews them, within the hour while its tab is open.
@@ -1611,89 +1629,71 @@ function SyncPane() {
                 Sign out
               </button>
             )}
+            <Switch label="Sync Teams and Outlook" on={enabled} onChange={(v) => settings.update({ syncEnabled: v })} />
+          </div>
+          <div className="srow">
+            <Icon name="mail" style={{ color: (s.syncMailAttachments ?? true) ? "var(--green)" : "var(--ink3)" }} />
+            <div className="t">
+              <div className="pt">Bring in email attachments</div>
+              <div className="faint">
+                PDF, Word, PowerPoint, Excel and text files up to 30 MB, each its own source, linked from its thread. Others are listed by
+                name.
+              </div>
+            </div>
+            <Switch
+              label="Bring in email attachments"
+              on={s.syncMailAttachments ?? true}
+              onChange={(v) => settings.update({ syncMailAttachments: v })}
+            />
           </div>
         </div>
-      </section>
 
-      <section className="sgroup">
-        <h2 className="h3">Sync now</h2>
-        <p className="faint">The sync runs on its own every so often. Run it now to check it's working.</p>
-        <div className="row">
-          <button
-            type="button"
-            className="btn"
-            title="Run one sync pass now: Teams and Outlook, and Slack, whichever are on"
-            disabled={busy || !(enabled || s.syncSlack)}
-            onClick={syncNow}
-          >
-            <Icon name="refresh" size={13} />
-            {busy ? "Syncing…" : "Sync now"}
-          </button>
-        </div>
-        {report && !report.blocked && (
-          <p className="faint" role="status">
-            Added {report.chats} chat {report.chats === 1 ? "day" : "days"}, {report.mail} {report.mail === 1 ? "email" : "emails"} and{" "}
-            {report.transcripts} {report.transcripts === 1 ? "transcript" : "transcripts"}.
-            {report.problems.length > 0 && ` ${report.problems.length} problem${report.problems.length === 1 ? "" : "s"}.`}
-          </p>
+        <h3 className="ssub">Teams channels</h3>
+        <p className="faint">1:1 and group chats sync on their own. Channels sync only when you switch them on here.</p>
+        {signIn?.signedIn ? (
+          <div className="row">
+            <button
+              type="button"
+              className="btn sm"
+              title="List your Teams channels to choose which to sync"
+              disabled={loadingChannels}
+              onClick={loadChannels}
+            >
+              <Icon name="refresh" size={13} className={loadingChannels ? "spin" : undefined} />
+              {loadingChannels ? "Loading…" : channels ? "Refresh channel list" : "Show my Teams channels"}
+            </button>
+          </div>
+        ) : (
+          <p className="faint">Sign in to Teams to choose channels.</p>
         )}
-        {report?.problems?.map((p, i) => (
-          <div key={i} className="doc-banner warn" role="alert">
-            <Icon name="info" size={14} />
-            <span>{p}</span>
-          </div>
-        ))}
-      </section>
-
-      {!!skips?.suggestions.length && (
-        <section className="sgroup">
-          <h2 className="h3">Suggested from what you delete</h2>
-          <p className="faint">
-            You've moved these to the Trash again and again. Skip one and the sync leaves it out from now on; nothing is skipped until you
-            say so.
-          </p>
+        {channels && channels.length === 0 && <p className="faint">No channels found.</p>}
+        {channels && channels.length > 0 && (
           <div className="card">
-            {skips.suggestions.map((x) => (
-              <div key={x.key} className="srow">
-                <Icon name={x.kind === "chat" ? "chat" : "mail"} style={{ color: "var(--ink3)" }} />
+            {channels.map((c) => (
+              <div key={c.id} className="srow">
                 <div className="t">
-                  <div className={`pt ${x.kind === "sender" ? "mono" : ""}`}>{x.label}</div>
-                  <div className="faint">
-                    {x.kind === "chat" ? "Chat" : "Sender"} · deleted {x.deletes} times, last on {x.last}
-                  </div>
+                  <div className="pt">{c.topic}</div>
                 </div>
-                <button
-                  type="button"
-                  className="btn sm"
-                  title={x.kind === "chat" ? `Stop syncing the chat ${x.label}` : `Stop syncing mail from ${x.label}`}
-                  onClick={() => void acceptSkip(x).then(loadSkips)}
-                >
-                  Skip
-                </button>
-                <button
-                  type="button"
-                  className="btn sm ghost"
-                  title="Keep syncing it, and don't suggest it again"
-                  onClick={() => void api.skipSuggestionDismiss(x.key).then(loadSkips)}
-                >
-                  Not this one
-                </button>
+                <Switch
+                  label={`Sync ${c.topic}`}
+                  on={chosen.includes(c.id)}
+                  onChange={(v) => settings.update({ syncChannels: v ? [...chosen, c.id] : chosen.filter((x) => x !== c.id) })}
+                />
               </div>
             ))}
           </div>
-        </section>
-      )}
+        )}
 
-      <section className="sgroup">
-        <h2 className="h3">Mail to skip</h2>
+        <h3 className="ssub">Mail to skip</h3>
         <p className="faint">
-          Your Inbox syncs, apart from these senders or domains (and anything Outlook files under Other). Use “Don't sync this sender” on a
-          synced email to add one, or add one here.
+          Senders or domains whose mail isn't synced (nor anything Outlook files under Other). “Don't sync this sender” on a synced email
+          adds one.
         </p>
         <div className="row">
           <input
             className="input"
             placeholder="name@example.com or example.com"
+            aria-label="Sender or domain to skip"
             value={newIgnore}
             onChange={(e) => setNewIgnore(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addIgnore()}
@@ -1730,10 +1730,50 @@ function SyncPane() {
         )}
       </section>
 
+      <SlackSync />
+
+      {!!skips?.suggestions.length && (
+        <section className="sgroup">
+          <h2 className="h3">Suggested from what you delete</h2>
+          <p className="faint">
+            You keep moving these to the Trash. Skip one and the sync leaves it out; nothing is skipped until you say so.
+          </p>
+          <div className="card">
+            {skips.suggestions.map((x) => (
+              <div key={x.key} className="srow">
+                <Icon name={x.kind === "chat" ? "chat" : "mail"} style={{ color: "var(--ink3)" }} />
+                <div className="t">
+                  <div className={`pt ${x.kind === "sender" ? "mono" : ""}`}>{x.label}</div>
+                  <div className="faint">
+                    {x.kind === "chat" ? "Chat" : "Sender"} · deleted {x.deletes} times, last on {x.last}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn sm"
+                  title={x.kind === "chat" ? `Stop syncing the chat ${x.label}` : `Stop syncing mail from ${x.label}`}
+                  onClick={() => void acceptSkip(x).then(loadSkips)}
+                >
+                  Skip
+                </button>
+                <button
+                  type="button"
+                  className="btn sm ghost"
+                  title="Keep syncing it, and don't suggest it again"
+                  onClick={() => void api.skipSuggestionDismiss(x.key).then(loadSkips)}
+                >
+                  Not this one
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {(s.syncIgnoreChats ?? []).length > 0 && (
         <section className="sgroup">
           <h2 className="h3">Chats to skip</h2>
-          <p className="faint">These chats don't sync. Skip one from a suggestion above.</p>
+          <p className="faint">Teams and Slack chats that don't sync. Skip one from a suggestion above.</p>
           <div className="card">
             {(s.syncIgnoreChats ?? []).map((id) => (
               <div key={id} className="srow">
@@ -1754,48 +1794,12 @@ function SyncPane() {
           </div>
         </section>
       )}
-
-      <section className="sgroup">
-        <h2 className="h3">Channels</h2>
-        <p className="faint">1:1 and group chats sync automatically. Channels are off unless you choose them here.</p>
-        <div className="row">
-          <button
-            type="button"
-            className="btn sm"
-            title="List your Teams channels to choose which to sync"
-            disabled={!signIn?.signedIn || loadingChannels}
-            onClick={loadChannels}
-          >
-            <Icon name="refresh" size={13} className={loadingChannels ? "spin" : undefined} />
-            {loadingChannels ? "Loading…" : channels ? "Refresh channel list" : "Show my channels"}
-          </button>
-        </div>
-        {channels && channels.length === 0 && <p className="faint">No channels found.</p>}
-        {channels && channels.length > 0 && (
-          <div className="card">
-            {channels.map((c) => (
-              <div key={c.id} className="srow">
-                <div className="t">
-                  <div className="pt">{c.topic}</div>
-                </div>
-                <Switch
-                  label={`Sync ${c.topic}`}
-                  on={chosen.includes(c.id)}
-                  onChange={(v) => settings.update({ syncChannels: v ? [...chosen, c.id] : chosen.filter((x) => x !== c.id) })}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <SlackSync />
     </>
   );
 }
 
-/** Slack sync (D-20261118-01): its switch, the sign-in the Slack extension handed over, and the
- *  channels to sync. DMs and group DMs sync always, and threads that mention you. */
+/** Slack sync (D-20261118-01): its switch with the sign-in the Slack sync extension handed over, and
+ *  the channels to sync. DMs and group DMs sync always, and threads that mention you. */
 function SlackSync() {
   const s = useStore(settings);
   const [state, setState] = useState<Awaited<ReturnType<typeof api.slackSignInState>> | null>(null);
@@ -1821,19 +1825,14 @@ function SlackSync() {
   return (
     <section className="sgroup">
       <h2 className="h3">Slack</h2>
-      <p className="faint">
-        Brainstead reads your own Slack DMs and group DMs, the channels you choose here, and threads that mention you, one source per
-        conversation per day, while Slack is open in a browser tab (the desktop app can stay open too). The Slack sync extension hands the
-        tab's sign-in over: load it from Settings › Capture extensions. It reads only.
-      </p>
       <div className="card">
         <div className="srow">
-          <Icon name="chat" style={{ color: state?.signedIn ? "var(--green)" : "var(--ink3)" }} />
+          <Icon name="chat" style={{ color: s.syncSlack && state?.signedIn ? "var(--green)" : "var(--ink3)" }} />
           <div className="t">
-            <div className="pt">Slack sync</div>
+            <div className="pt">Sync Slack</div>
             <div className="faint">
               {state?.signedIn
-                ? `Signed in to ${state.workspaces.join(", ")}${state.handedOver ? `, handed over ${new Date(state.handedOver).toLocaleString()}` : ""}.`
+                ? `Signed in to ${state.workspaces.join(", ")}${state.handedOver ? `, handed over ${ago(new Date(state.handedOver).getTime())}` : ""}. Keep Slack open in a browser tab; the desktop app can stay open too.`
                 : "Not signed in: open Slack in Chrome with the Slack sync extension loaded."}
             </div>
           </div>
@@ -1847,21 +1846,30 @@ function SlackSync() {
               Sign out
             </button>
           )}
-          <Switch label="Slack sync" on={!!s.syncSlack} onChange={(v) => settings.update({ syncSlack: v })} />
+          <Switch label="Sync Slack" on={!!s.syncSlack} onChange={(v) => settings.update({ syncSlack: v })} />
         </div>
       </div>
-      <div className="row">
-        <button
-          type="button"
-          className="btn sm"
-          title="List your Slack channels to choose which to sync"
-          disabled={!state?.signedIn || loading}
-          onClick={load}
-        >
-          <Icon name="refresh" size={13} className={loading ? "spin" : undefined} />
-          {loading ? "Loading…" : channels ? "Refresh channel list" : "Show my channels"}
-        </button>
-      </div>
+
+      <h3 className="ssub">Slack channels</h3>
+      <p className="faint">
+        DMs, group DMs and threads that mention you sync on their own. Channels sync only when you switch them on here.
+      </p>
+      {state?.signedIn ? (
+        <div className="row">
+          <button
+            type="button"
+            className="btn sm"
+            title="List your Slack channels to choose which to sync"
+            disabled={loading}
+            onClick={load}
+          >
+            <Icon name="refresh" size={13} className={loading ? "spin" : undefined} />
+            {loading ? "Loading…" : channels ? "Refresh channel list" : "Show my Slack channels"}
+          </button>
+        </div>
+      ) : (
+        <p className="faint">Sign in to Slack to choose channels.</p>
+      )}
       {err && (
         <div className="doc-banner warn" role="alert">
           <Icon name="info" size={14} />

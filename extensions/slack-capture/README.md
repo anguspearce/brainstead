@@ -16,7 +16,7 @@ Slack only needs to be open in a browser tab; the Slack desktop app can stay ope
 1. Open Brainstead once, so it registers its helper with your browsers.
 2. Open `chrome://extensions`, switch on Developer mode, click **Load unpacked** and choose this folder (Settings › Capture extensions › Slack sync › Show in Finder).
 3. Open Slack in a tab at `https://app.slack.com` and sign in.
-4. Switch on **Slack sync** in Settings › Sync.
+4. Switch on **Sync Slack** in Settings › Sync.
 
 The extension's ID is fixed by the public key in `manifest.json`, so Brainstead's helper accepts it without anything to copy.
 
