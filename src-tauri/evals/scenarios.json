@@ -162,5 +162,99 @@
       "From the 1-1 with Lena: sending Lena the rota is the user's own action, and Lena's budget figures are waiting for",
       "Suggests ticking the Acme contract task, since the note says it's signed"
     ]
+  },
+  {
+    "name": "ingest takes actions into an initiative and hands one on",
+    "kind": "ingest",
+    "model": "claude:sonnet",
+    "source": "sources/emails/Email. Orbit launch who does what - 2026-10-02.md",
+    "owner": "Sam",
+    "twice": true,
+    "plants": [
+      {
+        "path": "wiki/initiatives/Orbit launch.md",
+        "text": "---\ntype: initiative\nname: Orbit launch\nstatus: active\ndescription: Getting the Orbit App to staff, then customers.\nsources: []\n---\n\nGetting the [[Orbit App]] to staff, then customers.\n\n## Current state\n\nStaff launch planned.\n\n## Actions\n\n- Draft the support FAQ [owner:: me] [status:: open] ^a-1111\n- Confirm the pen-test date [delegated:: Jonas] [status:: open] ^a-2222\n\n## Decisions\n\n- 2026-09-18 — Staff first, customers in Q1 ^d-1111\n"
+      },
+      {
+        "path": "sources/emails/Email. Orbit launch who does what - 2026-10-02.md",
+        "text": "---\nfrom: Sam\nto: Lena; Maya; Jonas\nsubject: Orbit launch: who does what\ndate: 2026-10-02\n---\n# Orbit launch: who does what\n\n**Sam, 2 Oct 09:10**\nHi all, quick one after this morning's call. Lena, can you take over the support FAQ from me? I won't get to it this week.\nMaya, please book the launch room for 28 November.\nWe agreed on the call to move the staff launch to 28 November.\nThanks for the cake yesterday, it was great.\n\n**Lena, 2 Oct 09:40**\nSure, I'll take the FAQ and have a draft by 9 October.\n\n**Jonas, 2 Oct 10:05**\nPen-test date is confirmed: 20 November.\n\n**Newsletter bot, 2 Oct 11:00**\nDon't forget to update your profile picture in the staff directory.\n"
+      }
+    ],
+    "actions": [
+      {
+        "page": "wiki/initiatives/Orbit launch.md",
+        "words": "a-1111",
+        "owner": "delegated",
+        "person": "Lena",
+        "status": "open"
+      },
+      {
+        "page": "wiki/initiatives/Orbit launch.md",
+        "words": "launch room",
+        "owner": "delegated",
+        "person": "Maya",
+        "status": "open"
+      },
+      {
+        "page": "wiki/initiatives/Orbit launch.md",
+        "words": "a-2222",
+        "owner": "delegated",
+        "person": "Jonas",
+        "status": "done"
+      }
+    ],
+    "expect": [
+      "The support FAQ action (a-1111) is handed to Lena as a delegated action, not added a second time, with Lena's 9 October date as its due date",
+      "A delegated action for Maya to book the launch room is added, quoting the email",
+      "The pen-test action (a-2222) is marked done, quoting Jonas",
+      "A decision to move the staff launch to 28 November is recorded once",
+      "Nothing is made of the thanks for the cake or the newsletter bot's reminder"
+    ]
+  },
+  {
+    "name": "ingest reads a forked thread branch by branch",
+    "kind": "ingest",
+    "model": "claude:sonnet",
+    "source": "sources/emails/Email. Thread. Offsite catering - 2026-10-05.md",
+    "owner": "Sam",
+    "plants": [
+      {
+        "path": "wiki/initiatives/Team offsite.md",
+        "text": "---\ntype: initiative\nname: Team offsite\nstatus: active\ndescription: The team's November offsite.\nsources: []\n---\n\nThe team's November offsite.\n\n## Current state\n\nPlanning.\n\n## Actions\n\n- Book the offsite venue [delegated:: Maya] [status:: open] ^a-1111\n\n## Decisions\n"
+      },
+      {
+        "path": "sources/emails/Email. Thread. Offsite catering - 2026-10-05.md",
+        "text": "# Offsite catering\n\n**Source:** [Open in Outlook](https://outlook.office.com/mail/)\n**Captured:** 2026-10-05T10:00:00.000Z\n**Continues:** [[Email. Thread. Offsite plans - 2026-10-01]]\n\n---\n\n## Branch 1\n\n### Maya — 2026-10-05 09:00\n\n**To:** Sam, Lena, Jonas\n\nVenue is booked: the Riverside room for 12 November.\n\n---\n\n### Sam — 2026-10-05 09:20\n\n**To:** Maya, Lena\n\nGreat, thanks Maya. Lena, can you sort the catering?\n\n---\n\n### Lena — 2026-10-05 09:45\n\n**To:** Sam, Maya\n\nYes, I'll get catering quotes by Friday 9 October.\n\n---\n\n## Branch 2: replies to Maya's message of 5 Oct 09:00, to Maya\n\n### Jonas — 2026-10-05 09:30\n\n**To:** Maya\n\nNice. Do we have a projector there? I can bring mine if not.\n\n---\n\n### Maya — 2026-10-05 09:50\n\n**To:** Jonas\n\nNot sure, please bring yours just in case.\n\n---\n"
+      }
+    ],
+    "actions": [
+      {
+        "page": "wiki/initiatives/Team offsite.md",
+        "words": "a-1111",
+        "owner": "delegated",
+        "person": "Maya",
+        "status": "done"
+      },
+      {
+        "page": "wiki/initiatives/Team offsite.md",
+        "words": "catering",
+        "owner": "delegated",
+        "person": "Lena",
+        "status": "open"
+      },
+      {
+        "page": "wiki/initiatives/Team offsite.md",
+        "words": "projector",
+        "owner": "other",
+        "person": "Jonas",
+        "status": "open"
+      }
+    ],
+    "expect": [
+      "The venue action (a-1111) is marked done, quoting Maya, and no second venue action is added",
+      "A delegated catering action for Lena is added, due 2026-10-09, quoting Lena",
+      "Jonas bringing the projector is his own action (other), from the second branch, not delegated by Sam",
+      "The decision or fact that the venue is the Riverside room on 12 November is recorded once"
+    ]
   }
 ]

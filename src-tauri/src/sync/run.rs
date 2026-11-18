@@ -274,8 +274,12 @@ fn sync_thread(p: &Pass, conversation_id: &str, st: &mut state::State, r: &mut R
         } else {
             Vec::new()
         };
-        fetch::thread_capture(&msgs, &attachments)
+        let continues = fetch::replies_into(&msgs).and_then(|h| st.continued(conversation_id, &h));
+        fetch::thread_capture(&msgs, &attachments, continues)
     };
+    if let Some(h) = fetch::thread_header(&msgs) {
+        st.mark_header(conversation_id, &h);
+    }
     match st.thread_path(conversation_id).map(str::to_string) {
         None => {
             if let Some(cap) = capture(st, r) {

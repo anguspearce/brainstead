@@ -257,7 +257,11 @@ fn pull_mail(
         } else {
             Vec::new()
         };
-        let Some(cap) = fetch::thread_capture(&thread, &files) else { continue };
+        if let Some(h) = fetch::thread_header(&thread) {
+            st.mark_header(&m.conversation_id, &h);
+        }
+        let continues = fetch::replies_into(&thread).and_then(|h| st.continued(&m.conversation_id, &h));
+        let Some(cap) = fetch::thread_capture(&thread, &files, continues) else { continue };
         let when = thread.last().map(|x| x.received);
         let title = thread.last().map(|x| x.subject.clone()).unwrap_or(m.subject);
         let date = when.unwrap_or(m.received).with_timezone(&Local).format("%Y-%m-%d").to_string();

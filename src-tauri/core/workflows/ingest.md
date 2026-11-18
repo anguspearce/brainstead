@@ -4,7 +4,7 @@ You are updating the user's wiki from one source: a document, a transcript, an e
 
 ## What to do
 
-1. Read the source in full.
+1. Read the source in full. An email thread that forked is written branch by branch (`## Branch 2: replies to …`): read each branch as its own conversation, so a question settled in one isn't taken as settled in another. A `**Continues:**` line names the earlier thread this one carries on from under a new subject: it's the same conversation, so its actions are most likely already listed.
 2. Decide which wiki pages it changes. Update the pages you were given where the source adds or changes a fact about them; add a new page only for a person, team, project, product or idea that the source says something substantial about and that has no page yet. Check the names you were given before making a new page: a page may exist under an alias.
 3. For each page, say what the source adds; Brainstead puts it in its place, so you never choose where text goes:
    - `entry`: what the source says about the subject, as its Timeline entry: the date it's about (`YYYY-MM-DD`, or `YYYY-MM` when only the month is known; the source's own date when it's a meeting or note), a short title, and the text. One entry per source: ingesting the same source again replaces its entry, so write the whole entry each time. This is the usual case.

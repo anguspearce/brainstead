@@ -45,6 +45,10 @@ pub struct Message {
     /// listed under the body.
     #[serde(default)]
     pub attachments: Vec<Attachment>,
+    /// The branch of a forked email thread it's on (D-20261118-06), as its heading: the Teams and
+    /// Outlook sync sets it when a thread forked; the messages come branch by branch.
+    #[serde(default)]
+    pub branch: Option<String>,
 }
 
 /// A file that came with a message: brought into `sources/` (`path`), only linked (`url`, a file
@@ -103,6 +107,10 @@ pub struct Thread {
     /// Its start (`HH:MM`, local), when the page showed one.
     #[serde(default, rename = "meetingStart")]
     pub meeting_start: Option<String>,
+    /// The earlier thread this one carries on from under a new subject (the sync's, by the reply's
+    /// ConversationIndex): its source's name, linked from a `**Continues:**` line.
+    #[serde(default)]
+    pub continues: Option<String>,
 }
 
 impl Thread {
@@ -241,6 +249,23 @@ fn message_lines(m: &Message, level: usize, out: &mut Vec<String>) {
     out.extend(["---".into(), String::new()]);
 }
 
+/// A thread's messages at `level`; a forked thread's under a heading per branch, a level up.
+fn branch_lines(msgs: &[Message], level: usize, out: &mut Vec<String>) {
+    if msgs.iter().all(|m| m.branch.is_none()) {
+        msgs.iter().for_each(|m| message_lines(m, level, out));
+        return;
+    }
+    let mut on: Option<&str> = None;
+    for m in msgs {
+        let b = m.branch.as_deref().unwrap_or("Other messages");
+        if on != Some(b) {
+            out.extend([format!("{} {b}", "#".repeat(level)), String::new()]);
+            on = Some(b);
+        }
+        message_lines(m, level + 1, out);
+    }
+}
+
 fn reading_pane_note(kind: Option<&str>) -> Option<String> {
     (kind == Some("reading-pane")).then(|| {
         "**Capture:** reading-pane text only, not a threaded conversation (meeting invitation, card-only mail, or a DOM the thread extractor didn't recognise).".to_string()
@@ -260,9 +285,10 @@ pub fn render(c: &Capture, now: DateTime<Utc>, today: &str) -> (String, String) 
                 format!("**Source:** [Open in Outlook]({})", t.url),
                 format!("**Captured:** {captured}"),
             ]);
+            l.extend(t.continues.as_ref().map(|c| format!("**Continues:** [[{c}]]")));
             l.extend(reading_pane_note(t.kind.as_deref()));
             l.extend([String::new(), "---".into(), String::new()]);
-            t.messages.iter().for_each(|m| message_lines(m, 2, &mut l));
+            branch_lines(&t.messages, 2, &mut l);
             let prefix = if t.kind.as_deref() == Some("reading-pane") { "Email. Item." } else { "Email. Thread." };
             format!("{prefix} {title} - {today}.md")
         }
@@ -280,7 +306,7 @@ pub fn render(c: &Capture, now: DateTime<Utc>, today: &str) -> (String, String) 
                 l.extend([format!("## {}", t.title), String::new(), format!("**Source:** [Open in Outlook]({})", t.url)]);
                 l.extend(reading_pane_note(t.kind.as_deref()));
                 l.push(String::new());
-                t.messages.iter().for_each(|m| message_lines(m, 3, &mut l));
+                branch_lines(&t.messages, 3, &mut l);
             }
             format!("Email. Threads. {label} - {today}.md")
         }

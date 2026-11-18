@@ -200,6 +200,7 @@ pub fn chat_capture(conv: &Conv, day_msgs: &[ChatMessage], me: &str, url_base: &
     let messages = day_msgs
         .iter()
         .map(|m| Message {
+            branch: None,
             sender: m.sender.clone(),
             from_address: None,
             to: None,
@@ -215,6 +216,7 @@ pub fn chat_capture(conv: &Conv, day_msgs: &[ChatMessage], me: &str, url_base: &
         })
         .collect();
     Some(Capture::Teams(Thread {
+        continues: None,
         url: format!("{url_base}/_#/conversations/{}", urlencode(&conv.id)),
         title,
         kind: Some("chat".into()),
@@ -284,6 +286,9 @@ pub struct Mail {
     pub web_link: String,
     /// Outlook says it carries attachments (inline images in a signature count).
     pub has_attachments: bool,
+    /// Its ConversationIndex (MAPI 0x0071): the thread's 22-byte header, then 5 bytes for each reply
+    /// down to it, so a reply's index is its parent's plus 5 bytes. Empty when Outlook didn't give it.
+    pub index: Vec<u8>,
 }
 
 const MAIL_SELECT: &str = "Subject,From,ToRecipients,Body,ReceivedDateTime,WebLink,ConversationId,HasAttachments";
@@ -297,14 +302,25 @@ pub fn inbox(client: &Client, top: usize) -> Result<Vec<Mail>, String> {
     Ok(parse_mail(&body))
 }
 
+/// The ConversationIndex as an extended property (PidTagConversationIndex), for the reply tree.
+const INDEX_EXPAND: &str = "&$expand=SingleValueExtendedProperties($filter=PropertyId%20eq%20'Binary%200x0071')";
+
 /// Every message of one conversation across all folders (so a thread includes the user's own sent
-/// replies), oldest first.
+/// replies), oldest first, each with its ConversationIndex when Outlook gives it (asked again
+/// without it when it won't, so the thread still comes, in date order).
 pub fn conversation(client: &Client, conversation_id: &str, top: usize) -> Result<Vec<Mail>, String> {
     // Filter by ConversationId only — combining it with $orderby makes Outlook reject the query as an
     // "InefficientFilter", so we sort by received time ourselves below.
     let filter = format!("ConversationId eq '{}'", conversation_id.replace('\'', "''"));
     let url = format!("https://outlook.office.com/api/v2.0/me/messages?$filter={}&$top={top}&$select={MAIL_SELECT}", urlencode(&filter));
-    let mut msgs = parse_mail(&api::get_json(client, Service::Outlook, &url)?);
+    let body = match api::get_json(client, Service::Outlook, &format!("{url}{INDEX_EXPAND}")) {
+        Ok(b) => b,
+        Err(e) => {
+            crate::applog!("sync: a thread's reply tree wasn't given ({e}); reading it in date order");
+            api::get_json(client, Service::Outlook, &url)?
+        }
+    };
+    let mut msgs = parse_mail(&body);
     msgs.sort_by_key(|m| m.received);
     Ok(msgs)
 }
@@ -345,6 +361,7 @@ pub fn parse_mail(body: &Value) -> Vec<Mail> {
                         body: if is_html { html::to_text(content) } else { content.trim().to_string() },
                         web_link: m["WebLink"].as_str().unwrap_or("").to_string(),
                         has_attachments: m["HasAttachments"].as_bool().unwrap_or(false),
+                        index: conversation_index(m),
                     })
                 })
                 .collect()
@@ -419,7 +436,93 @@ pub fn attachment_bytes(client: &Client, message_id: &str, attachment_id: &str) 
 /// An Outlook capture for a whole email thread: one message block per mail, oldest first. A one-mail
 /// thread renders the same as a single email. `msgs` must be non-empty.
 /// `attachments` holds each message's files, by position (shorter or empty when there are none).
-pub fn thread_capture(msgs: &[Mail], attachments: &[Vec<Attachment>]) -> Option<Capture> {
+/// A message's ConversationIndex from its extended properties, or nothing.
+fn conversation_index(m: &Value) -> Vec<u8> {
+    use base64::Engine;
+    m["SingleValueExtendedProperties"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|p| p["PropertyId"].as_str().is_some_and(|id| id.to_lowercase().replace("0x00", "0x").ends_with("0x71")))
+        .and_then(|p| p["Value"].as_str())
+        .and_then(|v| base64::engine::general_purpose::STANDARD.decode(v).ok())
+        .filter(|b| b.len() >= 22 && (b.len() - 22) % 5 == 0)
+        .unwrap_or_default()
+}
+
+/// The order to write a thread's messages in, and each one's branch when it forked (D-20261118-06):
+/// the reply tree from their ConversationIndex (a reply's is its parent's plus 5 bytes). The first
+/// branch follows the earliest reply at each fork; every other reply at a fork starts a branch,
+/// headed with whose message it answers, when, and who it went to. A thread that never forked, or
+/// whose messages lack an index, stays in date order with no branches. `msgs` are oldest first.
+pub fn branched(msgs: &[Mail]) -> Vec<(usize, Option<String>)> {
+    let plain = || (0..msgs.len()).map(|i| (i, None)).collect();
+    if msgs.len() < 3 || msgs.iter().any(|m| m.index.is_empty()) {
+        return plain();
+    }
+    // Each message's parent: the message whose index is the longest prefix of its own.
+    let parent: Vec<Option<usize>> = msgs
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            msgs.iter()
+                .enumerate()
+                .filter(|(j, o)| *j != i && o.index.len() < m.index.len() && m.index.starts_with(&o.index))
+                .max_by_key(|(_, o)| o.index.len())
+                .map(|(j, _)| j)
+        })
+        .collect();
+    let children = |p: Option<usize>| -> Vec<usize> { (0..msgs.len()).filter(|&i| parent[i] == p).collect() };
+    if !(0..msgs.len()).any(|i| children(Some(i)).len() > 1) && children(None).len() <= 1 {
+        return plain();
+    }
+    let local = |m: &Mail| m.received.with_timezone(&Local).format("%-d %b %H:%M").to_string();
+    let mut out: Vec<(usize, Option<String>)> = Vec::new();
+    // Branches still to write: (first message, its heading).
+    let mut todo: std::collections::VecDeque<(usize, String)> = std::collections::VecDeque::new();
+    let roots = children(None);
+    let mut n = 1;
+    todo.push_back((roots[0], "Branch 1".to_string()));
+    for &r in &roots[1..] {
+        n += 1;
+        todo.push_back((r, format!("Branch {n}: a new message, {}, to {}", local(&msgs[r]), msgs[r].to)));
+    }
+    while let Some((start, heading)) = todo.pop_front() {
+        let mut at = Some(start);
+        while let Some(i) = at {
+            out.push((i, Some(heading.clone())));
+            let kids = children(Some(i));
+            for &k in kids.iter().skip(1) {
+                n += 1;
+                let to = if msgs[k].to.is_empty() { String::new() } else { format!(", to {}", msgs[k].to) };
+                todo.push_back((k, format!("Branch {n}: replies to {}'s message of {}{to}", msgs[i].from, local(&msgs[i]))));
+            }
+            at = kids.first().copied();
+        }
+    }
+    out
+}
+
+/// The thread's ConversationIndex header (its first 22 bytes, in hex), the same on every message of
+/// it; None when Outlook gave no index.
+pub fn thread_header(msgs: &[Mail]) -> Option<String> {
+    msgs.iter().find(|m| m.index.len() >= 22).map(|m| hex(&m.index[..22]))
+}
+
+/// The header of the thread this one replies into, when its first message is itself a reply (its
+/// index longer than a header): a thread carried on under a new subject keeps the old one's header
+/// (D-20261118-06). The caller checks it's another thread's.
+pub fn replies_into(msgs: &[Mail]) -> Option<String> {
+    let first = msgs.iter().filter(|m| !m.index.is_empty()).min_by_key(|m| m.index.len())?;
+    (first.index.len() > 22).then(|| hex(&first.index[..22]))
+}
+
+fn hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// `continues`: the name of the source of the thread this one carries on from, if any.
+pub fn thread_capture(msgs: &[Mail], attachments: &[Vec<Attachment>], continues: Option<String>) -> Option<Capture> {
     let first = msgs.first()?;
     // Title from the most recent message's subject (replies keep the subject, possibly "Re:").
     let title = msgs.last().map(|m| m.subject.clone()).unwrap_or_else(|| first.subject.clone());
@@ -427,10 +530,11 @@ pub fn thread_capture(msgs: &[Mail], attachments: &[Vec<Attachment>]) -> Option<
         .last()
         .and_then(|m| (!m.web_link.is_empty()).then(|| m.web_link.clone()))
         .unwrap_or_else(|| "https://outlook.office.com/mail/".into());
-    let messages = msgs
-        .iter()
-        .enumerate()
-        .map(|(i, m)| Message {
+    let messages = branched(msgs)
+        .into_iter()
+        .map(|(i, branch)| (i, &msgs[i], branch))
+        .map(|(i, m, branch)| Message {
+            branch,
             sender: m.from.clone(),
             from_address: Some(m.from_address.clone()).filter(|a| !a.is_empty()),
             to: Some(m.to.clone()).filter(|t| !t.is_empty()),
@@ -441,7 +545,7 @@ pub fn thread_capture(msgs: &[Mail], attachments: &[Vec<Attachment>]) -> Option<
             attachments: attachments.get(i).cloned().unwrap_or_default(),
         })
         .collect();
-    Some(Capture::Outlook(Thread { url: link, title, kind: None, messages, meeting_date: None, meeting_start: None }))
+    Some(Capture::Outlook(Thread { url: link, title, kind: None, messages, meeting_date: None, meeting_start: None, continues }))
 }
 
 // ── Calendar ───────────────────────────────────────────────────────────────────────────
@@ -531,6 +635,7 @@ fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
     let mut out =
         vec![divider(brainstead_core::webcapture::MEETING_CHAT_HEADING, "Messages typed in the meeting chat during the meeting:")];
     out.extend(msgs.iter().map(|m| Message {
+        branch: None,
         sender: m.sender.clone(),
         from_address: None,
         to: None,
@@ -586,6 +691,7 @@ pub fn transcript_capture(client: &Client, s: &SignIn, ev: &Event) -> Result<Opt
 /// A heading-only message used to label a section within a capture.
 fn divider(heading: &str, note: &str) -> Message {
     Message {
+        branch: None,
         sender: heading.to_string(),
         from_address: None,
         to: None,
@@ -648,6 +754,7 @@ pub fn parse_transcript(body: &Value, ev: &Event) -> Result<Option<Capture>, Str
                 return None;
             }
             Some(Message {
+                branch: None,
                 sender: e["speakerDisplayName"].as_str().filter(|s| !s.is_empty()).unwrap_or("Unknown").to_string(),
                 from_address: None,
                 to: None,
@@ -664,6 +771,7 @@ pub fn parse_transcript(body: &Value, ev: &Event) -> Result<Option<Capture>, Str
     }
     let start_local = ev.start.with_timezone(&Local);
     Ok(Some(Capture::Teams(Thread {
+        continues: None,
         url: "https://teams.microsoft.com/".to_string(),
         title: ev.subject.clone(),
         kind: Some("transcript".into()),
@@ -739,7 +847,7 @@ mod tests {
             path: Some("sources/Email. Attachment. Orbit App proposal - 2026-10-24.pdf".into()),
             ..Default::default()
         }]];
-        match thread_capture(&mail, &files).unwrap() {
+        match thread_capture(&mail, &files, None).unwrap() {
             Capture::Outlook(th) => assert_eq!(th.messages[0].attachments, files[0]),
             _ => panic!("expected an Outlook capture"),
         }
@@ -861,7 +969,7 @@ mod tests {
         assert_eq!(mail[0].from_address, "lena@acme.example");
         assert_eq!(mail[0].body, "Point one\nPoint two");
         assert!(!mail[0].has_attachments);
-        match thread_capture(&mail, &[]).unwrap() {
+        match thread_capture(&mail, &[], None).unwrap() {
             Capture::Outlook(th) => {
                 assert_eq!(th.title, "Re: Roadmap", "titled by the latest message");
                 assert_eq!(th.messages.len(), 2, "the whole thread, incl. the reply");
@@ -919,5 +1027,116 @@ mod tests {
         let multiday = Event { end: "2026-10-27T12:00:00Z".parse().unwrap(), ..ev.clone() };
         let err = parse_transcript(&json!({"value": [item("2026-10-26T12:00:00Z")]}), &multiday).unwrap_err();
         assert!(err.contains("2026-10-26") && err.contains("2026-10-24"), "{err}");
+    }
+}
+
+#[cfg(test)]
+mod branch_tests {
+    use super::*;
+
+    /// A message `mins` after 09:00 on 2 Oct, its index the thread's header plus `path` (one 5-byte
+    /// step per reply, each step's first byte its number).
+    fn mail(id: &str, from: &str, to: &str, mins: i64, path: &[u8]) -> Mail {
+        let mut index = vec![1u8; 22];
+        for &p in path {
+            index.extend([p, 0, 0, 0, 0]);
+        }
+        Mail {
+            id: id.into(),
+            conversation_id: "c".into(),
+            subject: "Re: Launch".into(),
+            from: from.into(),
+            from_address: String::new(),
+            to: to.into(),
+            received: chrono::DateTime::parse_from_rfc3339("2026-10-02T09:00:00Z").unwrap().with_timezone(&Utc)
+                + chrono::Duration::minutes(mins),
+            body: format!("{from} says {id}"),
+            web_link: String::new(),
+            has_attachments: false,
+            index,
+        }
+    }
+
+    #[test]
+    fn reads_the_index_outlook_gives() {
+        use base64::Engine;
+        let v = base64::engine::general_purpose::STANDARD.encode([7u8; 27]);
+        let m = serde_json::json!({"SingleValueExtendedProperties": [{"PropertyId": "Binary 0x71", "Value": v}]});
+        assert_eq!(conversation_index(&m), vec![7u8; 27]);
+        // Not a ConversationIndex's shape, or none: nothing.
+        let odd = base64::engine::general_purpose::STANDARD.encode([7u8; 25]);
+        assert!(conversation_index(&serde_json::json!({"SingleValueExtendedProperties": [{"PropertyId": "Binary 0x71", "Value": odd}]}))
+            .is_empty());
+        assert!(conversation_index(&serde_json::json!({})).is_empty());
+    }
+
+    #[test]
+    fn a_forked_thread_is_written_branch_by_branch() {
+        // Maya starts; Lena and Jonas both reply to her; Maya answers Lena; Sam answers Jonas.
+        let msgs = vec![
+            mail("a", "Maya", "Lena, Jonas", 0, &[]),
+            mail("b", "Lena", "Maya", 10, &[1]),
+            mail("c", "Jonas", "Maya, Sam", 20, &[2]),
+            mail("d", "Maya", "Lena", 30, &[1, 1]),
+            mail("e", "Sam", "Jonas", 40, &[2, 1]),
+        ];
+        let b = branched(&msgs);
+        let order: Vec<&str> = b.iter().map(|(i, _)| msgs[*i].id.as_str()).collect();
+        assert_eq!(order, ["a", "b", "d", "c", "e"]);
+        assert_eq!(b[0].1.as_deref(), Some("Branch 1"));
+        let second = b[3].1.as_deref().unwrap();
+        assert!(second.starts_with("Branch 2: replies to Maya's message of ") && second.ends_with(", to Maya, Sam"), "{second}");
+        assert_eq!(b[4].1.as_deref(), Some(second));
+
+        let (_, text) = brainstead_core::webcapture::render(&thread_capture(&msgs, &[], None).unwrap(), Utc::now(), "2026-10-02");
+        let heads: Vec<&str> = text.lines().filter(|l| l.starts_with("##")).collect();
+        assert_eq!(heads[0], "## Branch 1");
+        assert!(heads[1].starts_with("### Maya — "), "{heads:?}");
+        assert!(heads[4].starts_with("## Branch 2: replies to Maya"), "{heads:?}");
+        assert!(heads[5].starts_with("### Jonas — "), "{heads:?}");
+        assert!(text.contains("Sam says e"));
+    }
+
+    #[test]
+    fn a_thread_under_a_new_subject_links_back_to_the_one_it_continues() {
+        let old = vec![mail("a", "Maya", "Lena", 0, &[]), mail("b", "Lena", "Maya", 10, &[1])];
+        // Lena's reply to b under a new subject: Outlook gives it a new ConversationId, but its index
+        // still starts with the old thread's header.
+        let new = vec![mail("c", "Lena", "Maya", 20, &[1, 1]), mail("d", "Maya", "Lena", 30, &[1, 1, 1])];
+        let mut st = super::super::state::State::default();
+        st.mark_thread("old", "sources/emails/Email. Thread. Launch - 2026-10-02.md", 2);
+        st.mark_header("old", &thread_header(&old).unwrap());
+        assert_eq!(replies_into(&old), None, "a thread that starts fresh replies into nothing");
+        let h = replies_into(&new).unwrap();
+        assert_eq!(st.continued("old", &h), None, "not itself");
+        let c = st.continued("new", &h);
+        assert_eq!(c.as_deref(), Some("Email. Thread. Launch - 2026-10-02"));
+        let (_, text) = brainstead_core::webcapture::render(&thread_capture(&new, &[], c).unwrap(), Utc::now(), "2026-10-02");
+        assert!(text.contains("**Continues:** [[Email. Thread. Launch - 2026-10-02]]"), "{text}");
+    }
+
+    #[test]
+    fn a_fork_inside_a_fork_gets_its_own_branch() {
+        let msgs = vec![
+            mail("a", "Maya", "Lena", 0, &[]),
+            mail("b", "Lena", "Maya", 10, &[1]),
+            mail("c", "Maya", "Lena", 20, &[1, 1]),
+            mail("d", "Jonas", "Lena", 30, &[1, 2]),
+        ];
+        let b = branched(&msgs);
+        let order: Vec<&str> = b.iter().map(|(i, _)| msgs[*i].id.as_str()).collect();
+        assert_eq!(order, ["a", "b", "c", "d"]);
+        assert!(b[3].1.as_deref().unwrap().starts_with("Branch 2: replies to Lena's message of"), "{b:?}");
+    }
+
+    #[test]
+    fn a_thread_that_never_forked_or_has_no_index_is_as_before() {
+        let line = vec![mail("a", "Maya", "Lena", 0, &[]), mail("b", "Lena", "Maya", 10, &[1]), mail("c", "Maya", "Lena", 20, &[1, 1])];
+        assert!(branched(&line).iter().all(|(_, b)| b.is_none()));
+        let mut forked = vec![mail("a", "Maya", "Lena", 0, &[]), mail("b", "Lena", "Maya", 10, &[1]), mail("c", "Jonas", "Maya", 20, &[2])];
+        forked[2].index.clear();
+        assert_eq!(branched(&forked), vec![(0, None), (1, None), (2, None)]);
+        let (_, text) = brainstead_core::webcapture::render(&thread_capture(&line, &[], None).unwrap(), Utc::now(), "2026-10-02");
+        assert!(!text.contains("Branch") && text.contains("\n## Maya — "), "{text}");
     }
 }

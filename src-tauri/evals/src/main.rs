@@ -52,10 +52,28 @@ struct Scenario {
     right: String,
     #[serde(default)]
     expect: Vec<String>,
+    /// For ingest: more files planted first (an initiative page, the source itself).
+    #[serde(default)]
+    plants: Vec<Planted>,
+    /// For ingest: actions an initiative must end with, each once.
+    #[serde(default)]
+    actions: Vec<WantAction>,
     /// A model this scenario needs instead of the run's (ingest needs more than Haiku); `--model`
     /// given on the command line wins.
     #[serde(default)]
     model: Option<String>,
+}
+
+/// An action an initiative page must have after the ingest: found by its id or by words in it.
+#[derive(Deserialize, Clone)]
+struct WantAction {
+    page: String,
+    words: String,
+    owner: String,
+    #[serde(default)]
+    person: Option<String>,
+    #[serde(default)]
+    status: Option<String>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -278,8 +296,10 @@ fn run_ingest(s: &Scenario, root: &Path, model: &str) -> Outcome {
     if let Some(p) = &s.pad {
         pad_page(root, p);
     }
-    if let Some(p) = &s.plant {
-        std::fs::write(root.join(&p.path), &p.text).unwrap();
+    for p in s.plant.iter().chain(&s.plants) {
+        let to = root.join(&p.path);
+        std::fs::create_dir_all(to.parent().unwrap()).unwrap();
+        std::fs::write(to, &p.text).unwrap();
     }
     let files = brainstead_core::pageshape::vault_files(root);
     let sources = brainstead_core::pageshape::Sources::from_paths(files.iter().map(String::as_str));
@@ -367,7 +387,47 @@ fn run_ingest(s: &Scenario, root: &Path, model: &str) -> Outcome {
             failures.push(format!("It tried to rewrite a section of {} it was shown only part of.", d.page));
         }
     }
+    check_actions(s, root, &planned, &mut failures);
     Outcome { output, failures }
+}
+
+/// The initiatives as the ingest left them: each wanted action there once, as wanted, and no open
+/// action twice.
+fn check_actions(s: &Scenario, root: &Path, planned: &[ingest::Planned], failures: &mut Vec<String>) {
+    use brainstead_core::initiatives as ini;
+    for p in planned.iter().filter(|p| ini::is_initiative(&p.page)) {
+        std::fs::write(root.join(&p.page), &p.after).unwrap();
+    }
+    let read = |rel: &str| ini::parse(rel, &std::fs::read_to_string(root.join(rel)).unwrap_or_default());
+    for w in &s.actions {
+        let i = read(&w.page);
+        let words = w.words.to_lowercase();
+        let hits: Vec<&ini::Action> = i.actions.iter().filter(|a| a.id == w.words || a.text.to_lowercase().contains(&words)).collect();
+        let [a] = hits.as_slice() else {
+            failures.push(format!("{} has {} actions for “{}”, not one.", w.page, hits.len(), w.words));
+            continue;
+        };
+        let owner = a.owner.map(|o| format!("{o:?}").to_lowercase()).unwrap_or_default();
+        if owner != w.owner
+            || (w.person.is_some() && a.person.as_deref().map(str::to_lowercase) != w.person.as_deref().map(str::to_lowercase))
+        {
+            failures.push(format!("“{}” is {owner} {:?}, not {} {:?}.", a.text, a.person, w.owner, w.person));
+        }
+        if let Some(st) = &w.status {
+            if a.status.as_str() != st {
+                failures.push(format!("“{}” is {}, not {st}.", a.text, a.status.as_str()));
+            }
+        }
+    }
+    for p in planned.iter().filter(|p| ini::is_initiative(&p.page)) {
+        let i = read(&p.page);
+        let mut seen = std::collections::HashSet::new();
+        for a in i.actions.iter().filter(|a| a.status == ini::Status::Open) {
+            if !seen.insert(a.text.to_lowercase()) {
+                failures.push(format!("{} has “{}” twice.", p.page, a.text));
+            }
+        }
+    }
 }
 
 fn run_meeting(s: &Scenario, root: &Path, model: &str) -> Outcome {

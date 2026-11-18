@@ -51,6 +51,10 @@ pub struct State {
     /// How many messages a thread's source held when last written (ConversationId → count).
     #[serde(default)]
     pub thread_counts: BTreeMap<String, usize>,
+    /// Each thread's ConversationIndex header (hex) → its ConversationId, so a thread carried on
+    /// under a new subject can link back to it (D-20261118-06).
+    #[serde(default)]
+    pub thread_headers: BTreeMap<String, String>,
     /// Email attachments brought into `sources/` ([`attachment_key`] → the file's path), so each is
     /// downloaded once however often its thread is rewritten.
     #[serde(default)]
@@ -146,6 +150,19 @@ impl State {
     pub fn mark_thread(&mut self, conv_id: &str, path: &str, count: usize) {
         self.thread_paths.insert(conv_id.to_string(), path.to_string());
         self.thread_counts.insert(conv_id.to_string(), count);
+    }
+
+    /// Records a thread's ConversationIndex header.
+    pub fn mark_header(&mut self, conv_id: &str, header: &str) {
+        self.thread_headers.insert(header.to_string(), conv_id.to_string());
+    }
+
+    /// The name of the source of the other thread whose header is `header`, when it's still known.
+    pub fn continued(&self, conv_id: &str, header: &str) -> Option<String> {
+        let other = self.thread_headers.get(header).filter(|c| *c != conv_id)?;
+        let path = self.thread_path(other)?;
+        let name = path.rsplit('/').next().unwrap_or(path);
+        Some(name.strip_suffix(".md").unwrap_or(name).to_string())
     }
 
     pub fn transcript_done(&self, meeting: &str) -> bool {
