@@ -67,7 +67,13 @@ pub fn sync_sign_in_state() -> auth::SignInState {
 /// The user signs out of the sync (Settings): forgets the sign-in.
 #[tauri::command]
 pub fn sync_sign_out() -> Result<(), String> {
-    auth::forget()
+    auth::forget_teams()
+}
+
+/// Forgets the Outlook mail sign-in only (Settings › Sync › Outlook › Sign out).
+#[tauri::command]
+pub fn sync_sign_out_outlook() -> Result<(), String> {
+    auth::forget_mail()
 }
 
 /// Runs one sync pass now (Settings › "Sync now").

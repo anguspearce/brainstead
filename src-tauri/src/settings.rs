@@ -44,6 +44,10 @@ pub struct Settings {
     /// threads that mention the user, while a Slack tab hands its sign-in over.
     #[serde(default)]
     pub sync_slack: bool,
+    /// Outlook mail sync, apart from Teams (it needs its own Outlook on the web tab). None follows
+    /// `sync_enabled`, as before the two were separate (D-20261118-18).
+    #[serde(default)]
+    pub sync_outlook: Option<bool>,
     /// Slack channel ids to sync (off unless picked).
     #[serde(default)]
     pub slack_channels: Vec<String>,
@@ -74,6 +78,7 @@ impl Default for Settings {
             sync_ignore_senders: Vec::new(),
             sync_ignore_chats: Vec::new(),
             sync_slack: false,
+            sync_outlook: None,
             slack_channels: Vec::new(),
             sync_initial_days: 7,
             sync_mail_attachments: true,
@@ -86,6 +91,11 @@ impl Default for Settings {
 const SYSTEM_DIRS: [&str; 6] = ["wiki", "sources", "Templates", "images", ".trash", ".obsidian"];
 
 impl Settings {
+    /// Whether Outlook mail syncs: its own switch, or before there was one, the Teams switch's.
+    pub fn mail_on(&self) -> bool {
+        self.sync_outlook.unwrap_or(self.sync_enabled)
+    }
+
     /// Cleans what the window sent: trimmed, unique, valid folder names; a known theme.
     pub fn normalised(mut self) -> Result<Settings, String> {
         // The Keychain switch, gone 2026-10-03 (nothing was ever kept there).

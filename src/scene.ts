@@ -287,12 +287,20 @@ export function applyScene(sc: Scene) {
   if (sc.update) updateView.set(sampleUpdate(sc.update));
   if (sc.syncDot) {
     settings.update({ syncEnabled: true });
-    const base = { handedOver: "2026-10-28T07:00:00Z", stale: [], rejected: [], extensionOutdated: null, extensionShipped: "1.1.16" };
+    const base = {
+      handedOver: "2026-10-28T07:00:00Z",
+      stale: [],
+      rejected: [],
+      extensionOutdated: null,
+      extensionShipped: "1.1.16",
+      teams: true,
+      outlook: true,
+    };
     sceneSignIn.set(
       sc.syncDot === "ok"
         ? { ...base, signedIn: true }
         : sc.syncDot === "stale"
-          ? { ...base, signedIn: true, stale: ["mail"] }
+          ? { ...base, signedIn: true, stale: ["mail"], outlook: false }
           : { ...base, signedIn: false, handedOver: null },
     );
   }

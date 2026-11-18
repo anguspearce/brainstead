@@ -26,6 +26,7 @@ import { useDraftPaths } from "./drafts";
 import { IMAGE_EXT } from "./md/wikilinks";
 import { TopBar } from "./TopBar";
 import { hasSync } from "./platform";
+import { mailOn } from "./syncStatus";
 import { Dialog, fmtBytes, fmtCount, Popover, Seg } from "./ui";
 import { TypeDot, TypePill } from "./typeTone";
 import { keyLabel } from "./platform";
@@ -631,7 +632,7 @@ function useDropToSources(): boolean {
 function SyncNowButton() {
   const s = useStore(settings);
   const [syncing, setSyncing] = useState(false);
-  if (!hasSync || !s.syncEnabled) return null;
+  if (!hasSync || !(s.syncEnabled || mailOn(s) || s.syncSlack)) return null;
   const run = () => {
     setSyncing(true);
     api

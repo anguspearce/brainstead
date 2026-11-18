@@ -325,6 +325,33 @@ pub struct Progress {
     pub counts: BTreeMap<String, usize>,
     /// Conversations seen before (the first-sync limit applies only the first time).
     pub seen: Vec<String>,
+    /// Each conversation's `updated` when it was last read, and when that was (epoch seconds): a
+    /// pass reads what changed first, then what's waited longest, so every conversation gets its
+    /// turn however many there are.
+    pub updated_read: BTreeMap<String, i64>,
+    pub read_at: BTreeMap<String, i64>,
+}
+
+/// Which conversations a pass reads, at most `limit` (D-20261118-19): those changed since they were
+/// last read (most recent first), then those Slack gives no time for, then the unchanged ones, each
+/// of the last two longest-unread first. Only those active since `since_for` (or of unknown time).
+pub fn pick(convs: &[Conv], prog: &Progress, since_for: impl Fn(&str) -> i64, limit: usize) -> Vec<Conv> {
+    let mut in_window: Vec<&Conv> = convs.iter().filter(|c| c.updated == 0 || c.updated >= since_for(&c.id)).collect();
+    let read_at = |c: &Conv| prog.read_at.get(&c.id).copied().unwrap_or(0);
+    let changed = |c: &Conv| c.updated > 0 && prog.updated_read.get(&c.id).is_none_or(|u| *u < c.updated);
+    in_window.sort_by_key(|c| {
+        let rank = if changed(c) {
+            0
+        } else if c.updated == 0 {
+            1
+        } else {
+            2
+        };
+        // Changed: newest first; the rest: longest unread first.
+        let order = if rank == 0 { -c.updated } else { read_at(c) };
+        (rank, order)
+    });
+    in_window.into_iter().take(limit).cloned().collect()
 }
 
 fn progress_file(data: &Path) -> PathBuf {
@@ -432,10 +459,8 @@ fn workspace(
         }
     }
     let wanted = |c: &Conv| (c.kind != "channel" || s.slack_channels.contains(&c.id)) && !s.sync_ignore_chats.contains(&c.id);
-    let mut chosen: Vec<Conv> =
-        convs.iter().filter(|c| wanted(c) && (c.updated == 0 || c.updated >= since_for(&c.id).timestamp())).cloned().collect();
-    chosen.sort_by_key(|c| std::cmp::Reverse(c.updated));
-    chosen.truncate(MOST_CONVERSATIONS);
+    let wanted_convs: Vec<Conv> = convs.iter().filter(|c| wanted(c)).cloned().collect();
+    let mut chosen: Vec<Conv> = pick(&wanted_convs, prog, |id| since_for(id).timestamp(), MOST_CONVERSATIONS);
 
     // Threads that mention the user in channels not picked: those threads alone.
     let mut only: HashMap<String, Vec<String>> = HashMap::new();
@@ -487,6 +512,8 @@ fn workspace(
                 continue;
             }
         };
+        prog.updated_read.insert(c.id.clone(), c.updated);
+        prog.read_at.insert(c.id.clone(), Utc::now().timestamp());
         let tops: Vec<Msg> = match only.get(&c.id) {
             Some(threads) => msgs.into_iter().filter(|m| threads.contains(&m.ts)).collect(),
             None => msgs,
@@ -647,6 +674,36 @@ mod tests {
         let lunch = text.find("## Lena — 2026-11-16 09:10\n\nLunch?").unwrap();
         assert!(sam < reply && reply < lunch, "{text}");
         assert!(text.contains("Pricing.pdf"), "{text}");
+    }
+
+    #[test]
+    fn every_conversation_gets_its_turn_however_many_there_are() {
+        let conv = |id: &str, updated: i64| Conv { id: id.into(), kind: "im".into(), name: String::new(), user: None, updated };
+        // 50 conversations active this week, nothing read yet: the 40 most recent.
+        let convs: Vec<Conv> = (0..50).map(|i| conv(&format!("D{i:02}"), 1_000 + i)).collect();
+        let mut prog = Progress::default();
+        let first = pick(&convs, &prog, |_| 0, 40);
+        assert_eq!((first.len(), first[0].id.as_str(), first[39].id.as_str()), (40, "D49", "D10"));
+        // Read them; the next pass takes the 10 left, then the longest-unread of the rest.
+        for (i, c) in first.iter().enumerate() {
+            prog.updated_read.insert(c.id.clone(), c.updated);
+            prog.read_at.insert(c.id.clone(), 5_000 + i as i64);
+        }
+        let next = pick(&convs, &prog, |_| 0, 40);
+        assert_eq!(
+            next[..10].iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            (0..10).rev().map(|i| format!("D{i:02}")).collect::<Vec<_>>()
+        );
+        assert_eq!(next[10].id, "D49", "then the one read longest ago");
+        // A conversation that changes goes first; one with no time comes before the unchanged.
+        let mut convs = convs;
+        convs[5].updated = 9_000;
+        convs.push(conv("G1", 0));
+        let again = pick(&convs, &prog, |_| 0, 40);
+        assert_eq!((again[0].id.as_str(), again[1].id.as_str()), ("D05", "D09"));
+        assert!(again.iter().position(|c| c.id == "G1").unwrap() < again.iter().position(|c| c.id == "D49").unwrap());
+        // Quiet longer than the window: left out.
+        assert!(pick(&[conv("D99", 10)], &Progress::default(), |_| 100, 40).is_empty());
     }
 
     #[test]

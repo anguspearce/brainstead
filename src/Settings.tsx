@@ -6,7 +6,7 @@ import { Fragment, useEffect, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, AppInfo, CliInfo, CliName, Skill, SkipSuggestion, Theme } from "./api";
 import { acceptSkip, unskipChat } from "./skips";
-import { extensionOutdatedText, rejectedText } from "./syncStatus";
+import { extensionOutdatedText, mailOn, rejectedText } from "./syncStatus";
 import appIconDark from "../src-tauri/icons/128x128@2x.png";
 import appIconLight from "../src-tauri/icons/about-light.png";
 import { Icon, TrayMark } from "./icons";
@@ -1502,6 +1502,12 @@ function SyncPane() {
     };
   }, []);
   const enabled = !!s.syncEnabled;
+  const mail = mailOn(s);
+  const teamsParts = ["chats", "transcripts", "channel list"];
+  const teamsStale = (signIn?.stale ?? []).filter((x) => teamsParts.includes(x));
+  const teamsRejected = (signIn?.rejected ?? []).filter((x) => teamsParts.includes(x));
+  const mailStale = !!signIn?.signedIn && (signIn?.stale ?? []).includes("mail");
+  const mailRejected = (signIn?.rejected ?? []).includes("mail");
   const ignore = s.syncIgnoreSenders ?? [];
   const chosen = s.syncChannels ?? [];
   const addIgnore = () => {
@@ -1529,9 +1535,6 @@ function SyncPane() {
       .catch((e) => toast(`Couldn't list channels: ${e}`, undefined, "bad"))
       .finally(() => setLoadingChannels(false));
   };
-  const teamsStatus = signIn?.signedIn
-    ? `Signed in, handed over ${signIn.handedOver ? ago(new Date(signIn.handedOver).getTime()) : "recently"}. Keep Teams, and Outlook for mail, open in browser tabs.`
-    : "Not signed in: open Teams in Chrome with the Teams capture extension loaded. The sign-in arrives within a few minutes.";
   return (
     <>
       <section className="sgroup">
@@ -1568,7 +1571,7 @@ function SyncPane() {
               type="button"
               className="btn sm"
               title="Run one sync pass now: Teams and Outlook, and Slack, whichever are on"
-              disabled={busy || !(enabled || s.syncSlack)}
+              disabled={busy || !(enabled || mail || s.syncSlack)}
               onClick={syncNow}
             >
               <Icon name="refresh" size={13} className={busy ? "spin" : undefined} />
@@ -1589,7 +1592,7 @@ function SyncPane() {
             <span>{p}</span>
           </div>
         ))}
-        {s.readOnly && (enabled || s.syncSlack) && (
+        {s.readOnly && (enabled || mail || s.syncSlack) && (
           <div className="doc-banner warn" role="status">
             <Icon name="info" size={14} />
             <span>Read-only is on (Settings › Vault), so the sync is paused until it's switched off.</span>
@@ -1598,59 +1601,44 @@ function SyncPane() {
       </section>
 
       <section className="sgroup">
-        <h2 className="h3">Teams and Outlook</h2>
+        <h2 className="h3">Teams</h2>
         <div className="card">
           <div className="srow">
-            <Icon name="chat" style={{ color: enabled && signIn?.signedIn ? "var(--green)" : "var(--ink3)" }} />
+            <Icon name="chat" style={{ color: enabled && signIn?.teams ? "var(--green)" : "var(--ink3)" }} />
             <div className="t">
-              <div className="pt">Sync Teams and Outlook</div>
+              <div className="pt">Sync Teams</div>
               <div className="faint">
-                {teamsStatus}
-                {signIn?.signedIn && signIn.stale.length > 0 && (
+                {signIn?.teams
+                  ? `Chats, meeting transcripts and your calendar. Signed in, handed over ${signIn.handedOver ? ago(new Date(signIn.handedOver).getTime()) : "recently"}; keep Teams open in a browser tab.`
+                  : "Chats, meeting transcripts and your calendar. Not signed in: open Teams in Chrome with the Teams capture extension loaded."}
+                {teamsStale.length > 0 && (
                   <div style={{ color: "var(--amber)" }}>
-                    Gone stale: {signIn.stale.join(", ")}. Those wait until Teams renews them, within the hour while its tab is open.
+                    Gone stale: {teamsStale.join(", ")}. Those wait until Teams renews them, within the hour while its tab is open.
                   </div>
                 )}
-                {signIn?.signedIn && signIn.rejected.length > 0 && (
-                  <div style={{ color: "var(--amber)" }}>{rejectedText(signIn.rejected)}</div>
-                )}
+                {teamsRejected.length > 0 && <div style={{ color: "var(--amber)" }}>{rejectedText(teamsRejected)}</div>}
                 {signIn?.handedOver && signIn.extensionOutdated !== null && (
                   <div style={{ color: "var(--amber)" }}>{extensionOutdatedText(signIn)}</div>
                 )}
               </div>
             </div>
-            {signIn?.signedIn && (
+            {signIn?.teams && (
               <button
                 type="button"
                 className="btn sm"
-                title="Forget the Teams sign-in on this computer"
+                title="Forget the Teams sign-in on this computer (Outlook's stays)"
                 onClick={() => void api.syncSignOut().then(refresh)}
               >
                 Sign out
               </button>
             )}
-            <Switch label="Sync Teams and Outlook" on={enabled} onChange={(v) => settings.update({ syncEnabled: v })} />
-          </div>
-          <div className="srow">
-            <Icon name="mail" style={{ color: (s.syncMailAttachments ?? true) ? "var(--green)" : "var(--ink3)" }} />
-            <div className="t">
-              <div className="pt">Bring in email attachments</div>
-              <div className="faint">
-                PDF, Word, PowerPoint, Excel and text files up to 30 MB, each its own source, linked from its thread. Others are listed by
-                name.
-              </div>
-            </div>
-            <Switch
-              label="Bring in email attachments"
-              on={s.syncMailAttachments ?? true}
-              onChange={(v) => settings.update({ syncMailAttachments: v })}
-            />
+            <Switch label="Sync Teams" on={enabled} onChange={(v) => settings.update({ syncEnabled: v, syncOutlook: mail })} />
           </div>
         </div>
 
         <h3 className="ssub">Teams channels</h3>
         <p className="faint">1:1 and group chats sync on their own. Channels sync only when you switch them on here.</p>
-        {signIn?.signedIn ? (
+        {signIn?.teams ? (
           <div className="row">
             <button
               type="button"
@@ -1683,6 +1671,53 @@ function SyncPane() {
             ))}
           </div>
         )}
+      </section>
+
+      <section className="sgroup">
+        <h2 className="h3">Outlook</h2>
+        <div className="card">
+          <div className="srow">
+            <Icon name="mail" style={{ color: mail && signIn?.outlook ? "var(--green)" : "var(--ink3)" }} />
+            <div className="t">
+              <div className="pt">Sync Outlook mail</div>
+              <div className="faint">
+                {signIn?.outlook
+                  ? "Your Inbox mail. Signed in; keep Outlook on the web open in a browser tab."
+                  : "Your Inbox mail. Not signed in: open Outlook on the web in Chrome with the Outlook capture extension loaded."}
+                {mailStale && (
+                  <div style={{ color: "var(--amber)" }}>Gone stale: mail. It waits until Outlook renews it, while its tab is open.</div>
+                )}
+                {mailRejected && <div style={{ color: "var(--amber)" }}>{rejectedText(["mail"])}</div>}
+              </div>
+            </div>
+            {signIn?.outlook && (
+              <button
+                type="button"
+                className="btn sm"
+                title="Forget the Outlook mail sign-in on this computer (Teams' stays)"
+                onClick={() => void api.syncSignOutOutlook().then(refresh)}
+              >
+                Sign out
+              </button>
+            )}
+            <Switch label="Sync Outlook mail" on={mail} onChange={(v) => settings.update({ syncOutlook: v })} />
+          </div>
+          <div className="srow">
+            <Icon name="source" style={{ color: (s.syncMailAttachments ?? true) ? "var(--green)" : "var(--ink3)" }} />
+            <div className="t">
+              <div className="pt">Bring in email attachments</div>
+              <div className="faint">
+                PDF, Word, PowerPoint, Excel and text files up to 30 MB, each its own source, linked from its thread. Others are listed by
+                name.
+              </div>
+            </div>
+            <Switch
+              label="Bring in email attachments"
+              on={s.syncMailAttachments ?? true}
+              onChange={(v) => settings.update({ syncMailAttachments: v })}
+            />
+          </div>
+        </div>
 
         <h3 className="ssub">Mail to skip</h3>
         <p className="faint">

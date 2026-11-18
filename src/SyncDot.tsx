@@ -11,13 +11,16 @@ import { api, SyncSignIn } from "./api";
 import { nav } from "./nav";
 import { hasSync } from "./platform";
 import { Store, settings, useStore } from "./store";
-import { syncStatus } from "./syncStatus";
+import { mailOn, syncStatus } from "./syncStatus";
 
 /** Screenshot mode: a sign-in state to show instead of the real one (scene.ts `syncDot`). */
 export const sceneSignIn = new Store<SyncSignIn | null>(null);
 
 export function SyncDot() {
-  const on = !!useStore(settings).syncEnabled && hasSync;
+  const st = useStore(settings);
+  const teams = !!st.syncEnabled;
+  const mail = mailOn(st);
+  const on = (teams || mail) && hasSync;
   const scene = useStore(sceneSignIn);
   const [signIn, setSignIn] = useState<SyncSignIn | null>(null);
   useEffect(() => {
@@ -37,7 +40,7 @@ export function SyncDot() {
     };
   }, [on, scene]);
   if (!on) return null;
-  const { tone, text } = syncStatus(scene ?? signIn);
+  const { tone, text } = syncStatus(scene ?? signIn, { teams, mail });
   return (
     <button
       type="button"

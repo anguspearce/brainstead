@@ -77,6 +77,7 @@ import {
   trashCapture,
 } from "./inboxActions";
 import { acceptSkip, unskipChat } from "./skips";
+import { mailOn } from "./syncStatus";
 import {
   ADVISORY,
   byRun,
@@ -2333,7 +2334,7 @@ async function syncTool(a: Args): Promise<string> {
     const learned = await api.skipSuggestions().catch(() => null);
     const chats = s.syncIgnoreChats ?? [];
     return [
-      `Teams and Outlook sync is ${s.syncEnabled ? "on" : "off"}.`,
+      `Teams sync is ${s.syncEnabled ? "on" : "off"}; Outlook mail sync is ${mailOn(s) ? "on" : "off"}.`,
       state.signedIn
         ? `Signed in (handed over ${state.handedOver ? new Date(state.handedOver).toISOString().slice(0, 16).replace("T", " ") : "recently"}).${state.stale.length ? ` Gone stale, waiting for Teams to renew: ${state.stale.join(", ")}.` : ""}${state.rejected.length ? ` ${rejectedText(state.rejected)}` : ""}${state.handedOver && state.extensionOutdated !== null ? ` ${extensionOutdatedText(state)}` : ""}`
         : "Not signed in — open Teams in the browser so the extension hands the sign-in over.",
@@ -2357,8 +2358,13 @@ async function syncTool(a: Args): Promise<string> {
     ].join("\n");
   }
   if (action === "on" || action === "off") {
-    settings.update({ syncEnabled: action === "on" });
-    return `Teams and Outlook sync turned ${action}.`;
+    // Teams only: Outlook keeps what it was (D-20261118-18).
+    settings.update({ syncEnabled: action === "on", syncOutlook: mailOn(s) });
+    return `Teams sync turned ${action}.`;
+  }
+  if (action === "outlook_on" || action === "outlook_off") {
+    settings.update({ syncOutlook: action === "outlook_on" });
+    return `Outlook mail sync turned ${action === "outlook_on" ? "on" : "off"}.`;
   }
   if (action === "now") {
     const r = await api.syncNow();
@@ -2428,7 +2434,7 @@ async function syncTool(a: Args): Promise<string> {
     return `Syncing chat ${id} again.`;
   }
   throw new Error(
-    "action is get, on, off, now, channels, channel, unchannel, ignore, unignore, suggestions, accept, dismiss, unskip_chat, slack_on, slack_off, slack_channels, slack_channel or slack_unchannel.",
+    "action is get, on, off, outlook_on, outlook_off, now, channels, channel, unchannel, ignore, unignore, suggestions, accept, dismiss, unskip_chat, slack_on, slack_off, slack_channels, slack_channel or slack_unchannel.",
   );
 }
 
@@ -3485,7 +3491,8 @@ const settingRows = (): SettingRow[] => [
   ["meetingIngest", "AI assistants", "Ingest a meeting note once it's made", "bool", true],
   ["meetingTrash", "AI assistants", "Then move the transcript to the Trash", "bool", true],
   ["ingestOnArrival", "AI assistants", "Ingest new sources as they arrive", "bool", false],
-  ["syncEnabled", "Sync", "Sync Teams and Outlook", "bool", false],
+  ["syncEnabled", "Sync", "Sync Teams", "bool", false],
+  ["syncOutlook", "Sync", "Sync Outlook mail", "bool", false],
   ["syncInitialDays", "Sync", "Days of history to load on first sync (0 = no limit)", "number", 7],
   ["syncMailAttachments", "Sync", "Bring in email attachments", "bool", true],
   ["syncSlack", "Sync", "Slack sync", "bool", false],

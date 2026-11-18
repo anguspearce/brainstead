@@ -1007,6 +1007,7 @@ pub fn run() {
             sync::sync_sign_in_state,
             sync::sync_sign_out,
             sync::sync_now,
+            sync::sync_sign_out_outlook,
             sync::skips::skip_suggestions,
             sync::slack::slack_sign_in_state,
             sync::slack::slack_sign_out,

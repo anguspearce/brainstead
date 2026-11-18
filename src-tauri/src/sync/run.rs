@@ -55,8 +55,8 @@ fn run_inner(data: &Path) -> Report {
     let mut r = Report::default();
     let s = settings::load(&data.join("settings.json"));
     let vault = s.vault_path.as_deref().filter(|p| !p.trim().is_empty());
-    if !s.sync_enabled && !s.sync_slack {
-        r.blocked = Some("Sync is off: switch on Teams and Outlook, or Slack, in Settings › Sync.".into());
+    if !s.sync_enabled && !s.mail_on() && !s.sync_slack {
+        r.blocked = Some("Sync is off: switch on Teams, Outlook or Slack in Settings › Sync.".into());
         return r;
     }
     let Some(vault) = vault else {
@@ -71,11 +71,13 @@ fn run_inner(data: &Path) -> Report {
     if s.sync_slack {
         super::slack::sync(data, Path::new(vault), &s, cutoff_day(s.sync_initial_days).as_deref(), &mut r);
     }
-    if !s.sync_enabled {
+    if !s.sync_enabled && !s.mail_on() {
         return r;
     }
     let Some(sign_in) = auth::load() else {
-        r.blocked = Some("Not signed in. Open Teams in your browser so the extension hands the sign-in over.".into());
+        r.blocked = Some(
+            "Not signed in. Open Teams (or Outlook on the web, for mail) in your browser so its extension hands the sign-in over.".into(),
+        );
         return r;
     };
 
@@ -85,9 +87,16 @@ fn run_inner(data: &Path) -> Report {
     // mailbox or long chat history can't flood the Inbox. 0 means no limit.
     let p = Pass { client: super::client(), sign_in, data, vault, s: &s, cutoff: cutoff_day(s.sync_initial_days) };
 
-    sync_chats(&p, &mut st, &mut r);
-    sync_mail(&p, &mut st, &mut r);
-    sync_transcripts(&p, &mut st, &mut r);
+    // Teams (chats, transcripts) and Outlook (mail) each on its own switch and its own tab's sign-in.
+    if s.sync_enabled {
+        sync_chats(&p, &mut st, &mut r);
+    }
+    if s.mail_on() {
+        sync_mail(&p, &mut st, &mut r);
+    }
+    if s.sync_enabled {
+        sync_transcripts(&p, &mut st, &mut r);
+    }
 
     st.initialized = true;
     if let Err(e) = state::save(data, &st) {

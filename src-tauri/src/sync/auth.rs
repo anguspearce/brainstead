@@ -113,6 +113,10 @@ pub struct SignInState {
     pub extension_outdated: Option<String>,
     /// The Teams extension version this build ships.
     pub extension_shipped: String,
+    /// Teams' own sign-in is live (chats, transcripts, calendar), handed over from a Teams tab.
+    pub teams: bool,
+    /// The mail sign-in is live, handed over from an Outlook on the web tab.
+    pub outlook: bool,
 }
 
 /// The Teams extension version this build ships, from its manifest.
@@ -161,6 +165,33 @@ pub fn forget() -> Result<(), String> {
     platform::secret_delete(ACCOUNT)
 }
 
+/// Forgets Teams' sign-in (Teams' Sign out), keeping the mail one Outlook handed over.
+pub fn forget_teams() -> Result<(), String> {
+    match load() {
+        Some(s) => match s.tokens.get(Service::Outlook.key()).cloned() {
+            Some(mail) => {
+                let mut kept = SignIn { origin: s.origin, tenant: s.tenant, handed_over: s.handed_over, ..SignIn::default() };
+                kept.tokens.insert(Service::Outlook.key().to_string(), mail);
+                store(&kept)
+            }
+            None => forget(),
+        },
+        None => Ok(()),
+    }
+}
+
+/// Forgets only the mail sign-in (Outlook's Sign out), keeping Teams'.
+pub fn forget_mail() -> Result<(), String> {
+    match load() {
+        Some(mut s) => {
+            s.tokens.remove(Service::Outlook.key());
+            s.rejected.remove(Service::Outlook.key());
+            store(&s)
+        }
+        None => Ok(()),
+    }
+}
+
 /// What Settings shows. Signed in means we currently hold at least one unexpired token from a
 /// handover — once they all expire (Teams closed in the browser for a while), it reads as not
 /// signed in, prompting the user to reopen Teams.
@@ -180,7 +211,19 @@ pub fn state() -> SignInState {
                 .collect();
             let shipped = shipped_extension_version();
             let extension_outdated = older(&s.extension_version, &shipped).then(|| s.extension_version.clone());
-            SignInState { signed_in, handed_over: Some(s.handed_over), stale, rejected, extension_outdated, extension_shipped: shipped }
+            let live = |svc: Service| {
+                s.tokens.get(svc.key()).is_some_and(|t| t.expires > now + MARGIN_SECS) && !s.rejected.contains_key(svc.key())
+            };
+            SignInState {
+                signed_in,
+                handed_over: Some(s.handed_over),
+                stale,
+                rejected,
+                extension_outdated,
+                extension_shipped: shipped,
+                teams: live(Service::Spaces) || live(Service::Substrate),
+                outlook: live(Service::Outlook),
+            }
         }
         None => SignInState {
             signed_in: false,
@@ -189,6 +232,8 @@ pub fn state() -> SignInState {
             rejected: Vec::new(),
             extension_outdated: None,
             extension_shipped: shipped_extension_version(),
+            teams: false,
+            outlook: false,
         },
     }
 }

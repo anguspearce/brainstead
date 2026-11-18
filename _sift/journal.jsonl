@@ -539,3 +539,5 @@
 {"commit": "c39f48d4", "detail": "D-20261118-15 - Skips learned from deletes, suggested in Settings, onto the existing skip lists", "id": "j-20261118-185815-49cc", "kind": "decision-ref", "ts": "2026-11-18T18:58:15Z", "who": "waynetd777@users.noreply.github.com"}
 {"commit": "4fe65c95", "detail": "D-20261118-16 - Slack sync: how the extension and the app read Slack", "id": "j-20261118-190908-9fe0", "kind": "decision-ref", "ts": "2026-11-18T19:09:08Z", "who": "waynetd777@users.noreply.github.com"}
 {"commit": "e317cf51", "detail": "D-20261118-17 - The sync is called Sync", "id": "j-20261118-191523-dbf9", "kind": "decision-ref", "ts": "2026-11-18T19:15:23Z", "who": "waynetd777@users.noreply.github.com"}
+{"commit": "044839db", "detail": "D-20261118-18 - Teams and Outlook sync on separate switches", "id": "j-20261118-193017-0f16", "kind": "decision-ref", "ts": "2026-11-18T19:30:17Z", "who": "waynetd777@users.noreply.github.com"}
+{"commit": "044839db", "detail": "D-20261118-19 - Slack passes rotate through conversations", "id": "j-20261118-193017-ad97", "kind": "decision-ref", "ts": "2026-11-18T19:30:17Z", "who": "waynetd777@users.noreply.github.com"}

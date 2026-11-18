@@ -58,6 +58,8 @@ export interface Settings {
   syncIgnoreChats?: string[];
   /** Slack sync (the Slack extension hands the sign-in over). */
   syncSlack?: boolean;
+  /** Outlook mail sync, apart from Teams; unset follows syncEnabled (mailOn). */
+  syncOutlook?: boolean;
   /** Slack channel ids to sync. */
   slackChannels?: string[];
   /** How many days of history the first sync loads (0 = no limit). */
@@ -425,6 +427,10 @@ export interface SyncSignIn {
   extensionOutdated: string | null;
   /** The Teams extension version this build ships. */
   extensionShipped: string;
+  /** Teams' own sign-in is live (chats, transcripts, calendar). */
+  teams: boolean;
+  /** The mail sign-in, from an Outlook on the web tab, is live. */
+  outlook: boolean;
 }
 
 /** What one sync pass did. */
@@ -1442,6 +1448,7 @@ export const api = {
   // Teams and Outlook sync (src-tauri/src/sync/). macOS only.
   syncSignInState: () => invoke<SyncSignIn>("sync_sign_in_state"),
   syncSignOut: () => invoke<void>("sync_sign_out"),
+  syncSignOutOutlook: () => invoke<void>("sync_sign_out_outlook"),
   syncNow: () => invoke<SyncReport>("sync_now"),
   syncTodayMeetings: () => invoke<SyncMeeting[]>("sync_today_meetings"),
   /** The last calendar read's meetings that haven't ended — instant, no network. */
