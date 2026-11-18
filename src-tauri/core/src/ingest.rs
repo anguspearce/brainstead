@@ -1238,11 +1238,19 @@ mod tracking_tests {
 
     #[test]
     fn a_chat_day_gets_no_summary_page() {
-        let chat = Source { rel: "sources/slack/Slack. Chat. Lena - 2026-11-16.md".into(), text: SourceText::Text("Lena: the launch moves.".into()) };
-        assert!(chat.is_chat_day() && Source { rel: "sources/Teams. Chat. Standup - 2026-11-16.md".into(), text: SourceText::Text(String::new()) }.is_chat_day());
+        let chat = Source {
+            rel: "sources/slack/Slack. Chat. Lena - 2026-11-16.md".into(),
+            text: SourceText::Text("Lena: the launch moves.".into()),
+        };
+        assert!(
+            chat.is_chat_day()
+                && Source { rel: "sources/Teams. Chat. Standup - 2026-11-16.md".into(), text: SourceText::Text(String::new()) }
+                    .is_chat_day()
+        );
         assert!(!src().is_chat_day());
         assert!(prompt(&chat, &[], "", "Friday", &Tracking::default()).contains("give no summary page"));
-        let a = parse_answer(r#"{"summary": {"page": "wiki/summaries/Slack. Chat. Lena - 2026-11-16", "content": "x"}, "pages": []}"#).unwrap();
+        let a =
+            parse_answer(r#"{"summary": {"page": "wiki/summaries/Slack. Chat. Lena - 2026-11-16", "content": "x"}, "pages": []}"#).unwrap();
         let (out, dropped) = plan(&chat, &a, |_| None, |_| None, "2026-11-18", 6000);
         assert!(out.is_empty());
         assert_eq!(dropped[0].reason, "A day of a chat gets no summary page.");
