@@ -2,6 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { appLink, GUIDES, helpUrl, KEYS, openSection, keyRows, parseTopic, searchHelp, TOPICS, topicFor } from ".";
 import type { Screen, SettingsPane } from "../nav";
@@ -153,5 +154,25 @@ describe("help topics", () => {
       "Ask",
     ]);
     expect(KEYS[0][1]).toContainEqual(["?", "Help for this screen"]);
+  });
+});
+
+describe("Learn more links", () => {
+  // Each setting's Learn more opens its pane's help at a section: one renamed in the help, or a
+  // link that names one that isn't there, would open the topic at its top instead.
+  it("names a section its topic has", () => {
+    const files = ["src/Settings.tsx", "src/Jobs.tsx", "src/AutomatedTools.tsx"];
+    const links = files.flatMap((f) =>
+      [...readFileSync(f, "utf8").matchAll(/<LearnMore topic="([\w-]+)" section="([^"]+)"/g)].map((m) => [f, m[1], m[2]]),
+    );
+    expect(links.length).toBeGreaterThan(30);
+    for (const [f, topic, section] of links) {
+      const t = TOPICS.find((x) => x.id === topic);
+      expect(t, `${f}: ${topic}`).toBeTruthy();
+      expect(
+        t!.sections.map((x) => x.title),
+        `${f}: ${topic} › ${section}`,
+      ).toContain(section);
+    }
   });
 });

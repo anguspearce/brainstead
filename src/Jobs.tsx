@@ -2,10 +2,10 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Settings › Jobs & schedule: the scheduled daily and weekly summaries (src-tauri/src/reviews.rs).
-// Only one app runs them at a time, so Brainstead runs them only when you say it should; then
-// The previous app's schedule should be switched off. Each run opens as a chat tab, and its block
-// can be undone while the file is as the run left it.
+// Settings › Automations (pane id `jobs`): the weekly review's day and time and its preparation,
+// the scheduled daily and weekly summaries (src-tauri/src/reviews.rs) and the daily check.
+// Brainstead runs the summaries only when you say it should, so two apps don't both write them.
+// Each run opens as a chat tab, and its block can be undone while the file is as the run left it.
 
 import { useEffect, useState } from "react";
 import {
@@ -29,6 +29,7 @@ import { DatePicker } from "./DatePicker";
 import { fmtShortDate } from "./md/dates";
 import { DocButton, useIsGone } from "./docButton";
 import { AutomatedTools } from "./AutomatedTools";
+import { LearnMore } from "./help/HelpDrawer";
 
 export const DEFAULT_SCHEDULE: SummarySchedule = {
   dailyEnabled: false,
@@ -51,6 +52,38 @@ const DAYS: [Weekday, string][] = [
   ["sat", "Saturday"],
   ["sun", "Sunday"],
 ];
+
+/** Sets the weekly review's day or time (`weeklyReview`), keeping the other: the one function
+ *  Settings › Automations and the Weekly review's start page both change it with. */
+export function setWeeklyReview(patch: Partial<WeeklyReviewTime>) {
+  settings.update({ weeklyReview: { ...DEFAULT_WEEKLY_REVIEW, ...settings.get().weeklyReview, ...patch } });
+}
+
+/** The weekly review's day and time pickers, as Settings › Automations and the review's start page
+ *  show them; `prefix` puts "Every … at" round them. */
+export function WeeklyReviewWhen({ prefix }: { prefix?: boolean }) {
+  const wr = { ...DEFAULT_WEEKLY_REVIEW, ...useStore(settings).weeklyReview };
+  return (
+    <span className="jtime">
+      {prefix && <span className="muted">Every</span>}
+      <select
+        title="The day of your weekly review (its preparation runs four hours before it)"
+        className="sel"
+        value={wr.day}
+        aria-label="Weekly review day"
+        onChange={(e) => setWeeklyReview({ day: e.target.value as Weekday })}
+      >
+        {DAYS.map(([d, l]) => (
+          <option key={d} value={d}>
+            {l}
+          </option>
+        ))}
+      </select>
+      {prefix && <span className="muted">at</span>}
+      <TimeField value={wr.time} onChange={(t) => setWeeklyReview({ time: t })} label="Weekly review time" />
+    </span>
+  );
+}
 
 const when = (iso: string | null) =>
   iso
@@ -86,10 +119,8 @@ export function Jobs() {
   const s = useStore(settings);
   const st = useReviews();
   const sch = { ...DEFAULT_SCHEDULE, ...s.summaries };
-  const wr = { ...DEFAULT_WEEKLY_REVIEW, ...s.weeklyReview };
   const here = !!s.summariesHere;
   const set = (patch: Partial<SummarySchedule>) => settings.update({ summaries: { ...sch, ...patch } });
-  const setReview = (patch: Partial<WeeklyReviewTime>) => settings.update({ weeklyReview: { ...wr, ...patch } });
   const [dailyFor, setDailyFor] = useState("");
   const runNow = (kind: "daily" | "weekly" | "brief", day?: string) =>
     api
@@ -110,45 +141,30 @@ export function Jobs() {
           <div className="t">
             <div className="pt">Weekly review</div>
             <div className="faint">
-              You go through your week, step by step. Today reminds you from this time until the end of the next day.
+              Today reminds you from this time; also set on the review&apos;s start page.{" "}
+              <LearnMore topic="settings-jobs" section="Set when you do the weekly review" />
             </div>
           </div>
-          <span className="jtime">
-            <select
-              title="The day of your weekly review (its preparation runs four hours before it)"
-              className="sel"
-              value={wr.day}
-              aria-label="Weekly review day"
-              onChange={(e) => setReview({ day: e.target.value as Weekday })}
-            >
-              {DAYS.map(([d, l]) => (
-                <option key={d} value={d}>
-                  {l}
-                </option>
-              ))}
-            </select>
-            <TimeField value={wr.time} onChange={(t) => setReview({ time: t })} label="Weekly review time" />
-          </span>
+          <WeeklyReviewWhen />
         </div>
         <WeekPrep here={here} />
       </div>
       <div className="jobnote">
         <Icon name="info" size={16} />
         <span>
-          Jobs run while Brainstead is running, even with its window closed; a run missed while it was closed or asleep catches up when it
-          next runs. Times use this computer's clock.
+          Jobs run while Brainstead runs, even with its window closed, and catch up after sleep.{" "}
+          <LearnMore topic="settings-jobs" section="When jobs run" />
         </span>
       </div>
       <h2 className="h3">Summaries Brainstead writes</h2>
       <div className="card">
         <div className="srow">
-          <Icon name="calendar" style={{ color: here ? "var(--green)" : "var(--ink3)" }} />
+          <Icon name="calendar" className={here ? "tint-ok" : "tint-off"} />
           <div className="t">
             <div className="pt">Brainstead runs the daily and weekly summaries</div>
             <div className="faint">
-              {here
-                ? "Make sure no other app also runs them, so only one app writes them."
-                : "Off: Brainstead doesn't run them. Switch this on if no other app does."}
+              If another app also writes them, each summary is written twice.{" "}
+              <LearnMore topic="settings-jobs" section="Let Brainstead write the daily and weekly summaries" />
             </div>
           </div>
           <Switch
@@ -164,30 +180,24 @@ export function Jobs() {
       </div>
       <div className="card">
         <div className="srow">
-          <Icon name="review" style={{ color: s.holdSummaries ? "var(--accent)" : "var(--ink3)" }} />
+          <Icon name="review" className={s.holdSummaries ? "tint-accent" : "tint-off"} />
           <div className="t">
             <div className="pt">Hold the summaries for me</div>
             <div className="faint">
               {s.holdSummaries
-                ? "Each summary is held in Changes until you accept it."
-                : "Off: summaries are written straight away, with Undo in Recent runs below and Revert in Changes."}
+                ? "Each summary waits in Changes until you accept it."
+                : "Summaries are written at once, with Undo in Recent runs."}
             </div>
           </div>
           <Switch label="Hold the summaries for me" on={!!s.holdSummaries} onChange={(v) => settings.update({ holdSummaries: v })} />
         </div>
       </div>
       {here && s.readOnly && !s.holdSummaries && (
-        <p className="faint">
-          Brainstead is read-only: a scheduled summary is held in Changes for you, and Run now needs read-only turned off in Settings ›
-          Vault.
-        </p>
+        <p className="faint">Read-only is on: scheduled summaries are held in Changes, and Run now needs it off in Settings › Vault.</p>
       )}
       <div className="card">
         {!here && (
-          <p className="faint small pad joboff">
-            Greyed out because “Brainstead runs the daily and weekly summaries” is off: they won't run on schedule until it's on. Run now
-            still works.
-          </p>
+          <p className="faint small pad joboff">Off until “Brainstead runs the daily and weekly summaries” is on; Run now still works.</p>
         )}
         <div className={`job ${here ? "" : "off"}`}>
           <div className="t">
@@ -222,10 +232,7 @@ export function Jobs() {
         <div className={`job ${here ? "" : "off"}`}>
           <div className="t">
             <div className="pt">Daily brief</div>
-            <div className="faint">
-              Today's note in Briefs/: the themes of what came in since yesterday, your actions, what you're waiting for and what you can
-              archive.
-            </div>
+            <div className="faint">Today&apos;s note in Briefs/: what came in, your actions and what you&apos;re waiting for.</div>
             <RunLine run={last("brief")} next={here && sch.briefEnabled ? (st?.next.brief ?? null) : null} running={running("brief")} />
           </div>
           <label className="jtime">
@@ -245,7 +252,7 @@ export function Jobs() {
         <div className={`job ${here ? "" : "off"}`}>
           <div className="t">
             <div className="pt">Weekly summary</div>
-            <div className="faint">What you did last week, written for you. Your weekly review shows it beside its steps.</div>
+            <div className="faint">What you did last week, shown beside your weekly review&apos;s steps.</div>
             <RunLine run={last("weekly")} next={here && sch.weeklyEnabled ? (st?.next.weekly ?? null) : null} running={running("weekly")} />
           </div>
           <span className="jtime">
@@ -276,9 +283,7 @@ export function Jobs() {
         </div>
       </div>
       <p className="faint">
-        Brainstead gathers each summary's notes, tasks and Claude Code sessions itself, the model (Settings › AI assistants) writes it from
-        them with read-only tools, and Brainstead puts it at the top of the month's summaries note. The brief is a note of its own each day;
-        the model writes only its themes. Run now works whether or not the schedule is on.
+        Each summary goes at the top of the month&apos;s summaries note; Run now works whether or not it&apos;s scheduled.
       </p>
       <AutomatedTools />
       <DailyCheck />
@@ -313,7 +318,7 @@ function RunRow({ r }: { r: ReviewRun }) {
     <div className="srow">
       <Icon
         name={r.status === "error" ? "x" : r.status === "running" ? "refresh" : r.undone ? "back" : "check"}
-        style={{ color: r.status === "error" ? "var(--red)" : r.status === "running" ? "var(--amber)" : "var(--green)" }}
+        className={r.status === "error" ? "tint-bad" : r.status === "running" ? "tint-warn" : "tint-ok"}
       />
       <div className="t">
         <div className="pt">
@@ -526,9 +531,8 @@ function DailyCheck() {
         </div>
         {st?.running && <DailyCheckProgress doing={st.doing} progress={st.progress} />}
         <p className="faint small pad">
-          Checks the wiki pages that changed since the last run for contradictions, making the fixes (held in Changes when a check fails),
-          and brings the list of pages in index.md up to date. It can also refresh pages whose sources changed: see Ingest in Settings › AI
-          assistants.
+          Checks changed wiki pages for contradictions, makes the fixes and updates index.md.{" "}
+          <LearnMore topic="settings-jobs" section="Check the wiki every day" />
         </p>
       </div>
     </>
@@ -579,7 +583,7 @@ function DayButton({ value, max, onChange }: { value: string; max: string; onCha
   );
 }
 
-function TimeField({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+export function TimeField({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
   const [v, setV] = useState(value);
   useEffect(() => {
     setV(value);

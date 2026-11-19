@@ -8,7 +8,7 @@ summary: A guided GTD weekly review over your real lists, step by step, saved in
 The weekly review walks you through eleven steps in GTD's three phases over your real lists, so you can act on what you see as you go.
 
 ## Start or carry on a review
-From the review's time on its day until the end of the next day, the To process card on [Today](app:today) shows **Weekly review day** with **Start**. Or start it any time from ⌘K with "Start the weekly review". The day and time (Friday 16:00 by default) are in [Settings › Jobs & schedule](app:settings/jobs).
+From the review's time on its day until the end of the next day, the To process card on [Today](app:today) shows **Weekly review day** with **Start**. Or start it any time from ⌘K with "Start the weekly review". Set the day and time (Friday 16:00 by default) under **Scheduled** on the review's start page, **Every** a day **at** a time, or in [Settings › Automations](app:settings/jobs): they're the same setting.
 
 **Weekly review** in the sidebar, under Projects, opens a start page. It shows:
 

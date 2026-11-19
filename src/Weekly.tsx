@@ -27,6 +27,7 @@ import { ago, Dialog, LayerTag, Squeeze } from "./ui";
 import { PrepHeader, PrepRows, prepStep, WEEKLY_STATE_CHANGED, when } from "./weeklyPrep";
 import { keyLabel } from "./platform";
 import { usePanes } from "./PaneResizer";
+import { WeeklyReviewWhen } from "./Jobs";
 import { PANES } from "./panes";
 
 /** The ISO week a local date is in: "2026-W40". */
@@ -137,7 +138,7 @@ const DAY_NAME: Record<Weekday, string> = {
   sun: "Sunday",
 };
 
-/** "Fridays at 16:00": when the review is scheduled (Settings › Jobs & schedule). */
+/** "Fridays at 16:00": when the review is scheduled (its start page, or Settings › Automations). */
 export const scheduleLabel = (day: Weekday | undefined, time: string | undefined) =>
   `${DAY_NAME[day ?? "fri"]}s at ${/^\d\d:\d\d$/.test(time ?? "") ? time : "16:00"}`;
 
@@ -396,7 +397,6 @@ function StartPage({
   prep: WeekPrepStatus | null;
   onStart: (over: boolean) => void;
 }) {
-  const r = useStore(settings).weeklyReview;
   const [job, setJob] = useState<WeekPrepJob | null>(null);
   const [confirmOver, setConfirmOver] = useState(false);
   useEffect(() => {
@@ -463,16 +463,9 @@ function StartPage({
             <dt>Week</dt>
             <dd>{ctx ? `${week.slice(-2)} · ${ctx.range}` : week}</dd>
             <dt>Scheduled</dt>
-            <dd>
-              {scheduleLabel(r?.day, r?.time)}: Today shows it then, and you can start any time.{" "}
-              <button
-                type="button"
-                className="tlink"
-                title="Change the review's day and time in Settings › Jobs & schedule"
-                onClick={() => nav.go({ screen: "settings", pane: "jobs" })}
-              >
-                Change
-              </button>
+            <dd className="wwhen">
+              <WeeklyReviewWhen prefix />
+              <span>Today shows it then, and you can start any time.</span>
             </dd>
             <dt>Suggestions</dt>
             <dd>{suggestions}</dd>

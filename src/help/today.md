@@ -42,12 +42,12 @@ The To process card is the one list of what needs you. When the right rail is un
 - **Changes held for you**, with **Decide**, which opens [Changes › Held](app:review) to accept or reject them.
 - **Bookmarks to triage**, with **Triage**, when bookmarks are stale or missing.
 - **Wiki health to decide**, with **Decide**, which opens [Wiki health](app:health). It counts only issues you must decide, not ones a safe fix mends.
-- **Weekly review day** with **Start**, from the review's time on its day until the end of the next day (Friday 16:00 unless changed in [Settings › Jobs & schedule](app:settings/jobs)). While a review is paused it shows **Weekly review, paused** with **Carry on**. Either goes straight into the [Weekly review](app:weekly).
+- **Weekly review day** with **Start**, from the review's time on its day until the end of the next day (Friday 16:00 unless changed in [Settings › Automations](app:settings/jobs)). While a review is paused it shows **Weekly review, paused** with **Carry on**. Either goes straight into the [Weekly review](app:weekly).
 
 ## Read the daily and weekly summaries
 The **Daily brief** card, while the brief is on, shows today's or the most recent brief, folded to one line the same way; **Open note** opens it. The **Daily summary** card shows today's or the most recent daily summary, folded to one line: its date, and whether a run is going or when the next is due. Click the line to open or fold it; Brainstead remembers. **Open note** opens the summary note at that day's heading.
 
-The **Weekly summary** card above it works the same way. Both show when **Brainstead runs the daily and weekly summaries** is on in [Settings › Jobs & schedule](app:settings/jobs), or when there's a summary to show.
+The **Weekly summary** card above it works the same way. Both show when **Brainstead runs the daily and weekly summaries** is on in [Settings › Automations](app:settings/jobs), or when there's a summary to show.
 
 ## See today's meetings
 On macOS and Windows, with Teams and Outlook on in [Settings › Sync](app:settings/sync), an **Upcoming meetings** card lists your remaining Teams meetings for the day, read from your own calendar. From midday it also shows tomorrow's, under a **Tomorrow** heading, so an afternoon glance covers the next morning. It shows the last list it read straight away and changes only when a fresh read of the calendar differs. It's hidden when there are none.

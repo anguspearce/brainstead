@@ -11,8 +11,8 @@ General holds the settings that affect the whole app. Open Settings with `⌘,`.
 **Moving over from another notes app** lists what's left before you stop using another app on the same vault. It shows only when that app's `scripts/` folder is in the vault. Brainstead ticks some items itself:
 
 - **Brainstead can write to the vault**: read-only is off in [Settings › Vault](app:settings/vault).
-- **Brainstead runs the daily and weekly summaries**: on in [Settings › Jobs & schedule](app:settings/jobs).
-- **Your tools that start sessions are listed** (optional): so the daily summary doesn't count them as your work. See the [Jobs & schedule help](help:settings-jobs).
+- **Brainstead runs the daily and weekly summaries**: on in [Settings › Automations](app:settings/jobs).
+- **Your tools that start sessions are listed** (optional): so the daily summary doesn't count them as your work. See the [Automations help](help:settings-jobs).
 - **The Outlook extension captures here** and **The Teams extension captures here**: a capture has arrived from each.
 - **The other app's skills and scripts are retired**: its skills (`.claude/skills`) and scripts (`scripts/`) let an agent write to the vault directly, bypassing [Changes](help:review). Once **The other app is stopped** is ticked, **Retire them** copies your name corrections out, then:
   - moves both folders to the [Trash](app:trash), where you can restore them;
@@ -39,7 +39,7 @@ What the two together do is in [The menu bar](help:menubar).
 - **All**: those, and every synced chat, email thread or Slack conversation, every ingest done, each summary written and the daily check.
 - **Off**: none.
 
-What the sync brought in and what each ingest did is always in [Activity › Sync & ingest](help:activity). An assistant can change this with the `settings` tool (`notifications`: `needs_me`, `all` or `off`).
+Teams, Outlook and Slack already tell you about new messages, so by default Brainstead doesn't repeat them. What the sync brought in and what each ingest did is always in [Activity › Sync & ingest](help:activity). An assistant can change this with the `settings` tool (`notifications`: `needs_me`, `all` or `off`).
 ## Change the quick capture shortcut
 The [Quick capture](help:capture) shortcut has a default, shown on its button (Ctrl+Shift+Space on Windows). Click the shortcut button and press the new keys, including at least one modifier. `Esc` or a click elsewhere keeps the old one. **Reset to ⌃⌥Space** puts it back. If macOS won't take a shortcut, a message says why. An assistant can change it when you ask, with the same checks.
 

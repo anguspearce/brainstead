@@ -71,7 +71,7 @@ fn brief_time() -> String {
 }
 
 /// When you do the guided weekly review (Today reminds you then), not a job: Friday 16:00 unless
-/// set (Settings › Jobs & schedule, stored as `weeklyReview`).
+/// set (Settings › Automations, stored as `weeklyReview`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WeeklyReview {

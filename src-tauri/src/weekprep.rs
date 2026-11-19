@@ -4,7 +4,7 @@
 
 //! Prepare the weekly review: a background job that reads the week and saves suggestions for each
 //! of the review's steps (brainstead_core::reviews::prep gathers, prompts and checks). It runs on
-//! the review day, `prep::LEAD_HOURS` before the review (Settings › Jobs & schedule), when
+//! the review day, `prep::LEAD_HOURS` before the review (Settings › Automations), when
 //! Brainstead runs the jobs and the week has changed since it was last prepared; when the review
 //! is started and the week has no preparation or has changed since (`weekprep_ensure`); and on
 //! Run now (`weekprep_run`).
@@ -143,14 +143,14 @@ impl WeekPrep {
     }
 }
 
-/// The weekly review's day and time (Settings › Jobs & schedule).
+/// The weekly review's day and time (Settings › Automations).
 fn review_schedule(app: &AppHandle) -> (Weekday, String) {
     let st = app.state::<AppState>();
     let s = crate::lock(&st.settings);
     (s.weekly_review.day, s.weekly_review.time.clone())
 }
 
-/// The job runs on schedule (Settings › Jobs & schedule, `weekprepEnabled`, on unless switched off).
+/// The job runs on schedule (Settings › Automations, `weekprepEnabled`, on unless switched off).
 fn enabled(app: &AppHandle) -> bool {
     let st = app.state::<AppState>();
     let s = crate::lock(&st.settings);
@@ -187,7 +187,7 @@ pub fn weekprep_status(app: AppHandle, week: String) -> Status {
     Status { prep: read_prep(&week), running, error: last.filter(|r| r.status == "error").and_then(|r| r.error) }
 }
 
-/// The job's row in Settings › Jobs & schedule: its last run, and when it next runs on schedule.
+/// The job's row in Settings › Automations: its last run, and when it next runs on schedule.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JobStatus {
@@ -212,7 +212,7 @@ pub fn weekprep_job(app: AppHandle) -> JobStatus {
     JobStatus { running, last, next, enabled: on }
 }
 
-/// Stops the run going now (Stop, in Settings › Jobs & schedule).
+/// Stops the run going now (Stop, in Settings › Automations).
 #[tauri::command]
 pub fn weekprep_stop(app: AppHandle) {
     let wp = app.state::<WeekPrep>();

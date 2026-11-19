@@ -23,9 +23,9 @@ Turn on **Open at login** (in Settings › General or the menu-bar window) and *
 
 ## Summaries and jobs
 
-<a href="images/index.md#day-to-day"><picture><source media="(prefers-color-scheme: dark)" srcset="images/settings-jobs-dark.png"><img alt="Settings › Jobs & schedule: the daily and weekly summaries, the daily check and recent runs" src="images/settings-jobs-light.png"></picture></a>
+<a href="images/index.md#day-to-day"><picture><source media="(prefers-color-scheme: dark)" srcset="images/settings-jobs-dark.png"><img alt="Settings › Automations: the daily and weekly summaries, the daily check and recent runs" src="images/settings-jobs-light.png"></picture></a>
 
-In Settings › Jobs & schedule:
+In Settings › Automations:
 
 - **Daily summary** and **Weekly summary**: a model writes a summary of the day's or week's notes, tasks and Claude Code sessions. A note with a day in its name, such as a meeting note, counts on that day, however late it was written. **Run now** can redo a past day (pick it in **for**). The summary goes at the top of the month's summaries note, undoable, or waits in Changes if **Hold the summaries for me** is on. Each runs as a chat in Ask, in a tab marked with a calendar. (The weekly summary isn't the Weekly review, which you do yourself.)
 - **Daily brief**: each morning (07:00 by default) a note of its own, `Briefs/Brief 2026-11-18.md`: **Themes**, what came in since yesterday, written by the model (each names its initiative, not its sources); then your open actions, what you're waiting for (the ones to chase first) and what you can archive (an initiative whose every action is closed, and one line counting the sources nothing came of, by conversation), listed by Brainstead from your [initiatives](wiki.md#initiatives). No model is asked when nothing came in. Today shows it as a card; `summary` with kind brief reads it, and `start_run daily_brief` writes it.
@@ -40,7 +40,7 @@ A run missed while the computer slept catches up when Brainstead next runs.
 
 A scheduled run, or one an assistant starts with nobody watching (Find tasks and projects and the weekly review's preparation included), never goes on one of Ollama's models, which run only in Ask and in runs you start by hand: a job set to one runs on the model new chats use instead (Claude Code's Sonnet when that is Ollama's too), and Settings › AI assistants › Models by job says so under the job.
 
-To keep sessions started by your own tools (a script, another app) out of the daily summary, list them under **Your tools that start Claude Code sessions** in Settings › Jobs & schedule. Each has a name, and the folder its sessions run in, the words their first message starts with, or both. Their sessions then count as automated, not as your work. **Add a tool** adds one by hand; folders whose sessions look like a tool's are offered in one click. Assistants can list, add and remove them too.
+To keep sessions started by your own tools (a script, another app) out of the daily summary, list them under **Your tools that start Claude Code sessions** in Settings › Automations. Each has a name, and the folder its sessions run in, the words their first message starts with, or both. Their sessions then count as automated, not as your work. **Add a tool** adds one by hand; folders whose sessions look like a tool's are offered in one click. Assistants can list, add and remove them too.
 
 The ingest switches (ingest new sources as they arrive, refresh pages whose sources changed) are under **Ingest** in Settings › AI assistants.
 
@@ -60,7 +60,7 @@ On Windows, ⌘ is Ctrl, ⌥ is Alt and ⇧ is Shift. Press `?` on any screen, c
 
 <a href="images/index.md#day-to-day"><picture><source media="(prefers-color-scheme: dark)" srcset="images/settings-general-dark.png"><img alt="Settings › General: the switch-over checklist (shown when the previous app's files are in the vault), the menu bar and Open at login, the capture shortcut, your name and appearance" src="images/settings-general-light.png"></picture></a>
 
-Settings (⌘,) has General, Notes, Vault, AI assistants, Jobs & schedule, Capture extensions, Permissions (Mac only) and About. Press `?` on each for what's in it.
+Settings (⌘,) has General, Notes, Vault, AI assistants, Automations, Capture extensions, Sync, Permissions (Mac only) and About. Each setting says in a line what it does; its **Learn more** opens the help at the part that explains it, and `?` opens the pane's help.
 
 **Interface size** (General › Appearance) changes everything in the window together, from 80% to 150% in steps of 10: the sidebar, lists, buttons, dialogs and the text of notes. ⇧⌘= and ⇧⌘- (Ctrl+Shift+= and Ctrl+Shift+- on Windows) do the same from any screen, ⇧⌘0 puts it back to 100%, and the View menu has the three on a Mac. A note's **Text size** (⌘= ⌘- ⌘0, on the note's ⋯ menu) is separate and comes on top: 120% with 18 px text shows a 21.6 px body. The quick capture window stays at 100%. The size is kept for this computer, not in the vault.
 

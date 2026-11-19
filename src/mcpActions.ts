@@ -1749,7 +1749,7 @@ async function startRun(a: Args, r: McpRequest): Promise<string> {
   }
 }
 
-/** How many summary runs Settings › Jobs & schedule's Recent runs lists. */
+/** How many summary runs Settings › Automations' Recent runs lists. */
 const RECENT_SUMMARIES = 8;
 
 /** A summary run as Recent runs shows it, with its change in Changes: a summary's block is written
@@ -1853,7 +1853,7 @@ async function runStatus(a: Args = {}): Promise<string> {
       !cs?.total ? "not run" : `${cs.running ? "running" : "last run"}: ${cs.done} of ${cs.total} pages done, ${cs.written} written`
     }`,
     summaries.length
-      ? `Recent summary runs (Settings › Jobs & schedule), newest first:\n${summaries.map((r) => summaryRunLine(r, changes ?? [])).join("\n")}`
+      ? `Recent summary runs (Settings › Automations), newest first:\n${summaries.map((r) => summaryRunLine(r, changes ?? [])).join("\n")}`
       : "Recent summary runs: none yet.",
   ].join("\n");
 }
@@ -1920,7 +1920,7 @@ async function weeklyStatus(): Promise<string> {
   const r = settings.get().weeklyReview;
   const job = await api.weekprepJob().catch(() => null);
   const out = [
-    `The weekly review for ${week}. It's scheduled for ${scheduleLabel(r?.day, r?.time)} (Settings › Jobs & schedule); the user can start it any time from its start page.`,
+    `The weekly review for ${week}. It's scheduled for ${scheduleLabel(r?.day, r?.time)} (set on its start page or in Settings › Automations); the user can start it any time from its start page.`,
   ];
   if (job?.next) out.push(`Its suggestions are next prepared on schedule at ${job.next}.`);
   const note = await api.weeklyReviewNote(week).catch(() => null);
@@ -2435,7 +2435,7 @@ async function status(): Promise<string> {
     info ? `Brainstead ${info.version} (${info.build}); its app data folder: ${info.dataDir}; its website: ${WEBSITE}` : "",
     // What the update dialog said at this start (Windows): the update the app closed for didn't install.
     failed ? `${failed.title}: ${failed.text}` : "",
-    `Brainstead runs the daily and weekly summaries (Settings › Jobs & schedule): ${s.summariesHere ? "on" : "off"}`,
+    `Brainstead runs the daily and weekly summaries (Settings › Automations): ${s.summariesHere ? "on" : "off"}`,
     u ? `${keyLabel("⌘Z")} would undo: ${u.label}` : "Nothing to undo.",
     old
       ? "The previous app's skills or scripts are still in the vault (.claude/skills, scripts/): don't use them; use these tools. The user can retire them in Settings › General › Moving over."
@@ -3656,20 +3656,20 @@ const settingRows = (): SettingRow[] => [
   ["syncMailAttachments", "Sync", "Bring in email attachments", "bool", true],
   ["syncSlack", "Sync", "Slack sync", "bool", false],
   ["refreshStale", "AI assistants", "Also refresh pages whose sources changed", "bool", false],
-  ["summariesHere", "Jobs & schedule", "Brainstead runs the daily and weekly summaries", "bool", false],
-  ["holdSummaries", "Jobs & schedule", "Hold the summaries for me", "bool", false],
-  ["summaries.dailyEnabled", "Jobs & schedule", "Daily summary", "bool", false],
-  ["summaries.dailyTime", "Jobs & schedule", "Daily summary time", "time", null],
-  ["summaries.weeklyEnabled", "Jobs & schedule", "Weekly summary", "bool", false],
-  ["summaries.weeklyDay", "Jobs & schedule", "Weekly summary day", "day", null],
-  ["summaries.weeklyTime", "Jobs & schedule", "Weekly summary time", "time", null],
-  ["summaries.briefEnabled", "Jobs & schedule", "Daily brief", "bool", false],
-  ["summaries.briefTime", "Jobs & schedule", "Daily brief time", "time", null],
-  ["weeklyReview.day", "Jobs & schedule", "Weekly review day", "day", null],
-  ["weeklyReview.time", "Jobs & schedule", "Weekly review time", "time", null],
-  ["weekprepEnabled", "Jobs & schedule", "Prepare the weekly review", "bool", true],
-  ["dailyCheckEnabled", "Jobs & schedule", "Daily check", "bool", false],
-  ["dailyCheckTime", "Jobs & schedule", "Daily check time", "time", "09:00"],
+  ["summariesHere", "Automations", "Brainstead runs the daily and weekly summaries", "bool", false],
+  ["holdSummaries", "Automations", "Hold the summaries for me", "bool", false],
+  ["summaries.dailyEnabled", "Automations", "Daily summary", "bool", false],
+  ["summaries.dailyTime", "Automations", "Daily summary time", "time", null],
+  ["summaries.weeklyEnabled", "Automations", "Weekly summary", "bool", false],
+  ["summaries.weeklyDay", "Automations", "Weekly summary day", "day", null],
+  ["summaries.weeklyTime", "Automations", "Weekly summary time", "time", null],
+  ["summaries.briefEnabled", "Automations", "Daily brief", "bool", false],
+  ["summaries.briefTime", "Automations", "Daily brief time", "time", null],
+  ["weeklyReview.day", "Automations", "Weekly review day", "day", null],
+  ["weeklyReview.time", "Automations", "Weekly review time", "time", null],
+  ["weekprepEnabled", "Automations", "Prepare the weekly review", "bool", true],
+  ["dailyCheckEnabled", "Automations", "Daily check", "bool", false],
+  ["dailyCheckTime", "Automations", "Daily check time", "time", "09:00"],
   ["logDays", "About", "The app's logs › Keep (days: 7, 14, 30 or 90)", "number", 14],
 ];
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];

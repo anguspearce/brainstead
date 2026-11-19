@@ -23,7 +23,7 @@ Click **Fix safe issues** in the top bar of [Wiki health](app:health). Brainstea
 Click the **Contradictions** tab at the top of [Wiki health](app:health), then **Check · changed pages only**. Real contradictions come first. Their fixes are listed in [Changes](app:review); when you're done, mark each one resolved or ignored on [Contradictions](app:contradictions).
 
 ## Turn on the daily check
-In [Settings › Jobs & schedule](app:settings/jobs), turn on **Daily check**. Each day it looks for contradictions in the pages that changed. To have it ingest changed sources again too, turn on **Also refresh pages whose sources changed** in [Settings › AI assistants](app:settings/assistants).
+In [Settings › Automations](app:settings/jobs), turn on **Daily check**. Each day it looks for contradictions in the pages that changed. To have it ingest changed sources again too, turn on **Also refresh pages whose sources changed** in [Settings › AI assistants](app:settings/assistants).
 
 ## Fix a name spelt wrong
 When a transcript gets a name wrong, such as "Lina" for Lena, choose **Fix a name everywhere…** in `⌘K`. Type **Written as** and **Correct spelling**, check the files it lists, and click **Apply**. Sources are left alone, the person's wiki page gets the wrong spelling as an alias, and **Remember this correction** keeps later ingests right. The fix is logged in `log.md`, which [Changes › All](app:review) lists, and `⌘Z` undoes it all. [Fix a name everywhere](help:fix-name) has the details.

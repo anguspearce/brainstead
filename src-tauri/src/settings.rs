@@ -24,11 +24,11 @@ pub struct Settings {
     pub skipped_full_disk_access: bool,
     /// The global quick-capture shortcut, as "Control+Alt+Space".
     pub capture_shortcut: String,
-    /// The daily and weekly summaries' schedule (Settings › Jobs & schedule).
+    /// The daily and weekly summaries' schedule (Settings › Automations).
     pub summaries: brainstead_core::reviews::ScheduleSettings,
     /// Brainstead runs the daily and weekly summaries (only one app should: the previous app runs them otherwise).
     pub summaries_here: bool,
-    /// When the user does the guided weekly review (Settings › Jobs & schedule).
+    /// When the user does the guided weekly review (Settings › Automations).
     pub weekly_review: brainstead_core::reviews::WeeklyReview,
     /// Teams and Outlook sync is on (Settings › Sync; macOS only, D-20261025-01).
     pub sync_enabled: bool,

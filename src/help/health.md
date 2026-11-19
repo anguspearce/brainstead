@@ -74,7 +74,7 @@ A page that needs you says why: a heading whose year it can't tell, two summing-
 On the right, **Wiki pages by type** and **Wiki pages by tag** are pie charts; click a slice or row to open the [Wiki](app:wiki) filtered to it. **Most linked** lists the notes and wiki pages the most others link to; click one to open it. Sources changed since they were cited are under **More checks**. The **Contradictions** tab at the top has the report of wiki pages that disagree.
 
 ## The daily check
-Turn on **Daily check** in [Settings › Jobs & schedule](app:settings/jobs) to have Brainstead, at the time you set (09:00 to start), look for contradictions in pages that changed and update the list of pages in `index.md`. It catches up after sleep. **Also refresh pages whose sources changed**, in [Settings › AI assistants](app:settings/assistants), has it ingest those sources again. Its notification also says how many pages have left the page shape, for **Reshape pages**. **Run now** runs it straight away and becomes **Stop** while it runs.
+Turn on **Daily check** in [Settings › Automations](app:settings/jobs) to have Brainstead, at the time you set (09:00 to start), look for contradictions in pages that changed and update the list of pages in `index.md`. It catches up after sleep. **Also refresh pages whose sources changed**, in [Settings › AI assistants](app:settings/assistants), has it ingest those sources again. Its notification also says how many pages have left the page shape, for **Reshape pages**. **Run now** runs it straight away and becomes **Stop** while it runs.
 
 ## Resize the panes
 Drag the line beside the side column to make it wider or narrower; a double-click on it puts it back ([pane widths](help:settings-general)).

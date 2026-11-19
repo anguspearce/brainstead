@@ -27,6 +27,7 @@ import { errText } from "./notes/actions";
 import { Switchover } from "./Switchover";
 import { TopBar } from "./TopBar";
 import { Jobs } from "./Jobs";
+import { LearnMore } from "./help/HelpDrawer";
 import {
   CLI_LABEL,
   cliOf,
@@ -59,7 +60,7 @@ const PANES: [SettingsPane, string, string][] = [
   ["notes", "Notes", "note"],
   ["vault", "Vault", "folder"],
   ["assistants", "AI assistants", "cpu"],
-  ["jobs", "Jobs & schedule", "calendar"],
+  ["jobs", "Automations", "calendar"],
   ["capture", "Capture extensions", "source"],
   ["sync", "Sync", "refresh"],
   ["permissions", "Permissions", "shield"],
@@ -151,7 +152,7 @@ function CaptureShortcut() {
     <section className="sgroup">
       <h2 className="h3">Quick capture</h2>
       <p className="muted">
-        A shortcut that works over any app and opens a capture box. Tasks go to the To Do list, Scratchpad notes to the Scratchpad.
+        A shortcut that opens a capture box over any app. <LearnMore topic="settings-general" section="Change the quick capture shortcut" />
       </p>
       <div className="row">
         <button
@@ -211,6 +212,10 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
   return (
     <section className="sgroup">
       <h2 className="h3">Models by job</h2>
+      <p className="faint">
+        Each kind of background work can have its own model and effort.{" "}
+        <LearnMore topic="settings-assistants" section="Give a job its own model" />
+      </p>
       <div className="card jobmodels">
         {MODEL_JOBS.map(([job, label, icon]) => (
           <div key={job} className="srow">
@@ -346,8 +351,8 @@ function OpenAtLogin() {
           <div className="t">
             <div className="pt">Show in the menu bar</div>
             <div className="faint">
-              An icon in the menu bar opens a small window: today at a glance, a capture box, what's running and what waits for you. It
-              shows dots while a run is going, and a dot when something waits.
+              An icon that opens today at a glance, a capture box and what's running.{" "}
+              <LearnMore topic="settings-general" section="Start at login, and the menu bar" />
             </div>
           </div>
           <Switch label="Show in the menu bar" on={menuBar} onChange={(v) => settings.update({ menuBar: v })} />
@@ -370,9 +375,7 @@ function OpenAtLogin() {
           <Icon name="start" />
           <div className="t">
             <div className="pt">Offer Getting started when Brainstead opens</div>
-            <div className="faint">
-              A welcome that opens the help's step-by-step guides. They're always in the help: press ? and click Getting started.
-            </div>
+            <div className="faint">A welcome that opens the step-by-step guides, which are always in the help.</div>
           </div>
           <Switch
             label="Offer Getting started when Brainstead opens"
@@ -385,10 +388,7 @@ function OpenAtLogin() {
             <Icon name="power" />
             <div className="t">
               <div className="pt">Open at login</div>
-              <div className="faint">
-                Brainstead starts when you log in, so quick capture, captures from the browser, the daily summary and the weekly summary are
-                ready.
-              </div>
+              <div className="faint">Starts Brainstead when you log in, so captures and scheduled jobs are ready.</div>
             </div>
             <Switch
               label="Open at login"
@@ -427,8 +427,7 @@ function General() {
           onChange={(v) => settings.update({ notifications: v })}
         />
         <p className="faint">
-          Teams, Outlook and Slack already tell you about new messages, so by default Brainstead doesn't repeat them. What the sync brought
-          in and what each ingest did is in{" "}
+          What the sync brought in is always in{" "}
           <button
             type="button"
             className="tlink"
@@ -437,7 +436,7 @@ function General() {
           >
             Activity › Sync & ingest
           </button>
-          .
+          . <LearnMore topic="settings-general" section="Notifications" />
         </p>
       </section>
       <section className="sgroup">
@@ -450,8 +449,8 @@ function General() {
           />
         </label>
         <p className="faint">
-          Today greets you by your first name. For notes from transcripts: which speaker is you, so your actions become tasks and a
-          two-person meeting is a 1-1.
+          Today greets you by it, and meeting notes know which speaker is you.{" "}
+          <LearnMore topic="settings-general" section="Set your name" />
         </p>
       </section>
       <section className="sgroup">
@@ -469,6 +468,10 @@ function General() {
             applyTheme(t);
           }}
         />
+        <p className="faint">
+          The app's light or dark; documents follow it unless set in Settings › Notes.{" "}
+          <LearnMore topic="settings-general" section="Choose light or dark" />
+        </p>
         <AccentColour />
         <InterfaceSize />
         <SidebarRail />
@@ -497,8 +500,7 @@ function AccentColour() {
         onChange={setAccent}
       />
       <p className="faint">
-        System takes the accent colour from Windows Settings › Personalisation › Colours and follows it when it changes, lighter or darker
-        where text on it would be hard to read.
+        System follows the Windows accent colour. <LearnMore topic="settings-general" section="Use the Windows accent colour" />
       </p>
     </div>
   );
@@ -524,9 +526,8 @@ function SidebarRail() {
         ))}
       </div>
       <p className="faint">
-        {keyLabel("⌘\\")} or the button at the top of the sidebar switches it for the width the window is at (now {width}), and each width
-        keeps its own choice, so a narrow window's icons never change how a wide one shows. Interface size counts: a bigger interface makes
-        the window narrower for this. Kept for this computer, not in the vault.
+        {keyLabel("⌘\\")} switches it for the width the window is at (now {width}); kept for this computer.{" "}
+        <LearnMore topic="settings-general" section="The sidebar as icons" />
       </p>
     </div>
   );
@@ -562,10 +563,8 @@ function PaneWidths() {
         ))}
       </div>
       <p className="faint">
-        Reset pane widths puts every pane and table column back to its usual width; Lock pane widths keeps the sidebar and the screens'
-        panes as they are, and Lock column widths every table's columns, with their lines hidden. To resize one pane, drag the line between
-        two panes or beside a column's heading; the arrow keys move a focused line, and Enter or a double-click puts that pane back. A lock
-        keeps the widths you set and doesn't stop Reset pane widths. Widths and locks are kept for this computer, not in the vault.
+        Drag the line between two panes to resize them; a lock hides the lines. Kept for this computer.{" "}
+        <LearnMore topic="settings-general" section="Resize the panes" />
       </p>
     </div>
   );
@@ -613,10 +612,8 @@ function InterfaceSize() {
         </span>
       </div>
       <p className="faint">
-        Smaller and Bigger change everything in the window together, from {INTERFACE_SIZE.min}% to {INTERFACE_SIZE.max}% in steps of{" "}
-        {INTERFACE_SIZE.step}: the sidebar, lists, dialogs and the text of notes. {keyLabel("⇧⌘=")} and {keyLabel("⇧⌘-")} do the same from
-        any screen, and {keyLabel("⇧⌘0")} puts it back to {INTERFACE_SIZE.default}%. A note's Text size is separate and comes on top of it,
-        the quick capture window stays at 100%, and the size is kept for this computer, not in the vault.
+        Everything in the window, from {INTERFACE_SIZE.min}% to {INTERFACE_SIZE.max}%; {keyLabel("⇧⌘=")} and {keyLabel("⇧⌘-")} from any
+        screen. <LearnMore topic="settings-general" section="Make everything bigger or smaller" />
       </p>
     </div>
   );
@@ -665,7 +662,7 @@ function SpellLanguage() {
       <Icon name="text" />
       <div className="t">
         <div className="pt">Spelling language</div>
-        <div className="faint">Which English words are checked against: colour or color, organise or organize.</div>
+        <div className="faint">Which English to check against: colour or color.</div>
       </div>
       <select
         title="The language spelling is checked in"
@@ -700,11 +697,7 @@ function ReadAloudSettings() {
           <div className="t">
             <div className="pt">Voice</div>
             <div className="faint">
-              {isMac
-                ? "More voices: System Settings › Accessibility › Spoken Content › System voice › Manage Voices. Premium voices sound the most natural (Zoe or Ava for US English, Jamie for British); download one there and it's listed here. Siri's voices can't be used by other apps."
-                : isWindows
-                  ? "More voices: Windows Settings › Time & language › Speech › Manage voices; add one there and it's listed here. Natural voices, where Windows has them, are listed first."
-                  : "More voices: install one in the system's speech settings and it's listed here."}
+              The voice notes are read in. <LearnMore topic="settings-notes" section="Read notes aloud" />
             </div>
           </div>
           <VoiceSelect onChange={speechSettingsChanged} />
@@ -721,6 +714,7 @@ function ReadAloudSettings() {
           <Icon name="stopwatch" />
           <div className="t">
             <div className="pt">Speed</div>
+            <div className="faint">How fast notes are read, from half to twice the usual speed.</div>
           </div>
           <SpeedSlider />
         </div>
@@ -728,7 +722,7 @@ function ReadAloudSettings() {
           <Icon name="eye" />
           <div className="t">
             <div className="pt">Highlight each word</div>
-            <div className="faint">Off: the whole paragraph being read is tinted instead.</div>
+            <div className="faint">Marks each word as it's read; off tints the paragraph instead.</div>
           </div>
           <Switch label="Highlight each word" on={s.speechHighlight !== false} onChange={(v) => settings.update({ speechHighlight: v })} />
         </div>
@@ -755,8 +749,8 @@ function Notes() {
                 <div className="t">
                   <div className="pt">Check spelling</div>
                   <div className="faint">
-                    A red wavy line under words {isMac ? "macOS" : "the system"} doesn't know, as you write. Click one for guesses, Learn or
-                    Ignore.
+                    A red wavy line under unknown words as you write.{" "}
+                    <LearnMore topic="settings-notes" section="Check spelling and grammar" />
                   </div>
                 </div>
                 <Switch label="Check spelling" on={s.spellCheck !== false} onChange={(v) => settings.update({ spellCheck: v })} />
@@ -767,9 +761,7 @@ function Notes() {
                 <Icon name="check" />
                 <div className="t">
                   <div className="pt">Check grammar</div>
-                  <div className="faint">
-                    A blue wavy line where {isMac ? "macOS" : "the system"} sees a grammar problem; click for its explanation and fixes.
-                  </div>
+                  <div className="faint">A blue wavy line under grammar problems, checked on this computer.</div>
                 </div>
                 <Switch label="Check grammar" on={s.grammarCheck !== false} onChange={(v) => settings.update({ grammarCheck: v })} />
               </div>
@@ -781,7 +773,10 @@ function Notes() {
       <ReadAloudSettings />
       <section className="sgroup">
         <h2 className="h3">Document look</h2>
-        <p className="muted">How notes, wiki pages and their PDFs look unless a note has its own. Change one note's from its screen.</p>
+        <p className="muted">
+          How notes, wiki pages and their PDFs look unless a note has its own.{" "}
+          <LearnMore topic="settings-notes" section="Choose how documents look" />
+        </p>
         <LookPicker
           style={d.style}
           accent={d.accent}
@@ -809,13 +804,16 @@ function Notes() {
           ]}
           onChange={(t) => settings.update({ docTheme: t === "app" ? undefined : t })}
         />
-        <p className="muted">PDFs always print light.</p>
+        <p className="muted">
+          Documents can be light or dark apart from the app; PDFs always print light.{" "}
+          <LearnMore topic="settings-notes" section="Make documents light or dark" />
+        </p>
       </section>
       <section className="sgroup">
         <h2 className="h3">Templates</h2>
         <p className="muted">
-          New note runs the templates in the vault’s Templates folder (Templater syntax). Their user scripts (
-          <span className="mono">tp.user</span>) are the .js files in this folder.
+          The folder of the templates' user scripts (<span className="mono">tp.user</span>).{" "}
+          <LearnMore topic="settings-notes" section="Point templates at their scripts" />
         </p>
         <div className="row">
           <span className="inp grow mono">
@@ -870,7 +868,10 @@ function Vault() {
     <>
       <section className="sgroup">
         <h2 className="h3">Vault folder</h2>
-        <p className="muted">Every .md and .txt file in this folder is indexed, except system and excluded folders.</p>
+        <p className="muted">
+          Every .md and .txt file in this folder is indexed, except system and excluded folders.{" "}
+          <LearnMore topic="settings-vault" section="Choose the vault folder" />
+        </p>
         <div className="row">
           <div className="inp grow mono" title={s.vaultPath ?? undefined}>
             <Icon name="folder" size={14} />
@@ -896,7 +897,7 @@ function Vault() {
         <div className="srow">
           <Icon
             name={st.state === "error" ? "x" : "check"}
-            style={{ color: st.state === "error" ? "var(--red)" : st.state === "ready" ? "var(--green)" : "var(--amber)" }}
+            className={st.state === "error" ? "tint-bad" : st.state === "ready" ? "tint-ok" : "tint-warn"}
           />
           <div className="t">
             <div className="pt">
@@ -952,7 +953,7 @@ function Vault() {
         </div>
         {st.state === "ready" && used && disk && (
           <div className="srow">
-            <Icon name="folder" style={{ color: "var(--accent)" }} />
+            <Icon name="folder" className="tint-accent" />
             <div className="t">
               <div className="pt">{fmtBytes(vaultBytes(used))} on disk</div>
               <div className="faint">
@@ -974,11 +975,11 @@ function Vault() {
           </div>
         )}
         <div className="srow">
-          <Icon name="lock" style={{ color: s.readOnly ? "var(--green)" : "var(--amber)" }} />
+          <Icon name="lock" className={s.readOnly ? "tint-ok" : "tint-warn"} />
           <div className="t">
             <div className="pt">Read-only</div>
             <div className="faint">
-              Never change anything in the vault. Turn it off to tick tasks, set their dates and capture from Brainstead.
+              While it's on, Brainstead changes nothing in the vault. <LearnMore topic="settings-vault" section="Make the vault editable" />
             </div>
           </div>
           {/* Saved at once: Rust refuses or allows writes by it, so the switch and the app mustn't disagree. */}
@@ -987,7 +988,10 @@ function Vault() {
       </div>
       <section className="sgroup">
         <h2 className="h3">Excluded folders</h2>
-        <p className="muted">Any folder with one of these names, at any depth, is skipped.</p>
+        <p className="muted">
+          Any folder with one of these names, at any depth, is skipped.{" "}
+          <LearnMore topic="settings-vault" section="Skip folders you don't want indexed" />
+        </p>
         <div className="chips">
           {s.excluded.map((x) => (
             <span key={x} className="chip">
@@ -1066,8 +1070,8 @@ function ExampleNotes() {
     <section className="sgroup">
       <h2 className="h3">Example notes</h2>
       <p className="muted">
-        The notes a new vault is made with, which show what Brainstead can do. Only the ones that aren&apos;t in the vault are added;
-        nothing already there is changed.
+        The starter notes a new vault gets; only missing ones are added.{" "}
+        <LearnMore topic="settings-vault" section="Add the example notes" />
       </p>
       <div className="row">
         <span
@@ -1150,7 +1154,10 @@ function Assistants() {
             <Icon name="chevdown" size={12} />
           </button>
         </div>
-        <p className="faint">Each chat keeps the model it started with, and jobs use this one unless they have their own below.</p>
+        <p className="faint">
+          Each chat keeps the model it started with; jobs use this one unless they have their own.{" "}
+          <LearnMore topic="settings-assistants" section="Choose the model for new chats" />
+        </p>
         {at && (
           <Popover anchor={at} onClose={() => setAt(null)} width={300}>
             <ModelMenu
@@ -1165,11 +1172,12 @@ function Assistants() {
         )}
         <div className="card">
           <div className="srow">
-            <Icon name="ask" style={{ color: s.askSuggest === false ? "var(--ink3)" : "var(--green)" }} />
+            <Icon name="ask" className={s.askSuggest === false ? "tint-off" : "tint-ok"} />
             <div className="t">
               <div className="pt">Suggest a next message</div>
               <div className="faint">
-                After each answer, a model offers a follow-up in the message box (→ types it), at the cost of one more call per answer.
+                After each answer, a follow-up is offered in the message box, for one more call.{" "}
+                <LearnMore topic="settings-assistants" section="Suggest a next message" />
               </div>
             </div>
             <Switch label="Suggest a next message" on={s.askSuggest !== false} onChange={(v) => settings.update({ askSuggest: v })} />
@@ -1180,15 +1188,12 @@ function Assistants() {
         <h2 className="h3">Changes</h2>
         <div className="card">
           <div className="srow">
-            <Icon name="history" style={{ color: "var(--accent)" }} />
+            <Icon name="history" className="tint-accent" />
             <div className="t">
               <div className="pt">Keep the history of agent changes</div>
               <div className="faint">
-                Every change an assistant or a run makes can be reverted in Changes. The history is kept for this many days, or until it
-                takes this much space, whichever comes first.
-                {disk && ` It takes ${fmtBytes(disk.changesBytes)} now.`}
-                {/onedrive/i.test(s.vaultPath ?? "") &&
-                  " Your vault is in a OneDrive folder, so older versions are also in OneDrive's version history."}
+                How long Changes can revert what assistants and runs changed{disk && `; it takes ${fmtBytes(disk.changesBytes)} now`}.{" "}
+                <LearnMore topic="settings-assistants" section="Changes" />
               </div>
             </div>
             <select
@@ -1224,7 +1229,7 @@ function Assistants() {
         <h2 className="h3">Meeting notes</h2>
         <div className="card">
           <div className="srow">
-            <Icon name="wiki" style={{ color: s.meetingIngest !== false ? "var(--green)" : "var(--ink3)" }} />
+            <Icon name="wiki" className={s.meetingIngest !== false ? "tint-ok" : "tint-off"} />
             <div className="t">
               <div className="pt">Ingest a meeting note once it's made</div>
               <div className="faint">A note written from a transcript is read into the wiki straight after.</div>
@@ -1236,13 +1241,10 @@ function Assistants() {
             />
           </div>
           <div className="srow">
-            <Icon name="trash" style={{ color: s.meetingTrash !== false ? "var(--green)" : "var(--ink3)" }} />
+            <Icon name="trash" className={s.meetingTrash !== false ? "tint-ok" : "tint-off"} />
             <div className="t">
               <div className="pt">Then move the transcript to the Trash</div>
-              <div className="faint">
-                Only once the note is made (and ingested, when that's on); a transcript whose note or ingest failed is kept. With both off,
-                Brainstead asks after each note.
-              </div>
+              <div className="faint">Once the note is made; with both off, Brainstead asks after each note.</div>
             </div>
             <Switch
               label="Then move the transcript to the Trash"
@@ -1256,12 +1258,12 @@ function Assistants() {
         <h2 className="h3">Ingest</h2>
         <div className="card">
           <div className="srow">
-            <Icon name="inbox" style={{ color: s.ingestOnArrival ? "var(--green)" : "var(--ink3)" }} />
+            <Icon name="inbox" className={s.ingestOnArrival ? "tint-ok" : "tint-off"} />
             <div className="t">
               <div className="pt">Ingest new sources as they arrive</div>
               <div className="faint">
-                An email or chat captured from the browser, or a file dropped or imported into Sources, is ingested straight away. A
-                transcript gets its meeting note when Brainstead is sure of it.
+                Captures and files dropped or imported into Sources are ingested straight away.{" "}
+                <LearnMore topic="settings-assistants" section="Ingest" />
               </div>
             </div>
             <Switch
@@ -1271,13 +1273,10 @@ function Assistants() {
             />
           </div>
           <div className="srow">
-            <Icon name="refresh" style={{ color: s.refreshStale ? "var(--green)" : "var(--ink3)" }} />
+            <Icon name="refresh" className={s.refreshStale ? "tint-ok" : "tint-off"} />
             <div className="t">
               <div className="pt">Also refresh pages whose sources changed</div>
-              <div className="faint">
-                The daily check (Settings › Jobs &amp; schedule) ingests again each source that changed since the pages citing it were
-                written; the wiki is updated at once, and a change that fails a check is held for you in Changes.
-              </div>
+              <div className="faint">The daily check (Settings › Automations) ingests again each source that changed.</div>
             </div>
             <Switch
               label="Also refresh pages whose sources changed"
@@ -1314,7 +1313,7 @@ function Assistants() {
               {/* A refused OLLAMA_HOST is neither found nor missing: a warning, and no How to install. */}
               <Icon
                 name={c.path ? "check" : c.refused ? "alert" : "x"}
-                style={{ color: c.path ? "var(--green)" : c.refused ? "var(--amber)" : "var(--ink3)" }}
+                className={c.path ? "tint-ok" : c.refused ? "tint-warn" : "tint-off"}
               />
               <div className="t">
                 <div className="pt">
@@ -1361,9 +1360,8 @@ function Assistants() {
           ))}
         </div>
         <p className="faint">
-          Ask runs the assistant you choose on this computer with your own account, and it never writes a file itself. Its effort is what
-          new chats start with (a chat can change its own beside its model in Ask) and what its jobs run at unless Models by job gives a job
-          its own; Default leaves it to the assistant, which picks one for each model.
+          Ask runs these with your own account; an Effort is what new chats and jobs start from.{" "}
+          <LearnMore topic="settings-assistants" section="Set how hard an assistant thinks" />
         </p>
       </section>
       <McpGroup />
@@ -1403,7 +1401,7 @@ function HandedOver() {
       <div className="card">
         {skills.map((s) => (
           <div key={s.name} className="srow">
-            <Icon name="check" style={{ color: "var(--green)" }} />
+            <Icon name="check" className="tint-ok" />
             <div className="t">
               <div className="pt">/{s.name}</div>
               <div className="faint">{SCREEN_NAME[s.opens!] ?? s.opens}</div>
@@ -1412,8 +1410,8 @@ function HandedOver() {
         ))}
       </div>
       <p className="faint">
-        Picking one of these in Ask opens its screen; the vault's own copies in .claude/skills keep working, and Brainstead never deletes
-        them.
+        Picking one in Ask opens its screen; the vault's own copies keep working.{" "}
+        <LearnMore topic="settings-assistants" section="See which vault skills Brainstead now does itself" />
       </p>
     </section>
   );
@@ -1456,14 +1454,11 @@ function McpGroup() {
     <section className="sgroup">
       <h2 className="h3">Brainstead's tools</h2>
       <p className="faint">
-        In Ask, Claude Code, Codex and Copilot get Brainstead's tools: small changes happen at once and can be undone, while prose, renames
-        and deletes are made at once and listed in Changes, where you can revert them (Antigravity uses only its own read tools).
+        Assistants change the vault only through these, and each change is listed in Changes.{" "}
+        <LearnMore topic="settings-assistants" section="Use Brainstead's tools from Terminal" />
       </p>
       {found && info && !cmds.length && (
-        <p className="faint">
-          No assistant is installed on this computer yet (see Found on this computer); once one is, its command to use Brainstead's tools
-          from {terminalApp} shows here.
-        </p>
+        <p className="faint">No assistant is installed yet; once one is, its command for {terminalApp} shows here.</p>
       )}
       {cmds.length > 0 && (
         <>
@@ -1500,7 +1495,7 @@ function PermissionsPane() {
   return (
     <>
       <FullDiskAccessCard />
-      <p className="faint">Notifications and automation are asked for when a feature first needs them, not at startup.</p>
+      <p className="faint">Notifications and automation are asked for when a feature first needs them.</p>
     </>
   );
 }
@@ -1599,15 +1594,18 @@ function SyncPane() {
     <>
       <section className="sgroup">
         <p className="muted">
-          Brainstead reads your own Teams chats, transcripts and calendar, Outlook mail, and Slack conversations into sources/, read-only,
-          each with the sign-in its own browser tab hands over (Settings › Capture extensions).
+          Reads your own Teams, Outlook and Slack into sources/, with each browser tab's sign-in.{" "}
+          <LearnMore topic="settings-sync" section="How it signs in" />
         </p>
         <div className="card">
           <label className="srow">
-            <Icon name="history" style={{ color: "var(--ink3)" }} />
+            <Icon name="history" className="tint-off" />
             <div className="t">
               <div className="pt">History on first sync</div>
-              <div className="faint">How many days each new chat, channel and the mailbox starts with. 0 loads everything.</div>
+              <div className="faint">
+                Days each new chat, channel and the mailbox starts with; 0 loads everything.{" "}
+                <LearnMore topic="settings-sync" section="First sync" />
+              </div>
             </div>
             <input
               type="number"
@@ -1622,10 +1620,10 @@ function SyncPane() {
             />
           </label>
           <div className="srow">
-            <Icon name="refresh" style={{ color: "var(--ink3)" }} />
+            <Icon name="refresh" className="tint-off" />
             <div className="t">
               <div className="pt">Sync now</div>
-              <div className="faint">It runs on its own every 15 minutes. Run it now to check it's working.</div>
+              <div className="faint">It runs on its own every 15 minutes.</div>
             </div>
             <button
               type="button"
@@ -1639,12 +1637,12 @@ function SyncPane() {
             </button>
           </div>
           <div className="srow">
-            <Icon name="history" style={{ color: "var(--ink3)" }} />
+            <Icon name="history" className="tint-off" />
             <div className="t">
               <div className="pt">Fetch again</div>
               <div className="faint">
-                Teams and Slack conversations from this day on, and the threads in your Outlook Inbox with a message since then. They wait
-                in the Inbox, not ingested as they arrive.
+                Fetches everything since this day into the Inbox, without ingesting it.{" "}
+                <LearnMore topic="settings-sync" section="Fetch again" />
               </div>
             </div>
             <DateField value={fetchFrom} onChange={setFetchFrom} label="Day to fetch from" />
@@ -1684,7 +1682,7 @@ function SyncPane() {
         <h2 className="h3">Teams</h2>
         <div className="card">
           <div className="srow">
-            <Icon name="chat" style={{ color: enabled && signIn?.teams ? "var(--green)" : "var(--ink3)" }} />
+            <Icon name="chat" className={enabled && signIn?.teams ? "tint-ok" : "tint-off"} />
             <div className="t">
               <div className="pt">Sync Teams</div>
               <div className="faint">
@@ -1692,13 +1690,13 @@ function SyncPane() {
                   ? `Chats, meeting transcripts and your calendar. Signed in, handed over ${signIn.handedOver ? ago(new Date(signIn.handedOver).getTime()) : "recently"}; keep Teams open in a browser tab.`
                   : "Chats, meeting transcripts and your calendar. Not signed in: open Teams in Chrome with the Teams capture extension loaded."}
                 {teamsStale.length > 0 && (
-                  <div style={{ color: "var(--amber)" }}>
+                  <div className="tint-warn">
                     Gone stale: {teamsStale.join(", ")}. Those wait until Teams renews them, within the hour while its tab is open.
                   </div>
                 )}
-                {teamsRejected.length > 0 && <div style={{ color: "var(--amber)" }}>{rejectedText(teamsRejected)}</div>}
+                {teamsRejected.length > 0 && <div className="tint-warn">{rejectedText(teamsRejected)}</div>}
                 {signIn?.handedOver && signIn.extensionOutdated !== null && (
-                  <div style={{ color: "var(--amber)" }}>{extensionOutdatedText(signIn)}</div>
+                  <div className="tint-warn">{extensionOutdatedText(signIn)}</div>
                 )}
               </div>
             </div>
@@ -1757,17 +1755,15 @@ function SyncPane() {
         <h2 className="h3">Outlook</h2>
         <div className="card">
           <div className="srow">
-            <Icon name="mail" style={{ color: mail && signIn?.outlook ? "var(--green)" : "var(--ink3)" }} />
+            <Icon name="mail" className={mail && signIn?.outlook ? "tint-ok" : "tint-off"} />
             <div className="t">
               <div className="pt">Sync Outlook mail</div>
               <div className="faint">
                 {signIn?.outlook
                   ? "Your Inbox mail. Signed in; keep Outlook on the web open in a browser tab."
                   : "Your Inbox mail. Not signed in: open Outlook on the web in Chrome with the Outlook capture extension loaded."}
-                {mailStale && (
-                  <div style={{ color: "var(--amber)" }}>Gone stale: mail. It waits until Outlook renews it, while its tab is open.</div>
-                )}
-                {mailRejected && <div style={{ color: "var(--amber)" }}>{rejectedText(["mail"])}</div>}
+                {mailStale && <div className="tint-warn">Gone stale: mail. It waits until Outlook renews it, while its tab is open.</div>}
+                {mailRejected && <div className="tint-warn">{rejectedText(["mail"])}</div>}
               </div>
             </div>
             {signIn?.outlook && (
@@ -1783,12 +1779,11 @@ function SyncPane() {
             <Switch label="Sync Outlook mail" on={mail} onChange={(v) => settings.update({ syncOutlook: v })} />
           </div>
           <div className="srow">
-            <Icon name="source" style={{ color: (s.syncMailAttachments ?? true) ? "var(--green)" : "var(--ink3)" }} />
+            <Icon name="source" className={(s.syncMailAttachments ?? true) ? "tint-ok" : "tint-off"} />
             <div className="t">
               <div className="pt">Bring in email attachments</div>
               <div className="faint">
-                PDF, Word, PowerPoint, Excel and text files up to 30 MB, each its own source, linked from its thread. Others are listed by
-                name.
+                Office, PDF and text files up to 30 MB, each its own source. <LearnMore topic="settings-sync" section="What syncs" />
               </div>
             </div>
             <Switch
@@ -1800,10 +1795,7 @@ function SyncPane() {
         </div>
 
         <h3 className="ssub">Mail to skip</h3>
-        <p className="faint">
-          Senders or domains whose mail isn't synced (nor anything Outlook files under Other). “Don't sync this sender” on a synced email
-          adds one.
-        </p>
+        <p className="faint">Senders or domains whose mail isn&apos;t synced.</p>
         <div className="row">
           <input
             className="input"
@@ -1827,7 +1819,7 @@ function SyncPane() {
           <div className="card">
             {ignore.map((e) => (
               <div key={e} className="srow">
-                <Icon name="mail" style={{ color: "var(--ink3)" }} />
+                <Icon name="mail" className="tint-off" />
                 <div className="t">
                   <div className="pt mono">{e}</div>
                 </div>
@@ -1850,13 +1842,11 @@ function SyncPane() {
       {!!skips?.suggestions.length && (
         <section className="sgroup">
           <h2 className="h3">Suggested from what you delete</h2>
-          <p className="faint">
-            You keep moving these to the Trash. Skip one and the sync leaves it out; nothing is skipped until you say so.
-          </p>
+          <p className="faint">You keep moving these to the Trash; Skip leaves one out of the sync.</p>
           <div className="card">
             {skips.suggestions.map((x) => (
               <div key={x.key} className="srow">
-                <Icon name={x.kind === "chat" ? "chat" : "mail"} style={{ color: "var(--ink3)" }} />
+                <Icon name={x.kind === "chat" ? "chat" : "mail"} className="tint-off" />
                 <div className="t">
                   <div className={`pt ${x.kind === "sender" ? "mono" : ""}`}>{x.label}</div>
                   <div className="faint">
@@ -1892,7 +1882,7 @@ function SyncPane() {
           <div className="card">
             {(s.syncIgnoreChats ?? []).map((id) => (
               <div key={id} className="srow">
-                <Icon name="chat" style={{ color: "var(--ink3)" }} />
+                <Icon name="chat" className="tint-off" />
                 <div className="t">
                   <div className="pt">{skips?.chatNames[id] ?? id}</div>
                 </div>
@@ -1942,7 +1932,7 @@ function SlackSync() {
       <h2 className="h3">Slack</h2>
       <div className="card">
         <div className="srow">
-          <Icon name="chat" style={{ color: s.syncSlack && state?.signedIn ? "var(--green)" : "var(--ink3)" }} />
+          <Icon name="chat" className={s.syncSlack && state?.signedIn ? "tint-ok" : "tint-off"} />
           <div className="t">
             <div className="pt">Sync Slack</div>
             <div className="faint">
@@ -2046,9 +2036,8 @@ function CapturePane() {
       <section className="sgroup">
         <h2 className="h3">Outlook, Teams and Slack in the browser</h2>
         <p className="muted">
-          Two browser extensions send what's open in Outlook on the web or Teams into the vault's sources/ folder, ready to ingest and
-          listed in the Inbox. They reach Brainstead through a small helper the browser starts, so they work while Brainstead is closed. The
-          third hands your open Slack tab's sign-in over for Slack sync.
+          Browser extensions that capture Outlook and Teams into sources/, even while Brainstead is closed.{" "}
+          <LearnMore topic="settings-capture" section="What each extension captures" />
         </p>
         {s.readOnly && (
           <div className="doc-banner warn" role="status">
@@ -2068,7 +2057,7 @@ function CapturePane() {
           const last = st?.recent.find((c) => c.extension === e.ext);
           return (
             <div key={e.id} className="srow">
-              <Icon name={last?.path ? "check" : "source"} style={{ color: last?.path ? "var(--green)" : "var(--ink3)" }} />
+              <Icon name={last?.path ? "check" : "source"} className={last?.path ? "tint-ok" : "tint-off"} />
               <div className="t">
                 <div className="pt">
                   {e.name}
@@ -2130,7 +2119,7 @@ function CapturePane() {
                   ", ",
                 )}${browsers.some((b) => !b.current) ? " (another copy of Brainstead registered it; this one takes over when it starts)" : ""}.`
             : "No Chromium browser was found on this computer: install Chrome, Edge or Brave, then open this page again."}{" "}
-          The extensions' IDs are fixed, so there's nothing to copy or paste.
+          <LearnMore topic="settings-capture" section="Install the extensions" />
         </p>
       </section>
       {!!st?.recent.length && (
@@ -2139,7 +2128,7 @@ function CapturePane() {
           <div className="card">
             {st.recent.map((c) => (
               <div key={c.at} className="srow">
-                <Icon name={c.path ? "check" : "x"} style={{ color: c.path ? "var(--green)" : "var(--red)" }} />
+                <Icon name={c.path ? "check" : "x"} className={c.path ? "tint-ok" : "tint-bad"} />
                 <div className="t">
                   <div className="pt ell">{c.path ? c.path.replace(/^sources\//, "").replace(/\.md$/, "") : `${c.what} not captured`}</div>
                   <div className="faint">
@@ -2223,7 +2212,7 @@ function About() {
           <div className="t">
             <div className="pt">The app's logs</div>
             <div className="faint">
-              What Brainstead noted while running, one file a day in the app data folder's logs. Older files are deleted.
+              One file a day in the app data folder; older ones are deleted. <LearnMore topic="settings-about" section="Find the logs" />
             </div>
           </div>
           <label className="faint" htmlFor="logdays">

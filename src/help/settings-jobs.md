@@ -1,14 +1,14 @@
 ---
-title: Settings › Jobs & schedule
+title: Settings › Automations
 kind: screen
 screens: [settings/jobs]
 order: 34
-summary: The weekly review's day and time and its preparation, the scheduled daily and weekly summaries, the daily check, and recent runs.
+summary: Automations, the jobs Brainstead runs on a schedule: the weekly review's day and time and its preparation, the scheduled daily and weekly summaries, the daily check, and recent runs.
 ---
 The page has two parts. **Your weekly review** is something you do. **Summaries Brainstead writes** are done for you: an assistant writes up each day and each week. The weekly summary shows beside your weekly review's steps.
 
 ## Set when you do the weekly review
-**Weekly review** is when you do the guided [Weekly review](app:weekly): Friday 16:00 by default. It isn't a job: [Today](app:today) reminds you from then until the end of the next day.
+**Weekly review** is when you do the guided [Weekly review](app:weekly): Friday 16:00 by default. The review's start page sets the same day and time under **Scheduled**. It isn't a job: [Today](app:today) reminds you from then until the end of the next day.
 
 ## Prepare the weekly review ahead of time
 **Prepare the weekly review** reads the week and saves suggestions for each step. It runs 4 hours before the review time, only while **Brainstead runs the daily and weekly summaries** is on, and only if the week has changed since it was last prepared. Its switch turns the schedule off. Starting the review prepares it too if needed.
@@ -22,7 +22,7 @@ Jobs run while Brainstead is running, even with its window closed. A run missed 
 Each job's assistant, model and effort are under **Models by job** in [Settings › AI assistants](app:settings/assistants): the summaries, the weekly review's preparation, Find tasks and projects, ingests (the daily check's too), meeting notes, Inbox suggestions (**Clarify suggestions**) and **Contradiction checks** (also the daily check's check and Write Current state). A job's **Effort** applies to runs on its own model; with Claude Code, the quick passes on Haiku (finding a contradiction check's claims, and Write Current state) run at Claude Code's effort. **Default** runs a job at its assistant's. A job's level never becomes what a new chat starts with, and the weekly review's preparation borrows the summaries' model, not their effort. A scheduled run never goes on an Ollama model: a job set to one runs on **New chats use** instead (Claude Code's Sonnet when that is Ollama's too), as Models by job shows under the job.
 
 ## Let Brainstead write the daily and weekly summaries
-Only one app should write them, so Brainstead runs them only when **Brainstead runs the daily and weekly summaries** is on. If another app also runs them, switch them off there. Until it's on, the summary rows are greyed. Then switch on:
+Only one app should write them, so Brainstead runs them only when **Brainstead runs the daily and weekly summaries** is on. If another app also runs them, each summary is written twice: switch them off there. Until it's on, the summary rows are greyed. Then switch on:
 
 - **Daily summary**: every day at 06:30 by default.
 - **Daily brief**: every day at 07:00 by default, a note of its own in `Briefs/` (`Brief 2026-11-18`): **Themes**, what the sources that came in since yesterday are about, which the model writes (each a few sentences and the initiative it's about, without listing the sources); then **Your actions**, **Waiting for** (the delegated actions, the ones to chase first) and **You can archive** (an initiative whose actions are all closed, and one line counting the sources nothing came of, by conversation), which Brainstead lists from your [initiatives](help:wiki) itself. When nothing came in, no model is asked. **Run now** writes today's again, replacing it.

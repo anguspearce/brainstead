@@ -2,7 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! the daily check (stage 7b; Settings › Jobs & schedule): contradictions for the pages that
+//! the daily check (stage 7b; Settings › Automations): contradictions for the pages that
 //! changed, `index.md`'s catalogue brought up to date, and the wiki pages not in the page shape
 //! counted. Off until switched on; at the time
 //! set, or on waking when the time passed while asleep or closed (the reviews' "most recent
@@ -239,7 +239,7 @@ fn run(app: &AppHandle, trigger: Option<&str>) {
     }
 
     // Sources changed since the pages citing them: ingested again, when switched on (Settings ›
-    // Jobs & schedule), so the pages catch up. The runs go on in the background, applying or
+    // Automations), so the pages catch up. The runs go on in the background, applying or
     // queueing their changes like any ingest. A source is tried once per version: a run that
     // changed nothing isn't repeated every day.
     let refresh = app.state::<AppState>().settings.lock().unwrap().ui.get("refreshStale").and_then(|v| v.as_bool()).unwrap_or(false);

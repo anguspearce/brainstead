@@ -1038,9 +1038,9 @@ describe("MCP actions", () => {
 
     it("reads and changes the settings it's allowed, never Read-only", async () => {
       answers.settings_write = (a) => a!.settings;
-      expect(await run("settings")).toMatch(/dailyCheckTime · Settings › Jobs & schedule › Daily check time: "09:00"/);
+      expect(await run("settings")).toMatch(/dailyCheckTime · Settings › Automations › Daily check time: "09:00"/);
       expect(await run("settings", { action: "set", key: "dailyCheckTime", value: "03:30" })).toMatch(/is now "03:30"/);
-      expect(await run("settings")).toMatch(/weeklyReview.day · Settings › Jobs & schedule › Weekly review day: "fri"/);
+      expect(await run("settings")).toMatch(/weeklyReview.day · Settings › Automations › Weekly review day: "fri"/);
       await run("settings", { action: "set", key: "weeklyReview.day", value: "Thursday" });
       expect(await run("settings")).toMatch(/Weekly review day: "thu"/);
       await run("settings", { action: "set", key: "summaries.dailyTime", value: "07:00" });
@@ -1340,8 +1340,8 @@ describe("MCP actions", () => {
     it("says where each setting is, as the screen does", async () => {
       const out = (await run("settings")) as string;
       expect(out).toContain("captureShortcut · Settings › General › Quick capture shortcut");
-      expect(out).toContain("summaries.dailyEnabled · Settings › Jobs & schedule › Daily summary: false");
-      expect(out).toContain("summaries.weeklyEnabled · Settings › Jobs & schedule › Weekly summary: false");
+      expect(out).toContain("summaries.dailyEnabled · Settings › Automations › Daily summary: false");
+      expect(out).toContain("summaries.weeklyEnabled · Settings › Automations › Weekly summary: false");
       expect(out).toContain("logDays · Settings › About › The app's logs › Keep (days: 7, 14, 30 or 90): 14");
     });
 

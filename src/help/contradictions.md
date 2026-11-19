@@ -8,7 +8,7 @@ summary: Find places where wiki pages disagree about the same thing, and settle 
 Contradictions finds wiki pages that disagree about the same fact, such as two launch dates for Orbit App. It's the **Contradictions** tab of [Wiki health](app:health), picked at the top; ⌘K's **Contradictions** opens it too.
 
 ## Run a check
-Click **Check · changed pages only**. Brainstead reads the claims and facts on each wiki page that changed since the last check, and the AI judges the ones that disagree. **Stop** ends a check part way and keeps what it has read for next time. The daily check in [Settings › Jobs & schedule](app:settings/jobs) can run this for you each day.
+Click **Check · changed pages only**. Brainstead reads the claims and facts on each wiki page that changed since the last check, and the AI judges the ones that disagree. **Stop** ends a check part way and keeps what it has read for next time. The daily check in [Settings › Automations](app:settings/jobs) can run this for you each day.
 
 ## Read a clash
 Real contradictions come first, by severity, then unclear and unjudged ones. Each clash shows the judge's verdict: **Real** (with its severity), **Newer supersedes older**, **Not a conflict**, **Unclear** or **Not judged yet**. Once you've dealt with it, it shows **Resolved** or **Ignored**.

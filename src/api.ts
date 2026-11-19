@@ -45,7 +45,7 @@ export interface Settings {
   projectOrder?: { areas?: string[]; projects?: string[] };
   /** Each list's search results order (by the list's plural noun): best match or latest first. */
   searchOrder?: Record<string, "ranked" | "latest">;
-  /** Jobs & schedule: ingest a new source as it arrives (a capture, a file dropped or imported);
+  /** Automations: ingest a new source as it arrives (a capture, a file dropped or imported);
    *  and, in the daily check, ingest again the sources that changed since pages cited them. */
   ingestOnArrival?: boolean;
   /** Teams and Outlook sync is on (Settings › Sync; macOS only). */
@@ -131,7 +131,7 @@ export interface Settings {
   askSuggest?: boolean;
   askTabs?: { id: string; filename: string }[];
   askActive?: string;
-  /** The daily and weekly summaries (Settings › Jobs & schedule), and whether Brainstead runs them. */
+  /** The daily and weekly summaries (Settings › Automations), and whether Brainstead runs them. */
   summaries?: SummarySchedule;
   summariesHere?: boolean;
   /** "Hold the summaries for me": the daily and weekly summaries wait in Changes instead of being written. */
@@ -181,7 +181,7 @@ export interface WeeklyReviewTime {
   time: string;
 }
 
-/** What Settings › Jobs & schedule's Recent runs, and run_status, call a summary run's kind. */
+/** What Settings › Automations' Recent runs, and run_status, call a summary run's kind. */
 export const reviewKindName = (k: ReviewRun["kind"]) =>
   k === "daily" ? "Daily summary" : k === "brief" ? "Daily brief" : "Weekly summary";
 
@@ -1574,7 +1574,7 @@ export const api = {
    *  `unattended` (an assistant nobody is watching): held when a check fails. */
   weekprepLink: (week: string, path: string, phrase: string, target: string, unattended = false) =>
     invoke<ChangeOutcome>("weekprep_link", { week, path, phrase, target, unattended }),
-  /** The job's last run and next scheduled time (Settings › Jobs & schedule). */
+  /** The job's last run and next scheduled time (Settings › Automations). */
   weekprepJob: () => invoke<WeekPrepJob>("weekprep_job"),
   /** Stops the preparation running now. */
   weekprepStop: () => invoke<void>("weekprep_stop"),
@@ -1744,7 +1744,7 @@ export interface WeekPrepRun {
   chat: string | null;
 }
 
-/** The preparation's row in Settings › Jobs & schedule. */
+/** The preparation's row in Settings › Automations. */
 export interface WeekPrepJob {
   /** The week being prepared now. */
   running: string | null;

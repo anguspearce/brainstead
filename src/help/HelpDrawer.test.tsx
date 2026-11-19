@@ -9,7 +9,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(async () => null), conver
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: vi.fn() }));
 
-import { HelpDrawer, helpOpen, openHelp } from "./HelpDrawer";
+import { HelpDrawer, helpOpen, LearnMore, openHelp } from "./HelpDrawer";
 
 afterEach(() => {
   cleanup();
@@ -54,6 +54,21 @@ describe("the help drawer's top", () => {
     const open = [...container.querySelectorAll<HTMLDetailsElement>("details.help-sec")].filter((d) => d.open);
     // Today's keys are the task lists'.
     expect(open.map((d) => d.querySelector("summary")?.textContent)).toEqual(["Task lists"]);
+  });
+});
+
+describe("a setting's Learn more", () => {
+  it("opens its pane's help at the section that explains it", () => {
+    const { getByText, container } = render(
+      <>
+        <LearnMore topic="settings-jobs" section="When jobs run" />
+        <HelpDrawer />
+      </>,
+    );
+    act(() => getByText("Learn more").click());
+    expect(helpOpen.get()).toEqual({ topic: "settings-jobs", section: "When jobs run" });
+    const open = [...container.querySelectorAll<HTMLDetailsElement>("details.help-sec")].filter((d) => d.open);
+    expect(open.map((d) => d.querySelector("summary")?.textContent)).toEqual(["When jobs run"]);
   });
 });
 

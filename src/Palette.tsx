@@ -189,6 +189,14 @@ export function commands(): Command[] {
       run: () => nav.go({ screen: "settings", pane: "vault" }),
     },
     {
+      id: "automations",
+      group: "Do",
+      icon: "calendar",
+      label: "Automations settings",
+      keywords: "jobs schedule summaries daily brief daily check weekly review time preparation",
+      run: () => nav.go({ screen: "settings", pane: "jobs" }),
+    },
+    {
       id: "fixname",
       group: "Do",
       icon: "text",

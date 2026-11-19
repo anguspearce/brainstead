@@ -91,7 +91,7 @@ In the daily and weekly summaries, area Personal goes under **Personal** and any
 
 The weekly review walks you through GTD's three phases, Get clear, Get current and Get creative, in eleven steps over your real lists, acting on each item as you go.
 
-- Open it from **Weekly review** in the sidebar, or **Start** on Today from the review's time (Friday 16:00 by default, in Settings › Jobs & schedule).
+- Open it from **Weekly review** in the sidebar, or **Start** on Today from the review's time (Friday 16:00 by default, set on its start page or in Settings › Automations).
 - **Pause** keeps your place.
 - **Finish and save** writes the week's review note. ⌘Z undoes it.
 

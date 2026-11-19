@@ -2341,6 +2341,33 @@ details.callout[open] .callout-chev {
   font-size: 11.5px;
 }
 
+/* A setting's Learn more (src/help/HelpDrawer.tsx): after its one line, in the line's own size. */
+.tlink.learn {
+  font-size: inherit;
+  white-space: nowrap;
+}
+.tlink.learn:hover {
+  text-decoration: underline;
+}
+
+/* Status tints for a Settings row's icon or line: on and working, needs a look, failed, off, and
+   the accent for one that's neither (Settings, src/Jobs.tsx). */
+.tint-ok {
+  color: var(--green);
+}
+.tint-warn {
+  color: var(--amber);
+}
+.tint-bad {
+  color: var(--red);
+}
+.tint-off {
+  color: var(--ink3);
+}
+.tint-accent {
+  color: var(--accent);
+}
+
 /* mermaid */
 .mermaid {
   position: relative;
@@ -6597,7 +6624,7 @@ code.noscript {
   outline: 0;
 }
 
-/* Settings › Jobs & schedule (src/Jobs.tsx) */
+/* Settings › Automations (src/Jobs.tsx) */
 
 /* A note between a screen's settings: plain grey text, not a coloured box. */
 .jobnote {
@@ -7388,6 +7415,20 @@ select.sel {
 }
 .wstart .row {
   gap: 8px;
+}
+
+/* Scheduled: the review's day and time pickers, then what that means, wrapping under them. */
+.wstart .wwhen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+
+  /* The pickers are taller than a line: centred on the Scheduled label's line, not below it. */
+  margin: -5px 0;
+}
+.wstart .wwhen .muted {
+  margin: 0;
 }
 .wphases {
   display: grid;
@@ -10313,7 +10354,7 @@ html.tray-view body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Settings › Jobs & schedule: your tools that start Claude Code sessions. */
+/* Settings › Automations: your tools that start Claude Code sessions. */
 .autotools .autorow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1.6fr) auto;

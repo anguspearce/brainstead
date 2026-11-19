@@ -33,7 +33,7 @@ Renames and moves to the Trash are made at once, unless they touch a template (t
 
 Assistants' task, Inbox and project edits are listed and held by the same rules; your own edits on those screens aren't listed.
 
-To have the summaries always held for you, turn on **Hold the summaries for me** in [Settings › Jobs & schedule](app:settings/jobs).
+To have the summaries always held for you, turn on **Hold the summaries for me** in [Settings › Automations](app:settings/jobs).
 
 ## Read the feed
 The feed groups changes by run, newest first: "Daily check, 5 Oct: 6 changes to 4 pages", an ingest, an Ask chat. Each run is folded to its heading: click its chevron to show its changes, which folds the one that was open. Moving to a change (`J` and `K`, or a search) opens its run. Click the selected change again, or fold its run, to let it go. Older runs load as you scroll down. Each row shows the title, page, source, model and age, with **Flagged**, **Reverted** or a kind such as **New page**. `J` and `K` move between changes.

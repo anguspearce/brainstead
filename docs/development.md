@@ -92,7 +92,7 @@ In `~/Library/Application Support/Brainstead/` on a Mac or `%APPDATA%\Brainstead
 | Fix name's corrections | `substitutions.json` |
 | Find tasks and projects: suggestions, accepted or skipped, last run | `find/state.json` |
 | When each bookmark was last kept in triage | `bookmarks-kept.json` |
-| Your tools that start Claude Code sessions, excluded from summaries (Settings › Jobs & schedule) | `summaries/automated.json` |
+| Your tools that start Claude Code sessions, excluded from summaries (Settings › Automations) | `summaries/automated.json` |
 | MCP actions waiting for the app | `bridge/` |
 | Logs | `logs/` |
 | When updates were last checked, and a skipped version | `updates.json` |

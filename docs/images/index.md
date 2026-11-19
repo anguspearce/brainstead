@@ -58,6 +58,6 @@ On [Ask and assistants](../ask.md).
 On [Day to day](../day-to-day.md).
 
 - The menu-bar window: [light](tray-light.png) · [dark](tray-dark.png)
-- Settings › Jobs & schedule: [light](settings-jobs-light.png) · [dark](settings-jobs-dark.png)
+- Settings › Automations: [light](settings-jobs-light.png) · [dark](settings-jobs-dark.png)
 - The help drawer on Tasks: [light](help-light.png) · [dark](help-dark.png)
 - Settings › General: [light](settings-general-light.png) · [dark](settings-general-dark.png)

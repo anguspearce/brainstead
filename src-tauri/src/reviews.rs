@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! The scheduled daily and weekly reviews, run here in Rust (a hidden webview throttles its
-//! timers). Only when Settings › Jobs & schedule says Brainstead runs them: one app at a time.
+//! timers). Only when Settings › Automations says Brainstead runs them: one app at a time.
 //!
 //! A run gathers the review's inputs itself (brainstead_core::reviews, replacing the previous app's
 //! scripts), asks the model with read-only tools to compose the block from them and the workflow,
@@ -105,7 +105,7 @@ pub fn automated_file() -> PathBuf {
     dir().join("automated.json")
 }
 
-/// The user's own tools (Settings › Jobs & schedule): the signatures in `automated.json`, not
+/// The user's own tools (Settings › Automations): the signatures in `automated.json`, not
 /// the built-in ones. A file that doesn't read gives none.
 #[tauri::command]
 pub fn automated_list() -> Vec<reviews::sessions::Automation> {
@@ -689,7 +689,7 @@ fn write_brief(
     let mut s = crate::changes::Submit::new(&file, kind, title, "", origin, brainstead_core::changes::from_texts(before.as_deref(), note));
     s.model = Some(model.into());
     if held {
-        s.hold = Some("You asked for the summaries to be held for you (Settings › Jobs & schedule).".into());
+        s.hold = Some("You asked for the summaries to be held for you (Settings › Automations).".into());
     }
     let o = crate::changes::submit(app, s).map_err(|e| e.message().to_string())?;
     if held || !o.applied {
@@ -712,7 +712,7 @@ fn hold(app: &AppHandle, w: &Window, block: &str, title: &str, model: &str, orig
     let kind = if before.is_some() { Kind::Edit } else { Kind::New };
     let mut s = crate::changes::Submit::new(&file, kind, title, "", origin, brainstead_core::changes::from_texts(before.as_deref(), &text));
     s.model = Some(model.into());
-    s.hold = Some("You asked for the summaries to be held for you (Settings › Jobs & schedule).".into());
+    s.hold = Some("You asked for the summaries to be held for you (Settings › Automations).".into());
     crate::changes::submit(app, s).map_err(|e| e.message().to_string())?;
     Ok(file)
 }
