@@ -61,6 +61,19 @@
   --display: "Geist Variable", -apple-system, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   --mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, "Cascadia Mono", Consolas, monospace;
 
+  /* The type scale: every UI size is one of these (D-20261119-15). Note text follows --read-size and
+     the export looks keep their pt sizes; only the brand wordmark sits off the scale. */
+  --fs-2xs: 10px; /* rail labels, tiny pills, weekday initials */
+  --fs-xs: 11px; /* chips, counts, meta lines, hints */
+  --fs-sm: 12px; /* secondary text, rows' second line, small buttons */
+  --fs-base: 13px; /* the UI's body: rows, buttons, inputs */
+  --fs-md: 14px; /* reading-size UI text: Ask, Review bodies, empty states */
+  --fs-lg: 15px; /* pane titles, large inputs */
+  --fs-xl: 17px; /* dialog titles, capture box, big numbers */
+  --fs-2xl: 20px; /* panel headings */
+  --fs-3xl: 22px; /* .h2 */
+  --fs-display: 34px; /* .h1, the health score */
+
   /* The left panes, one width each kind: a nav or list beside a page (Inbox, Tasks, Search, Wiki,
      Settings, Meeting notes, the weekly steps), and a list beside a record (Projects, Changes). */
   --pane-left: 260px;
@@ -185,7 +198,7 @@ body,
 body {
   background: var(--ground);
   color: var(--ink);
-  font: 13px/1.45 var(--sans);
+  font: var(--fs-base)/1.45 var(--sans);
   -webkit-font-smoothing: antialiased;
   -webkit-user-select: none;
   user-select: none;
@@ -300,7 +313,7 @@ body:has(.scrim:not(.mfull)) .winctl {
 /* Windows 11's caption glyphs (src/WindowControls.tsx): its icon font at 10px, regular weight. */
 .winctl .wglyph {
   font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif;
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   font-weight: 400;
   line-height: 1;
 }
@@ -333,7 +346,7 @@ html[data-platform="windows"] .top {
   border: 1px solid var(--line);
   color: var(--ink3);
   margin: 0 0 10px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   cursor: pointer;
   text-align: left;
 }
@@ -380,7 +393,7 @@ html[data-platform="windows"] .top {
   color: var(--ink);
 }
 .sect {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--ink3);
   padding: 14px 8px 4px;
@@ -438,7 +451,7 @@ html[data-platform="windows"] .top {
 }
 .navi .n {
   margin-left: auto;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
   font-variant-numeric: tabular-nums;
 }
@@ -480,7 +493,7 @@ html[data-platform="windows"] .top {
 }
 .sideempty {
   padding: 4px 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--ink3);
 }
 .side .foot {
@@ -496,7 +509,7 @@ html[data-platform="windows"] .top {
   align-items: center;
   gap: 8px;
   padding: 6px 8px 0;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
   font-variant-numeric: tabular-nums;
 }
@@ -539,7 +552,7 @@ html[data-platform="windows"] .top {
   background: var(--amber-soft);
   color: var(--amber);
   font: inherit;
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   cursor: pointer;
 }
@@ -655,7 +668,7 @@ html[data-platform="windows"] .top {
   min-height: 0;
   background: var(--surface);
   border-bottom: 1px solid var(--line2);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--ink3);
   cursor: default;
@@ -675,7 +688,7 @@ html[data-platform="windows"] .top {
   padding: 0 16px 0 12px;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink2);
 }
@@ -705,12 +718,12 @@ html[data-platform="windows"] .top {
   color: var(--ink3);
   cursor: pointer;
 }
-.headbtn:hover {
+.headbtn:hover:not(:disabled) {
   color: var(--ink);
 }
 .headbtn:disabled {
   cursor: default;
-  opacity: 0.6;
+  opacity: 0.45;
 }
 .tb-band.none > :first-child {
   font-style: italic;
@@ -719,7 +732,7 @@ html[data-platform="windows"] .top {
 .tb-band .n {
   flex: none;
   min-width: 20px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 400;
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -762,22 +775,22 @@ html[data-platform="windows"] .top {
 
 /* type */
 .h1 {
-  font: 600 34px/1.1 var(--display);
+  font: 600 var(--fs-display)/1.1 var(--display);
   letter-spacing: -0.03em;
   margin: 0;
 }
 .h2 {
-  font: 600 22px/1.2 var(--display);
+  font: 600 var(--fs-3xl)/1.2 var(--display);
   letter-spacing: -0.02em;
   margin: 0;
 }
 .h3 {
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   margin: 0;
 }
 .eyebrow {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink2);
 }
@@ -789,7 +802,7 @@ html[data-platform="windows"] .top {
 }
 .mono {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .err {
   color: var(--red);
@@ -872,7 +885,7 @@ body.presizing * {
   border: 1px solid var(--line2);
   background: var(--surface);
   color: var(--ink);
-  font: 500 12.5px/1 var(--sans);
+  font: 500 var(--fs-sm)/1 var(--sans);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -880,11 +893,16 @@ body.presizing * {
   white-space: nowrap;
   flex: none;
 }
-.btn:hover {
+.btn:hover:not(:disabled) {
   background: var(--sunk);
 }
+
+/* One disabled look for every control: buttons, chips, links and pickers. */
 .btn:disabled,
-.ibtn:disabled {
+.ibtn:disabled,
+.chip:disabled,
+.tlink:disabled,
+select.sel:disabled {
   opacity: 0.45;
   cursor: default;
 }
@@ -893,7 +911,7 @@ body.presizing * {
   border-color: var(--accent);
   color: var(--on-accent);
 }
-.btn.pri:hover {
+.btn.pri:hover:not(:disabled) {
   background: var(--accent-ink);
 }
 .btn.ghost {
@@ -901,19 +919,19 @@ body.presizing * {
   border-color: transparent;
   color: var(--ink2);
 }
-.btn.ghost:hover {
+.btn.ghost:hover:not(:disabled) {
   background: var(--hover);
 }
 
 /* Every button is the standard 28px high; sm and lg only change the padding and the text. */
 .btn.sm {
   padding: 0 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   border-radius: 6px;
 }
 .btn.lg {
   padding: 0 14px;
-  font-size: 13.5px;
+  font-size: var(--fs-base);
   border-radius: 8px;
 }
 .ibtn {
@@ -939,7 +957,7 @@ body.presizing * {
   margin-right: -4px;
 }
 .kbd {
-  font: 500 10.5px/1 var(--sans);
+  font: 500 var(--fs-2xs)/1 var(--sans);
   color: var(--ink3);
   border: 1px solid var(--line2);
   border-bottom-width: 2px;
@@ -955,7 +973,7 @@ body.presizing * {
   height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-weight: 500;
   background: var(--sunk);
   color: var(--ink2);
@@ -989,7 +1007,7 @@ body.presizing * {
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--ink2);
   border: 0;
@@ -1009,7 +1027,7 @@ body.presizing * {
   border: 1px solid var(--line2);
   background: var(--surface);
   padding: 0 10px;
-  font: 13px var(--sans);
+  font: var(--fs-base) var(--sans);
   color: var(--ink);
   display: flex;
   align-items: center;
@@ -1017,7 +1035,7 @@ body.presizing * {
   min-width: 0;
 }
 .inp.mono {
-  font: 12.5px var(--mono);
+  font: var(--fs-sm) var(--mono);
 }
 .inp svg {
   color: var(--ink3);
@@ -1101,7 +1119,7 @@ body.presizing * {
   border: 1px solid var(--line);
   border-radius: 7px;
   box-shadow: var(--pop);
-  font: 500 12px/1.35 var(--sans);
+  font: 500 var(--fs-sm)/1.35 var(--sans);
   pointer-events: none;
   animation: fadein 0.12s ease-out;
   overflow-wrap: anywhere;
@@ -1164,7 +1182,7 @@ body.presizing * {
   border: 0;
   outline: 0;
   background: transparent;
-  font: 400 17px var(--sans);
+  font: 400 var(--fs-xl) var(--sans);
   color: var(--ink);
 }
 .plist {
@@ -1180,7 +1198,7 @@ body.presizing * {
 }
 
 .pg {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink3);
   padding: 12px 20px 4px;
@@ -1227,7 +1245,7 @@ body.presizing * {
   padding: 10px 16px;
   border-top: 1px solid var(--line);
   background: var(--sunk);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
 }
 
@@ -1254,7 +1272,7 @@ body.presizing * {
 .wcard .tagline {
   margin: -6px 0 12px;
   color: var(--ink3);
-  font-size: 15px;
+  font-size: var(--fs-lg);
 }
 .wcard p {
   margin: 0;
@@ -1355,7 +1373,7 @@ body.presizing * {
 /* A sub-heading inside a Settings section (Teams channels, Mail to skip). */
 .sgroup .ssub {
   margin: 8px 0 0;
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--ink2);
 }
@@ -1418,7 +1436,7 @@ body.presizing * {
   grid-template-columns: 140px 1fr;
   gap: 6px 12px;
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .sysf dd,
 .kv dd {
@@ -1472,7 +1490,7 @@ body.presizing * {
   border-radius: 7px;
   background: var(--surface);
   color: var(--ink);
-  font: 500 12.5px var(--sans);
+  font: 500 var(--fs-sm) var(--sans);
   padding: 0 8px;
   display: inline-flex;
   align-items: center;
@@ -1541,7 +1559,7 @@ body.presizing * {
    and one selected look everywhere. */
 .tnode,
 .spanes .navi {
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .tnode {
   display: flex;
@@ -1572,7 +1590,7 @@ body.presizing * {
 }
 .tnode .n {
   margin-left: auto;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
   font-variant-numeric: tabular-nums;
 }
@@ -1616,11 +1634,11 @@ body.presizing * {
   display: flex;
   gap: 6px;
   align-items: center;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
 .count {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-variant-numeric: tabular-nums;
 }
 .chip.f {
@@ -1650,7 +1668,7 @@ body.presizing * {
   border-style: dashed;
 }
 .badge {
-  font: 600 10.5px/1 var(--mono);
+  font: 600 var(--fs-2xs)/1 var(--mono);
   color: var(--l-source);
   letter-spacing: 0.03em;
 }
@@ -1678,7 +1696,7 @@ body.presizing * {
   padding-bottom: 0;
 }
 .fhead .fcell {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--ink3);
   border: 0;
@@ -1716,7 +1734,7 @@ body.presizing * {
   padding: 24px 18px;
 }
 .snip {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 400;
   color: var(--ink2);
   line-height: 1.45;
@@ -1741,7 +1759,7 @@ mark.search-hit {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -1801,10 +1819,10 @@ mark.search-hit {
 }
 .inp.lg {
   height: 40px;
-  font-size: 15px;
+  font-size: var(--fs-lg);
 }
 .scount {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .shelp {
   max-width: 640px;
@@ -1952,7 +1970,7 @@ html[data-platform]:not([data-platform="macos"]) .top.focusbar {
   margin: 0 -8px;
   border-radius: 7px;
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   min-width: 0;
   width: calc(100% + 16px);
 }
@@ -1960,7 +1978,7 @@ html[data-platform]:not([data-platform="macos"]) .top.focusbar {
   background: var(--hover);
 }
 .blink .faint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1977,7 +1995,7 @@ html[data-platform]:not([data-platform="macos"]) .top.focusbar {
   margin: 0 0 22px;
   padding: 0 0 14px;
   border-bottom: 1px solid var(--line);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .props.err {
   display: block;
@@ -2259,7 +2277,7 @@ details.callout[open] .callout-chev {
 }
 .sysnote summary {
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink3);
   letter-spacing: 0.02em;
@@ -2320,7 +2338,7 @@ details.callout[open] .callout-chev {
   min-width: 0;
 }
 .tqhead code {
-  font: 11.5px var(--mono);
+  font: var(--fs-xs) var(--mono);
   color: var(--ink3);
   background: none;
   border: 0;
@@ -2330,7 +2348,7 @@ details.callout[open] .callout-chev {
 }
 .tqmsg {
   padding: 8px 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .tlink {
   border: 0;
@@ -2338,7 +2356,7 @@ details.callout[open] .callout-chev {
   padding: 0;
   color: var(--accent-ink);
   cursor: pointer;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
 }
 
 /* A setting's Learn more (src/help/HelpDrawer.tsx): after its one line, in the line's own size. */
@@ -2463,7 +2481,7 @@ html[data-platform="windows"] .scrim.mfull {
   border-radius: 8px;
 }
 .mermaid-source {
-  font: 12px var(--mono);
+  font: var(--fs-sm) var(--mono);
   white-space: pre-wrap;
 }
 
@@ -2486,14 +2504,14 @@ html[data-platform="windows"] .scrim.mfull {
 .srcocr summary {
   cursor: pointer;
   color: var(--ink2);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .srcocr .srctext,
 .srcocr p {
   margin-top: 8px;
 }
 .srctext {
-  font: 12.5px/1.55 var(--mono);
+  font: var(--fs-sm)/1.55 var(--mono);
   white-space: pre-wrap;
   background: var(--sunk);
   border: 1px solid var(--line);
@@ -2676,7 +2694,7 @@ html[data-platform="windows"] .scrim.mfull {
 }
 .loadfail.compact {
   padding: 8px 12px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .loadfail.loading {
   color: var(--ink3);
@@ -2690,7 +2708,7 @@ html[data-platform="windows"] .scrim.mfull {
   padding: 8px 20px;
   background: var(--accent-soft);
   color: var(--accent-ink);
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .trow.dragging {
   opacity: 0.6;
@@ -2726,7 +2744,7 @@ html[data-platform="windows"] .scrim.mfull {
   flex-wrap: wrap;
   gap: 2px 14px;
   align-items: center;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink3);
 }
 
@@ -2766,7 +2784,7 @@ html[data-platform="windows"] .scrim.mfull {
 .itag {
   margin-left: 6px;
   color: var(--ink3);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 400;
 }
 
@@ -2898,7 +2916,7 @@ html[data-platform="windows"] .scrim.mfull {
   gap: 14px;
 }
 .tdetail .h2 {
-  font-size: 15px;
+  font-size: var(--fs-lg);
   line-height: 1.4;
   letter-spacing: -0.01em;
 }
@@ -2933,7 +2951,7 @@ html[data-platform="windows"] .scrim.mfull {
   font-weight: 500;
 }
 .seglabel {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .tdetail .kv {
   /* As wide as the longest name with its ⓘ, so none wraps. */
@@ -2961,7 +2979,7 @@ html[data-platform="windows"] .scrim.mfull {
   min-width: 0;
 }
 .small {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   margin: 0;
 }
 
@@ -2994,7 +3012,7 @@ html[data-platform="windows"] .scrim.mfull {
 /* Today's counts as a sentence under the greeting; each count jumps to its band. */
 .tsum {
   margin: 0;
-  font-size: 15.5px;
+  font-size: var(--fs-lg);
   line-height: 1.5;
   color: var(--ink2);
 }
@@ -3082,7 +3100,7 @@ html[data-platform="windows"] .scrim.mfull {
   gap: 6px;
   padding: 10px 16px 10px 0;
   border-bottom: 1px solid var(--line);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .tctx .faint {
   margin-right: 4px;
@@ -3104,7 +3122,7 @@ html[data-platform="windows"] .scrim.mfull {
   color: var(--ink);
 }
 .tcalm .faint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .todaytable .tfoot {
   display: flex;
@@ -3115,7 +3133,7 @@ html[data-platform="windows"] .scrim.mfull {
 .trow .wsince {
   align-self: center;
   flex: none;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   color: var(--ink3);
 }
@@ -3156,7 +3174,7 @@ html[data-platform="windows"] .scrim.mfull {
   padding: 0 0 6px;
   background: none;
   border: 0;
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .rcard .rrow {
   padding-left: 0;
@@ -3173,7 +3191,7 @@ html[data-platform="windows"] .scrim.mfull {
   background: none;
   color: var(--ink);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   text-align: left;
   width: 100%;
   min-width: 0;
@@ -3188,7 +3206,7 @@ html[data-platform="windows"] .scrim.mfull {
 .rrow .n {
   flex: none;
   min-width: 20px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-variant-numeric: tabular-nums;
   text-align: right;
   color: var(--ink3);
@@ -3197,9 +3215,23 @@ html[data-platform="windows"] .scrim.mfull {
   font-weight: 600;
   color: var(--ink);
 }
+
+/* A group label inside a card's rows (Upcoming meetings' Tomorrow). */
+.rrow.rgroup {
+  min-height: 0;
+  padding-top: 8px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink3);
+}
+.rrow .ricon {
+  display: inline-flex;
+  flex: none;
+  color: var(--ink3);
+}
 .rrow .rstat {
   flex: none;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   white-space: nowrap;
 }
 .rcard .ract {
@@ -3234,7 +3266,7 @@ button.rrow.rlink:hover {
 }
 .rsub {
   padding: 10px 0 4px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink3);
 }
@@ -3268,7 +3300,7 @@ button.rrow.rlink:hover {
 }
 .sumline {
   flex: none;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   white-space: nowrap;
 }
 .sumbody {
@@ -3278,7 +3310,7 @@ button.rrow.rlink:hover {
   border-bottom: 1px solid var(--line);
 }
 .sumbody .prose {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .rempty {
   margin: 0;
@@ -3315,7 +3347,7 @@ button.rrow.rlink:hover {
   padding: 0 4px;
 }
 .ghead .faint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 /* capture */
@@ -3339,14 +3371,14 @@ button.rrow.rlink:hover {
   outline: 0;
   resize: none;
   background: transparent;
-  font: 17px/1.4 var(--sans);
+  font: var(--fs-xl)/1.4 var(--sans);
   color: var(--ink);
   field-sizing: content;
   max-height: 160px;
   min-height: 24px;
 }
 .capture.compact textarea {
-  font-size: 14px;
+  font-size: var(--fs-md);
 }
 .capture .cfoot {
   display: flex;
@@ -3355,7 +3387,7 @@ button.rrow.rlink:hover {
   padding: 8px 14px;
   border-top: 1px solid var(--line);
   background: var(--sunk);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   border-radius: 0 0 12px 12px;
 }
 .capture .cfoot .sp {
@@ -3570,7 +3602,7 @@ html[data-platform="windows"][data-scrollbars="always"] ::-webkit-scrollbar-thum
   font-weight: 500;
 }
 .nnt span {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
 }
 .nnt:hover {
   background: var(--hover);
@@ -3589,7 +3621,7 @@ html[data-platform="windows"][data-scrollbars="always"] ::-webkit-scrollbar-thum
   gap: 4px;
 }
 .nnhint {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   padding: 4px;
 }
 .nnhint:last-child {
@@ -3607,7 +3639,7 @@ html[data-platform="windows"][data-scrollbars="always"] ::-webkit-scrollbar-thum
 }
 .nnmain .h2,
 .rename .h2 {
-  font-size: 20px;
+  font-size: var(--fs-2xl);
 }
 .nnfields {
   display: grid;
@@ -3627,7 +3659,7 @@ html[data-platform="windows"][data-scrollbars="always"] ::-webkit-scrollbar-thum
   grid-column: span 1;
 }
 .nnf > span:first-child {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink2);
 }
@@ -3638,7 +3670,7 @@ select.inp:focus {
   outline: 0;
 }
 .nnname {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   flex-wrap: wrap;
 }
 .nnname .fname {
@@ -3672,7 +3704,7 @@ select.inp:focus {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 12px 14px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.7;
   color: var(--ink2);
   white-space: pre-wrap;
@@ -3687,7 +3719,7 @@ select.inp:focus {
   border-radius: 10px;
   background: var(--amber-soft);
   color: var(--amber);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .nnerr svg {
   flex: none;
@@ -3746,10 +3778,10 @@ button.rnhead {
   font-weight: 500;
 }
 .rnfile .row .faint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .rnba {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -3780,7 +3812,7 @@ button.rnhead {
   border-bottom: 1px solid var(--line);
 }
 .trsel .faint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .trlist {
   --tb-head: 34px;
@@ -3815,7 +3847,7 @@ button.rnhead {
   font-weight: 500;
 }
 .trwarn {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--amber);
   display: flex;
   gap: 6px;
@@ -3845,7 +3877,7 @@ button.rnhead {
   align-items: center;
   border-top: 1px solid var(--line);
   color: var(--ink3);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .btn.danger,
 .menu button.danger {
@@ -3885,14 +3917,14 @@ button.rnhead {
 .updnotes .prose h1,
 .updnotes .prose h2,
 .updnotes .prose h3 {
-  font-size: 14px;
+  font-size: var(--fs-md);
   margin: 12px 0 4px;
 }
 .updprog {
   min-height: 34px;
 }
 .updlabel {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -3938,7 +3970,7 @@ button.rnhead {
 /* Source (src/editor/cm.ts): the plain text in a monospaced font, nothing styled, so it's
    clearly not Edit. Beats a styled document's font too. */
 :is(.editor, .docsurf.styled .editor) .cm-editor.cm-source {
-  font: 13.5px / 1.6 var(--mono);
+  font: var(--fs-base) / 1.6 var(--mono);
 }
 
 .editor .cm-editor.cm-focused {
@@ -4103,7 +4135,7 @@ button.rnhead {
   padding: 8px 0 2px;
   color: var(--ink2);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   cursor: pointer;
 }
 .hlpick .hlnone:hover {
@@ -4344,7 +4376,7 @@ button.rnhead {
   border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--pop);
-  font: 13px var(--sans);
+  font: var(--fs-base) var(--sans);
 }
 .editor .cm-tooltip-autocomplete > ul > li {
   padding: 4px 10px;
@@ -4363,7 +4395,7 @@ button.rnhead {
   display: none;
 }
 .unsaved {
-  font: 500 12px var(--sans);
+  font: 500 var(--fs-sm) var(--sans);
   color: var(--amber);
   background: var(--amber-soft);
   border: 0;
@@ -4383,7 +4415,7 @@ button.rnhead {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--sunk);
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--ink2);
 }
 .doc-banner.warn {
@@ -4401,7 +4433,7 @@ button.rnhead {
   margin: 12px 0;
 }
 .compare pre {
-  font: 12px / 1.5 var(--mono);
+  font: var(--fs-sm) / 1.5 var(--mono);
   max-height: 50vh;
   overflow: auto;
   white-space: pre-wrap;
@@ -5226,7 +5258,7 @@ button.rnhead {
   border-radius: 8px;
   background: var(--surface);
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   cursor: pointer;
   text-align: left;
 }
@@ -5244,7 +5276,7 @@ button.rnhead {
   box-shadow: 0 0 0 1px var(--accent);
 }
 .lookstyles .aa {
-  font-size: 15px;
+  font-size: var(--fs-lg);
   font-weight: 600;
   width: 22px;
 }
@@ -5264,12 +5296,12 @@ button.rnhead {
   justify-content: space-between;
   gap: 8px;
   padding: 0 10px 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .lookdemo {
   margin-top: 14px;
   max-width: 640px;
-  font-size: 13px;
+  font-size: var(--fs-base);
 
   --read-size: 13px;
 }
@@ -5308,7 +5340,7 @@ button.rnhead {
   border-radius: 6px;
   background: none;
   color: var(--ink2);
-  font: 500 13px var(--sans);
+  font: 500 var(--fs-base) var(--sans);
   cursor: pointer;
 }
 .tbtn:hover {
@@ -5323,7 +5355,7 @@ button.rnhead {
 .tbtn i,
 .tbtn s {
   font: inherit;
-  font-size: 14px;
+  font-size: var(--fs-md);
 }
 .tbtn b {
   font-weight: 750;
@@ -5333,7 +5365,7 @@ button.rnhead {
   font-family: Georgia, serif;
 }
 .tbtn code {
-  font: 600 11px var(--mono);
+  font: 600 var(--fs-xs) var(--mono);
 }
 .tbtn.heading {
   min-width: 104px;
@@ -5347,19 +5379,19 @@ button.rnhead {
   background: var(--line);
 }
 .hpick.h1 {
-  font-size: 17px;
+  font-size: var(--fs-xl);
   font-weight: 700;
 }
 .hpick.h2 {
-  font-size: 15px;
+  font-size: var(--fs-lg);
   font-weight: 700;
 }
 .hpick.h3 {
-  font-size: 13.5px;
+  font-size: var(--fs-base);
   font-weight: 650;
 }
 .hpick.h4 {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 650;
 }
 .hpick.on {
@@ -5464,13 +5496,13 @@ button.rnhead {
   outline: 0;
   background: none;
   color: var(--ink);
-  font: 13px var(--sans);
+  font: var(--fs-base) var(--sans);
 }
 .dpick-in::placeholder {
   color: var(--ink3);
 }
 .dpick-preview {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--ink2);
   padding: 0 2px;
   min-height: 16px;
@@ -5485,7 +5517,7 @@ button.rnhead {
   justify-content: space-between;
 }
 .dpick-title {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink);
 }
@@ -5495,7 +5527,7 @@ button.rnhead {
   gap: 2px;
 }
 .dpick-wd {
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   font-weight: 500;
   color: var(--ink3);
   text-align: center;
@@ -5507,7 +5539,7 @@ button.rnhead {
   border-radius: 7px;
   background: none;
   color: var(--ink);
-  font: 12.5px var(--sans);
+  font: var(--fs-sm) var(--sans);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
@@ -5547,7 +5579,7 @@ button.rnhead {
   gap: 6px;
   cursor: pointer;
   color: var(--ink);
-  font: 12.5px var(--sans);
+  font: var(--fs-sm) var(--sans);
 }
 .dfield-btn.empty {
   color: var(--ink3);
@@ -5565,7 +5597,7 @@ button.rnhead {
   flex-wrap: wrap;
   gap: 4px 12px;
   padding: 0 16px 10px 50px;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--ink2);
 }
 .capture.compact .chint {
@@ -5588,7 +5620,7 @@ button.rnhead {
   border-radius: 6px;
   background: var(--sunk);
   color: var(--ink2);
-  font: 11.5px var(--sans);
+  font: var(--fs-xs) var(--sans);
   cursor: pointer;
 }
 .cm-taskhint button:hover {
@@ -5596,12 +5628,12 @@ button.rnhead {
   color: var(--ink);
 }
 .cm-taskhint .k {
-  font: 11.5px var(--mono);
+  font: var(--fs-xs) var(--mono);
   color: var(--accent-ink);
 }
 .cm-taskhint .t {
   flex-basis: 100%;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
   padding: 2px 2px 0;
 }
@@ -5707,7 +5739,7 @@ button.rnhead {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 12px 14px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.7;
   color: var(--ink2);
 }
@@ -5782,7 +5814,7 @@ button.rnhead {
 .tqerr {
   margin: 0;
   padding: 8px 12px;
-  font: 11.5px/1.5 var(--mono);
+  font: var(--fs-xs)/1.5 var(--mono);
   white-space: pre-wrap;
   border-bottom: 1px solid var(--line);
   background: none;
@@ -5796,7 +5828,7 @@ button.rnhead {
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   border-top: 1px solid var(--line);
 }
 
@@ -5880,7 +5912,7 @@ button.rnhead {
   margin: 0;
   padding: 10px 12px;
   white-space: pre-wrap;
-  font: 11.5px/1.5 var(--mono);
+  font: var(--fs-xs)/1.5 var(--mono);
   color: var(--red);
   background: var(--red-soft);
   border: 0;
@@ -5938,7 +5970,7 @@ code.noscript {
   gap: 2px;
 }
 .dvcalgrid .dow {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
   text-align: center;
 }
@@ -5959,7 +5991,7 @@ code.noscript {
   color: var(--doc-accent);
 }
 .dvcalgrid .n {
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .dvcalgrid .dots {
   display: flex;
@@ -5992,7 +6024,7 @@ code.noscript {
 .editor .cm-qdocs {
   margin-left: auto;
   flex: none;
-  font: 11.5px var(--sans);
+  font: var(--fs-xs) var(--sans);
   color: var(--ink3);
   text-decoration: none;
   border: 0;
@@ -6048,10 +6080,10 @@ code.noscript {
 .cm-qinfo {
   display: grid;
   gap: 6px;
-  font: 12px / 1.45 var(--sans);
+  font: var(--fs-sm) / 1.45 var(--sans);
 }
 .cm-qinfo code {
-  font: 11.5px var(--mono);
+  font: var(--fs-xs) var(--mono);
   color: var(--ink2);
   white-space: pre-wrap;
 }
@@ -6065,13 +6097,13 @@ code.noscript {
 }
 .editor .cm-completionDetail {
   margin-left: 10px;
-  font: 11px var(--mono);
+  font: var(--fs-xs) var(--mono);
   font-style: normal;
   color: var(--ink3);
 }
 .editor .cm-completionLabel {
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .editor .cm-completionMatchedText {
   text-decoration: none;
@@ -6107,7 +6139,7 @@ code.noscript {
 }
 .editor .cm-diagnostic {
   padding: 6px 10px;
-  font: 12px / 1.4 var(--sans);
+  font: var(--fs-sm) / 1.4 var(--sans);
   color: var(--ink);
   white-space: pre-wrap;
 }
@@ -6154,7 +6186,7 @@ code.noscript {
 }
 .qblabel {
   padding-top: 6px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--ink3);
 }
@@ -6183,7 +6215,7 @@ code.noscript {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--ink2);
 }
 .qbcheck input {
@@ -6212,10 +6244,10 @@ code.noscript {
   border-radius: 8px;
   background: var(--amber-soft);
   color: var(--amber);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .qbnote code {
-  font: 11px var(--mono);
+  font: var(--fs-xs) var(--mono);
   color: var(--ink2);
 }
 .qbside {
@@ -6238,12 +6270,12 @@ code.noscript {
   border-radius: 8px;
   background: var(--sunk);
   color: var(--ink);
-  font: 12px / 1.5 var(--mono);
+  font: var(--fs-sm) / 1.5 var(--mono);
 }
 .qbprev {
   overflow: auto;
   padding: 10px 18px 18px;
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .qbfoot {
   display: flex;
@@ -6293,7 +6325,7 @@ code.noscript {
   border: 0;
   background: none;
   color: var(--ink2);
-  font: 500 12px var(--sans);
+  font: 500 var(--fs-sm) var(--sans);
   cursor: pointer;
 }
 .asktab.on > button[role="tab"] {
@@ -6344,7 +6376,7 @@ code.noscript {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   flex: none;
 }
 .ctxm .bar {
@@ -6392,7 +6424,7 @@ code.noscript {
   background: var(--accent-soft);
   border-radius: 14px 14px 4px;
   padding: 10px 14px;
-  font-size: 14px;
+  font-size: var(--fs-md);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -6402,7 +6434,7 @@ code.noscript {
   gap: 8px;
 }
 .aska .prose {
-  font-size: 14.5px;
+  font-size: var(--fs-md);
 }
 .looked {
   display: flex;
@@ -6447,7 +6479,7 @@ code.noscript {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
 }
 .askqueue .chip {
   max-width: 320px;
@@ -6469,7 +6501,7 @@ code.noscript {
   resize: none;
   background: transparent;
   color: var(--ink);
-  font: 14px/1.5 var(--sans);
+  font: var(--fs-md)/1.5 var(--sans);
   min-height: 22px;
   padding: 0;
 }
@@ -6482,7 +6514,7 @@ code.noscript {
   flex: 1;
 }
 .askbar select.sel {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 /* An effort menu with its label: Ask's message box, Settings › AI assistants */
@@ -6490,7 +6522,7 @@ code.noscript {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .ibtn.send {
   background: var(--accent);
@@ -6500,7 +6532,7 @@ code.noscript {
   background: var(--accent-ink);
 }
 .askhint {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   text-align: center;
 }
 .asksugg {
@@ -6531,11 +6563,11 @@ code.noscript {
   background: var(--accent-soft);
 }
 .asksugg .nm {
-  font: 500 12.5px var(--mono);
+  font: 500 var(--fs-sm) var(--mono);
   flex: none;
 }
 .asksugg .ds {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink2);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6546,7 +6578,7 @@ code.noscript {
   overflow: auto;
 }
 .mg {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink3);
   padding: 8px 9px 4px;
@@ -6556,7 +6588,7 @@ code.noscript {
 }
 .mpad {
   padding: 4px 9px 6px;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
 }
 .askhead {
   padding: 16px 18px 8px;
@@ -6609,7 +6641,7 @@ code.noscript {
   white-space: nowrap;
 }
 .hopen .faint {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
 }
 .hedit {
   flex: 1;
@@ -6618,7 +6650,7 @@ code.noscript {
   border: 1px solid var(--accent);
   border-radius: 7px;
   padding: 0 8px;
-  font: 13px var(--sans);
+  font: var(--fs-base) var(--sans);
   color: var(--ink);
   background: var(--surface);
   outline: 0;
@@ -6631,7 +6663,7 @@ code.noscript {
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  font-size: 13px;
+  font-size: var(--fs-base);
   line-height: 1.5;
   color: var(--ink2);
 }
@@ -6667,7 +6699,7 @@ code.noscript {
   font-weight: 600;
 }
 .job .faint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .jtime {
   display: inline-flex;
@@ -6682,7 +6714,7 @@ select.sel {
   border-radius: 7px;
   background: var(--surface);
   color: var(--ink);
-  font: 500 12.5px var(--sans);
+  font: 500 var(--fs-sm) var(--sans);
   padding: 0 8px;
 }
 .tfield {
@@ -6708,7 +6740,7 @@ select.sel {
 .chip.proj {
   cursor: pointer;
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-weight: 500;
 }
 .chip.proj:hover {
@@ -6719,7 +6751,7 @@ select.sel {
   border: 1px solid var(--line2);
   border-radius: 999px;
   padding: 0 8px;
-  font: 11.5px var(--sans);
+  font: var(--fs-xs) var(--sans);
   background: var(--surface);
   color: var(--ink);
   outline: 0;
@@ -6794,7 +6826,7 @@ select.sel {
   display: flex;
   flex-wrap: wrap;
   gap: 2px 14px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink3);
 }
 .prow .pmeta .red {
@@ -6823,7 +6855,7 @@ select.sel {
 }
 .pband .pin {
   height: 24px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 /* The grips (drag an area or a project into order) sit in the row's left padding, shown on hover. */
@@ -6982,7 +7014,7 @@ select.sel {
   border: 1px solid var(--accent);
   border-radius: 7px;
   padding: 0 8px;
-  font: 13px var(--sans);
+  font: var(--fs-base) var(--sans);
   color: var(--ink);
   background: var(--surface);
   outline: 0;
@@ -7000,7 +7032,7 @@ select.sel {
   border: 0;
   outline: 0;
   background: transparent;
-  font: 13px var(--sans);
+  font: var(--fs-base) var(--sans);
   color: var(--ink);
 }
 .pacts {
@@ -7016,7 +7048,7 @@ select.sel {
   display: flex;
   gap: 6px;
   align-items: center;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink2);
   min-width: 0;
 }
@@ -7070,7 +7102,7 @@ select.sel {
   padding: 9px 16px 9px 12px;
   text-align: left;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--fs-base);
   line-height: 1.35;
 }
 
@@ -7107,7 +7139,7 @@ select.sel {
   border: 1px solid var(--line2);
   border-radius: 8px;
   background: var(--sunk);
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .main.ask > .stillin {
   margin: 10px 16px 0;
@@ -7162,7 +7194,7 @@ select.sel {
 }
 .irow .faint {
   display: block;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
 .iopen {
@@ -7193,11 +7225,11 @@ select.sel {
   max-width: 720px;
 }
 .itext {
-  font-size: 20px;
+  font-size: var(--fs-2xl);
   overflow-wrap: anywhere;
 }
 .ibody .prose {
-  font-size: 14px;
+  font-size: var(--fs-md);
   color: var(--ink2);
 }
 
@@ -7219,24 +7251,24 @@ select.sel {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--accent-ink);
 }
 .isugg-text {
   margin-top: 3px;
-  font-size: 15px;
+  font-size: var(--fs-lg);
 }
 .isugg-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 2px 14px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink3);
 }
 .isugg-why {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink2);
 }
 
@@ -7300,7 +7332,7 @@ select.sel {
   border-radius: 10px;
   border: 1px solid var(--line2);
   background: var(--surface);
-  font: 500 13px var(--sans);
+  font: 500 var(--fs-base) var(--sans);
   color: var(--ink);
   cursor: pointer;
   text-align: left;
@@ -7338,7 +7370,7 @@ select.sel {
   overflow-y: auto;
 }
 .wph {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink3);
   padding: 16px 10px 6px;
@@ -7355,7 +7387,7 @@ select.sel {
   border: 0;
   border-radius: 7px;
   background: none;
-  font: 400 13px/1.35 var(--sans);
+  font: 400 var(--fs-base)/1.35 var(--sans);
   color: var(--ink2);
   cursor: pointer;
   text-align: left;
@@ -7369,7 +7401,7 @@ select.sel {
   align-items: center;
   justify-content: center;
   flex: none;
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   border: 1.5px solid var(--line2);
 }
@@ -7443,7 +7475,7 @@ select.sel {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--ink2);
 }
 .wphases li.done {
@@ -7457,7 +7489,7 @@ select.sel {
   border: 1px solid var(--line2);
   border-radius: 10px;
   padding: 8px 10px;
-  font: 13px/1.5 var(--sans);
+  font: var(--fs-base)/1.5 var(--sans);
   color: var(--ink);
   background: var(--surface);
   resize: vertical;
@@ -7471,7 +7503,7 @@ select.sel {
   gap: 14px;
 }
 .wblock .prose {
-  font-size: 13.5px;
+  font-size: var(--fs-base);
 }
 .wkcard {
   display: flex;
@@ -7549,7 +7581,7 @@ select.sel {
 .chip.sm {
   height: 18px;
   padding: 0 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   margin-left: 8px;
 }
 
@@ -7594,7 +7626,7 @@ select.sel {
   display: flex;
   gap: 6px;
   align-items: center;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
 .body.queue {
@@ -7612,7 +7644,7 @@ select.sel {
   width: 100%;
   padding: 9px 16px 9px 12px;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--fs-base);
   cursor: pointer;
 }
 
@@ -7640,7 +7672,7 @@ select.sel {
   overflow-wrap: anywhere;
 }
 .qrow .faint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .qopen {
   align-items: stretch;
@@ -7660,7 +7692,7 @@ select.sel {
   border-radius: 10px;
   overflow: hidden;
   background: var(--surface);
-  font: 12.5px/1.55 var(--mono);
+  font: var(--fs-sm)/1.55 var(--mono);
 }
 .diff.focus {
   border-color: var(--accent);
@@ -7680,7 +7712,7 @@ select.sel {
   padding: 6px 12px;
   background: var(--sunk);
   border-bottom: 1px solid var(--line);
-  font: 600 11px var(--sans);
+  font: 600 var(--fs-xs) var(--sans);
   letter-spacing: 0.03em;
   color: var(--ink3);
 }
@@ -7758,7 +7790,7 @@ select.sel {
   border-radius: 6px;
   background: none;
   color: var(--ink);
-  font: 500 13px var(--sans);
+  font: 500 var(--fs-base) var(--sans);
   text-align: left;
   cursor: pointer;
 }
@@ -7784,7 +7816,7 @@ select.sel {
   gap: 6px;
   border-radius: 10px;
   background: var(--sunk);
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .qstatus.held {
   background: var(--amber-soft);
@@ -7814,7 +7846,7 @@ select.sel {
   background: var(--amber-soft);
   border-bottom: 1px solid color-mix(in srgb, var(--amber) 25%, var(--line));
   color: var(--amber);
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .agentrow {
   display: flex;
@@ -7832,7 +7864,7 @@ select.sel {
   width: 100%;
   height: 260px;
   resize: vertical;
-  font: 12px/1.5 var(--mono);
+  font: var(--fs-sm)/1.5 var(--mono);
 }
 .qquotes {
   padding: 4px 0 0;
@@ -7889,7 +7921,7 @@ select.sel {
   gap: 2px;
 }
 .hnum b {
-  font: 600 34px/1 var(--sans);
+  font: 600 var(--fs-display)/1 var(--sans);
   letter-spacing: -0.03em;
 }
 .htrend {
@@ -7926,7 +7958,7 @@ select.sel {
   border-top: 1px solid var(--line);
   background: none;
   color: var(--ink);
-  font: 500 13px var(--sans);
+  font: 500 var(--fs-base) var(--sans);
   text-align: left;
   cursor: pointer;
 }
@@ -7965,7 +7997,7 @@ select.sel {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   min-height: 28px;
 }
 
@@ -8020,7 +8052,7 @@ select.sel {
 .ckitem .ckline {
   display: block;
   margin-top: 2px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .ckitem .why {
   color: var(--amber);
@@ -8038,7 +8070,7 @@ select.sel {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   min-width: 0;
 }
 .hqi .ell {
@@ -8154,7 +8186,7 @@ select.sel {
   overflow-wrap: anywhere;
 }
 .fnctx {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--ink2);
   overflow-wrap: anywhere;
 }
@@ -8217,7 +8249,7 @@ select.sel {
   grid-template-columns: 18px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: start;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .runstep .grow {
   display: flex;
@@ -8291,11 +8323,11 @@ select.sel {
   border: 1px solid var(--line);
 }
 .cst b {
-  font-size: 17px;
+  font-size: var(--fs-xl);
   font-weight: 600;
 }
 .cst span {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
 }
 .cgrid {
@@ -8392,7 +8424,7 @@ select.sel {
   overflow-y: auto;
   padding: 20px 28px;
   border-right: 1px solid var(--line);
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .mside {
   display: flex;
@@ -8424,7 +8456,7 @@ select.sel {
   display: flex;
   gap: 6px;
   align-items: center;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
 .runs .card.run {
@@ -8446,7 +8478,7 @@ select.sel {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  font-size: 14px;
+  font-size: var(--fs-md);
   line-height: 1.55;
   color: var(--ink2);
 }
@@ -8499,7 +8531,7 @@ select.sel {
   grid-template-columns: 120px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .krow dt {
   display: flex;
@@ -8524,7 +8556,7 @@ select.sel {
   margin: 0 1px;
   border-radius: 5px;
   vertical-align: super;
-  font: 600 10px/1 var(--sans);
+  font: 600 var(--fs-2xs)/1 var(--sans);
   color: var(--accent-ink);
   background: var(--accent-soft);
   text-decoration: none;
@@ -8544,7 +8576,7 @@ select.sel {
 }
 .wikisum {
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .wikifields {
   padding: 14px 16px;
@@ -8560,7 +8592,7 @@ select.sel {
   align-items: start;
 }
 .wf > span:first-child {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink3);
   padding-top: 3px;
 }
@@ -8580,13 +8612,13 @@ select.sel {
   border: 0;
   background: none;
   outline: none;
-  font: 12.5px var(--sans);
+  font: var(--fs-sm) var(--sans);
   color: var(--ink);
   min-width: 80px;
   height: 22px;
 }
 .wfdesc {
-  font: 13px/1.45 var(--sans);
+  font: var(--fs-base)/1.45 var(--sans);
   color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--line2);
@@ -8639,7 +8671,7 @@ select.sel {
   align-items: center;
   gap: 6px;
   color: var(--accent-ink);
-  font-size: 14px;
+  font-size: var(--fs-md);
 }
 .icapture {
   margin-top: 12px;
@@ -8649,7 +8681,7 @@ select.sel {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface);
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .icopen {
   align-self: flex-start;
@@ -8713,7 +8745,7 @@ select.sel {
   gap: 10px;
   padding: 5px 12px;
   margin-right: 4px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
 }
 .gdepth input {
@@ -8739,7 +8771,7 @@ select.sel {
   position: absolute;
   right: 20px;
   bottom: 16px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   pointer-events: none;
 }
 .gpane {
@@ -8751,12 +8783,12 @@ select.sel {
   gap: 16px;
 }
 .gpane .h2 {
-  font-size: 19px;
+  font-size: var(--fs-2xl);
   margin-top: 8px;
   overflow-wrap: anywhere;
 }
 .gpane .faint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   margin-top: 4px;
   overflow-wrap: anywhere;
 }
@@ -8765,7 +8797,7 @@ select.sel {
 }
 .gpane p {
   margin: 4px 0;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .glink {
   display: flex;
@@ -8778,7 +8810,7 @@ select.sel {
   border-radius: 6px;
   background: none;
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink);
   text-align: left;
   cursor: pointer;
@@ -8799,7 +8831,7 @@ select.sel {
   margin-left: auto;
   flex: none;
   font-style: normal;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
 }
 .gpick {
@@ -8887,7 +8919,7 @@ select.sel {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .acthead .sp {
   flex: 1;
@@ -8930,7 +8962,7 @@ select.sel {
 .actmonth {
   grid-row: 1;
   overflow: visible;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
   white-space: nowrap;
 }
@@ -8974,7 +9006,7 @@ button.hc {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
 }
 .actkey .hc {
   width: 11px;
@@ -8987,7 +9019,7 @@ button.hc {
   gap: 8px;
 }
 .actday .acthead b {
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .actfiles {
   display: grid;
@@ -9008,7 +9040,7 @@ button.hc {
   border-radius: 6px;
   background: none;
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink);
   text-align: left;
   cursor: pointer;
@@ -9026,7 +9058,7 @@ button.hc {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .actfilters .sp {
   flex: 1;
@@ -9078,7 +9110,7 @@ button.hc {
 
 /* Tasks: the effort select, New task */
 .tfilters select.sel.sm {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
 }
 .newtask {
   padding: 10px;
@@ -9091,7 +9123,7 @@ button.hc {
 /* A source's provenance card */
 .prov .kv {
   grid-template-columns: 64px 1fr;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .provciter {
   display: flex;
@@ -9108,7 +9140,7 @@ button.hc {
   border-left: 2px solid var(--amber-soft);
   background: none;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--ink2);
   text-align: left;
   cursor: pointer;
@@ -9140,7 +9172,7 @@ button.hc {
 }
 .asgroup {
   padding: 8px 10px 2px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink3);
 }
@@ -9265,7 +9297,7 @@ button.hc {
 .rtext pre {
   margin: 0;
   white-space: pre-wrap;
-  font: 12.5px/1.5 var(--sans);
+  font: var(--fs-sm)/1.5 var(--sans);
   color: var(--ink2);
 }
 .rtext .btn {
@@ -9274,13 +9306,13 @@ button.hc {
 
 /* The captured thread, drawn as the note is, a size down. */
 .rthreadmd .prose {
-  font-size: 13px;
+  font-size: var(--fs-base);
   max-width: none;
   padding: 0;
 }
 .rpaste {
   padding: 12px 14px;
-  font: 13px/1.5 var(--sans);
+  font: var(--fs-base)/1.5 var(--sans);
   color: var(--ink);
   resize: none;
 }
@@ -9288,7 +9320,7 @@ button.hc {
   padding: 10px 12px;
   border-radius: 10px;
   background: var(--amber-soft);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   max-height: 35vh;
   overflow: auto;
 }
@@ -9301,7 +9333,7 @@ button.hc {
 }
 .rbody {
   padding: 12px 14px;
-  font: 14px/1.6 var(--sans);
+  font: var(--fs-md)/1.6 var(--sans);
   color: var(--ink);
   resize: none;
   outline: 0;
@@ -9338,13 +9370,13 @@ button.hc {
   gap: 12px;
   align-items: center;
   padding: 8px 14px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .dcr + .dcr {
   border-top: 1px solid var(--line);
 }
 .dcr.th {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--ink3);
   background: var(--sunk);
@@ -9404,7 +9436,7 @@ button.hc {
   gap: 10px;
 }
 .dcv {
-  font-size: 17px;
+  font-size: var(--fs-xl);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -9430,7 +9462,7 @@ button.hc {
   gap: 10px;
 }
 .dcq .q {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   padding: 8px 10px;
   border-radius: 8px;
@@ -9441,13 +9473,13 @@ button.hc {
 /* The spelling menu */
 .spelldesc {
   margin: 4px 9px 6px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   line-height: 1.45;
 }
 .chip.draftmark {
   height: 18px;
   margin-left: 8px;
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   vertical-align: 1px;
 }
 
@@ -9487,14 +9519,14 @@ button.hc {
 /* Cards beside a note: outline, open tasks */
 .blink.outline {
   padding: 3px 0;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink2);
 }
 .ntask {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   min-width: 0;
 }
 .ntask .cb {
@@ -9511,7 +9543,7 @@ button.hc {
   border-radius: 10px;
   background: var(--amber-soft);
   color: var(--amber);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 
 /* Source preview: a PDF's bar and found pages; PowerPoint and Excel as text */
@@ -9569,7 +9601,7 @@ button.hc {
 .officepart pre {
   margin: 0;
   white-space: pre-wrap;
-  font: 13px/1.5 var(--sans);
+  font: var(--fs-base)/1.5 var(--sans);
 }
 .officetable {
   overflow: auto;
@@ -9577,7 +9609,7 @@ button.hc {
 }
 .officetable table {
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .officetable td {
   border: 1px solid var(--line);
@@ -9606,7 +9638,7 @@ button.hc {
   border: 0;
   outline: 0;
   background: transparent;
-  font: 13px var(--sans);
+  font: var(--fs-base) var(--sans);
   color: var(--ink);
 }
 .findbar .grow {
@@ -9714,7 +9746,7 @@ button.hc {
 .help-head .h2 {
   flex: 1;
   margin: 0;
-  font-size: 19px;
+  font-size: var(--fs-2xl);
 }
 .help-nav {
   display: flex;
@@ -9746,7 +9778,7 @@ button.hc {
   gap: 6px;
 }
 .help-text {
-  font-size: 13px;
+  font-size: var(--fs-base);
   line-height: 1.55;
   color: var(--ink2);
 }
@@ -9835,7 +9867,7 @@ button.hc {
 }
 .help-steptitle {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--fs-lg);
   font-weight: 600;
   color: var(--ink);
 }
@@ -9870,7 +9902,7 @@ button.hc {
   background: none;
   padding: 0;
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--accent-ink);
   cursor: pointer;
 }
@@ -9928,7 +9960,7 @@ html.tray-view body {
   align-items: center;
   gap: 10px;
   font-family: var(--display);
-  font-size: 17px;
+  font-size: var(--fs-xl);
   font-weight: 650;
   letter-spacing: -0.02em;
   color: var(--ink);
@@ -9951,12 +9983,12 @@ html.tray-view body {
   background: var(--sunk);
   color: var(--ink2);
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   text-align: left;
   cursor: pointer;
 }
 .tray-tile b {
-  font-size: 18px;
+  font-size: var(--fs-xl);
   font-weight: 650;
   color: var(--ink);
 }
@@ -10053,7 +10085,7 @@ html.tray-view body {
   font-weight: 600;
 }
 .tray-item .kbd {
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .tray-rule {
   height: 1px;
@@ -10067,7 +10099,7 @@ html.tray-view body {
 .tray-foot {
   padding: 10px 18px;
   background: var(--sunk);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
 }
 .tray-capture .kbdhint {
@@ -10184,7 +10216,7 @@ html.tray-view body {
   background: var(--sunk);
   color: var(--ink2);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   cursor: pointer;
 }
@@ -10256,12 +10288,12 @@ html.tray-view body {
   opacity: 0.8;
 }
 .pietotal {
-  font: 600 20px var(--sans);
+  font: 600 var(--fs-2xl) var(--sans);
   fill: var(--ink);
   font-variant-numeric: tabular-nums;
 }
 .pieunit {
-  font: 11px var(--sans);
+  font: var(--fs-xs) var(--sans);
   fill: var(--ink3);
 }
 .pielegend {
@@ -10273,7 +10305,7 @@ html.tray-view body {
   gap: 2px;
   min-width: 0;
   flex: 1;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .pierow {
   border: 0;
@@ -10344,7 +10376,7 @@ html.tray-view body {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .mostlinked li {
   display: flex;
@@ -10748,7 +10780,7 @@ html[data-platform="macos"] .shell {
   border-radius: 8px;
   background: var(--surface);
   box-shadow: 0 0 0 1px var(--line);
-  font-size: 9.5px;
+  font-size: var(--fs-2xs);
   line-height: 15px;
   text-align: center;
 }
@@ -10877,7 +10909,7 @@ html[data-platform="macos"] .shell {
 }
 .tstrip-h {
   margin-right: 4px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--ink3);
 }
@@ -10893,7 +10925,7 @@ html[data-platform="macos"] .shell {
   background: var(--surface);
   color: var(--ink2);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   cursor: pointer;
 }
 .tstrip-i:hover {

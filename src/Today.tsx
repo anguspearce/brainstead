@@ -395,7 +395,7 @@ function MeetingsCard() {
         {m.subject}
       </span>
       {m.online && (
-        <span title="Online meeting" style={{ display: "inline-flex" }}>
+        <span className="ricon" title="Online meeting" aria-label="Online meeting">
           <Icon name="globe" size={12} />
         </span>
       )}
@@ -420,12 +420,7 @@ function MeetingsCard() {
       {today.map(row)}
       {tomorrow.length > 0 && (
         <>
-          <div
-            className="rrow faint"
-            style={{ minHeight: 0, paddingTop: 8, textTransform: "uppercase", fontSize: "11px", letterSpacing: "0.04em" }}
-          >
-            Tomorrow
-          </div>
+          <div className="rrow rgroup">Tomorrow</div>
           {tomorrow.map(row)}
         </>
       )}
