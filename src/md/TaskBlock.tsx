@@ -19,14 +19,19 @@ import { QueryDocsLink } from "./queryDocs";
 import { SCRIPTS_OFF } from "./scripts";
 import { localToday } from "./taskQuery";
 
-/** The task's text without the fields and tags shown beside it as chips. */
+/** The task's text without the fields and tags shown beside it as chips. Project links at the end
+ *  go too (the project chip shows them), but not when a project link is part of the sentence
+ *  ("Ask about posters for [[Project. Orbit App launch|the launch]]"): then every link stays, so
+ *  the words still read. */
 export function taskLabel(text: string): string {
-  return withoutFields(text)
+  const s = withoutFields(text)
     .replace(/\s*[[(]effort::[^\])]*[\])]/gi, "")
-    .replace(/\s*\[\[Project\. [^\]]+\]\]/g, "")
     .replace(/(^|\s)#[A-Za-z][\w/-]*/g, "")
     .replace(/\s+\^[\w-]+\s*$/, "")
     .trim();
+  const tail = /(?:\s*\[\[Project\. [^\]]+\]\])+$/.exec(s);
+  if (!tail || /\[\[Project\. /.test(s.slice(0, tail.index))) return s;
+  return s.slice(0, tail.index).trim();
 }
 
 // Every task, fetched once per change in the vault and shared by the blocks on screen. A failed

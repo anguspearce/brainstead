@@ -40,7 +40,8 @@ import { keyLabel } from "./platform";
 
 export const taskKey = (t: TaskRow) => `${t.path}:${t.line}`;
 
-/** A task's text with its inline markdown shown: `code`, **bold**, *italic*, and [[links]] as their label. */
+/** A task's text with its inline markdown shown: `code`, **bold**, *italic*, and [[links]] as their label
+ *  (a project's link as the project's name, as its chip shows it). */
 export function TaskText({ text }: { text: string }) {
   const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*\s][^*]*\*|!?\[\[[^\]]+\]\])/g);
   return (
@@ -55,7 +56,7 @@ export function TaskText({ text }: { text: string }) {
         const [target, alias] = inner.split("|");
         return (
           <span key={i} className="tlinkword">
-            {alias ?? target.split("#")[0].split("/").pop()}
+            {alias ?? projectName(target.split("#")[0])}
           </span>
         );
       })}

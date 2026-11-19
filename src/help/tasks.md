@@ -89,7 +89,7 @@ Tasks are plain markdown, so other editors read them too.
 - Dates are emoji before the date: `📅` due, `⏳` deferred until, `🛫` start, `➕` created, `✅` done.
 - Priority is one emoji: `🔺` highest, `⏫` high, `🔼` medium, `🔽` low, `⏬` lowest.
 - A context is a tag like `#context/calls`, and effort a field like `[effort:: 30m]`.
-- A task belongs to a project when it's in the project's note or links `[[Project. Orbit App launch]]`.
+- A task belongs to a project when it's in the project's note or links `[[Project. Orbit App launch]]`. A project link at the end of the words shows as the project under the row; one inside the sentence stays in the words.
 - A recurring task carries a rule such as `🔁 every week`. Tick it and the next one is added above, with its dates moved on.
 - Tasks inside quotes and callouts (`> - [ ] Call Maya`) work like any other.
 
