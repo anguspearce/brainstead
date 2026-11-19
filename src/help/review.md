@@ -3,9 +3,13 @@ title: Changes
 kind: screen
 screens: [review]
 order: 13
-summary: See what AI assistants and Brainstead's runs changed in your vault, revert any of it, and decide the few changes held for you.
+summary: See what AI assistants and Brainstead's runs changed in your vault, revert any of it, decide the few changes held for you, and read the vault's log.
 ---
-Every change assistants and Brainstead's runs make to the vault is listed here with **Revert**. You only need to step in when a change is held for you. Open Changes from the foot of the sidebar; the sidebar count and Today's **Changes held for you** card count held changes only.
+Every change assistants and Brainstead's runs make to the vault is listed here with **Revert**. You only need to step in when a change is held for you. Open Changes from the foot of the sidebar; the sidebar count, the menu-bar window and the **Changes held for you** row of Today's **To process** count held changes only.
+
+Two tabs at the top pick what's listed:
+- **Held** lists only the changes held for you, with their count. Today's **Decide** and the menu-bar window open it.
+- **All**, where Changes opens, lists the held changes first and then everything else, newest first: every change, and the lines of the vault's `log.md` that aren't one of them, as **The vault's log** below explains.
 
 ## What's made at once, and what's held
 A change you started is made at once: something you asked for in Ask or a terminal session, or a run you started by hand (Ingest, **Run now**, **Draft the note**, a Wiki health fix, **File this answer**, a bookmark made into a wiki page, a link from the weekly review). If a check fails, it's still made, but flagged.
@@ -34,9 +38,18 @@ To have the summaries always held for you, turn on **Hold the summaries for me**
 ## Read the feed
 The feed groups changes by run, newest first: "Daily check, 5 Oct: 6 changes to 4 pages", an ingest, an Ask chat. Each run is folded to its heading: click its chevron to show its changes, which folds the one that was open. Moving to a change (`J` and `K`, or a search) opens its run. Click the selected change again, or fold its run, to let it go. Older runs load as you scroll down. Each row shows the title, page, source, model and age, with **Flagged**, **Reverted** or a kind such as **New page**. `J` and `K` move between changes.
 
-**Search changes** above the list narrows held changes and the feed to those with every word you type in their title, page, source or model. The box shows which match you're on out of how many (`3/12`); `↓` and `↑` step through them, and `Esc` or ✕ clears it.
+**Search changes** above the list narrows held changes and the feed to those with every word you type in their title, page, source or model (and a log line's title, text or type). The box shows which match you're on out of how many (`3/12`); `↓` and `↑` step through them, and `Esc` or ✕ clears it.
 
 On the right is the change as a diff under its section, with any flags above it. **What it rests on** lists the quotes behind it, each marked **Found in the source**, **Not found in the source**, or **Not checked** (a file Brainstead can't read). Click a quote's source to open it, or **Open the page**.
+
+## The vault's log
+`log.md` is the vault's own record of what Brainstead changed: ingests, assistants' changes, Wiki health fixes, the daily and weekly summaries, the weekly review, name fixes and the daily check's catalogue update. Your own edits, captures and dropped files aren't logged. Other markdown editors and assistants in a terminal can write to it too.
+
+A change writes its line when it's made, so in **All** that line isn't listed again: you see the change, with its diff and **Revert**. The lines that are listed are those Changes doesn't hold: older than its history, made on another computer, in another editor or in a terminal, and Brainstead's own writes that aren't changes, such as the weekly review, **Fix name** and safe fixes. Each says its day and time, its type and **log.md**; click its title to open the page it names, or hover for what it says.
+
+In **All**, the chips under the search keep one type, such as **Ingested**, or **Summary** for a daily or weekly summary; **All types** shows every type. A day picked on [Activity](app:activity) (**Changes that day**) shows as a chip of its own; click it to show every day again.
+
+An assistant reads the same list, with the same tabs, types and day, with the `list_changes` tool.
 
 ## Revert a change
 **Revert** undoes a change on the page as it is now, keeping later edits. It works on any change in the history, not just the last. If the change's lines have since been edited, or appear in more than one place, it says so and shows the page as it was before, to copy from. A reverted change is marked **Reverted**; `⌘Z` straight after undoes the revert.

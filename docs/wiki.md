@@ -71,6 +71,8 @@ An ingest you start makes its changes at once. One the daily check starts holds 
 
 Changes lists every change assistants and runs made to the vault, newest first, grouped by run ("Daily check, 5 Oct: 6 changes to 4 pages"). Each has its diff, why, who made it, the quotes it rests on and **Revert**. **Search changes** narrows the list by title, page, source or model; `↑` `↓` step through what it found and `Esc` clears it.
 
+Two tabs pick what's listed. **Held** has only the changes held for you. **All**, where it opens, has them first and then everything else: every change, and the lines of the vault's `log.md` that aren't one (older than Changes' history, from another computer, the previous app or a terminal, or Brainstead's own writes that aren't changes, such as the weekly review and safe fixes). A change's own `log.md` line isn't listed again. Chips keep one type of change, and Activity's **Changes that day** opens All on one day.
+
 - A change you started (Ask, a terminal, a run started by hand) is made at once, and flagged if a check fails.
 - A scheduled run's change (the daily check and its ingests, the scheduled summaries) is made only when it passes every check, and held otherwise: a quote not found or read from an image, text rewritten or removed in one of your own notes, unsaved edits to the page, an open contradiction on it, or properties that wouldn't read.
 - A change to a template, one that adds code that runs when a note is shown, or one that changes a [system note's header](notes.md#system-notes) is always held. Renames, moves to the Trash and restores from it are made at once, unless they touch a template or bring back code that runs. An assistant can accept a held change only while you're there, and only one held for a failed check.
@@ -109,12 +111,13 @@ An initiative is something you're tracking: a page in `wiki/initiatives/` (`stat
 
 Wiki health checks the wiki whenever the vault changes: missing pages and links, broken or changed sources, duplicates, stale pages, claims with no citation and more. A small chart beside **To decide** shows that count day by day. Claims with no citation are listed one row a page, and open the page with those lines highlighted.
 
-- Pie charts show the pages by type and by tag; a slice opens the Wiki filtered to it.
+- Pie charts show the pages by type and by tag; a slice opens the Wiki filtered to it. **Most linked** lists the notes and pages the most others link to. They're the only charts of the vault: Activity has the heatmap.
 - **Fix safe issues** fixes the ones with one right answer (a missing link, a date, a `log.md` line, a system note's lost header), undoably.
 - **Ignore** hides an issue until its page changes; **Show again** brings a check's ignored issues back. Stale pages and claims with no citation also have **Ignore all**.
 - A fixed issue leaves the list at once, and the checks rerun within a second of any change to the vault. Checks only worth a look (stale pages, claims with no citation, pages with no Current state) have a grey icon, not amber.
 - Missing pages can be created, or linked to an existing page with **Link to…**. Each says which pages link it. When a note's name is a slip away (after a rename, say), the row asks **Did you mean** that note, and **Link to it** points the links there.
 - A missing page or source whose file is in the Trash says **In the Trash since** the day, with **Restore from Trash** instead of **Create**.
+- **Sources not yet ingested** only counts them, and isn't counted in To decide: they wait in Inbox › Captures, where you ingest each or keep it in Sources, and clicking the row opens the Inbox. Sources lists every source with its status but is the library, not a second list of what to do.
 - A source changed since it was cited has **Ingest again**, so its pages catch up. Orphan pages have **Add them to index.md**, which brings the catalogue up to date now; an initiative is never counted as one. A source an ingest has read isn't counted as not yet ingested, even when nothing in it was worth citing (`sources-read.json` in the app data, D-20261118-28). Duplicates can be compared or dismissed.
 - **Pages not in the page shape** lists pages laid out another way. **Reshape pages** fixes the ones it can, without the AI, and checks that nothing is lost before it saves. Each page is one change in Changes, and you can revert the whole run at once. A page it can't fix says why; fix it, or **Reshape anyway**. The screen's help lists exactly what it changes.
 - **Pages with no Current state** lists pages with a Timeline but no Current state. **Write 5** and **Write all** have a cheap model write one from the page's opening and newest Timeline entries. Each page is a change in one run in Changes.

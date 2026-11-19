@@ -1379,7 +1379,9 @@ export const api = {
   appInfo: () => invoke<AppInfo>("app_info"),
   /** The files around `center` to `depth` links, or the whole wiki when `center` is null. */
   graph: (center: string | null, depth: number) => invoke<Graph>("graph", { center, depth }),
-  activity: () => invoke<{ log: LogEntry[]; days: ActivityDay[] }>("activity"),
+  activity: () => invoke<{ days: ActivityDay[] }>("activity"),
+  /** log.md's entries, newest first. */
+  vaultLog: () => invoke<LogEntry[]>("vault_log"),
   glance: () => invoke<Glance>("glance"),
   activityDay: (date: string) => invoke<FileSummary[]>("activity_day", { date }),
   /** Which of these vault files are still there, in the same order. */

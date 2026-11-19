@@ -40,7 +40,7 @@ Click **Fix** on one issue, or **Fix safe issues** in the top bar for all of the
 
 A fixed issue leaves the list as soon as its fix is made, and the checks rerun within a second of any change to the vault, wherever it was made (Changes, Ask, another editor).
 - **Images nothing uses**: **Move to the Trash**, after asking; you can restore them.
-- **Sources not yet ingested**: a source no wiki page cites and no ingest has read (one read with nothing in it worth keeping isn't listed). **Ingest** starts the same ingest as [Sources](app:sources); its page changes are listed in [Changes](app:review). A source that can't be ingested, such as an SVG or a zip file, shows **Can't ingest**.
+- **Sources not yet ingested**: a source no wiki page cites and no ingest has read (one read with nothing in it worth keeping isn't listed). They aren't counted in **To decide**, and they aren't listed here: they wait under **Captures** in the [Inbox](app:inbox), where you ingest each or keep it in Sources, so the row only counts them and clicking it opens the Inbox. One you kept in Sources without ingesting is still counted here, and [Sources](app:sources) shows it as **New**.
 
 ## Put pages in the page shape
 Every entity, concept and initiative page has the same layout: the opening text, **Current state**, its topics (such as Architecture), a **Timeline**, then **See also**. Each Timeline entry is a heading starting with its date, newest first, with a line under it naming the note it came from:
@@ -69,7 +69,7 @@ A page that needs you says why: a heading whose year it can't tell, two summing-
 **Fix with Ask** starts a chat asking the assistant to fix the issues that need judgement. Its edits are listed in [Changes](app:review) with Revert; safe fixes are made at once and `⌘Z` undoes them. The button is greyed out when nothing needs a decision.
 
 ## Side cards and contradictions
-On the right, **Wiki pages by type** and **Wiki pages by tag** are pie charts; click a slice or row to open the [Wiki](app:wiki) filtered to it. **Pending sources** lists sources not yet cited and those changed since. **Contradictions** on the top bar's ⋯ opens the report of wiki pages that disagree.
+On the right, **Wiki pages by type** and **Wiki pages by tag** are pie charts; click a slice or row to open the [Wiki](app:wiki) filtered to it. **Most linked** lists the notes and wiki pages the most others link to; click one to open it. Sources changed since they were cited are under **More checks**. **Contradictions** on the top bar's ⋯ opens the report of wiki pages that disagree.
 
 ## The daily check
 Turn on **Daily check** in [Settings › Jobs & schedule](app:settings/jobs) to have Brainstead, at the time you set (09:00 to start), look for contradictions in pages that changed and update the list of pages in `index.md`. It catches up after sleep. **Also refresh pages whose sources changed**, in [Settings › AI assistants](app:settings/assistants), has it ingest those sources again. Its notification also says how many pages have left the page shape, for **Reshape pages**. **Run now** runs it straight away and becomes **Stop** while it runs.

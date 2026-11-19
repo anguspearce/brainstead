@@ -307,23 +307,31 @@ async fn graph(app: AppHandle, center: Option<String>, depth: usize) -> Result<b
     .map_err(|e| e.to_string())?
 }
 
-/// The Activity screen: `log.md`'s entries and the heatmap of file changes by day.
+/// The Activity screen: the heatmap of file changes by day.
 #[derive(Serialize)]
 struct Activity {
-    log: Vec<brainstead_core::activity::LogEntry>,
     days: Vec<brainstead_core::activity::Day>,
 }
 
 #[tauri::command]
 async fn activity(app: AppHandle) -> Result<Activity, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let svc = app.state::<VaultService>();
-        let days = svc.with_index(|ix, _| ix.activity_files()).map(|f| brainstead_core::activity::heatmap(&f))?;
-        let log = brainstead_core::activity::parse_log(&svc.root().map(|r| root_note(&r, "log.md")).unwrap_or_default());
-        Ok(Activity { log, days })
+        let days = app.state::<VaultService>().with_index(|ix, _| ix.activity_files()).map(|f| brainstead_core::activity::heatmap(&f))?;
+        Ok(Activity { days })
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// `log.md`'s entries, newest first: Changes › All shows those that aren't a change (D-20261119-04).
+#[tauri::command]
+async fn vault_log(app: AppHandle) -> Result<Vec<brainstead_core::activity::LogEntry>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let svc = app.state::<VaultService>();
+        brainstead_core::activity::parse_log(&svc.root().map(|r| root_note(&r, "log.md")).unwrap_or_default())
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// The vault at a glance: notes and wiki pages by type, their top tags, and the most linked files.
@@ -937,6 +945,7 @@ pub fn run() {
             file_open,
             file_quick_look,
             activity,
+            vault_log,
             activity_day,
             listnotes::bookmark_toggle,
             listnotes::smart_list_save,

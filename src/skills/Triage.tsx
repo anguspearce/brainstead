@@ -18,6 +18,7 @@ import { useVaultVersion } from "../state";
 import { reportEditError, undoAction } from "../taskModel";
 import { toast } from "../Toast";
 import { TopBar } from "../TopBar";
+import { toTriage } from "../needsYou";
 import { keyLabel } from "../platform";
 
 export type Decision = "keep" | "promote" | "task" | "archive" | "remove";
@@ -131,7 +132,9 @@ export function TriageScreen() {
     return () => window.removeEventListener("keydown", k);
   });
 
-  const sub = rows ? `${todo.length} to go` : undefined;
+  // Stale or missing ones first in the sub, as Today's To process counts them (src/needsYou.ts).
+  const worth = toTriage(todo);
+  const sub = rows ? `${worth ? `${worth} stale or missing · ` : ""}${todo.length} to go` : undefined;
   return (
     <main className="main">
       <TopBar title="Triage bookmarks" sub={sub}>

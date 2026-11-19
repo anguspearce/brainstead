@@ -7504,6 +7504,24 @@ select.sel {
 .qsearch .searchbox {
   width: 100%;
 }
+
+/* Changes › All's types and day, under the search. */
+.qtypes {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.qtypes .chip .icon,
+.qtypes .chip svg {
+  margin-left: 4px;
+}
+
+/* A line of log.md that isn't a change: not selectable, its title a link when it names a file. */
+.qrow.qlog {
+  cursor: default;
+}
+.qrow.qlog .tt.linkish {
+  font-weight: inherit;
+}
 .qsearch .nav {
   display: flex;
   gap: 6px;
@@ -8729,20 +8747,16 @@ select.sel {
   white-space: nowrap;
 }
 
-/* Activity: the log's column and the side column (the pies, Most linked), each the full height, as
-   on Wiki health. In the log's column everything above the rows stays put and only the rows
-   scroll; the side column scrolls on its own; the page itself never does. Narrow, the side column
-   goes under the log. */
+/* Activity: the heatmap with the day's files under it, or Sync & ingest, the full height. The
+   heatmap stays put and only the day's files (or the sync's rows) scroll; the page never does. */
 .body.activity {
-  --pane-side: 380px;
-
   padding: 20px 28px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--pane-side);
-  gap: 20px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 .actmain {
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -8750,16 +8764,12 @@ select.sel {
   min-height: 0;
 }
 .actmain > .actheat,
-.actmain > .actday,
-.actmain > .actfilters,
 .actmain > p {
   flex: none;
 }
-.actmain > .actlog {
+.actmain > .actday {
   flex: 1 1 0;
   min-height: 120px;
-  display: flex;
-  flex-direction: column;
 }
 
 /* Activity › Sync & ingest (src/SyncFeed.tsx). */
@@ -8799,21 +8809,6 @@ select.sel {
 .synclinks .tlink:disabled {
   color: var(--ink3);
   cursor: default;
-}
-.actside {
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-@container main (width <= 868px) {
-  .body.activity {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
-  }
-  .actside {
-    max-height: 40vh;
-  }
 }
 .actrows {
   flex: 1;
@@ -8929,8 +8924,9 @@ button.hc {
 .actfiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  align-content: start;
   gap: 0 18px;
-  max-height: 220px;
+  min-height: 0;
   overflow: auto;
 }
 .actfile {
@@ -8973,70 +8969,12 @@ button.hc {
   gap: 6px;
 }
 
-/* Activity's log, its heat map and side: no boxes, as the other screens (times in the text face). */
-.actlog {
-  overflow: hidden;
-  border-top: 1px solid var(--line);
-}
-.actside .card {
-  padding: 0;
-  background: none;
-  border: 0;
-  border-radius: 0;
-}
 .tnum {
   font-variant-numeric: tabular-nums;
 }
-.actlog .ar {
-  display: grid;
-  grid-template-columns: var(--col-when, 150px) minmax(0, 1fr) var(--col-action, 120px);
-  gap: 14px;
-  align-items: center;
-  padding: 0 16px;
-  min-height: 40px;
-  font-size: 12.5px;
-}
-.actlog.banded .ar {
-  grid-template-columns: var(--col-time, 64px) minmax(0, 1fr) var(--col-action, 120px);
-}
-.actlog .ar.tb-head {
-  min-height: 0;
-}
-.actlog .ar.tb-head > span,
 .dcr.th > span {
   position: relative;
   min-width: 0;
-}
-
-/* The last header (Action), with the count of entries shown on its right. */
-.actlog .itemh {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-.actlog .itemh .count {
-  margin-left: auto;
-  font-weight: 400;
-  text-transform: none;
-  letter-spacing: 0;
-  font-variant-numeric: tabular-nums;
-}
-.actrows .ar {
-  scroll-margin-top: 30px;
-}
-.actlog .when {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.actlog .item {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .linkish {
   padding: 0;
@@ -9055,11 +8993,6 @@ button.hc {
 }
 .actempty {
   margin: 4px 0;
-}
-.actmore {
-  padding: 10px 16px;
-  text-align: center;
-  font-size: 12px;
 }
 
 /* Settings › General: the switch-over checklist (boxes as tasks' .cb) */
@@ -10601,8 +10534,7 @@ html.tray-view body {
   .body.meeting {
     --pane-side: 320px;
   }
-  .body.health,
-  .body.activity {
+  .body.health {
     --pane-side: 300px;
   }
   .docgrid {

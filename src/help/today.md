@@ -36,9 +36,10 @@ The box under the counts is the same as Quick capture. Type a task and press `�
 **Capture** in the top bar opens the floating Quick capture window. **Ask**, beside `?`, starts a chat in [Ask](app:ask) about your day.
 
 ## Use the To process card
-The To process card shows:
+The To process card is the one list of what needs you. Each row's count is the one the screen it opens shows, and the sidebar's badges and the menu-bar window count the same way. It shows:
 
-- **Inbox to clarify**, with its count and **Clarify**, which opens the [Inbox](app:inbox). It says when the Inbox is clear.
+- **Inbox to clarify**, with its count and **Clarify**, which opens the [Inbox](app:inbox). It says when the Inbox is clear. Sources waiting to be ingested are counted here, as they wait under the Inbox's **Captures**.
+- **Changes held for you**, with **Decide**, which opens [Changes › Held](app:review) to accept or reject them.
 - **Bookmarks to triage**, with **Triage**, when bookmarks are stale or missing.
 - **Wiki health to decide**, with **Decide**, which opens [Wiki health](app:health). It counts only issues you must decide, not ones a safe fix mends.
 - **Weekly review day** with **Start**, from the review's time on its day until the end of the next day (Friday 16:00 unless changed in [Settings › Jobs & schedule](app:settings/jobs)). While a review is paused it shows **Weekly review, paused** with **Carry on**. Either goes straight into the [Weekly review](app:weekly).
@@ -52,8 +53,6 @@ The **Weekly summary** card above it works the same way. Both show when **Brains
 On macOS and Windows, with Teams and Outlook on in [Settings › Sync](app:settings/sync), an **Upcoming meetings** card lists your remaining Teams meetings for the day, read from your own calendar. From midday it also shows tomorrow's, under a **Tomorrow** heading, so an afternoon glance covers the next morning. It shows the last list it read straight away and changes only when a fresh read of the calendar differs. It's hidden when there are none.
 
 ## Pick up where you left off
-**Changes held for you** counts the changes held in [Changes](app:review) and lists the first four; click one, or **Open Changes**, to accept or reject them.
-
 **Continue where you left off** shows up to six notes: unsaved ones first (marked Unsaved, with **Discard**), then notes you opened lately, then notes changed lately here or in another editor. **More in Activity** opens [Activity](app:activity).
 
 ## Resize the panes

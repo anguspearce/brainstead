@@ -734,6 +734,8 @@ export function SourcesScreen() {
           <Icon name="note" size={14} />
           Meeting notes
         </button>
+        {/* Not the screen's main button: Sources is the library, and Inbox › Captures is where new
+            sources wait to be dealt with (D-20261119-04). */}
         <span
           title={
             waiting.length
@@ -741,7 +743,7 @@ export function SourcesScreen() {
               : "No new or changed sources to ingest"
           }
         >
-          <button type="button" className="btn pri" disabled={!waiting.length} onClick={() => ingest(waiting)}>
+          <button type="button" className="btn" disabled={!waiting.length} onClick={() => ingest(waiting)}>
             <Icon name="wiki" size={14} />
             Ingest {waiting.length || ""}
           </button>

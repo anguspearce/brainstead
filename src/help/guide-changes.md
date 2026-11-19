@@ -17,10 +17,10 @@ Open [Changes](app:review) from the foot of the sidebar. The feed groups changes
 On [Changes](app:review), **Revert** undoes a change on the page as it is now, keeping later edits, even long after. A run with several changes has **Revert all**. A page's side pane lists its own **Agent changes**, each with **Revert**.
 
 ## Decide the changes held for you
-A change from a scheduled run that fails a check, a change to a template, or one that adds code that runs waits under **Held for you** on [Changes](app:review). The sidebar count shows how many. Press `A` to accept, `R` to reject, or use **Edit before accepting**. [Changes](help:review) lists the checks.
+A change from a scheduled run that fails a check, a change to a template, or one that adds code that runs waits under **Held for you** on [Changes](app:review); its **Held** tab lists only those. The sidebar count and Today's **To process** show how many. Press `A` to accept, `R` to reject, or use **Edit before accepting**. [Changes](help:review) lists the checks.
 
 ## Get a file back from the Trash
 A file moved to the Trash goes to the vault's own `.trash` folder. Open [Trash](app:trash), find it with **Search the Trash** and click **Restore**. **Delete forever** and **Empty the Trash** can't be undone, so they ask first.
 
 ## See what changed when
-[Activity](app:activity) shows a heatmap of files changed each day and the log of every change Brainstead made. Click a day to see the files that changed on it.
+[Changes › All](app:review) also lists the vault's `log.md`: the lines of what Brainstead changed that aren't a change it still holds, such as older ones. [Activity](app:activity) shows a heatmap of files changed each day; click a day to see the files that changed on it, and **Changes that day** for what Brainstead changed then.

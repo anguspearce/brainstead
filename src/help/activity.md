@@ -3,39 +3,23 @@ title: Activity
 kind: screen
 screens: [activity]
 order: 16
-summary: What has changed in the vault: the log of Brainstead's own changes, a heatmap of files changed by day, the notes at a glance, and Sync & ingest, what the sync brought in and what each ingest did.
+summary: What has changed in the vault: a heatmap of files changed by day, the files of the day you pick, and Sync & ingest, what the sync brought in and what each ingest did.
 ---
-Activity shows the vault's `log.md`, newest first, under a heatmap of files changed per day, with charts of your notes beside it. Open it from the foot of the sidebar.
+Activity has two views, picked at the top: **Files by day**, a heatmap of the files changed per day with the files of one day under it, and **Sync & ingest**. Open it from the foot of the sidebar.
+
+The vault's `log.md`, the log of Brainstead's own changes, is in [Changes › All](app:review) now, beside every change with **Revert**, so there's one history of what Brainstead and the assistants did. The pie charts and **Most linked** are on [Wiki health](app:health).
 
 ## Read the heatmap
 Each square is a day, with a column per week from Monday. Darker means more notes, wiki pages and sources last changed that day; hover for the count. Templates aren't counted. The chevrons page to earlier and later weeks.
 
-Click a day to filter the log to it. A card lists the files that last changed that day; click one to open it. **Clear the day** shows the whole log again.
+Under the heatmap is the latest day anything changed, with the files that last changed that day; click one to open it. Click a day to show its files instead, and **Clear the day** to go back to the latest day.
 
-## The notes at a glance
-- **Notes by type** and **Notes by tag** are pie charts of the five most common types or tags, plus one slice for the rest, with counts in the legend.
-- Click a slice or its row (except "other tags"): a type opens [Notes](app:notes) filtered to it, a tag searches for it.
-- **Most linked** lists the most linked-to notes and wiki pages; click one to open it.
+**Changes that day** opens [Changes › All](app:review) on that day: what assistants and Brainstead's runs changed then, and that day's lines in `log.md`. The heatmap counts every file that changed, your own edits too, so it can show more than Changes does.
 
-An assistant can read these counts, and the wiki's from [Wiki health](app:health).
-
-## Read the log
-The log lists every change Brainstead makes to the vault: ingests, assistants' changes, Wiki health fixes, the daily and weekly summaries, name fixes and the daily check's catalogue update. Your own edits, captures and dropped files aren't logged.
-
-Entries are grouped by day; click a day's band to show only that day. Click an entry's title to open its page, or hover for its description.
-
-## Filter and search the log
-- The chips filter by kind of change, such as **Ingested**, or **Summary** for a daily or weekly summary. **All** shows every kind.
-- **Search activity** searches titles, descriptions and kinds; **Best match** or **Latest** orders the matches.
-- While searching, `↑` and `↓` move through the matches, `↩` opens the entry's page (or shows its day) and `Esc` clears the box.
-
-An assistant can filter and search the log the same way.
-
-## Resize the panes
-Drag the line beside the side column to make it wider or narrower; a double-click on it puts it back ([pane widths](help:settings-general)). The log's **When** (or **Time**) column resizes by its heading's right edge and **Action** by its left edge; **Item** takes the rest.
+An assistant reads the heatmap's days, and a day's files, with the `activity` tool.
 
 ## Sync & ingest
-**Sync & ingest**, beside **Log** at the top of Activity, shows what Brainstead does in the background, newest first, over the last two weeks:
+**Sync & ingest**, beside **Files by day** at the top of Activity, shows what Brainstead does in the background, newest first, over the last two weeks:
 
 - **Each sync pass** that brought something in from Teams, Outlook or Slack: the sources it wrote new and those it topped up (a chat day or email thread with more messages), by service. A pass that found nothing new isn't listed; the line at the top says when the sync last ran.
 - **A pass that had a problem or couldn't run**, and why (signed out, read-only). When the same thing happens pass after pass it's one entry with a count and the time of the last one, not a line every few minutes.

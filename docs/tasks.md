@@ -15,9 +15,9 @@ Today (⌘1) is what needs you now:
 - The day in one sentence under the greeting, each count a link to its band, then bands for **Overdue**, **Due today**, **Deferred until now**, **Coming up this week** (due in the next seven days) and **Waiting for**. On a wide window the last three sit beside the first two. A task deferred to a later day stays off Today until then, even if it's due. Tick, date and change tasks in place; ⌘Z undoes.
 - `@context` chips to show one context.
 - A capture box, the same as Quick capture.
-- **To process**: the Inbox, bookmarks to triage, Wiki health to decide, and the weekly review on its day.
+- **To process**, the one list of what needs you: the Inbox to clarify (sources waiting to be ingested among it), changes held for you, bookmarks to triage, Wiki health to decide, and the weekly review on its day. Each row's count is the one its screen shows, as the sidebar and the menu-bar window count, and its button names what you do: **Clarify**, **Decide**, **Triage**, **Start**.
 - The latest **Weekly summary** and **Daily summary**.
-- **Changes held for you** to accept or reject, and **Continue where you left off**.
+- **Continue where you left off**.
 
 A waiting-for row shows how many days it has waited. **Draft nudge** drafts a follow-up with Ask to copy into Outlook or Teams; nothing is sent.
 

@@ -16,6 +16,7 @@ import {
   IGNORE_ALL,
   claimsByPage,
   decisions,
+  IN_INBOX,
   fixWithAskPrompt,
   held,
   originLabel,
@@ -108,6 +109,15 @@ describe("wiki health", () => {
   it("counts what needs a decision, leaving out stale pages and safe fixes", () => {
     expect(decisions(report)).toBe(1);
     expect(decisions(null)).toBe(0);
+    // Sources not yet ingested wait in Inbox › Captures: counted there, not here too.
+    const pending = {
+      id: "uningested-sources",
+      title: "Sources not yet ingested",
+      classic: true,
+      items: [{ text: "sources/A.md", page: "sources/A.md", safe: false }],
+    };
+    expect(decisions({ ...report, checks: [...report.checks, pending] })).toBe(1);
+    expect([...IN_INBOX]).toEqual(["uningested-sources"]);
     expect(safeFixes(report)).toEqual([
       { check: "missing-crossrefs", page: "wiki/entities/Northwind.md", name: "Orbit App", detail: undefined },
     ]);

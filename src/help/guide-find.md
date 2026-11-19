@@ -23,4 +23,4 @@ An open note in [Notes](app:notes) lists what links to it under **Linked from**,
 Click **Graph** in an open note's top bar, or open [Graph](app:graph) from the sidebar and type in **Find a page to centre on**. Click a bubble to centre on that page and double-click to open it. Raise **Depth** to see links of links, or click **Whole wiki** for every page. The chips hide or show each kind of page.
 
 ## See what changed
-[Activity](app:activity) shows a heatmap of files changed each day and the log of Brainstead's own changes. Click a day to see the files that changed on it. Search the log, or filter it by kind of change.
+[Activity](app:activity) shows a heatmap of files changed each day. Click a day to see the files that changed on it, and **Changes that day** for what Brainstead changed then. The log of Brainstead's own changes is in [Changes › All](app:review), where you can search it or keep one type of change.

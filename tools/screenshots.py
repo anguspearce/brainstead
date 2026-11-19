@@ -302,7 +302,7 @@ def make_demo():
         "- Wrote up the [[Meeting. Orbit App Steerco - 2026-09-30|steerco]] actions.\n\n"
         "### Still open\n\n- Lena's comms plan is waiting on the launch date.\n"
     )
-    # Log lines quoting tasks, whose fields Activity draws as icons, for the `activity` scene.
+    # Log lines quoting tasks, whose fields Changes › All draws as icons, for the `review` scene.
     log = vault / "log.md"
     head, rest = log.read_text().split("\n## ", 1)
     log.write_text(

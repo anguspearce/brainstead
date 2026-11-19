@@ -20,7 +20,7 @@ On Windows the icon is white on a dark taskbar and black on a light one, and cha
 - A capture box, like Quick capture: type a task and press `↩` for the To Do list, or switch to **Scratchpad note** for the Scratchpad.
 - Each run going, with its progress and **Stop**.
 - The sync and ingests in a line: when the sync last ran, how many sources came in today, how many are being ingested and any problems today. Click it to open [Activity › Sync & ingest](help:activity).
-- Changes held for you and items in the Inbox, each opening its screen.
+- Changes held for you, opening [Changes › Held](app:review), and items in the Inbox, opening the [Inbox](app:inbox). They're counted as Today's **To process** and the sidebar count them.
 - **Open at login**, as in [Settings › General](app:settings/general), when the system can manage it (on a Mac, if macOS asks for approval, System Settings opens at Login Items).
 - **Run the daily check now**, which says **Daily check started** or what went wrong.
 - At the foot, when the next scheduled daily or weekly summary is due.

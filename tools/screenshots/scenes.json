@@ -380,6 +380,21 @@
     "docs": true
   },
   {
+    "name": "review-held",
+    "screen": "review",
+    "view": {
+      "review:view": "held"
+    }
+  },
+  {
+    "name": "review-type",
+    "screen": "review",
+    "view": {
+      "review:view": "all",
+      "review:type": "update"
+    }
+  },
+  {
     "name": "review-applied",
     "screen": "review",
     "view": {
@@ -973,14 +988,6 @@
     },
     "resizeLocks": {
       "columns": true
-    }
-  },
-  {
-    "name": "resize-columns-activity",
-    "screen": "activity",
-    "paneWidths": {
-      "activity.time": 110,
-      "activity.action": 160
     }
   },
   {

@@ -105,6 +105,11 @@ export const OWN_ACTIONS = new Set(["missing-pages", "duplicates", "unreferenced
 
 export const ADVISORY = new Set(["stale-pages", "uncited-claims", "no-current-state"]);
 
+/** Checks whose issues are acted on in the Inbox, not Wiki health: sources no page cites wait in
+ *  Inbox › Captures to be ingested or kept, so they aren't counted to decide here as well (one
+ *  place for each kind of status, D-20261119-04). Kept beside core/src/lint.rs IN_INBOX. */
+export const IN_INBOX = new Set(["uningested-sources"]);
+
 /** The note a missing link most likely meant: one whose name is the link's but for a slip or two
  *  ("meting" for "meeting"), as when a note was renamed after the link was written. Null when
  *  none is that close, or two are. */
@@ -206,7 +211,7 @@ export const IGNORE_ALL = new Set(["stale-pages", "uncited-claims"]);
 /** Issues that need you: everything Brainstead can't fix on its own. */
 export function decisions(r: LintReport | null | undefined): number {
   if (!r) return 0;
-  return r.checks.filter((c) => !ADVISORY.has(c.id)).reduce((n, c) => n + c.items.filter((i) => !i.safe).length, 0);
+  return r.checks.filter((c) => !ADVISORY.has(c.id) && !IN_INBOX.has(c.id)).reduce((n, c) => n + c.items.filter((i) => !i.safe).length, 0);
 }
 
 /** Every safe fix in the report, as health_fix takes them. */
@@ -263,7 +268,7 @@ export function claimsByPage(items: LintItem[]): { page: string; items: LintItem
 export function fixWithAskPrompt(r: LintReport): string {
   const lines: string[] = [];
   for (const c of r.checks) {
-    if (ADVISORY.has(c.id)) continue;
+    if (ADVISORY.has(c.id) || IN_INBOX.has(c.id)) continue;
     const open = c.items.filter((i) => !i.safe);
     if (!open.length) continue;
     lines.push(`${c.title}:`);

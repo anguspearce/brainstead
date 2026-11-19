@@ -26,6 +26,9 @@ const LOG: &str = "log.md";
 pub const STALE_DAYS: i64 = 90;
 /// Checks that are worth a look but aren't problems: not counted as needing a decision.
 pub const ADVISORY: [&str; 3] = ["stale-pages", "uncited-claims", "no-current-state"];
+/// Checks whose issues are acted on in the Inbox (Captures), not counted as needing a decision
+/// here as well (D-20261119-04). Kept beside src/knowledge.ts IN_INBOX.
+pub const IN_INBOX: [&str; 1] = ["uningested-sources"];
 const STALE_MIN_BACKLINKS: usize = 3;
 
 pub(crate) static FRONTMATTER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)\A---\n(.*?)\n---\n").unwrap());
@@ -220,9 +223,14 @@ impl Report {
         self.checks.iter().find(|c| c.id == id)
     }
     /// Issues Brainstead can't fix on its own. Stale pages and uncited claims are worth a look,
-    /// not problems, so they aren't counted.
+    /// not problems, and sources not yet ingested are the Inbox's, so they aren't counted.
     pub fn needs_decision(&self) -> usize {
-        self.checks.iter().filter(|c| !ADVISORY.contains(&c.id)).flat_map(|c| &c.items).filter(|i| !i.safe).count()
+        self.checks
+            .iter()
+            .filter(|c| !ADVISORY.contains(&c.id) && !IN_INBOX.contains(&c.id))
+            .flat_map(|c| &c.items)
+            .filter(|i| !i.safe)
+            .count()
     }
     pub fn total(&self) -> usize {
         self.checks.iter().map(|c| c.items.len()).sum()
@@ -958,7 +966,8 @@ mod tests {
         let after = run_with(&root, today(), &HashSet::new(), fixture::zone(), &read);
         assert_eq!(after.check("uningested-sources").unwrap().items.len(), pending.len() - read.len());
         let safe = r.checks.iter().flat_map(|c| &c.items).filter(|i| i.safe).count();
-        assert_eq!(r.needs_decision() + safe + stale.len(), r.total());
+        // Sources not yet ingested are the Inbox's to act on, not counted to decide here too.
+        assert_eq!(r.needs_decision() + safe + stale.len() + pending.len(), r.total());
     }
 
     #[test]

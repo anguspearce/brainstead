@@ -1455,11 +1455,15 @@ describe("MCP actions", () => {
         status: "completed",
         done_looks_like: "Live",
       });
+      // Activity's Files by day: the heatmap's days, newest first.
       answers.activity = () => ({
-        log: [{ date: "2026-10-01", time: "09:30", action: "ingest", title: "Orbit", description: "two pages" }],
+        days: [
+          { date: "2026-09-30", notes: 1, wiki: 0, sources: 0 },
+          { date: "2026-10-01", notes: 2, wiki: 1, sources: 1 },
+        ],
       });
-      expect(await run("activity")).toBe("1 entry in log.md, newest first:\n- 2026-10-01 ingest Orbit");
-      expect(await run("activity", { detail: true })).toMatch(/2026-10-01 09:30 ingest Orbit — two pages/);
+      expect(await run("activity")).toBe("2 days files changed on, newest first:\n- 2026-10-01: 4 files\n- 2026-09-30: 1 file");
+      expect(await run("activity", { detail: true })).toMatch(/2026-10-01: 4 files \(2 notes, 1 wiki page, 1 source\)/);
       // Activity › Sync & ingest: the screen's timeline, its chips as filter.
       answers.sync_log = () => ({
         lastPass: "2026-11-19T10:00:00",
@@ -1908,32 +1912,45 @@ describe("MCP actions", () => {
       await expect(run("open", { screen: "doc_check", document: "Nowhere" })).rejects.toThrow(/no Nowhere in the vault/);
     });
 
-    it("filters Activity by action and by the screen's search", async () => {
-      answers.activity = () => ({
-        log: [
-          { date: "2026-10-02", time: "10:00", action: "trash", title: "Idea. Old", description: "" },
-          { date: "2026-10-01", time: "09:30", action: "ingest", title: "Orbit", description: "two pages" },
-          { date: "2026-09-30", time: "09:00", action: "ingest", title: "Hub Platform", description: "one page" },
-        ],
-      });
-      expect(await run("activity", { action: "ingest" })).toBe(
-        "2 entries in log.md, newest first:\n- 2026-10-01 ingest Orbit\n- 2026-09-30 ingest Hub Platform",
+    it("gives log.md's lines that aren't a change in Changes › All, by type, day and search", async () => {
+      const change = {
+        id: "c1",
+        created: "2026-10-01T09:30:20",
+        origin: { kind: "ingest", run: "r1" },
+        model: null,
+        page: "wiki/entities/Orbit App.md",
+        kind: "edit",
+        title: "Add the launch",
+        reason: "",
+        status: "applied",
+        decided: null,
+        flags: [],
+        warnings: [],
+        group: "ingest-r1",
+        revertable: true,
+      };
+      answers.changes_list = () => [change];
+      answers.vault_log = () => [
+        { date: "2026-10-02", time: "10:00", action: "weekly-review", title: "2026-W40", description: "[[Weekly review 2026-W40]]" },
+        // The ingest's own line: shown once, as the change.
+        { date: "2026-10-01", time: "09:31", action: "ingest", title: "[[Orbit]]", description: "two pages" },
+        { date: "2026-09-30", time: "09:00", action: "ingest", title: "Hub Platform", description: "one page" },
+      ];
+      const all = (await run("changes")) as string;
+      expect(all).toMatch(/^3 changes and log\.md lines: nothing held, then 1 made and 2 other log\.md lines, newest first\./);
+      expect(all).toMatch(
+        /- log\.md 2026-10-02 weekly-review 2026-W40\nRun “[^”]+” \(group ingest-r1\):\n- Add the launch[^\n]*\n- log\.md 2026-09-30 ingest Hub Platform$/,
       );
-      expect(await run("activity", { action: "ingest", query: "two pages" })).toMatch(
-        /^1 entry in log\.md, best match first matching “two pages”, of 2:\n- 2026-10-01 ingest Orbit$/,
+      expect(all).not.toContain("[[Orbit]]");
+      expect(await run("changes", { type: "ingest" })).toMatch(/^2 changes and log\.md lines: nothing held, then 1 made and 1 other/);
+      expect(await run("changes", { type: "Ingested", date: "2026-09-30" })).toMatch(
+        /then 0 made and 1 other log\.md line, newest first on 2026-09-30/,
       );
-      // While searching, Best match (the screen's default) puts every word in the title first; Latest keeps the log's order.
-      expect(await run("activity", { query: "hub" })).toMatch(/best match first matching “hub”, of 3:\n- 2026-09-30 ingest Hub Platform$/);
-      answers.activity = () => ({
-        log: [
-          { date: "2026-10-02", time: "10:00", action: "ingest", title: "Orbit", description: "about the hub" },
-          { date: "2026-10-01", time: "09:30", action: "ingest", title: "Hub Platform", description: "" },
-        ],
-      });
-      expect(await run("activity", { query: "hub" })).toMatch(/:\n- 2026-10-01 ingest Hub Platform\n- 2026-10-02 ingest Orbit$/);
-      expect(await run("activity", { query: "hub", order: "latest" })).toMatch(/newest first.*:\n- 2026-10-02 ingest Orbit\n- 2026-10-01/);
-      await expect(run("activity", { query: "hub", order: "oldest" })).rejects.toThrow(/order is best_match or latest/);
-      await expect(run("activity", { action: "rename" })).rejects.toThrow(/Its actions: ingest\./);
+      expect(await run("changes", { query: "hub" })).toMatch(/^1 change or log\.md line matching “hub”, of 3/);
+      expect(((await data("changes")) as { log: { total: number } }).log.total).toBe(2);
+      expect(await run("changes", { view: "held" })).toBe("Nothing is held for the user.");
+      await expect(run("changes", { type: "rename" })).rejects.toThrow(/The types: ingest, weekly-review\./);
+      await expect(run("changes", { view: "made" })).rejects.toThrow(/view is held or all/);
     });
 
     it("reads and changes the newer settings: login, models, spelling, read aloud and the document look", async () => {
@@ -2140,7 +2157,7 @@ describe("MCP actions", () => {
       await expect(run("settings", { action: "set", key: "paneWidths.trash.type", value: 120 })).rejects.toThrow(
         "Column widths are locked, so trash.type can't be resized: turn off Lock column widths (resizeLocks.columns) in Settings › General › Appearance › Pane widths first.",
       );
-      await expect(run("settings", { action: "set", key: "paneWidths.activity.when", value: null })).rejects.toThrow(
+      await expect(run("settings", { action: "set", key: "paneWidths.trash.folder", value: null })).rejects.toThrow(
         /Column widths are locked/,
       );
       expect(await run("settings", { action: "set", key: "paneWidths.sidebar", value: 300 })).toBe(
@@ -2990,23 +3007,11 @@ describe("MCP actions", () => {
       expect(calls.filter(([c]) => c === "smart_list_save").map(([, a]) => a!.layers)).toEqual([[], ["wiki"]]);
     });
 
-    it("gives a day's log entries beside its files, and searches as the screen does", async () => {
-      answers.activity = () => ({
-        log: [
-          { date: "2026-10-02", time: "10:00", action: "ingest", title: "Orbit", description: "two pages" },
-          { date: "2026-10-02", time: "09:00", action: "trash", title: "Idea. Old", description: "" },
-          { date: "2026-10-01", time: "09:30", action: "ingest", title: "Hub Platform", description: "" },
-        ],
-      });
-      answers.activity_day = () => [{ path: "wiki/entities/Orbit App.md" }];
+    it("gives a day's files, and points to Changes for what Brainstead changed that day", async () => {
+      answers.activity_day = () => [{ path: "wiki/entities/Orbit App.md", title: "Orbit App", mtime: 0 }];
       expect(await run("activity", { date: "2026-10-02" })).toBe(
-        "3 files changed and entries in log.md on 2026-10-02:\n- wiki/entities/Orbit App.md\n- 2026-10-02 ingest Orbit\n- 2026-10-02 trash Idea. Old",
+        "What assistants and Brainstead's runs changed that day, and the vault's log.md: list_changes with date 2026-10-02.\n1 file changed on 2026-10-02:\n- wiki/entities/Orbit App.md",
       );
-      // The query narrows the entries, not the files; the date isn't searched, as on the screen.
-      expect(await run("activity", { date: "2026-10-02", query: "pages" })).toMatch(
-        /:\n- wiki\/entities\/Orbit App\.md\n- 2026-10-02 ingest Orbit$/,
-      );
-      expect(await run("activity", { query: "2026-10-01" })).toMatch(/^0 entries/);
     });
 
     it("won't save a contradictions report while a check runs", async () => {

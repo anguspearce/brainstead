@@ -414,13 +414,13 @@ pub fn tools() -> Vec<Value> {
                 "reason": reason
             }), &["initiative", "text"])),
         tool("pending_sources", "Sources not yet in the wiki", Read,
-            "Files in sources/ with their Status, as the Sources screen gives it: New (no wiki page cites it yet in its sources: property), Changed (changed since the pages citing it) or Ingested. Without status, the ones still to ingest, New and Changed: notes, PDFs, Office files and images (whose text is read from the picture), each path ready to pass to start_run's ingest (a Teams transcript is written up with start_run meeting_note instead); a file an ingest can't read is never listed as one to ingest, and status all marks it. An empty list means the wiki is up to date with Sources.",
+            "Files in sources/ with their Status, as the Sources screen gives it: New (no wiki page cites it yet in its sources: property), Changed (changed since the pages citing it) or Ingested. Without status, the ones still to ingest, New and Changed: notes, PDFs, Office files and images (whose text is read from the picture), each path ready to pass to start_run's ingest (a Teams transcript is written up with start_run meeting_note instead); a file an ingest can't read is never listed as one to ingest, and status all marks it. An empty list means the wiki is up to date with Sources. In the app, the New ones not yet dealt with wait in Inbox › Captures, where the user ingests them or keeps them in Sources (list_inbox lists them, clarify_inbox acts on them); Wiki health only counts them there.",
             schema(json!({"status": {"type": "string", "enum": ["all", "new", "changed", "ingested"], "description": "The Sources screen's Status: only New, Changed or Ingested sources, or all; New and Changed when left out."}}), &[])),
         tool("provenance", "A source's provenance", Read,
             "A source's Provenance card, as Sources and the source's own page show it (needs the app): whether it's ingested and by which run (when, its status and model), its size and when it changed, what the search index holds of it (passages indexed, its SHA-256), and the wiki pages that cite it with the passages they quote from it (three a page, as the card shows). Re-ingest is start_run ingest; Move to the Trash is trash_note.",
             schema(json!({"source": {"type": "string", "description": "The source, by its path in the vault (sources/…), as pending_sources gives it."}}), &["source"])),
         tool("lint", "Wiki health report", Read,
-            "Wiki health's checks on the wiki, as its screen lists them when Brainstead is open (ignored issues and pairs marked not duplicates left out, and the checks only the app runs: claims with no citation and system notes missing their header), else from the vault. Each check says whether it's counted (the grey ones, only worth a look, aren't) and each item marked [safe fix] can be fixed with fix_health. Wiki checks: missing pages, broken sources, orphan pages, missing cross-links, stale updated: dates, unlogged writes, sources not yet ingested and images nothing uses. More checks: possible duplicates, stale pages others rely on, sources changed since they were cited, pages not in the page shape (reshape_pages) and pages with no Current state (write_current_state). For one page when given. With the app, the whole report starts with the screen's summary card: how many Need a decision, how many more are safe to fix, and the trend (the first and last day's count, and the highest). With the app, a missing page or broken source also says, as its row does, when the file it names is in the Trash (since when, and the id for restore_from_trash) and Did you mean, the note it most likely meant (the meeting note a trashed transcript became, or one a slip away), for health_issue link_to. Missing pages, broken sources (link_to), duplicates, unused images and orphan pages (add_to_index) have health_issue for their buttons.",
+            "Wiki health's checks on the wiki, as its screen lists them when Brainstead is open (ignored issues and pairs marked not duplicates left out, and the checks only the app runs: claims with no citation and system notes missing their header), else from the vault. Each check says whether it's counted (the grey ones, only worth a look, aren't, nor sources not yet ingested, which the Inbox's Captures counts and acts on) and each item marked [safe fix] can be fixed with fix_health. Wiki checks: missing pages, broken sources, orphan pages, missing cross-links, stale updated: dates, unlogged writes, sources not yet ingested and images nothing uses. More checks: possible duplicates, stale pages others rely on, sources changed since they were cited, pages not in the page shape (reshape_pages) and pages with no Current state (write_current_state). For one page when given. With the app, the whole report starts with the screen's summary card: how many Need a decision, how many more are safe to fix, and the trend (the first and last day's count, and the highest). With the app, a missing page or broken source also says, as its row does, when the file it names is in the Trash (since when, and the id for restore_from_trash) and Did you mean, the note it most likely meant (the meeting note a trashed transcript became, or one a slip away), for health_issue link_to. Missing pages, broken sources (link_to), duplicates, unused images and orphan pages (add_to_index) have health_issue for their buttons.",
             schema(json!({"page": page}), &[])),
         tool("help", "Brainstead's help", Read,
             "Brainstead's own help: how the app works and how to use it (screens, settings, shortcuts, getting-started guides). For questions about the app itself, not the vault. No arguments lists the topics; `topic` reads one (and `section` one part of it); `query` finds the best matching sections.",
@@ -604,11 +604,14 @@ pub fn tools() -> Vec<Value> {
             }), &["name"])),
         // What agents changed.
         tool("list_changes", "What assistants changed", Read,
-            "What assistants and Brainstead's runs changed, and the changes held for the user, as the Changes screen shows them (needs the app). list gives them as one list, the held ones first and then those made, newest first, a page at a time (limit, offset and query page through the whole list), grouped by run, each with its id and its run's group; show gives one change's diff, quotes and flags; history says how long Changes keeps its history. detail adds each change's kind, who made it and why. Act on them with changes.",
+            "What assistants and Brainstead's runs changed, and the changes held for the user, as the Changes screen shows them (needs the app). list gives them as one list, a page at a time (limit, offset and query page through the whole list), grouped by run, each with its id and its run's group. view picks Changes' tab: all (the default) has the held ones first, then those made with the vault's log.md lines that aren't a change (older than Changes' history, from another computer, the previous app or a terminal, or Brainstead's own writes that aren't changes: the weekly review, Fix name, safe fixes), newest first, as All shows them; held has the held ones only. With view all, type keeps one type, as All's chips do, and date one day, as Activity's Changes that day opens it. show gives one change's diff, quotes and flags; history says how long Changes keeps its history. detail adds each change's kind, who made it and why, and each log.md line's time and what it says. Act on them with changes.",
             schema(json!({
                 "action": {"type": "string", "enum": ["list", "show", "history"], "description": "Default list."},
+                "view": {"type": "string", "enum": ["all", "held"], "description": "For list: Changes' tab, All (the default) or Held."},
+                "type": {"type": "string", "description": "For list with view all: only changes and log.md lines of this type, as the log names it or All's chip does: ingest, update, create, lint-fix, review, weekly-review…"},
+                "date": day("for list with view all, only that day's changes and log.md lines."),
                 "id": {"type": "string", "description": "For show: the change's id from list."},
-                "page": {"type": "string", "description": "For list: only this page's changes, by its path."},
+                "page": {"type": "string", "description": "For list: only this page's changes, by its path (no log.md lines)."},
                 "detail": detail
             }), &[])),
         tool("changes", "Accept, reject or revert changes", Destroy,
@@ -777,9 +780,9 @@ pub fn tools() -> Vec<Value> {
                 "save": {"type": "boolean", "description": "Save as note, once it's compared."}
             }), &["document_a", "document_b"])),
         // Around the vault.
-        tool("activity", "Recent activity", Read,
-            "log.md, newest first: what Brainstead and the assistants changed in the vault (needs the app), a line an entry with its date, action and title. action keeps one kind of entry, as the Activity screen's action chips do; query keeps the entries with all its words in their title, description or action's label, as its search does, best matches first or with order latest the newest first. With date, the day picked as on the screen: the files changed that day, then that day's entries (action and query narrow the entries, not the files). detail adds each entry's time and description.",
-            schema(json!({"date": day("the files changed that day and its entries."), "action": {"type": "string", "description": "Only entries of this action, as the log names it or its chip on the Activity screen does: ingest, review, trash…"}, "order": {"type": "string", "enum": ["best_match", "latest"], "description": "With query, the screen's order of search results: best_match (Best match, the default) or latest (Latest). Newest first without query."}, "detail": detail}), &[])),
+        tool("activity", "Files by day", Read,
+            "Activity's Files by day (needs the app): the days files in the vault last changed on, newest first, each with how many files, as its heatmap shades them (templates aren't counted); detail splits each day into notes, wiki pages and sources. With date, the day picked as on the screen: the files that last changed that day, newest first (detail adds the time). What assistants and Brainstead's runs changed, and the vault's log.md, are Changes' (list_changes, with date for one day).",
+            schema(json!({"date": day("the files that last changed that day."), "detail": detail}), &[])),
         tool("sync_activity", "Sync and ingest activity", Read,
             "What the sync brought in and what each ingest did with it (needs the app), newest first over the last two weeks, as Activity › Sync & ingest shows it: each Teams, Outlook and Slack sync pass (the sources it wrote new or topped up, its problems, or why it couldn't run, counted when the same wall repeats) and each ingest (what it changed, that it found nothing and moved a chat day to the Trash, or why it failed). The first line says when the sync last ran, as the menu-bar window does. filter keeps one service, or problems only, as the screen's chips do; query keeps the rows with all its words. detail adds the files each row names, by what they are, and what went wrong or was left out.",
             schema(json!({"filter": {"type": "string", "enum": ["all", "teams", "outlook", "slack", "failed"], "description": "As the screen's chips: all (the default), teams, outlook, slack, or failed (Problems: failed ingests and passes with a problem or that couldn't run)."}, "detail": detail}), &[])),
@@ -901,7 +904,7 @@ pub fn tools() -> Vec<Value> {
                 "reason": reason
             }), &[])),
         tool("glance", "The vault at a glance", Read,
-            "Glance's counts, as Activity and Wiki health show them (needs the app): notes and wiki pages by type and by tag, most first, and the files the most others link to.",
+            "The vault at a glance (needs the app): notes and wiki pages by type and by tag, most first, and the files the most others link to. Wiki health's side shows the wiki pages' charts and Most linked; the notes' types are the Notes screen's Type filter.",
             schema(json!({}), &[])),
         tool("app_status", "Brainstead's state", Read,
             "The vault, whether it's read-only (then nothing can be changed until the user switches it off in Settings › Vault), the index as Settings › Vault shows it (its counts, or why it failed), what the vault takes on disk by part (notes, wiki, sources, templates, images, other files; excluded folders apart) and what Brainstead's own data takes outside it, Changes' history among it, Full Disk Access, Brainstead's version, its app data folder and its website, whether the update it was last closed for didn't install (Windows, where the installer then reopens this version), whether Brainstead runs the daily and weekly summaries, whether the previous app's skills are still in the vault (moving_over retires them), and what ⌘Z would undo (needs the app). Then features: which of Quick Look, spelling, grammar, Read aloud, Export PDF, rich copy, Full Disk Access, Open at login and the text in images this system has; the window has no button or setting for the rest, so don't offer them.",
@@ -989,10 +992,11 @@ fn outputs() -> std::collections::HashMap<&'static str, Value> {
     let mut changes = json!({"type": "object", "properties": {
         "held": page_schema(change.clone()),
         "made": page_schema(change),
+        "log": page_schema(json!({"date": s("string"), "time": sn(), "action": s("string"), "title": s("string"), "description": s("string")})),
         "change": {"type": "object", "description": "show: the change, with its diff and quotes."},
         "history": {"type": "object", "properties": {"days": s("integer"), "mb": s("integer")}}
     }});
-    changes["description"] = json!("list gives held and made: one page of the list (held first, then made), split in two, each with its own total and matching and the same offset and next_offset; show gives change; history gives history.");
+    changes["description"] = json!("list gives held, made and log: one page of the list (held first, then made and log.md's other lines, newest first), split in three, each with its own total and matching and the same offset and next_offset; show gives change; history gives history.");
     let mut chats = page_schema(
         json!({"file": s("string"), "title": s("string"), "updated": s("string"), "saved": s("boolean"), "pinned": s("boolean")}),
     );
@@ -1035,7 +1039,7 @@ fn outputs() -> std::collections::HashMap<&'static str, Value> {
         (
             "activity",
             page_schema(
-                json!({"date": s("string"), "time": sn(), "action": s("string"), "title": s("string"), "description": s("string"), "path": s("string")}),
+                json!({"date": s("string"), "notes": s("integer"), "wiki": s("integer"), "sources": s("integer"), "path": s("string")}),
             ),
         ),
         (
@@ -2778,7 +2782,13 @@ fn lint_tool(ctx: &Ctx, a: LintArgs) -> Result<String, String> {
         if items.is_empty() {
             continue;
         }
-        let counted = if lint::ADVISORY.contains(&c.id) { ", not counted: only worth a look" } else { "" };
+        let counted = if lint::ADVISORY.contains(&c.id) {
+            ", not counted: only worth a look"
+        } else if lint::IN_INBOX.contains(&c.id) {
+            ", not counted here: they wait in Inbox › Captures (list_inbox) to be ingested or kept"
+        } else {
+            ""
+        };
         out.push_str(&format!("\n{} ({}{counted}; check {}):\n", c.title, items.len(), c.id));
         for i in items.iter().take(40) {
             // Page shape's items are reshape_pages', not fix_health's, as the app's report has them.

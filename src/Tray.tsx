@@ -13,7 +13,7 @@ import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, CurrentStateRun, DailyCheckStatus, FindState, IngestRun, ReviewsStatus, TaskRow, WeekPrepJob } from "./api";
 import { CaptureBox } from "./Capture";
-import { unclarified } from "./Inbox";
+import { heldCount, toClarify } from "./needsYou";
 import { Icon, Mark } from "./icons";
 import { localToday } from "./md/taskQuery";
 import { pageName } from "./knowledge";
@@ -185,8 +185,9 @@ async function load(): Promise<TrayData> {
     overdue: t ? t.overdue.length : null,
     due: t ? t.due.length : null,
     waiting: tasks ? (waitingView ? viewRows(tasks, waitingView, today).filter((r) => !deferredPast(r, today)).length : 0) : null,
-    inbox: inbox && inbox.filter(unclarified).length,
-    held: changes && changes.filter((c) => c.status === "held").length,
+    // As Today's To process and the sidebar count them (src/needsYou.ts).
+    inbox: inbox && toClarify(inbox),
+    held: changes && heldCount(changes),
     running: runningOf({ ingests, dailyCheck, reviews, contradictions: !!contra?.last?.running, weekprep, find, currentState }),
     nextReview: next ? `${next[1]} ${when(next[0])}` : null,
     sync: syncLog && syncLine(syncLog, ingests),
@@ -394,7 +395,11 @@ export function TrayWindow() {
       {(!!d.held || !!d.inbox) && (
         <div className="tray-sec tray-list">
           {!!d.held && (
-            <Item icon="review" label={`${d.held} ${d.held === 1 ? "change" : "changes"} held for you`} onClick={() => show("review")} />
+            <Item
+              icon="review"
+              label={`${d.held} ${d.held === 1 ? "change" : "changes"} held for you`}
+              onClick={() => show("review/held")}
+            />
           )}
           {!!d.inbox && (
             <Item icon="inbox" label={`${d.inbox} ${d.inbox === 1 ? "item" : "items"} in the Inbox`} onClick={() => show("inbox")} />

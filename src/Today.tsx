@@ -6,11 +6,12 @@
 // and the notes you were in. Upcoming meetings show when the sync (Teams and Outlook) is on (macOS), read
 // from the user's own Teams calendar — not Microsoft Graph (D-20261025-01).
 
-import { changes, decisions, health, held, pageName, startKnowledge } from "./knowledge";
+import { changes, health, startKnowledge } from "./knowledge";
+import { heldCount, toClarify, toDecide, toTriage } from "./needsYou";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, Draft, FileSummary, LatestSummary, ReviewsStatus, TaskRow } from "./api";
 import { fmtAccel } from "./Shortcuts";
-import { contextName, contextsInUse, unclarified, useInbox } from "./gtd";
+import { contextName, contextsInUse, useInbox } from "./gtd";
 import { CaptureBox } from "./Capture";
 import { settings, useStore } from "./store";
 import { isoWeek, keepsPaused, startWeekly } from "./Weekly";
@@ -23,8 +24,7 @@ import { DraftNudge, LoadFailed, TaskList, TasksFailed, useTaskListKeys } from "
 import { deferredPast, tasksFailed, todayRows, useAllTasks, viewRows, VIEWS } from "./taskModel";
 import { useVaultOpening, useVaultVersion, vaultStatus } from "./state";
 import { TopBar } from "./TopBar";
-import { ago, fmtCount, LayerTag, TableBand } from "./ui";
-import { iconizeEmoji } from "./md/fieldEmoji";
+import { ago, fmtCount, TableBand } from "./ui";
 import { captureDefault, hasSync, keyLabel } from "./platform";
 import { usePanes } from "./PaneResizer";
 import { PANES } from "./panes";
@@ -240,7 +240,6 @@ export function TodayScreen() {
           <SummaryCard kind="brief" />
           <SummaryCard kind="weekly" />
           <SummaryCard kind="daily" />
-          <HeldCard />
           <ContinueCard />
         </aside>
       </div>
@@ -585,8 +584,10 @@ function OpeningBanner() {
   );
 }
 
-/** What there is to process: the Inbox, bookmarks, Wiki health, and the weekly review on its day
- *  (or while one is paused). What couldn't be checked says so, with Retry. */
+/** What there is to process, the one list of what needs you (D-20261119-04): the Inbox, changes
+ *  held for you, bookmarks, Wiki health, and the weekly review on its day (or while one is paused).
+ *  Each row's count is the one the screen it opens shows (src/needsYou.ts), and its one button
+ *  names what you do there. What couldn't be checked says so, with Retry. */
 function ProcessCard() {
   const inbox = useInbox();
   const s = useStore(settings);
@@ -610,8 +611,9 @@ function ProcessCard() {
       })
       .catch(fail("the weekly review"));
   }, [tries, v]);
-  const n = (inbox ?? []).filter(unclarified).length;
+  const n = toClarify(inbox ?? []);
   useEffect(startKnowledge, []);
+  const waiting = heldCount(useStore(changes) ?? []);
   // Bookmarks gone stale (two weeks untouched) or missing: worth a triage.
   const [bookmarks, setBookmarks] = useState(0);
   useEffect(() => {
@@ -619,12 +621,12 @@ function ProcessCard() {
       .bookmarksStatus()
       .then((b) => {
         ok("the bookmarks");
-        setBookmarks(b.filter((x) => x.stale || x.missing).length);
+        setBookmarks(toTriage(b));
       })
       .catch(fail("the bookmarks"));
     // Read again as the vault changes: on first run it's still being indexed when Today opens.
   }, [tries, v]);
-  const need = decisions(useStore(health)?.report);
+  const need = toDecide(useStore(health)?.report);
   const reviewDay = isReviewDay(s.weeklyReview?.day, s.weeklyReview?.time);
   return (
     <SideCard title="To process">
@@ -648,6 +650,23 @@ function ProcessCard() {
           </>
         )}
       </div>
+      {waiting > 0 && (
+        <div className="rrow">
+          <Icon name="review" size={14} />
+          <span className="grow ell">Changes held for you</span>
+          <span className="n hot" title={`${fmtCount(waiting)} change${waiting === 1 ? "" : "s"} held for you to accept or reject`}>
+            {fmtCount(waiting)}
+          </span>
+          <button
+            type="button"
+            className="btn sm ghost ract"
+            title="Open Changes › Held to accept or reject each change"
+            onClick={() => nav.go({ screen: "review", view: { "review:view": "held" } })}
+          >
+            Decide
+          </button>
+        </div>
+      )}
       {bookmarks > 0 && (
         <div className="rrow">
           <Icon name="pin" size={14} />
@@ -696,50 +715,6 @@ function ProcessCard() {
           </button>
         </div>
       )}
-    </SideCard>
-  );
-}
-
-/** Scheduled runs' changes held for you in Changes. */
-function HeldCard() {
-  useEffect(startKnowledge, []);
-  const rows = held(useStore(changes) ?? []);
-  if (!rows.length) return null;
-  return (
-    <SideCard
-      title="Changes held for you"
-      right={
-        <span className="n" title={rows.length === 1 ? "1 change held" : `${fmtCount(rows.length)} changes held`}>
-          {fmtCount(rows.length)}
-        </span>
-      }
-    >
-      {rows.slice(0, 4).map((p) => (
-        <button
-          key={p.id}
-          type="button"
-          className="rrow rlink"
-          title={`${pageName(p.page)}: ${p.title}\n${p.flags[0] ?? ""}\nOpen Changes to accept or reject it`}
-          onClick={() => nav.go("review")}
-        >
-          <span className="lbt">
-            <LayerTag layer={p.page.startsWith("wiki/") ? "wiki" : "note"} />
-            <span className="ell">{pageName(p.page)}</span>
-          </span>
-          <span className="ell grow">{iconizeEmoji(p.title)}</span>
-        </button>
-      ))}
-      <div className="rfoot">
-        <button
-          type="button"
-          className="btn sm ghost ract"
-          title="Open Changes to accept or reject the held changes"
-          onClick={() => nav.go("review")}
-        >
-          Open Changes ({fmtCount(rows.length)} held)
-          <Icon name="forward" size={12} />
-        </button>
-      </div>
     </SideCard>
   );
 }

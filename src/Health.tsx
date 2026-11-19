@@ -9,7 +9,7 @@
 // needs judgement goes to Ask, whose changes are listed in Changes.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, CurrentStateRun, FileSummary, LintCheck, LintItem, LintReport, TrashEntry } from "./api";
+import { api, CurrentStateRun, FileSummary, LintCheck, LintItem, TrashEntry } from "./api";
 import { fmtShortDate } from "./md/dates";
 import { linkMatches } from "./Capture";
 import { askWith } from "./askState";
@@ -19,6 +19,7 @@ import { ingestable } from "./Lists";
 import { useGlance, WikiGlance } from "./Glance";
 import {
   ADVISORY,
+  IN_INBOX,
   claimsByPage,
   decisions,
   OWN_ACTIONS,
@@ -43,7 +44,7 @@ import { nav, openDoc, useViewState } from "./nav";
 import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
 import { MoreMenu, TopBar } from "./TopBar";
-import { Dialog, LayerTag, Squeeze } from "./ui";
+import { Dialog, Squeeze } from "./ui";
 import { Store, useStore } from "./store";
 import { keyLabel } from "./platform";
 import { vaultVersion } from "./state";
@@ -256,7 +257,7 @@ export function HealthScreen() {
             <Group title="More checks" checks={ours} open={open} setOpen={setOpen} on={{ setTrash, setLinking, setReshaping, ghosts }} />
           )}
         </div>
-        <aside className="hside">{r && <SideCards r={r} />}</aside>
+        <aside className="hside">{r && <SideCards />}</aside>
       </div>
       {trash && (
         <Dialog onClose={() => setTrash(null)} width={440} label="Move image to Trash">
@@ -372,6 +373,26 @@ function Group({
         const n = c.items.length;
         const ignored = c.ignored ?? 0;
         const isOpen = open === c.id && n + ignored > 0;
+        // Sources not yet ingested are acted on in Inbox › Captures: here a count that goes there.
+        if (IN_INBOX.has(c.id))
+          return (
+            <div key={c.id}>
+              <button
+                type="button"
+                className={`ck ${n ? "" : "zero"}`}
+                title={n ? "Go to the Inbox, where each waits under Captures to be ingested or kept in Sources" : "Every source is cited"}
+                onClick={() => n && nav.go("inbox")}
+              >
+                <Icon name={n ? "inbox" : "check"} size={14} className={n ? "advisory" : "green"} />
+                <span className="grow" title={CHECK_TIPS[c.id]}>
+                  {c.title}
+                  {n > 0 && <span className="faint small"> · in Inbox › Captures</span>}
+                </span>
+                <span className="c">{n}</span>
+                {n > 0 && <Icon name="forward" size={12} />}
+              </button>
+            </div>
+          );
         return (
           <div key={c.id}>
             <button
@@ -888,36 +909,11 @@ function IngestButton({ path, again = false }: { path: string; again?: boolean }
   );
 }
 
-function SideCards({ r }: { r: LintReport }) {
-  const get = (id: string) => r.checks.find((c) => c.id === id)?.items ?? [];
-  const pendingSources = get("uningested-sources");
-  const changed = get("changed-sources");
+function SideCards() {
   const glance = useGlance();
   return (
     <>
       {glance && <WikiGlance g={glance} />}
-      <div className="card hq">
-        <div className="row">
-          <span className="eyebrow grow">Pending sources</span>
-          <span className="faint small">{pendingSources.length + changed.length}</span>
-        </div>
-        {!pendingSources.length && !changed.length && <p className="faint small">Every source is cited.</p>}
-        {pendingSources.slice(0, 6).map((i) => (
-          <div key={i.text} className="hqi">
-            <LayerTag layer="source" />
-            <span className="grow ell">{pageName(i.page ?? "")}</span>
-            <span className="chip amber sm">New</span>
-            <IngestButton path={i.page ?? ""} />
-          </div>
-        ))}
-        {changed.slice(0, 4).map((i) => (
-          <div key={i.text} className="hqi">
-            <LayerTag layer="source" />
-            <span className="grow ell">{pageName(i.page ?? "")}</span>
-            <span className="chip amber sm">Changed</span>
-          </div>
-        ))}
-      </div>
       <p className="faint small">
         Safe fixes (cross-links, dates, log lines, system-note headers) apply straight away and can be undone with {keyLabel("⌘Z")}.
         Anything that changes meaning is an agent change, listed in Changes with Revert.

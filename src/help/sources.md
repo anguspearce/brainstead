@@ -15,8 +15,8 @@ Sources are the files in your vault's `sources/` folder: captured emails and cha
 
 Nothing can be added while Read-only is on in [Settings › Vault](app:settings/vault).
 
-## See what needs ingesting
-Each source has a status:
+## See each source's status
+Sources is the library: every source, whatever its status. The new ones waiting to be dealt with are in the [Inbox](app:inbox) under **Captures**, where you ingest each or keep it in Sources; Today's **To process** counts them there. Each source has a status:
 
 - **New**: no wiki page cites it.
 - **Changed**: it changed after the pages citing it were written.

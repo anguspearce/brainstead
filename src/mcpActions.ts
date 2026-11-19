@@ -81,6 +81,7 @@ import { acceptSkip, unskipChat } from "./skips";
 import { mailOn } from "./syncStatus";
 import {
   ADVISORY,
+  IN_INBOX,
   byRun,
   changeText,
   IGNORE_ALL,
@@ -172,7 +173,8 @@ import { meetingProgress, offerFollowUp, runMatches } from "./Ingest";
 import { findingsMarkdown, findingsNote, governingDocs, REGISTER, REGISTER_STUB, STATUS as REGISTER_STATUS } from "./skills/DocCheck";
 import { LABEL as TRIAGE } from "./skills/Triage";
 import { ANSWERED, replyTask } from "./skills/Reply";
-import { actionLabel, actionsIn, filterLog, rankLog } from "./activityModel";
+import { actionLabel } from "./activityModel";
+import { allTimeline, AllFilter, changeShown, entryShown, logOnly, typesIn } from "./changesLog";
 import { FEED_FILTERS, FeedFilter, FeedRow, groupLine, syncFeed, syncLine } from "./syncActivity";
 import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from "./taskGroups";
 import { captureDefault, isMac, keyLabel, terminalApp, vaultFile } from "./platform";
@@ -1374,18 +1376,41 @@ async function changesTool(a: Args): Promise<string | Listing> {
   const action = str(a, "action") ?? "list";
   const id = str(a, "id");
   if (action === "list") {
-    const rows = await api.changesList(str(a, "page"));
+    // Changes' tabs (D-20261119-04): Held, the held changes alone, or All (the default): every
+    // change, held first, then those made with the lines of log.md that aren't a change, newest first.
+    const view = str(a, "view") ?? "all";
+    if (view !== "held" && view !== "all") throw new Error("view is held or all, as Changes' tabs are.");
+    const page = str(a, "page");
+    const date = str(a, "date");
+    const every = await api.changesList(page);
+    // log.md's lines that aren't a change, for All without a page (a line isn't one page's).
+    const lines = view === "all" && !page ? logOnly((await api.vaultLog()) ?? [], every) : [];
+    // All's type chips: a type as the log names it or as its chip says it.
+    const types = typesIn(every, lines);
+    const want = view === "all" ? str(a, "type")?.toLowerCase() : undefined;
+    const type = want ? types.find((x) => x.toLowerCase() === want || actionLabel(x).toLowerCase() === want) : undefined;
+    if (want && !type) throw new Error(`No “${want}” changes or log.md lines. The types: ${types.join(", ") || "none"}.`);
+    const f: AllFilter = { type: type ?? null, day: view === "all" ? (date ?? null) : null, q: "" };
+    const rows = every.filter((c) => changeShown(c, f) && (view === "all" || c.status === "held"));
+    const shownLines = lines.filter((e) => entryShown(e, f));
     const empty = { total: 0, matching: 0, offset: 0, next_offset: null, items: [] };
-    if (!rows.length) return { text: "No changes yet.", structured: { held: empty, made: empty } };
-    const text = changeText;
+    if (!rows.length && !shownLines.length)
+      return {
+        text: view === "held" ? "Nothing is held for the user." : f.type || f.day ? "No changes or log.md lines match." : "No changes yet.",
+        structured: { held: empty, made: empty, log: empty },
+      };
     // Short: what, where, its state and flags; detail adds its kind, who made it and why.
-    const line = (c: (typeof rows)[number]) =>
+    const line = (c: ChangeRow) =>
       a.detail === true
         ? `- ${c.title} · ${c.page} · ${c.kind} · ${c.status}${c.flags.length ? ` · ${c.flags.join(" ")}` : ""} · ${originLabel(c)}${c.reason ? ` · why: ${c.reason}` : ""}  (id ${c.id})`
         : `- ${c.title} · ${c.page} · ${c.status}${c.flags.length ? ` · ${c.flags.join(" ")}` : ""}  (id ${c.id})`;
+    const logLine = (e: LogEntry) =>
+      a.detail === true
+        ? `- log.md ${e.date}${e.time ? ` ${e.time}` : ""} ${e.action} ${e.title}${e.description ? ` — ${e.description}` : ""}`
+        : `- log.md ${e.date} ${e.action} ${e.title}`;
     const groupOf = new Map<string, string>();
     for (const g of byRun(rows)) for (const c of g.rows) groupOf.set(c.id, g.group);
-    const item = (c: (typeof rows)[number]) => ({
+    const item = (c: ChangeRow) => ({
       id: c.id,
       title: c.title,
       page: c.page,
@@ -1397,26 +1422,77 @@ async function changesTool(a: Args): Promise<string | Listing> {
       reason: c.reason,
       created: c.created,
     });
-    // One list, as the screen shows it: the held ones first, then those made, newest first; limit,
-    // offset and query page through it as a whole, so the next page carries on where this one ended.
-    const isHeld = (c: (typeof rows)[number]) => c.status === "held";
-    const heldRows = rows.filter(isHeld);
-    const madeRows = rows.filter((c) => !isHeld(c));
-    const all = pagedRows(a, [...heldRows, ...madeRows], text, ["change", "changes"]);
-    const matching = (rs: typeof rows) => pagedRows({ query: a.query, limit: 1 }, rs, text, ["", ""]).page.matching;
-    const part = (rs: typeof rows) => {
-      const shown = all.shown.filter((c) => rs.includes(c));
-      return { shown, page: { ...all.page, total: rs.length, matching: matching(rs), items: shown.map(item) } };
+    const entryItem = (e: LogEntry) => ({ date: e.date, time: e.time, action: e.action, title: e.title, description: e.description });
+    // One list, as the screen shows it: the held ones first, then those made and log.md's other
+    // lines, newest first; limit, offset and query page through it as a whole.
+    type Seq = { c: ChangeRow } | { e: LogEntry };
+    const heldRows = rows.filter((c) => c.status === "held");
+    const madeRows = rows.filter((c) => c.status !== "held");
+    const seq: Seq[] = [
+      ...heldRows.map((c) => ({ c })),
+      ...allTimeline(madeRows, shownLines).flatMap((x): Seq[] => (x.kind === "run" ? x.run.rows.map((c) => ({ c })) : [{ e: x.entry }])),
+    ];
+    const seqText = (x: Seq) => ("c" in x ? changeText(x.c) : `${x.e.title}\n${x.e.description}\n${actionLabel(x.e.action)}`);
+    const seqMatch = (x: Seq, q: string) =>
+      "c" in x ? changeShown(x.c, { type: null, day: null, q }) : entryShown(x.e, { type: null, day: null, q });
+    const all = pagedRows(
+      a,
+      seq,
+      seqText,
+      view === "held"
+        ? ["held change", "held changes"]
+        : lines.length
+          ? ["change or log.md line", "changes and log.md lines"]
+          : ["change", "changes"],
+      50,
+      seqMatch,
+    );
+    const part = <T>(pick: (x: Seq) => T | null, items: (t: T) => Record<string, unknown>) => {
+      const of = seq.map(pick).filter((t): t is T => t !== null);
+      const matching = pagedRows(
+        { query: a.query, limit: 1 },
+        seq.filter((x) => pick(x) !== null),
+        seqText,
+        ["", ""],
+        50,
+        seqMatch,
+      ).page.matching;
+      const shown = all.shown.map(pick).filter((t): t is T => t !== null);
+      return { shown, page: { ...all.page, total: of.length, matching, items: shown.map(items) } };
     };
-    const held = part(heldRows);
-    const made = part(madeRows);
-    const runs = (cs: typeof rows) => byRun(cs).flatMap((g) => [`Run “${g.label}” (group ${g.group}):`, ...g.rows.map(line)]);
+    const held = part((x) => ("c" in x && x.c.status === "held" ? x.c : null), item);
+    const made = part((x) => ("c" in x && x.c.status !== "held" ? x.c : null), item);
+    const logged = part((x) => ("e" in x ? x.e : null), entryItem);
+    // The made changes under their runs, and log.md's lines between them, in the list's order.
+    const madeText: string[] = [];
+    let run = "";
+    for (const x of all.shown) {
+      if ("e" in x) {
+        madeText.push(logLine(x.e));
+        run = "";
+      } else if (x.c.status !== "held") {
+        const g = groupOf.get(x.c.id) ?? "";
+        if (g !== run) madeText.push(`Run “${byRun(rows).find((r) => r.group === g)?.label ?? g}” (group ${g}):`);
+        run = g;
+        madeText.push(line(x.c));
+      }
+    }
+    const runs = (cs: ChangeRow[]) => byRun(cs).flatMap((g) => [`Run “${g.label}” (group ${g.group}):`, ...g.rows.map(line)]);
+    const counts =
+      view === "held"
+        ? `${held.page.matching} held for the user`
+        : `${heldRows.length ? `${held.page.matching} held for the user` : "nothing held"}, then ${made.page.matching} made${lines.length ? ` and ${logged.page.matching} other log.md line${logged.page.matching === 1 ? "" : "s"}` : ""}, newest first`;
     const text_ = [
-      `${all.head}: ${heldRows.length ? `${held.page.matching} held for the user` : "nothing held"}, then ${made.page.matching} made, newest first.`,
+      `${all.head}: ${counts}${f.day ? ` on ${f.day}` : ""}${f.type ? `, type ${f.type}` : ""}.`,
       ...(held.shown.length ? ["Held for the user:", ...runs(held.shown)] : []),
-      ...(made.shown.length ? ["Made (changes revert undoes one, revert_run a whole run by its group):", ...runs(made.shown)] : []),
+      ...(madeText.length
+        ? [
+            `Made (changes revert undoes one, revert_run a whole run by its group)${lines.length ? "; log.md's lines that aren't a change are marked log.md" : ""}:`,
+            ...madeText,
+          ]
+        : []),
     ].join("\n");
-    return { text: text_, structured: { held: held.page, made: made.page } };
+    return { text: text_, structured: { held: held.page, made: made.page, log: logged.page } };
   }
   if (action === "history") {
     const cur = settings.get();
@@ -2232,55 +2308,34 @@ async function savedSearches(a: Args): Promise<string> {
   return `Saved the search “${name}”.`;
 }
 
+/** Activity's heatmap: the vault's files by the day they last changed, as the screen draws it; with
+ *  date, that day's files, as a day picked on the screen lists them. Brainstead's own changes and
+ *  the vault's log.md are Changes › All's (list_changes), as on the screens (D-20261119-04). */
 async function activity(a: Args): Promise<Listing> {
   const date = str(a, "date");
-  const { log: all } = await api.activity();
-  const full = (e: LogEntry) =>
-    `- ${e.date}${e.time ? ` ${e.time}` : ""} ${e.action} ${e.title}${e.description ? ` — ${e.description}` : ""}`;
-  const short = (e: LogEntry) => (a.detail === true ? full(e) : `- ${e.date} ${e.action} ${e.title}`);
-  const entryItem = (e: LogEntry) => ({ date: e.date, time: e.time, action: e.action, title: e.title, description: e.description });
-  // The screen's action chips: an action as the log names it or as its chip says it.
-  const actions = actionsIn(all);
-  const want = str(a, "action")?.toLowerCase();
-  const action = want ? actions.find((x) => x.toLowerCase() === want || actionLabel(x).toLowerCase() === want) : undefined;
-  if (want && !action) throw new Error(`No “${want}” entries in log.md. Its actions: ${actions.join(", ") || "none"}.`);
-  // The screen's order while searching: Best match (its default) or Latest; newest first otherwise.
-  const order = str(a, "order") ?? "best_match";
-  if (order !== "best_match" && order !== "latest") throw new Error("order is best_match or latest, as the Activity screen's are.");
-  const query = str(a, "query");
-  // The entries the screen shows: its action chip, the day picked, and its search (filterLog).
-  const filtered = filterLog(all, { action: action ?? null, day: date ?? null, q: "" });
-  const log = query && order === "best_match" ? rankLog(filtered, query) : filtered;
-  const matches = (e: LogEntry, q: string) => filterLog([e], { action: null, day: null, q }).length > 0;
   if (date) {
-    // A day picked, as on the screen: the files changed that day, then that day's entries in log.md
-    // (which the action and query narrow, as they narrow the screen's list; the files stay).
-    type Row = { file: string } | { entry: LogEntry };
-    const files = (await api.activityDay(date)).map((f): Row => ({ file: f.path }));
-    const rows: Row[] = [...files, ...log.map((e): Row => ({ entry: e }))];
-    return listed(a, rows, {
-      text: (r) => ("file" in r ? r.file : r.entry.title),
-      match: (r, q) => "file" in r || matches(r.entry, q),
-      noun: [`file changed or entry in log.md on ${date}`, `files changed and entries in log.md on ${date}`],
+    const files = await api.activityDay(date);
+    return listed(a, files, {
+      text: (f) => `${f.path} ${f.title}`,
+      noun: [`file changed on ${date}`, `files changed on ${date}`],
       def: 80,
-      line: (r) => ("file" in r ? `- ${r.file}` : short(r.entry)),
-      item: (r) => ("file" in r ? { date, path: r.file } : entryItem(r.entry)),
-      empty: `Nothing changed on ${date}.`,
+      line: (f) => (a.detail === true ? `- ${f.path} (${new Date(f.mtime).toTimeString().slice(0, 5)})` : `- ${f.path}`),
+      item: (f) => ({ date, path: f.path }),
+      empty: `No file in the vault last changed on ${date}.`,
+      before: [`What assistants and Brainstead's runs changed that day, and the vault's log.md: list_changes with date ${date}.`],
     });
   }
-  return listed(a, log, {
-    text: (e) => e.title,
-    // query's words in the entry's title, description or action's label, as the screen's search looks.
-    match: matches,
-    noun:
-      query && order === "best_match"
-        ? ["entry in log.md, best match first", "entries in log.md, best match first"]
-        : ["entry in log.md, newest first", "entries in log.md, newest first"],
+  const { days } = await api.activity();
+  const newest = [...days].sort((x, y) => y.date.localeCompare(x.date));
+  const n = (k: number, one: string) => `${k} ${one}${k === 1 ? "" : "s"}`;
+  return listed(a, newest, {
+    text: (d) => d.date,
+    noun: ["day files changed on, newest first", "days files changed on, newest first"],
     def: 30,
-    // Short: the day, what and which; detail adds the time and the description.
-    line: short,
-    item: entryItem,
-    empty: "log.md is empty.",
+    line: (d) =>
+      `- ${d.date}: ${n(d.notes + d.wiki + d.sources, "file")}${a.detail === true ? ` (${n(d.notes, "note")}, ${n(d.wiki, "wiki page")}, ${n(d.sources, "source")})` : ""}`,
+    item: (d) => ({ date: d.date, notes: d.notes, wiki: d.wiki, sources: d.sources }),
+    empty: "No file in the vault has changed yet.",
   });
 }
 
@@ -3126,7 +3181,11 @@ async function healthLint(a: Args): Promise<string> {
       : c.items;
     if (c.ignored && !page) quiet.push(`${c.title} ${c.ignored}`);
     if (!items.length) continue;
-    const counted = ADVISORY.has(c.id) ? ", not counted: only worth a look" : "";
+    const counted = ADVISORY.has(c.id)
+      ? ", not counted: only worth a look"
+      : IN_INBOX.has(c.id)
+        ? ", not counted here: they wait in Inbox › Captures (list_inbox) to be ingested or kept"
+        : "";
     out.push("", `${c.title} (${items.length}${counted}; check ${c.id}):`);
     for (const i of items.slice(0, 40))
       out.push(`- ${i.text}${i.safe && c.id !== "page-shape" ? " [safe fix]" : ""}${ghostNote(ghosts.get(`${c.id}:${i.text}`))}`);

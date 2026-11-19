@@ -81,13 +81,13 @@ async function start() {
   // A note renamed or trashed by an assistant, a run or Changes: the screens follow it.
   startMoves();
   // The menu-bar window asks for a screen when it opens the main window; "settings/vault" is a Settings
-  // pane, "activity/sync" Activity's Sync & ingest.
+  // pane, "activity/sync" Activity's Sync & ingest, "review/held" Changes' Held tab.
   void listen<string>("navigate", (e) => {
     const [screen, pane] = e.payload.split("/");
     const here = place.get().place;
-    if (screen === "activity" && pane && here.screen === "activity")
-      nav.replace({ ...here, view: { ...here.view, "activity.view": pane } });
-    else if (screen === "activity" && pane) nav.go({ screen: "activity", view: { "activity.view": pane } });
+    const tab = screen === "activity" ? "activity.view" : screen === "review" ? "review:view" : null;
+    if (tab && pane && here.screen === screen) nav.replace({ ...here, view: { ...here.view, [tab]: pane } });
+    else if (tab && pane) nav.go({ screen: screen as Screen, view: { [tab]: pane } });
     else nav.go(pane ? { screen: screen as Screen, pane: pane as SettingsPane } : (screen as Screen));
   });
   // A capture from the Outlook or Teams extension (src-tauri/src/nativehost.rs).

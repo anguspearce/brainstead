@@ -907,7 +907,7 @@ fn rebuilding_the_index_and_pinning_a_chat_go_to_the_app() {
         ("list_tasks", "group"),
         ("list_inbox", "suggest"),
         ("fix_name", "files"),
-        ("activity", "action"),
+        ("list_changes", "view"),
         ("open", "transcript"),
         ("open", "thread"),
         ("open", "document"),
@@ -996,7 +996,8 @@ fn the_re_audits_tools_and_arguments_go_to_the_app() {
         ("list_transcripts", "show"),
         ("pending_sources", "status"),
         ("search", "order"),
-        ("activity", "order"),
+        ("list_changes", "type"),
+        ("list_changes", "date"),
         ("create_note", "test_run"),
         ("move_task", "project"),
         ("provenance", "source"),
@@ -1005,7 +1006,13 @@ fn the_re_audits_tools_and_arguments_go_to_the_app() {
         assert!(props(tool_name).get(arg).is_some(), "{tool_name} takes {arg}");
     }
     // No old names left beside the screen's.
-    for (tool_name, arg) in [("save_chat", "title"), ("automated_tools", "folder"), ("automated_tools", "opening")] {
+    for (tool_name, arg) in [
+        ("save_chat", "title"),
+        ("automated_tools", "folder"),
+        ("automated_tools", "opening"),
+        ("activity", "action"),
+        ("activity", "order"),
+    ] {
         assert!(props(tool_name).get(arg).is_none(), "{tool_name} has no {arg}");
     }
     assert_eq!(props("draft_reply")["tone"]["enum"], json!(["brief", "warm", "formal"]));

@@ -9,7 +9,7 @@ import { nav, openDoc, place as placeStore, Screen } from "./nav";
 import { useVaultOpening, useVaultVersion, vaultStatus } from "./state";
 import { settings, useStore } from "./store";
 import { projectFlag, useInbox, useProjects } from "./gtd";
-import { unclarified } from "./Inbox";
+import { heldCount, toClarify, toDecide } from "./needsYou";
 import { ask } from "./askState";
 import { docChecks, docChecksUnseen, startDocChecks } from "./docChecks";
 import { isActive, runs, startRuns } from "./Ingest";
@@ -17,7 +17,7 @@ import { localToday } from "./md/taskQuery";
 import { reportEditError, tasksFailed, todayRows, undoLast, useAllTasks, viewRows, VIEWS } from "./taskModel";
 import { ago, fmtCount, Popover } from "./ui";
 import { toast } from "./Toast";
-import { changes, decisions, health, held, startKnowledge } from "./knowledge";
+import { changes, health, startKnowledge } from "./knowledge";
 import type { IndexStats, Layer, VaultStatus } from "./api";
 import { dragRegion, keyLabel } from "./platform";
 
@@ -322,7 +322,8 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
     extra.today = { n: t.overdue.length + t.due.length, hot: t.overdue.length > 0 };
     extra.tasks = { n: viewRows(tasks, VIEWS[0], today, inbox).length };
   }
-  if (inbox) extra.inbox = { n: inbox.filter(unclarified).length, hot: inbox.some(unclarified) };
+  // The counts Today's To process and the menu-bar window show too (src/needsYou.ts).
+  if (inbox) extra.inbox = { n: toClarify(inbox), hot: toClarify(inbox) > 0 };
   const projects = useProjects();
   if (projects)
     extra.projects = { n: projects.filter((p) => p.status === "active").length, hot: projects.some((p) => projectFlag(p) === "none") };
@@ -330,7 +331,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   // Only held changes are counted: the rest of the feed badges nothing.
   const all = useStore(changes);
   const h = useStore(health);
-  const waiting = held(all ?? []).length;
+  const waiting = heldCount(all ?? []);
   if (waiting) extra.review = { n: waiting, hot: true };
   // Ask: open chats with an answer you haven't seen.
   const chats = useStore(ask).chats;
@@ -359,7 +360,7 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
     };
   const writing = (useStore(runs) ?? []).filter((r) => r.kind === "meeting" && isActive(r)).length;
   if (writing) extra.meeting = { n: 0, busy: `${writing === 1 ? "A meeting note is" : `${writing} meeting notes are`} being made` };
-  const need = decisions(h?.report);
+  const need = toDecide(h?.report);
   if (need) extra.health = { n: need };
   const readOnly = !!useStore(settings).readOnly;
   const item = (i: Item) => <NavItem key={i.screen} item={i} on={lit === i.screen} stats={st.stats} extra={extra[i.screen]} />;
