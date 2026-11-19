@@ -56,6 +56,8 @@ The Inbox's **Bookmarks** band lists the bookmarks to triage and opens Triage on
 
 Counts that need you, such as overdue tasks, the Inbox and changes held for you, are in bold.
 
+On a narrow window (1100 px or less, Interface size counted in) the sidebar is a rail of icons: each keeps its badge, its tooltip gives its name, key and count, thin lines part the groups, Bookmarks is one pin listing them beside it, and Vault opens in place. ⌘\ (Ctrl+\ on Windows), the button at the sidebar's top and View › Toggle Sidebar switch it for the width the window is at, each width remembering its own choice, so a wide window can keep the rail too. There, Tasks' task pane slides over the list from the right (Esc or its × puts it away), and when Today's right rail drops under the bands, To process moves above them as a strip.
+
 On Windows, scrollbars stay out of sight until the pointer is over a list or page, or it scrolls; then a thin line shows where you are, and it widens under the pointer to drag. It goes again a second after scrolling stops. Where Windows shows scroll bars all the time (Settings › Accessibility › Visual effects › **Always show scrollbars**), Brainstead shows them all the time too. A Mac keeps its native scrollbars.
 
 Every pane can be dragged wider or narrower by the line between it and the next: the sidebar, each screen's left list and right-hand pane, and the columns of every table (Notes, Wiki, Sources, Templates, Trash, Doc check's register) by their headings' edges (a column after the table's flexible one by its left edge), one flexible column in each taking the rest. A double-click on the line puts the pane back, **Reset pane widths** in Settings › General puts every one back, **Lock pane widths** and **Lock column widths** there stop either type being resized, and the widths are kept per computer ([day-to-day](day-to-day.md#settings)).
@@ -71,6 +73,7 @@ Every pane can be dragged wider or narrower by the line between it and the next:
 | ⌥⌘1 ⌥⌘2 ⌥⌘3 (Ctrl+Shift+1 … 3 on Windows) | View, Edit or Source for the open note |
 | ⌘1 … ⌘9, ⌘0 (Ctrl+1 … 0 on Windows) | Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki, Sources |
 | ⌘[ ⌘] | Back, forward |
+| ⌘\ (Ctrl+\ on Windows) | The sidebar as icons, or in full, for the window's width |
 | ⌘Z | Undo the last change |
 | ⇧⌘= ⇧⌘- ⇧⌘0 (Ctrl+Shift+= … on Windows) | Interface size: everything bigger, smaller, or back to 100% |
 | ← → ⇧← ⇧→ ↩ | On a pane's divider (Tab reaches it): move it 8 px, 40 px, or put the pane back |

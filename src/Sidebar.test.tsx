@@ -121,6 +121,35 @@ describe("Sidebar", () => {
   });
 });
 
+describe("the icon rail", () => {
+  it("names each row in its label and tooltip, with its key and count, and draws the sections as rules", () => {
+    vaultStatus.set({ ...EMPTY_STATUS, state: "ready", stats: { ...EMPTY_STATUS.stats, files: 12, notes: 1561, updatedAt: Date.now() } });
+    settings.update({ folded: { library: true } });
+    const { container } = render(<Sidebar onSearch={() => {}} rail />);
+    const today = screen.getByRole("button", { name: "Today" });
+    expect(today.getAttribute("title")).toMatch(/^Go to Today \(⌘1\)/);
+    // No names on the rail, and the index's totals only in the tooltip.
+    const notes = screen.getByRole("button", { name: "Notes" });
+    expect(notes.textContent).toBe("");
+    expect(notes.getAttribute("title")).toBe("Go to Notes (⌘8) · 1,561");
+    // A folded section's rows still show: the rail has no heading to unfold them with.
+    expect(screen.getAllByRole("separator").map((x) => x.getAttribute("aria-label"))).toEqual(["Library", "Assistant", "Bookmarks"]);
+    expect(container.querySelector(".sect")).toBeNull();
+    expect(screen.getByRole("button", { name: "Bookmarks" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Vault" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show the sidebar in full" })).toBeTruthy();
+    settings.update({ folded: undefined });
+  });
+
+  it("switches for the width the window is at, from its button", () => {
+    settings.update({ sidebarRail: undefined });
+    render(<Sidebar onSearch={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse the sidebar to icons" }));
+    expect(settings.get().sidebarRail).toEqual({ wide: true });
+    settings.update({ sidebarRail: undefined });
+  });
+});
+
 describe("status line", () => {
   it("says what the index is doing", () => {
     expect(statusLine({ ...EMPTY_STATUS, state: "indexing" }, 0).tone).toBe("busy");

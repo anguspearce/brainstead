@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { useEffect, useState } from "react";
+import { Popover } from "./ui";
+import { toggleRail } from "./sidebarRail";
 import { api, Bookmark } from "./api";
 import { Icon, Mark } from "./icons";
 import { nav, openDoc, place as placeStore, Screen } from "./nav";
@@ -102,19 +104,24 @@ export const hotkey = (s: Screen): string | null => {
 /** A count beside an item; `err` when it couldn't be counted, shown as a warning rather than 0. */
 type Extra = { n: number; hot?: boolean; err?: string; bad?: boolean; busy?: string };
 
-function NavItem({ item, on, stats, extra }: { item: Item; on: boolean; stats: IndexStats; extra?: Extra }) {
+function NavItem({ item, on, stats, extra, rail }: { item: Item; on: boolean; stats: IndexStats; extra?: Extra; rail?: boolean }) {
   const n = extra?.n ?? item.count?.(stats) ?? 0;
-  const go = `Go to ${item.label}${hotkey(item.screen) ? ` (${keyLabel(hotkey(item.screen)!)})` : ""}`;
+  // On the rail the name is only in the tooltip, so its count is there too.
+  const go = `Go to ${item.label}${hotkey(item.screen) ? ` (${keyLabel(hotkey(item.screen)!)})` : ""}${rail && n > 0 ? ` · ${fmtCount(n)}` : ""}`;
+  // The rail badges what's going on (the counts worked out for it), not the index's totals of
+  // notes, wiki pages and sources, which stay in the tooltip.
+  const badge = rail && extra?.n === undefined ? 0 : n;
   return (
     <button
       type="button"
       className={`navi ${on ? "on" : ""}`}
       aria-current={on ? "page" : undefined}
       title={extra?.err ? `${go}. ${extra.err}` : extra?.busy ? `${go}. ${extra.busy}` : item.tip ? `${go}: ${item.tip}` : go}
+      aria-label={rail ? item.label : undefined}
       onClick={() => nav.go(item.screen)}
     >
       <Icon name={item.icon} />
-      <span className="lbl">{item.label}</span>
+      {!rail && <span className="lbl">{item.label}</span>}
       {extra?.err ? (
         <span className="n err" aria-label={extra.err}>
           <Icon name="alert" size={12} />
@@ -124,17 +131,37 @@ function NavItem({ item, on, stats, extra }: { item: Item; on: boolean; stats: I
           <span className="spin" />
         </span>
       ) : (
-        n > 0 && <span className={`n ${extra?.hot ? "hot" : ""} ${extra?.bad ? "bad" : ""}`}>{fmtCount(n)}</span>
+        badge > 0 && <span className={`n ${extra?.hot ? "hot" : ""} ${extra?.bad ? "bad" : ""}`}>{fmtCount(badge)}</span>
       )}
     </button>
   );
 }
 
-/** A section heading that folds its items away; remembered in settings. */
-function Section({ id, title, what, children }: { id: string; title: string; what?: string; children: React.ReactNode }) {
+/** A section heading that folds its items away; remembered in settings. On the rail it's a thin
+ *  rule between the groups and its items always show: there's no heading to unfold them with. */
+function Section({
+  id,
+  title,
+  what,
+  rail,
+  children,
+}: {
+  id: string;
+  title: string;
+  what?: string;
+  rail?: boolean;
+  children: React.ReactNode;
+}) {
   const s = useStore(settings);
   const folded = !!s.folded?.[id];
   what ??= `the ${title.toLowerCase()}`;
+  if (rail)
+    return (
+      <>
+        <div className="railsep" role="separator" aria-label={title} />
+        {children}
+      </>
+    );
   return (
     <>
       <button
@@ -168,7 +195,17 @@ export function summed(xs: (Extra | undefined)[]): Extra | undefined {
 
 /** The foot's Vault fold: a row like the others that opens to Wiki health, Activity, Trash, Templates
  *  and Graph. Closed (as it starts), it carries their badges and is lit while one of them is open. */
-function VaultFold({ lit, extra, children }: { lit: Screen; extra: Partial<Record<Screen, Extra>>; children: React.ReactNode }) {
+function VaultFold({
+  lit,
+  extra,
+  rail,
+  children,
+}: {
+  lit: Screen;
+  extra: Partial<Record<Screen, Extra>>;
+  rail?: boolean;
+  children: React.ReactNode;
+}) {
   const s = useStore(settings);
   const open = s.folded?.vault === false;
   const on = !open && VAULT.some((v) => v.screen === lit);
@@ -180,11 +217,16 @@ function VaultFold({ lit, extra, children }: { lit: Screen; extra: Partial<Recor
         type="button"
         className={`navi vaultfold ${on ? "on" : ""}`}
         aria-expanded={open}
-        title={open ? `Fold ${what} away` : `Show ${what}${x?.err ? `. ${x.err}` : x?.busy ? `. ${x.busy}` : ""}`}
+        aria-label={rail ? "Vault" : undefined}
+        title={
+          open
+            ? `Fold ${what} away`
+            : `${rail ? "Vault: show " : "Show "}${what}${rail && x?.n ? ` · ${fmtCount(x.n)}` : ""}${x?.err ? `. ${x.err}` : x?.busy ? `. ${x.busy}` : ""}`
+        }
         onClick={() => settings.update({ folded: { ...s.folded, vault: open } })}
       >
         <Icon name="folder" />
-        <span className="lbl">Vault</span>
+        {!rail && <span className="lbl">Vault</span>}
         {x?.err ? (
           <span className="n err" aria-label={x.err}>
             <Icon name="alert" size={12} />
@@ -199,6 +241,34 @@ function VaultFold({ lit, extra, children }: { lit: Screen; extra: Partial<Recor
         <Icon name="chevdown" size={12} className="navchev" style={{ transform: open ? undefined : "rotate(-90deg)" }} />
       </button>
       {open && <div className="foldkids">{children}</div>}
+    </>
+  );
+}
+
+/** The rail's Bookmarks: one pin that opens the list beside it, as the full sidebar shows it. */
+function RailBookmarks({ current }: { current?: string }) {
+  const [at, setAt] = useState<DOMRect | null>(null);
+  return (
+    <>
+      <button
+        type="button"
+        className={`navi ${at ? "open" : ""}`}
+        aria-label="Bookmarks"
+        aria-expanded={!!at}
+        title="Bookmarks: the notes in Me. Bookmarks.md"
+        onClick={(e) => setAt(at ? null : e.currentTarget.getBoundingClientRect())}
+      >
+        <Icon name="pin" />
+      </button>
+      {at && (
+        <Popover anchor={at} onClose={() => setAt(null)} width={260} place="right">
+          {/* A bookmark opened closes the list; its × leaves it open for the next. */}
+          <div className="railbm" onClick={(e) => (e.target as Element).closest?.(".navi.bm") && setAt(null)}>
+            <div className="eyebrow">Bookmarks</div>
+            <Bookmarks current={current} />
+          </div>
+        </Popover>
+      )}
     </>
   );
 }
@@ -255,15 +325,16 @@ function Bookmarks({ current }: { current?: string }) {
 
 /** Shown while the vault is read-only; opens Settings › Vault, where it's turned off (the tray
  *  window passes its own way there). It doesn't turn read-only off itself. */
-export function ReadOnlyPill({ onOpen }: { onOpen?: () => void }) {
+export function ReadOnlyPill({ onOpen, rail }: { onOpen?: () => void; rail?: boolean }) {
   return (
     <button
       type="button"
-      className="ropill"
+      className={`ropill${rail ? " rail" : ""}`}
+      aria-label={rail ? "Read-only" : undefined}
       title="The vault is read-only: Brainstead won't change any file. Click to open Settings › Vault, where it's turned off."
       onClick={onOpen ?? (() => nav.go({ screen: "settings", pane: "vault" }))}
     >
-      Read-only
+      {rail ? <Icon name="lock" size={12} /> : "Read-only"}
     </button>
   );
 }
@@ -292,7 +363,22 @@ export function statusLine(st: VaultStatus, now: number): { tone: "ok" | "busy" 
   }
 }
 
-export function Sidebar({ onSearch }: { onSearch: () => void }) {
+/** The sidebar's own toggle: an icon rail or in full, for the width the window is at (⌘\). */
+function RailToggle({ rail }: { rail: boolean }) {
+  return (
+    <button
+      type="button"
+      className="ibtn railtoggle"
+      aria-label={rail ? "Show the sidebar in full" : "Collapse the sidebar to icons"}
+      title={keyLabel(rail ? "Show the sidebar in full, with its names (⌘\\)" : "Collapse the sidebar to icons (⌘\\)")}
+      onClick={toggleRail}
+    >
+      <Icon name="sidebar" size={15} />
+    </button>
+  );
+}
+
+export function Sidebar({ onSearch, rail = false }: { onSearch: () => void; rail?: boolean }) {
   const { place } = useStore(placeStore);
   const st = useStore(vaultStatus);
   // Re-render each half minute so "2 min ago" stays true.
@@ -363,47 +449,58 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   const need = toDecide(h?.report);
   if (need) extra.health = { n: need };
   const readOnly = !!useStore(settings).readOnly;
-  const item = (i: Item) => <NavItem key={i.screen} item={i} on={lit === i.screen} stats={st.stats} extra={extra[i.screen]} />;
+  const item = (i: Item) => <NavItem key={i.screen} item={i} on={lit === i.screen} stats={st.stats} extra={extra[i.screen]} rail={rail} />;
+  const current = place.screen === "doc" ? place.path : undefined;
   return (
-    <aside className="side" aria-label="Sidebar">
+    <aside className={`side${rail ? " rail" : ""}`} aria-label="Sidebar">
       <div className="drag tlspace" {...dragRegion()} />
       <div className="brand drag" {...dragRegion()}>
-        <Mark />
-        <b>Brainstead</b>
+        {!rail && (
+          <>
+            <Mark />
+            <b>Brainstead</b>
+          </>
+        )}
+        <RailToggle rail={rail} />
       </div>
       <button
         type="button"
         className="search-pill"
+        aria-label={rail ? "Search or jump to…" : undefined}
         title={keyLabel("Find a note, go to a screen or run a command (⌘K)")}
         onClick={onSearch}
       >
         <Icon name="search" size={14} />
-        Search or jump to…
-        <span className="kbd">{keyLabel("⌘K")}</span>
+        {!rail && (
+          <>
+            Search or jump to…
+            <span className="kbd">{keyLabel("⌘K")}</span>
+          </>
+        )}
       </button>
       <nav className="sidescroll">
         {DAILY.map(item)}
-        <Section id="library" title="Library">
+        <Section id="library" title="Library" rail={rail}>
           {LIBRARY.map(item)}
         </Section>
-        <Section id="assistant" title="Assistant" what="Ask and the assistant's tools">
+        <Section id="assistant" title="Assistant" what="Ask and the assistant's tools" rail={rail}>
           {ASSISTANT.map(item)}
         </Section>
-        <Section id="bookmarks" title="Bookmarks">
-          <Bookmarks current={place.screen === "doc" ? place.path : undefined} />
+        <Section id="bookmarks" title="Bookmarks" rail={rail}>
+          {rail ? <RailBookmarks current={current} /> : <Bookmarks current={current} />}
         </Section>
       </nav>
       <div className="foot">
-        <VaultFold lit={lit} extra={extra}>
+        <VaultFold lit={lit} extra={extra} rail={rail}>
           {VAULT.map(item)}
         </VaultFold>
         {FOOTER.map(item)}
         <div className="statusrow">
-          <div className={`status ${line.tone}`} title={line.tip} role="status">
+          <div className={`status ${line.tone}`} title={rail ? [line.text, line.tip].filter(Boolean).join(" · ") : line.tip} role="status">
             <i />
-            {line.text}
+            {rail ? <span className="vh">{line.text}</span> : line.text}
           </div>
-          {readOnly && <ReadOnlyPill />}
+          {readOnly && <ReadOnlyPill rail={rail} />}
         </div>
       </div>
     </aside>

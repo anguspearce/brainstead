@@ -52,6 +52,7 @@ import { accelLabel, captureDefault, fileManager, hasSync, isMac, isWindows, key
 import { useFeatures } from "./features";
 import { usePanes } from "./PaneResizer";
 import { PANES as PANE_SPECS, RESIZE_LOCKS, ResizeType, resetPaneWidths, resizeLocked, setResizeLock } from "./panes";
+import { narrowWindow, RAIL_BELOW, RailWidth, railOn, setRail } from "./sidebarRail";
 
 const PANES: [SettingsPane, string, string][] = [
   ["general", "General", "settings"],
@@ -470,6 +471,7 @@ function General() {
         />
         <AccentColour />
         <InterfaceSize />
+        <SidebarRail />
         <PaneWidths />
       </section>
     </>
@@ -497,6 +499,34 @@ function AccentColour() {
       <p className="faint">
         System takes the accent colour from Windows Settings › Personalisation › Colours and follows it when it changes, lighter or darker
         where text on it would be hard to read.
+      </p>
+    </div>
+  );
+}
+
+/** The sidebar as an icon rail (src/sidebarRail.ts), chosen per width as ⌘\ chooses it. */
+function SidebarRail() {
+  const s = useStore(settings);
+  const width = useStore(narrowWindow) ? "narrow" : "wide";
+  const rows: [RailWidth, string, string][] = [
+    ["wide", "Icons only on a wide window", `The sidebar shows only its icons on a window wider than ${RAIL_BELOW} px`],
+    ["narrow", `Icons only on a narrow window (${RAIL_BELOW} px or less)`, "The sidebar shows only its icons when the window is narrow"],
+  ];
+  return (
+    <div className="ifacesize">
+      <div className="eyebrow">Sidebar</div>
+      <div className="row">
+        {rows.map(([w, label, tip]) => (
+          <label key={w} className="row" style={{ gap: 6 }} title={tip}>
+            <input type="checkbox" checked={railOn(s, w === "narrow")} onChange={(e) => setRail(w, e.target.checked)} />
+            {label}
+          </label>
+        ))}
+      </div>
+      <p className="faint">
+        {keyLabel("⌘\\")} or the button at the top of the sidebar switches it for the width the window is at (now {width}), and each width
+        keeps its own choice, so a narrow window's icons never change how a wide one shows. Interface size counts: a bigger interface makes
+        the window narrower for this. Kept for this computer, not in the vault.
       </p>
     </div>
   );

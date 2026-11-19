@@ -155,6 +155,9 @@ export interface Settings {
   /** Types of pane locked against resizing (src/panes.ts), by name; a type not here is unlocked, so
    *  a further type needs only a further key. Per machine, as paneWidths is. */
   resizeLocks?: { panes?: boolean; columns?: boolean };
+  /** The sidebar as an icon rail (src/sidebarRail.ts), chosen per width: `wide` true makes a wide
+   *  window's a rail, `narrow` false keeps a narrow window's in full. Neither set is the usual. */
+  sidebarRail?: { wide?: boolean; narrow?: boolean };
 }
 
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";

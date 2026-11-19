@@ -51,7 +51,7 @@ Right-click a row, or click its ⋯ button, for the task's menu:
 The chips, the **+**, the ⋯ menu and the task pane work the same on [Today](app:today), [Projects](app:projects), the [Weekly review](app:weekly) and in task blocks inside a note.
 
 ## Use the task pane
-Click a task to show it in the pane on the right; click it again to let it go. The pane shows every field at once, in one column: its dates with quick picks (**More dates…** adds start and created), priority, context, effort and project, then the ⋯ menu's **Rename…**, **Mark in progress**, **Waiting for someone**, **Cancel task**, its note and **Delete task**. Fields the pane doesn't set (a recurrence, an id) and its other tags are listed under them. Context offers the ones in use plus calls, computer, errands, office and personal, or **Other…** for a new one.
+Click a task to show it in the pane on the right; click it again to let it go. On a narrow window the pane slides over the list from the right instead of taking a column: `Esc` or its × puts it away and the task stays picked, and clicking a task brings it back. The pane shows every field at once, in one column: its dates with quick picks (**More dates…** adds start and created), priority, context, effort and project, then the ⋯ menu's **Rename…**, **Mark in progress**, **Waiting for someone**, **Cancel task**, its note and **Delete task**. Fields the pane doesn't set (a recurrence, an id) and its other tags are listed under them. Context offers the ones in use plus calls, computer, errands, office and personal, or **Other…** for a new one.
 
 To change a task's words in any list, point at it and click the pencil after them, or press `↩` on the selected one (`↩` keeps, `Esc` drops; dates and tags stay).
 

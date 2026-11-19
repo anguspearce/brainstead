@@ -20,6 +20,9 @@ While the vault is read-only, a **Read-only** pill at the end of that line opens
 
 `⌘1` to `⌘9`, then `⌘0`, go to Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki and Sources.
 
+## Shrink the sidebar to icons
+On a narrow window (1100 px or less, counting [Interface size](help:settings-general)) the sidebar starts as a rail of icons, so the screen beside it has room. Each icon keeps its badge (what needs you, a spinner while something's at work), and resting on it shows its name, key and count. Thin lines part the groups, **Bookmarks** is one pin that lists them beside the rail, and **Vault** opens in place. The button at the top of the sidebar, `⌘\`, or **Toggle Sidebar** on the View menu switches between icons and the full sidebar for the width the window is at: a wide window can keep the rail too, and a narrow one the full sidebar. Each width remembers its own choice, which is also under [Settings › General › Appearance](app:settings/general).
+
 Messages at the bottom go after a few seconds, except an error, which stays until you close it with its ×. If a screen fails, it offers **Try again**, **Go to Today** and **Copy error details**.
 
 ## Jump anywhere with ⌘K

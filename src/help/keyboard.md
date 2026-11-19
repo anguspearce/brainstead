@@ -18,6 +18,7 @@ Keys are shown for this computer: Windows uses Ctrl, Alt and Shift where the Mac
 - `⌘[` `⌘]` — Back, forward
 - `⌘1 … ⌘9` `⌘0` — Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki, Sources (Ask keeps `⌘6` though it's listed under Assistant, after Library)
 - `⌘,` — Settings
+- `⌘\` — The sidebar as icons, or in full, for this window's width (View › Toggle Sidebar)
 - `⇧⌘=` `⇧⌘-` `⇧⌘0` — Bigger, smaller, usual interface size (everything in the window; [Settings › General](app:settings/general))
 - `?` — Help for this screen
 - `←` `→` `⇧←` `⇧→` `↩` — On a pane's divider (`Tab` reaches it): move it 8 px, 40 px, or put the pane back ([Settings › General](app:settings/general))

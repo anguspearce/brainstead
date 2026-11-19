@@ -5,7 +5,8 @@
 // The menu bar's Note menu (src-tauri/src/menu.rs). Its items arrive as `menu` events; the open
 // document registers what to do with them, and the note's items are enabled only while it does.
 // Windows has no menu bar, so there the window takes the menu's keys itself (WINDOW_KEYS), the
-// View menu's Interface size keys among them (src/interfaceSize.ts acts on those).
+// View menu's Toggle Sidebar and Interface size keys among them (src/sidebarRail.ts and
+// src/interfaceSize.ts act on those).
 
 import { emit } from "@tauri-apps/api/event";
 import { api } from "./api";
@@ -49,6 +50,7 @@ export const WINDOW_KEYS: [string, string][] = [
   ["note:export-pdf", "CmdOrCtrl+P"],
   ["note:reveal", "Alt+CmdOrCtrl+R"],
   ["note:rename", "Shift+CmdOrCtrl+R"],
+  ["view:sidebar", "CmdOrCtrl+Backslash"],
   ["view:interface-bigger", "Shift+CmdOrCtrl+Equal"],
   ["view:interface-smaller", "Shift+CmdOrCtrl+Minus"],
   ["view:interface-usual", "Shift+CmdOrCtrl+0"],

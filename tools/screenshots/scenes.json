@@ -123,6 +123,28 @@
     "width": 1000
   },
   {
+    "name": "rail-wide",
+    "screen": "tasks",
+    "view": {
+      "tasks:sel": "Project. Orbit App launch.md:9"
+    },
+    "settings": { "sidebarRail": { "wide": true } }
+  },
+  {
+    "name": "rail-vault",
+    "screen": "health",
+    "folded": { "vault": false },
+    "window": [1000, 760],
+    "width": 1000
+  },
+  {
+    "name": "today-narrow-full",
+    "screen": "today",
+    "settings": { "sidebarRail": { "narrow": false } },
+    "window": [1000, 760],
+    "width": 1000
+  },
+  {
     "name": "today-wide",
     "screen": "today",
     "window": [1800, 1125],
@@ -1034,6 +1056,7 @@
     "paneWidths": {
       "sidebar": 400
     },
+    "settings": { "sidebarRail": { "narrow": false } },
     "window": [1040, 760],
     "width": 1040
   }

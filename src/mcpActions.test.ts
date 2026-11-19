@@ -2178,6 +2178,17 @@ describe("MCP actions", () => {
         "Settings › General › Appearance › Pane widths › trash.type is now 120 px.",
       );
       settings.update({ paneWidths: undefined, resizeLocks: undefined });
+      // The sidebar's icon rail, per width as ⌘\ chooses it; the width the window is at says so.
+      expect(await run("settings")).toMatch(
+        /- sidebarRail\.wide · Settings › General › Appearance › Sidebar › Icons only on a wide window: false \(the window is wide now, so the sidebar is in full\)/,
+      );
+      expect(await run("settings")).toMatch(/- sidebarRail\.narrow · [^\n]*Icons only on a narrow window \(1100 px or less\): true\n/);
+      expect(await run("settings", { action: "set", key: "sidebarRail.wide", value: true })).toBe(
+        "Settings › General › Appearance › Sidebar › Icons only on a wide window is now true.",
+      );
+      expect(settings.get().sidebarRail).toEqual({ wide: true });
+      await run("settings", { action: "set", key: "sidebarRail.wide", value: false });
+      expect(settings.get().sidebarRail).toBeUndefined();
       answers.capture_shortcut_status = () => ["Control+Shift+K", null];
       expect(await run("settings", { action: "set", key: "captureShortcut", value: "shift+control+k" })).toMatch(
         /is now "Control\+Shift\+K", registered with the system/,

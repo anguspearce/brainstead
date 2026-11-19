@@ -157,6 +157,7 @@ import { HelpView, openHelp } from "./help/HelpDrawer";
 import { IMAGE_EXT } from "./md/wikilinks";
 import { nav, place, Screen, SettingsPane } from "./nav";
 import { focusMode } from "./focus";
+import { RAIL_BELOW, RailWidth, railOn, railWidth, setRail } from "./sidebarRail";
 import { DEFAULT_SCHEDULE, DEFAULT_WEEKLY_REVIEW } from "./Jobs";
 import { foundDetail, handedOver, INSTALL, languageName, SCREEN_NAME, scriptsFolder, terminalCommands, WEBSITE } from "./Settings";
 import { choice, prepStep, WEEKLY_STATE_CHANGED } from "./weeklyPrep";
@@ -3552,6 +3553,9 @@ const settingRows = (): SettingRow[] => [
     "bool",
     false,
   ]),
+  // The sidebar as an icon rail, per width (src/sidebarRail.ts), as ⌘\ and the sidebar's button choose it.
+  ["sidebarRail.wide", "General", "Appearance › Sidebar › Icons only on a wide window", "bool", false],
+  ["sidebarRail.narrow", "General", `Appearance › Sidebar › Icons only on a narrow window (${RAIL_BELOW} px or less)`, "bool", true],
   ["openAtLogin", "General", "Open at login", "bool", false],
   ["menuBar", "General", "Show in the menu bar", "bool", true],
   ["menuBarOnly", "General", `Only in the menu bar when the window is closed${isMac ? "" : " (Mac only; no effect here)"}`, "bool", false],
@@ -3700,6 +3704,7 @@ async function settingsTool(a: Args): Promise<string> {
     jobEffort: { ...s.jobEffort },
     effort: { ...s.effort },
     resizeLocks: { ...s.resizeLocks },
+    sidebarRail: { ...s.sidebarRail },
   };
   // Open at login is macOS's login item, not a setting in the file; null where macOS can't say
   // (a copy run from a folder), and then it isn't offered, as the screen hides it.
@@ -3744,6 +3749,9 @@ async function settingsTool(a: Args): Promise<string> {
             .join(", ");
           extra = ` (panes: ${panes})`;
         }
+        // Which of the two the window is at now, so the rail as it shows can be told from the settings.
+        if (k === `sidebarRail.${railWidth()}`)
+          extra = ` (the window is ${railWidth()} now, so the sidebar ${railOn(s, railWidth() === "narrow") ? "is a rail" : "is in full"})`;
         return `- ${k} · ${where(pane, label)}: ${shown(valueOf(k, def), none)}${extra}`;
       }),
     );
@@ -3864,6 +3872,9 @@ async function settingsTool(a: Args): Promise<string> {
   } else if (head === "resizeLocks") {
     // As the screen's checkbox sets it.
     setResizeLock(sub as ResizeType, v as boolean);
+  } else if (head === "sidebarRail") {
+    // As ⌘\ and the screen's checkboxes set it: the usual choice leaves no key.
+    setRail(sub as RailWidth, v as boolean);
   } else if (sub) {
     const next = { ...nested[head], [sub]: v };
     if (v === undefined) delete next[sub];

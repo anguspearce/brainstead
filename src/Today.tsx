@@ -96,6 +96,8 @@ export function TodayScreen() {
   const failed = useStore(tasksFailed);
   const nothingDue = !!t && !failed && !overdue.length && !dueToday.length && !deferred.length;
   useTaskListKeys();
+  // The side column stacked under the bands (a narrow main area): To process moves above them.
+  const stacked = panes.gone.has("today.side");
   const tasks = (n: number) => (n === 1 ? "1 task" : `${fmtCount(n)} tasks`);
   return (
     <main className="main">
@@ -138,6 +140,7 @@ export function TodayScreen() {
               </p>
             )}
           </div>
+          {stacked && <ProcessCard strip />}
           <div className="card cardcap">
             <CaptureBox compact />
           </div>
@@ -235,7 +238,7 @@ export function TodayScreen() {
           </section>
         </section>
         <aside className="tside">
-          <ProcessCard />
+          {!stacked && <ProcessCard />}
           {hasSync && s.syncEnabled && <MeetingsCard />}
           <SummaryCard kind="brief" />
           <SummaryCard kind="weekly" />
@@ -588,7 +591,7 @@ function OpeningBanner() {
  *  held for you, bookmarks, Wiki health, and the weekly review on its day (or while one is paused).
  *  Each row's count is the one the screen it opens shows (src/needsYou.ts), and its one button
  *  names what you do there. What couldn't be checked says so, with Retry. */
-function ProcessCard() {
+function ProcessCard({ strip = false }: { strip?: boolean }) {
   const inbox = useInbox();
   const s = useStore(settings);
   const [paused, setPaused] = useState(false);
@@ -628,95 +631,136 @@ function ProcessCard() {
   }, [tries, v]);
   const need = toDecide(useStore(health)?.report);
   const reviewDay = isReviewDay(s.weeklyReview?.day, s.weeklyReview?.time);
+  // Each thing that needs you: its icon, what it is, its count, and the button that opens it.
+  const rows: ProcessRow[] = [
+    n
+      ? {
+          icon: "inbox",
+          label: "Inbox to clarify",
+          n,
+          hot: true,
+          count: `${fmtCount(n)} in the Inbox`,
+          act: "Clarify",
+          tip: keyLabel("Go to the Inbox to decide what each item is (⌘2)"),
+          go: () => nav.go("inbox"),
+        }
+      : { icon: "check", label: "The Inbox is clear" },
+    ...(waiting > 0
+      ? [
+          {
+            icon: "review",
+            label: "Changes held for you",
+            n: waiting,
+            hot: true,
+            count: `${fmtCount(waiting)} change${waiting === 1 ? "" : "s"} held for you to accept or reject`,
+            act: "Decide",
+            tip: "Open Changes › Held to accept or reject each change",
+            go: () => nav.go({ screen: "review", view: { "review:view": "held" } }),
+          },
+        ]
+      : []),
+    ...(bookmarks > 0
+      ? [
+          {
+            icon: "pin",
+            label: "Bookmarks to triage",
+            n: bookmarks,
+            count: `${fmtCount(bookmarks)} stale or missing bookmarks`,
+            act: "Triage",
+            tip: "Go through the bookmarks waiting to be sorted",
+            go: () => nav.go("triage"),
+          },
+        ]
+      : []),
+    ...(need > 0
+      ? [
+          {
+            icon: "health",
+            label: "Wiki health to decide",
+            n: need,
+            count: `${fmtCount(need)} wiki issue${need === 1 ? "" : "s"} only you can settle`,
+            act: "Decide",
+            tip: "Go to Wiki health to decide the issues only you can settle",
+            go: () => nav.go("health"),
+          },
+        ]
+      : []),
+    ...(reviewDay || paused
+      ? [
+          {
+            icon: "calendar",
+            label: paused ? "Weekly review, paused" : "Weekly review day",
+            act: paused ? "Carry on" : "Start",
+            tip: paused ? "Pick up the weekly review where you left it" : "Start the weekly review",
+            go: startWeekly,
+          },
+        ]
+      : []),
+  ];
+  const problem = failed.length > 0 && <LoadFailed compact what={failed.join(" and ")} onRetry={retry} />;
+  // Above the bands when the side column is stacked under them (a narrow main area): one line of
+  // pills, each the row's button, so what needs you is in view without scrolling past the tasks.
+  if (strip)
+    return (
+      <section className="tstrip" aria-label="To process">
+        <span className="tstrip-h">To process</span>
+        {problem}
+        {rows.map((r) =>
+          r.go ? (
+            <button
+              key={r.label}
+              type="button"
+              className={`tstrip-i${r.hot ? " hot" : ""}`}
+              title={`${r.act}: ${r.tip}${r.count ? ` (${r.count})` : ""}`}
+              onClick={r.go}
+            >
+              <Icon name={r.icon} size={13} />
+              <span className="ell">{r.label}</span>
+              {r.n !== undefined && <span className="n">{fmtCount(r.n)}</span>}
+            </button>
+          ) : (
+            <span key={r.label} className="tstrip-i quiet">
+              <Icon name={r.icon} size={13} />
+              <span className="ell">{r.label}</span>
+            </span>
+          ),
+        )}
+      </section>
+    );
   return (
     <SideCard title="To process">
-      {failed.length > 0 && <LoadFailed compact what={failed.join(" and ")} onRetry={retry} />}
-      <div className="rrow">
-        <Icon name={n ? "inbox" : "check"} size={14} />
-        <span className="grow ell">{n ? "Inbox to clarify" : "The Inbox is clear"}</span>
-        {n > 0 && (
-          <>
-            <span className="n hot" title={`${fmtCount(n)} in the Inbox`}>
-              {fmtCount(n)}
+      {problem}
+      {rows.map((r) => (
+        <div key={r.label} className="rrow">
+          <Icon name={r.icon} size={14} />
+          <span className="grow ell">{r.label}</span>
+          {r.n !== undefined && (
+            <span className={`n${r.hot ? " hot" : ""}`} title={r.count}>
+              {fmtCount(r.n)}
             </span>
-            <button
-              type="button"
-              className="btn sm ghost ract"
-              title={keyLabel("Go to the Inbox to decide what each item is (⌘2)")}
-              onClick={() => nav.go("inbox")}
-            >
-              Clarify
+          )}
+          {r.go && (
+            <button type="button" className="btn sm ghost ract" title={r.tip} onClick={r.go}>
+              {r.act}
             </button>
-          </>
-        )}
-      </div>
-      {waiting > 0 && (
-        <div className="rrow">
-          <Icon name="review" size={14} />
-          <span className="grow ell">Changes held for you</span>
-          <span className="n hot" title={`${fmtCount(waiting)} change${waiting === 1 ? "" : "s"} held for you to accept or reject`}>
-            {fmtCount(waiting)}
-          </span>
-          <button
-            type="button"
-            className="btn sm ghost ract"
-            title="Open Changes › Held to accept or reject each change"
-            onClick={() => nav.go({ screen: "review", view: { "review:view": "held" } })}
-          >
-            Decide
-          </button>
+          )}
         </div>
-      )}
-      {bookmarks > 0 && (
-        <div className="rrow">
-          <Icon name="pin" size={14} />
-          <span className="grow ell">Bookmarks to triage</span>
-          <span className="n" title={`${fmtCount(bookmarks)} stale or missing bookmarks`}>
-            {fmtCount(bookmarks)}
-          </span>
-          <button
-            type="button"
-            className="btn sm ghost ract"
-            title="Go through the bookmarks waiting to be sorted"
-            onClick={() => nav.go("triage")}
-          >
-            Triage
-          </button>
-        </div>
-      )}
-      {need > 0 && (
-        <div className="rrow">
-          <Icon name="health" size={14} />
-          <span className="grow ell">Wiki health to decide</span>
-          <span className="n" title={`${fmtCount(need)} wiki issue${need === 1 ? "" : "s"} only you can settle`}>
-            {fmtCount(need)}
-          </span>
-          <button
-            type="button"
-            className="btn sm ghost ract"
-            title="Go to Wiki health to decide the issues only you can settle"
-            onClick={() => nav.go("health")}
-          >
-            Decide
-          </button>
-        </div>
-      )}
-      {(reviewDay || paused) && (
-        <div className="rrow">
-          <Icon name="calendar" size={14} />
-          <span className="grow ell">{paused ? "Weekly review, paused" : "Weekly review day"}</span>
-          <button
-            type="button"
-            className="btn sm ghost ract"
-            title={paused ? "Pick up the weekly review where you left it" : "Start the weekly review"}
-            onClick={startWeekly}
-          >
-            {paused ? "Carry on" : "Start"}
-          </button>
-        </div>
-      )}
+      ))}
     </SideCard>
   );
+}
+
+/** One row of To process: what needs you and, where there's something to do, its count and button. */
+interface ProcessRow {
+  icon: string;
+  label: string;
+  n?: number;
+  hot?: boolean;
+  /** The count's tooltip. */
+  count?: string;
+  act?: string;
+  tip?: string;
+  go?: () => void;
 }
 
 /** Unsaved drafts, then notes you opened lately, then notes changed lately (in another editor or here). */

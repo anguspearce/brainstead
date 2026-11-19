@@ -42,6 +42,7 @@ const TOOL_WORDS: Partial<Record<string, string>> = {
   contradictions: "wiki health clashes disagree conflicting claims",
 };
 import { applyTheme, settings } from "./store";
+import { narrowWindow, railOn, toggleRail } from "./sidebarRail";
 import { LAYER_LABEL, useDebounced } from "./ui";
 import { fileManager, isMod, keyLabel } from "./platform";
 
@@ -247,6 +248,15 @@ export function commands(): Command[] {
       label: "Match the system appearance",
       keywords: "theme auto",
       run: theme("system"),
+    },
+    {
+      id: "rail",
+      group: "Appearance",
+      icon: "sidebar",
+      label: railOn(settings.get(), narrowWindow.get()) ? "Show the sidebar in full" : "Collapse the sidebar to icons",
+      keywords: "sidebar rail icons collapse expand toggle",
+      kbd: "⌘\\",
+      run: toggleRail,
     },
   ];
 }

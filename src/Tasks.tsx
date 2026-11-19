@@ -114,6 +114,28 @@ export function TasksScreen() {
   const search = useRef<HTMLInputElement>(null);
   const pinned = usePinnedBar();
   useTaskListKeys(search);
+  // On a narrow main area the grid has no column for the task's pane (the stylesheet drops it), so it
+  // slides over the list from the right while a task is picked: Esc or its × puts it away and keeps
+  // the task picked; picking a task again brings it back.
+  const overlay = panes.gone.has("tasks.side");
+  const [shut, setShut] = useState(false);
+  const pick = (k: string | null) => {
+    setShut(false);
+    setSel(k);
+  };
+  const paneOpen = overlay && !!selected && !shut;
+  useEffect(() => {
+    if (!paneOpen) return;
+    const k = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if ((e.target as HTMLElement)?.closest?.("input, textarea, select, [contenteditable]")) return;
+      if (document.querySelector(".scrim, [role='dialog'], .popover")) return;
+      setShut(true);
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [paneOpen]);
   return (
     <main className="main">
       <TopBar
@@ -274,8 +296,8 @@ export function TasksScreen() {
                       manual={view.manual && groupBy === "none"}
                       every={every}
                       selected={sel}
-                      onSelect={(t) => setSel(taskKey(t))}
-                      onDeselect={() => setSel(null)}
+                      onSelect={(t) => pick(taskKey(t))}
+                      onDeselect={() => pick(null)}
                       onOpen={() => document.querySelector<HTMLElement>(".trow.sel .trename")?.click()}
                       keys
                       empty={
@@ -322,9 +344,22 @@ export function TasksScreen() {
             </div>
           </Popover>
         )}
-        <aside className="tpane">
-          {selected ? <TaskDetail t={selected} /> : <p className="faint">Select a task to see where it lives.</p>}
-        </aside>
+        {(!overlay || paneOpen) && (
+          <aside className={`tpane${overlay ? " overlay" : ""}`} aria-label={overlay ? "The task" : undefined}>
+            {overlay && (
+              <button
+                type="button"
+                className="ibtn tpaneclose"
+                aria-label="Close"
+                title="Close the task's pane (Esc); the task stays picked"
+                onClick={() => setShut(true)}
+              >
+                <Icon name="x" />
+              </button>
+            )}
+            {selected ? <TaskDetail t={selected} /> : <p className="faint">Select a task to see where it lives.</p>}
+          </aside>
+        )}
       </div>
     </main>
   );

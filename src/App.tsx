@@ -34,6 +34,7 @@ import { QueryBuilderHost } from "./editor/QueryBuilder";
 import { SpellMenuHost } from "./editor/SpellMenu";
 import { startNoteMenu } from "./noteMenu";
 import { startInterfaceSizeMenu } from "./interfaceSize";
+import { startRailMenu, useRail } from "./sidebarRail";
 import { NoteDialogs } from "./notes/NoteDialogs";
 import { TrashScreen } from "./notes/Trash";
 import { nav, place, Screen, whenFree } from "./nav";
@@ -99,6 +100,8 @@ export default function App({ scene }: { scene: Scene | null }) {
   const { place: here } = useStore(place);
   const [palette, setPalette] = useState(!!scene?.palette);
   const focused = useStore(focusMode) && here.screen === "doc";
+  // The sidebar as an icon rail (src/sidebarRail.ts): no divider, as there's no width to drag.
+  const rail = useRail();
   useEffect(() => {
     return startFocus();
   }, []);
@@ -142,7 +145,7 @@ export default function App({ scene }: { scene: Scene | null }) {
 
   // The menu bar's Note, View and Help menus.
   useEffect(() => {
-    const off = [startNoteMenu(), startInterfaceSizeMenu(), startHelpMenu()];
+    const off = [startNoteMenu(), startInterfaceSizeMenu(), startRailMenu(), startHelpMenu()];
     return () => off.forEach((o) => void o.then((f) => f()));
   }, []);
 
@@ -194,9 +197,9 @@ export default function App({ scene }: { scene: Scene | null }) {
     );
   }
   return (
-    <div className={`shell${focused ? " focus" : ""}`} {...panes.root}>
-      {!focused && <Sidebar onSearch={() => setPalette(true)} />}
-      {!focused && panes.resizers}
+    <div className={`shell${focused ? " focus" : rail ? " rail" : ""}`} {...panes.root}>
+      {!focused && <Sidebar onSearch={() => setPalette(true)} rail={rail} />}
+      {!focused && !rail && panes.resizers}
       {(() => {
         const S = SCREENS[here.screen];
         return (
