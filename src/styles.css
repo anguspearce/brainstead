@@ -3231,11 +3231,12 @@ html[data-platform="windows"] .scrim.mfull {
   color: var(--ink);
 }
 
-/* A group label inside a card's rows (Upcoming meetings' Tomorrow). */
+/* A group label inside a card's rows (Upcoming meetings' Tomorrow), styled as .rsub but on the
+   rows' inset. */
 .rrow.rgroup {
   min-height: 0;
   padding-top: 8px;
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink3);
 }
