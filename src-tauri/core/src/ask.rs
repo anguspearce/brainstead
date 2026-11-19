@@ -927,11 +927,13 @@ pub struct Parser {
     error: Option<String>,
     /// Antigravity's step or Copilot's message the last text came in, to break between replies.
     block: Option<String>,
+    /// Claude: where the text stood when the message being streamed began, until it stops.
+    message: Option<usize>,
 }
 
 impl Parser {
     pub fn new(cli: Cli) -> Parser {
-        Parser { cli, text: String::new(), session: None, error: None, block: None }
+        Parser { cli, text: String::new(), session: None, error: None, block: None, message: None }
     }
 
     /// Text written after a search is a new block; without a break it runs on from the text
@@ -965,6 +967,18 @@ impl Parser {
         match v["type"].as_str() {
             Some("stream_event") => {
                 let ev = &v["event"];
+                // A message that starts before the last one stopped: the CLI gave up on that one
+                // mid-stream and asked again, so its half answer goes ("…Initiatives: [[" then the
+                // whole answer again).
+                if ev["type"] == "message_start" {
+                    if let Some(at) = self.message {
+                        self.text.truncate(at);
+                    }
+                    self.message = Some(self.text.len());
+                }
+                if ev["type"] == "message_stop" {
+                    self.message = None;
+                }
                 if ev["type"] == "content_block_start" && ev["content_block"]["type"] == "text" {
                     self.separate(out);
                 }
@@ -1748,6 +1762,21 @@ mod tests {
         assert!(ev.contains(&Event::Compacted));
         let o = p.finish(true, "");
         assert_eq!(o, Outcome { text: "Let me look.\n\nTwo tasks are due.".into(), session: Some("s2".into()), error: None });
+    }
+
+    /// A stream the CLI retried: the half answer before it isn't kept, a finished message is.
+    #[test]
+    fn claude_retried_stream_keeps_only_the_answer() {
+        let start = r#"{"type":"stream_event","event":{"type":"message_start","message":{}}}"#;
+        let stop = r#"{"type":"stream_event","event":{"type":"message_stop"}}"#;
+        let block = r#"{"type":"stream_event","event":{"type":"content_block_start","content_block":{"type":"text"}}}"#;
+        let delta = |t: &str| {
+            format!(r#"{{"type":"stream_event","event":{{"type":"content_block_delta","delta":{{"type":"text_delta","text":"{t}"}}}}}}"#)
+        };
+        let (a, b, c) =
+            (delta("Let me look."), delta("**Launch** moved. Initiatives: [["), delta("**Launch** moved. Initiatives: [[Orbit]]"));
+        let (_, p) = feed(Cli::Claude, &[start, block, &a, stop, start, block, &b, start, block, &c, stop]);
+        assert_eq!(p.finish(true, "").text, "Let me look.\n\n**Launch** moved. Initiatives: [[Orbit]]");
     }
 
     #[test]
