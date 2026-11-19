@@ -57,7 +57,21 @@ export function SyncFeed() {
   return (
     <div className="syncfeed">
       <div className="actfilters">
-        <span className={`faint small${line?.problem ? " amber" : ""}`}>{line?.text ?? "Nothing has synced or been ingested yet."}</span>
+        {/* Only the problems are amber: when it last synced and what came in are just information. */}
+        <span className="faint small">
+          {line ? (
+            line.problems ? (
+              <>
+                {line.text.slice(0, -line.problems.length)}
+                <span className="amber">{line.problems}</span>
+              </>
+            ) : (
+              line.text
+            )
+          ) : (
+            "Nothing has synced or been ingested yet."
+          )}
+        </span>
         <div className="chips">
           {FEED_FILTERS.map(([v, label, tip]) => (
             <button

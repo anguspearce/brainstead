@@ -17,7 +17,7 @@ Sources (⌘0) are the files in `sources/`: emails, Teams chats and transcripts 
 - Drag files onto Sources, or click **Import**, to copy them in.
 - The **Outlook** and **Teams** Chrome extensions capture a thread, chat or meeting transcript into `sources/` with one click. Set them up in Settings › Capture extensions. Each capture also waits in the Inbox.
 - On macOS and Windows, **[Sync](#sync)** can do the capturing for you, reading your own chats, transcripts and Inbox mail into `sources/` without a click.
-- Each source is **New**, **Changed** (since the pages citing it were written) or **Ingested**.
+- Each source is **New**, **Changed** (since the pages citing it were written, in amber: it needs you) or **Ingested**.
 - A row's button is what the source usually becomes: **Meeting note** for a Teams transcript, **Draft reply** for an email or chat thread, otherwise **Ingest**. Its ▾ has the rest: **Make and ingest a meeting note** or **Draft a reply** where they fit, **Ingest into the wiki**, **Ask about this source** and **Compare with…**. A file's right-click menu offers the same.
 - Transcripts, emails and chats are known by their names (`Teams. Transcript. …`, `Email. …`, `Teams. Chat. …`), in `sources/` or any folder under it.
 - The **Ingest runs** pane lists each run's steps, the latest first and older ones as you scroll. **Search runs** finds them by name, state, model or day, and **See N changes** opens Changes at the run's first change.
@@ -86,7 +86,7 @@ Two tabs pick what's listed. **Held** has only the changes held for you. **All**
 
 Every entity, concept and initiative page has one layout: opening text, **Current state**, topical sections, a **Timeline** of dated entries (`### YYYY-MM-DD — title`, or a month, quarter or half) newest first, each with a `Source:` line, and **See also**. Summaries are left as they are.
 
-The Wiki (⌘9) lists the pages by type and tag with their health: **Held**, **Stale**, **Check** or **Healthy**. On a page:
+The Wiki (⌘9) lists the pages by type and tag with their health. Amber is only for what needs your decision: **Held**, **Stale** (a source changed since the page cited it) or **Check**. Otherwise it's grey text: **Worth a look**, **Safe fix** or **Healthy**. Safe fixes get one line above the list instead of a badge on every row, such as "26 safe fixes", with a **Fix** that makes them all (as Wiki health's **Fix safe issues** does, undone with ⌘Z); its count opens Wiki health at them. On a page:
 
 - A link to a source shows as a small number that opens the source at the passage cited; the **Sources** card lists them.
 - The **Facts** card lists the page's checked facts: the latest value of each, what it replaced, and its source. Older pages may have none until they're next ingested.

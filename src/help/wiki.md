@@ -18,12 +18,19 @@ The list shows each page's type, source count, health and tags, with aliases und
 Click a column heading to sort by it.
 
 ## Read the health column
-Each page has a health chip; hover one for what it means:
+Each page's health says whether it needs you; hover it for what it means. Amber means you have something to decide:
 
 - **Held**: a change to the page is held for you in [Changes](app:review).
-- **Stale**: a source changed since the page was written, or Wiki health calls it stale.
-- **Check**: another check in [Wiki health](app:health) lists it.
+- **Stale**: a source it cites changed after the page was written.
+- **Check**: another check in [Wiki health](app:health) lists something on it to decide.
+
+Grey text means nothing needs you:
+
+- **Worth a look**: Wiki health suggests a look, such as a page others rely on that hasn't changed in months.
+- **Safe fix**: Brainstead can fix it by itself, such as an `updated:` date that's out of date.
 - **Healthy**: nothing to do.
+
+When there are safe fixes, one line above the list says how many, such as "26 safe fixes". Click **Fix** on it to make them all, as **Fix safe issues** on Wiki health does; `⌘Z` undoes them. Click the count to open Wiki health at them and see which pages they're on.
 
 ## Make a new page
 Click **New wiki page**, type a name, choose **Concept**, **Entity** or **Initiative** and press `↩`. The page is created in `wiki/concepts/`, `wiki/entities/` or `wiki/initiatives/` and opens for you to write. It is your own page, so it isn't listed in Changes.

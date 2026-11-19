@@ -9,7 +9,7 @@
 // needs judgement goes to Ask, whose changes are listed in Changes.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, CurrentStateRun, FileSummary, LintCheck, LintItem, TrashEntry } from "./api";
+import { api, CurrentStateRun, FileSummary, LintCheck, LintItem, LintReport, TrashEntry } from "./api";
 import { fmtShortDate } from "./md/dates";
 import { linkMatches } from "./Capture";
 import { askWith } from "./askState";
@@ -32,6 +32,7 @@ import {
   health,
   pageName,
   IGNORE_ALL,
+  issueClass,
   reloadHealth,
   safeFixes,
   startKnowledge,
@@ -117,6 +118,36 @@ function BusyButton({
 }
 
 const fixed = (label: string) => toast(label, undo, "ok");
+
+/** The safe fixes as one quiet line, for a list whose rows don't badge them (the Wiki list): the
+ *  count opens Wiki health at the first check that has them, so the pages they're on stay one click
+ *  away, and Fix is this screen's Fix safe issues, undone with ⌘Z. Nothing when there are none. */
+export function SafeFixLine({ report }: { report: LintReport | null | undefined }) {
+  const fixes = safeFixes(report);
+  if (!fixes.length) return null;
+  const n = fixes.length;
+  return (
+    <div className="safeline faint small">
+      <button
+        type="button"
+        className="linkish"
+        title="Open Wiki health at the safe fixes, to see which pages they're on"
+        onClick={() => nav.go({ screen: "health", view: { "health:open": fixes[0].check } })}
+      >
+        {fmtCount(n)} safe {n === 1 ? "fix" : "fixes"}
+      </button>
+      <span>Brainstead can make by itself, such as out-of-date updated: dates</span>
+      <BusyButton
+        id="fix-all"
+        icon="check"
+        title={keyLabel("Fix every issue that's safe to fix; ⌘Z undoes it")}
+        onClick={() => act("fix-all", () => api.healthFix(fixes), fixed)}
+      >
+        Fix
+      </BusyButton>
+    </div>
+  );
+}
 
 /** After Reshape pages: how many, and the way to Changes, where they can be reverted. */
 const reshaped = (r: { applied: number; failed: string[] }) =>
@@ -419,7 +450,9 @@ function Group({
               <Icon
                 name={n ? "info" : "check"}
                 size={14}
-                className={n ? (ADVISORY.has(c.id) ? "advisory" : c.items.some((i) => !i.safe) ? "amber" : "") : "green"}
+                className={
+                  n ? (ADVISORY.has(c.id) ? "advisory" : c.items.some((i) => issueClass(c.id, i) === "decide") ? "amber" : "") : "green"
+                }
               />
               <span className="grow" title={CHECK_TIPS[c.id]}>
                 {c.title}

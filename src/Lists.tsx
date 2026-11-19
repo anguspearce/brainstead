@@ -6,7 +6,7 @@
 // Templates.
 
 import { useEffect, useMemo, useState } from "react";
-import { api, FileSummary, Layer, LintCheck, LintReport, SourceRow, WikiMeta } from "./api";
+import { api, FileSummary, Layer, LintItem, LintReport, SourceRow, WikiMeta } from "./api";
 import { filedPage } from "./Ask";
 import { Column, FileList, fmtDay, Grouping, Snippet } from "./FileList";
 import { Icon } from "./icons";
@@ -14,7 +14,8 @@ import { ingest, RunsPane } from "./Ingest";
 import { runSourceAction, SOURCE_ACTION, sourceActions } from "./sourceActions";
 import { isTranscriptPath } from "./meetingFlow";
 import { checkTemplate } from "./notes/templater";
-import { changes, health, held, startKnowledge } from "./knowledge";
+import { changes, health, held, IssueClass, issueClass, startKnowledge } from "./knowledge";
+import { SafeFixLine } from "./Health";
 import { settings, useStore } from "./store";
 import { openNewNote, setNewNoteCursor } from "./notes/dialogs";
 import { nav, openDoc, useViewState } from "./nav";
@@ -287,26 +288,55 @@ function TagTreeView({
   );
 }
 
-/** A wiki page's health in the list: a change to it held for you, flagged stale, another Knowledge
- *  health issue, or none. */
-export function wikiHealth(path: string, heldPages: Set<string>, report: LintReport | null | undefined): "held" | "stale" | "issue" | "ok" {
+/** A wiki page's health in the list, by Wiki health's own rule (issueClass): a change to it held
+ *  for you, a source changed since it was written, or another issue that needs your decision (all
+ *  amber); only worth a look, or only safe fixes Brainstead makes by itself (muted, not a badge:
+ *  the banner above the list fixes them); or none. */
+export function wikiHealth(
+  path: string,
+  heldPages: Set<string>,
+  report: LintReport | null | undefined,
+): "held" | "stale" | "issue" | "look" | "safe" | "ok" {
   if (heldPages.has(path)) return "held";
-  const on = (c: LintCheck) => c.items.some((i) => i.page === path || i.pages?.includes(path));
-  const checks = report?.checks ?? [];
-  if (checks.some((c) => (c.id === "stale-pages" || c.id === "stale-dates" || c.id === "changed-sources") && on(c))) return "stale";
-  if (checks.some((c) => c.id !== "unlogged-writes" && on(c))) return "issue";
+  const on = (i: LintItem) => i.page === path || !!i.pages?.includes(path);
+  const found = new Map<IssueClass, Set<string>>();
+  for (const c of report?.checks ?? [])
+    for (const i of c.items)
+      if (on(i)) {
+        const k = issueClass(c.id, i);
+        found.set(k, (found.get(k) ?? new Set()).add(c.id));
+      }
+  const decide = found.get("decide");
+  if (decide?.has("changed-sources")) return "stale";
+  if (decide) return "issue";
+  if (found.has("advisory")) return "look";
+  if (found.has("safe")) return "safe";
   return "ok";
 }
 
 const HEALTH_CHIP = {
-  held: ["Held", "amber", "Held: a change to this page waits in Changes for you to accept or reject"],
-  stale: ["Stale", "amber", "Stale: a source changed after this page was written, or Wiki health flags it as out of date"],
+  held: ["Held", "chip amber", "Held: a change to this page waits in Changes for you to accept or reject"],
+  stale: [
+    "Stale",
+    "chip amber",
+    "Stale: a source this page cites changed after it was written; Wiki health lists it to re-ingest or check",
+  ],
   issue: [
     "Check",
-    "amber",
-    "Check: Wiki health lists something to look at on this page, such as a link to a page that doesn't exist, or a source that has gone",
+    "chip amber",
+    "Check: Wiki health lists something to decide on this page, such as a link to a page that doesn't exist, or a source that has gone",
   ],
-  ok: ["Healthy", "green", "Healthy: Wiki health finds nothing to fix on this page"],
+  look: [
+    "Worth a look",
+    "faint small",
+    "Worth a look: Wiki health suggests a look, such as a page others rely on that hasn't changed in months; nothing needs fixing",
+  ],
+  safe: [
+    "Safe fix",
+    "faint small",
+    "Safe fix: Wiki health can fix this page by itself, such as an out-of-date updated: date; Fix above the list does it",
+  ],
+  ok: ["Healthy", "chip green", "Healthy: Wiki health finds nothing to fix on this page"],
 } as const;
 
 export function WikiScreen() {
@@ -374,9 +404,9 @@ export function WikiScreen() {
       ...listColumn("wiki.health"),
       value: (r) => wikiHealth(r.path, pendingPages, report),
       render: (r) => {
-        const [label, tone, tip] = HEALTH_CHIP[wikiHealth(r.path, pendingPages, report)];
+        const [label, cls, tip] = HEALTH_CHIP[wikiHealth(r.path, pendingPages, report)];
         return (
-          <span className={`chip ${tone}`} title={tip}>
+          <span className={cls} title={tip}>
             {label}
           </span>
         );
@@ -452,6 +482,7 @@ export function WikiScreen() {
           table="wiki"
           defaultSort={["title", 1]}
           placeholder="Search the wiki"
+          banner={<SafeFixLine report={report} />}
           filters={
             <div className="chips">
               <button
@@ -568,7 +599,13 @@ export const sourceFolder = (path: string) =>
     .slice(0, -1)
     .join("/");
 
-const STATUS_CHIP = { new: ["New", "amber"], changed: ["Changed", "amber"], ingested: ["Ingested", "green"] } as const;
+// Only Changed is amber: it needs you (re-ingest it, or check the pages citing it). New is only
+// information here; the Inbox's Captures is where a new source waits for you, and counts it.
+const STATUS_CHIP = {
+  new: ["New", "", "New: no wiki page cites it yet; it waits in Inbox › Captures to be ingested or kept"],
+  changed: ["Changed", "amber", "Changed: it changed after the wiki pages citing it were written; re-ingest it or check them"],
+  ingested: ["Ingested", "green", "Ingested: a wiki page cites it"],
+} as const;
 
 /** Copies files (full paths) into sources/ and says how it went. */
 async function importToSources(paths: string[]) {
@@ -697,8 +734,12 @@ export function SourcesScreen() {
       ...listColumn("sources.ingested"),
       value: (r) => sourceStatus(r, changed),
       render: (r) => {
-        const [label, tone] = STATUS_CHIP[sourceStatus(r, changed)];
-        return <span className={`chip ${tone}`}>{label}</span>;
+        const [label, tone, tip] = STATUS_CHIP[sourceStatus(r, changed)];
+        return (
+          <span className={`chip ${tone}`} title={tip}>
+            {label}
+          </span>
+        );
       },
     },
     {

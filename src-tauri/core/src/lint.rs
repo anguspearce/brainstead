@@ -223,7 +223,8 @@ impl Report {
         self.checks.iter().find(|c| c.id == id)
     }
     /// Issues Brainstead can't fix on its own. Stale pages and uncited claims are worth a look,
-    /// not problems, and sources not yet ingested are the Inbox's, so they aren't counted.
+    /// not problems, and sources not yet ingested are the Inbox's, so they aren't counted. The
+    /// same rule as src/knowledge.ts issueClass, which the screens' badges follow.
     pub fn needs_decision(&self) -> usize {
         self.checks
             .iter()

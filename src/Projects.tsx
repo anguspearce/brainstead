@@ -4,7 +4,7 @@
 
 // Projects (stage 6): every `Project. <name>.md` note, by status and area, with what moves each
 // forward. A project with nothing to do next is flagged red, one that's gone quiet for two weeks
-// amber. The open one shows its outcome, next actions, waiting-fors and the notes that link it.
+// muted (worth a look, not a problem). The open one shows its outcome, next actions, waiting-fors and the notes that link it.
 
 import { FoundProjects } from "./Found";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -272,7 +272,7 @@ export function ProjectsScreen() {
                             )}
                             {p.waiting > 0 && <span>{p.waiting} waiting</span>}
                             {flag === "quiet" && (
-                              <span className="amber" title="Quiet: nothing has happened for two weeks">
+                              <span className="faint" title="Quiet: nothing has happened for two weeks, worth a look in the Weekly review">
                                 Quiet
                               </span>
                             )}

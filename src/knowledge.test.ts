@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { ChangeRow, LintReport, TrashEntry } from "./api";
 import { filedPage } from "./Ask";
+import { wikiHealth } from "./Lists";
 import {
   byRun,
   changeMatches,
@@ -17,6 +18,7 @@ import {
   claimsByPage,
   decisions,
   IN_INBOX,
+  issueClass,
   fixWithAskPrompt,
   held,
   originLabel,
@@ -121,6 +123,26 @@ describe("wiki health", () => {
     expect(safeFixes(report)).toEqual([
       { check: "missing-crossrefs", page: "wiki/entities/Northwind.md", name: "Orbit App", detail: undefined },
     ]);
+  });
+
+  it("badges a wiki page only for what needs a decision", () => {
+    expect(issueClass("missing-crossrefs", { text: "", safe: true })).toBe("safe");
+    expect(issueClass("stale-pages", { text: "", safe: false })).toBe("advisory");
+    expect(issueClass("uningested-sources", { text: "", safe: false })).toBe("inbox");
+    expect(issueClass("changed-sources", { text: "", safe: false })).toBe("decide");
+    const none = new Set<string>();
+    // A safe fix and a page worth a look are muted, not amber; a held change and a changed source are.
+    expect(wikiHealth("wiki/entities/Northwind.md", none, report)).toBe("safe");
+    expect(wikiHealth("wiki/entities/Orbit App.md", none, report)).toBe("look");
+    expect(wikiHealth("wiki/entities/Orbit App.md", new Set(["wiki/entities/Orbit App.md"]), report)).toBe("held");
+    const changed = {
+      id: "changed-sources",
+      title: "Sources changed since they were cited",
+      classic: false,
+      items: [{ text: "sources/A.md", page: "sources/A.md", pages: ["wiki/entities/Northwind.md"], safe: false }],
+    };
+    expect(wikiHealth("wiki/entities/Northwind.md", none, { ...report, checks: [...report.checks, changed] })).toBe("stale");
+    expect(wikiHealth("wiki/entities/Acme.md", none, report)).toBe("ok");
   });
 
   it("asks Ask about the issues that need judgement only", () => {

@@ -99,10 +99,11 @@ function reviewLabel(detail: string): string {
 /** A page's name from its path. */
 export const pageName = (path: string) => (path.split("/").pop() ?? path).replace(/\.md$/, "");
 
-/** Checks that are worth a look but aren't problems: not counted in the sidebar. */
 /** Checks whose issues have their own buttons, so they get no Ignore. */
 export const OWN_ACTIONS = new Set(["missing-pages", "duplicates", "unreferenced-images", "uningested-sources", "page-shape"]);
 
+/** Checks that are worth a look but aren't problems: not counted as needing a decision. Kept
+ *  beside core/src/lint.rs ADVISORY. */
 export const ADVISORY = new Set(["stale-pages", "uncited-claims", "no-current-state"]);
 
 /** Checks whose issues are acted on in the Inbox, not Wiki health: sources no page cites wait in
@@ -208,17 +209,30 @@ function distance(a: string, b: string, most: number): number {
 /** The checks with Ignore all (knowledge.rs IGNORE_ALL, kept the same): advisory, with no fix of their own. */
 export const IGNORE_ALL = new Set(["stale-pages", "uncited-claims"]);
 
+/** What an issue asks of you, the one rule every screen follows (core/src/lint.rs needs_decision
+ *  counts the same): the Inbox's (sources not yet ingested, acted on there), safe (Brainstead fixes
+ *  it by itself: Fix safe issues), advisory (only worth a look) or decide (it needs you). Only
+ *  decide is counted, and only decide (or a held change) turns a row amber. */
+export type IssueClass = "inbox" | "safe" | "advisory" | "decide";
+export function issueClass(check: string, i: LintItem): IssueClass {
+  if (IN_INBOX.has(check)) return "inbox";
+  if (i.safe) return "safe";
+  return ADVISORY.has(check) ? "advisory" : "decide";
+}
+
 /** Issues that need you: everything Brainstead can't fix on its own. */
 export function decisions(r: LintReport | null | undefined): number {
   if (!r) return 0;
-  return r.checks.filter((c) => !ADVISORY.has(c.id) && !IN_INBOX.has(c.id)).reduce((n, c) => n + c.items.filter((i) => !i.safe).length, 0);
+  return r.checks.reduce((n, c) => n + c.items.filter((i) => issueClass(c.id, i) === "decide").length, 0);
 }
 
 /** Every safe fix in the report, as health_fix takes them. */
 export function safeFixes(r: LintReport | null | undefined): HealthFix[] {
   if (!r) return [];
   // Reshaping pages is its own action (Reshape pages), recorded in Changes rather than undone with ⌘Z.
-  return r.checks.filter((c) => c.id !== "page-shape").flatMap((c) => c.items.filter((i) => i.safe && i.page).map((i) => fixOf(c.id, i)));
+  return r.checks
+    .filter((c) => c.id !== "page-shape")
+    .flatMap((c) => c.items.filter((i) => issueClass(c.id, i) === "safe" && i.page).map((i) => fixOf(c.id, i)));
 }
 
 export const fixOf = (check: string, i: LintItem): HealthFix => ({ check, page: i.page!, name: i.name, detail: i.detail });

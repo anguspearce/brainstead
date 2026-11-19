@@ -158,8 +158,9 @@ export function ago(at: string, now = new Date()): string {
 }
 
 /** The menu-bar window's line: "Synced 4 min ago · 3 in today · 2 ingesting · 1 problem today"; null
- *  when nothing has synced or been ingested. */
-export function syncLine(log: SyncLog, runs: IngestRun[], now = new Date()): { text: string; problem: boolean } | null {
+ *  when nothing has synced or been ingested. `problems` is its last part alone ("1 problem today",
+ *  or ""), the one part Activity shows in amber: the rest is only informational. */
+export function syncLine(log: SyncLog, runs: IngestRun[], now = new Date()): { text: string; problem: boolean; problems: string } | null {
   if (!log.lastPass && !runs.length) return null;
   const today = localToday(now);
   const rows = syncFeed(log, runs);
@@ -168,11 +169,12 @@ export function syncLine(log: SyncLog, runs: IngestRun[], now = new Date()): { t
   // A run of repeats counts when its last pass was today.
   const lastAt = (r: FeedRow) => (r.kind === "sync" ? (log.passes.find((p) => p.at === r.at)?.last ?? r.at) : r.at);
   const problems = rows.filter((r) => failing(r) && lastAt(r).startsWith(today)).length;
+  const bad = problems ? `${plural(problems, "problem")} today` : "";
   const parts = [
     log.lastPass ? `Synced ${ago(log.lastPass, now)}` : "Not synced yet",
     inToday ? `${inToday} in today` : "",
     ingesting ? `${ingesting} ingesting` : "",
-    problems ? `${plural(problems, "problem")} today` : "",
+    bad,
   ].filter(Boolean);
-  return { text: parts.join(" · "), problem: problems > 0 };
+  return { text: parts.join(" · "), problem: problems > 0, problems: bad };
 }

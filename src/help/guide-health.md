@@ -11,7 +11,7 @@ Keep the wiki accurate and well linked as it grows.
 Go to [Wiki health](app:health). It checks the wiki whenever the vault changes. **To decide** counts the issues only you can settle. Click a check to see its issues, and an issue to open its page.
 
 ## Fix the safe issues
-Click **Fix safe issues** in the top bar of [Wiki health](app:health). Brainstead adds missing links, corrects `updated:` dates, adds missing `log.md` lines and puts back lost system note headers. `⌘Z` undoes each fix.
+Click **Fix safe issues** in the top bar of [Wiki health](app:health). Brainstead adds missing links, corrects `updated:` dates, adds missing `log.md` lines and puts back lost system note headers. `⌘Z` undoes each fix. The [Wiki](app:wiki) list has the same **Fix** on one line above its pages, which counts the safe fixes; they don't turn any page amber, only what you need to decide does.
 
 ## Decide the rest
 - Missing pages: click **Create** or **Link to…**.

@@ -1590,6 +1590,22 @@ body.presizing * {
 .ftools .sp {
   flex: 1;
 }
+
+/* The Wiki list's safe fixes: one quiet line, not a badge on every row. */
+.safeline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.safeline .linkish {
+  font-weight: 500;
+}
+.safeline .btn {
+  margin-left: 4px;
+}
 .listq {
   width: 280px;
 }

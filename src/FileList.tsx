@@ -94,6 +94,7 @@ export function FileList<T extends FileSummary>({
   table,
   defaultSort,
   filters,
+  banner,
   empty,
   placeholder,
   group,
@@ -106,6 +107,8 @@ export function FileList<T extends FileSummary>({
   table: ListTable;
   defaultSort: [string, 1 | -1];
   filters?: ReactNode;
+  /** A quiet line between the toolbar and the table (the Wiki list's safe fixes). */
+  banner?: ReactNode;
   empty?: ReactNode;
   placeholder: string;
   group?: Grouping<T>;
@@ -293,6 +296,7 @@ export function FileList<T extends FileSummary>({
           {rows !== null && ` · ${fmtBytes(shownBytes)}`}
         </span>
       </div>
+      {banner}
       <div
         className={`ftable ${groups ? "grouped" : ""}`}
         ref={(el) => {

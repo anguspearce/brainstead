@@ -96,9 +96,17 @@ describe("Activity › Sync & ingest", () => {
 
   it("sums it up in a line for the menu-bar window", () => {
     const now = new Date(2026, 10, 19, 10, 44);
-    expect(syncLine(log, runs, now)).toEqual({ text: "Synced 4 min ago · 2 in today · 1 ingesting · 2 problems today", problem: true });
+    expect(syncLine(log, runs, now)).toEqual({
+      text: "Synced 4 min ago · 2 in today · 1 ingesting · 2 problems today",
+      problem: true,
+      problems: "2 problems today",
+    });
     expect(syncLine({ lastPass: null, passes: [] }, [], now)).toBeNull();
-    expect(syncLine({ lastPass: "2026-11-19T10:44:00", passes: [] }, [], now)).toEqual({ text: "Synced just now", problem: false });
+    expect(syncLine({ lastPass: "2026-11-19T10:44:00", passes: [] }, [], now)).toEqual({
+      text: "Synced just now",
+      problem: false,
+      problems: "",
+    });
     expect(ago("2026-11-19T08:00:00", now)).toBe("2 h ago");
     expect(ago("2026-11-17T08:00:00", now)).toBe("on 2026-11-17");
   });

@@ -25,7 +25,7 @@ An assistant reads the heatmap's days, and a day's files, with the `activity` to
 - **A pass that had a problem or couldn't run**, and why (signed out, read-only). When the same thing happens pass after pass it's one entry with a count and the time of the last one, not a line every few minutes.
 - **Each ingest**: the wiki pages it changed, **nothing for the wiki**, **nothing in it, moved to the Trash** (a chat day with nothing in it, which you can put back from [Changes](app:review)), or why it failed. An ingest still going says which step it's on.
 
-The line at the top sums it up, as the menu-bar window does: when the sync last ran, how many sources came in today, how many are being ingested and how many problems there were today. The chips keep one service (**Teams**, **Outlook**, **Slack**) or **Problems** only. Click a source or page under an entry to open it.
+The line at the top sums it up, as the menu-bar window does: when the sync last ran, how many sources came in today, how many are being ingested and how many problems there were today. Only the problems are in amber. The chips keep one service (**Teams**, **Outlook**, **Slack**) or **Problems** only. Click a source or page under an entry to open it.
 
 By default Brainstead doesn't notify you about each synced message or each ingest, as Teams, Outlook and Slack have already told you; this view is where to look instead. **Notifications** in [Settings › General](app:settings/general) changes that.
 
