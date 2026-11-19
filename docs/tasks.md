@@ -62,7 +62,7 @@ A capture offers only the choices that fit its kind. A transcript: make a meetin
 Tasks (⌘3) has the GTD lists: **Next actions**, **Follow-ups**, **Waiting for**, **Deferred**, **Someday / maybe**, and **Done this week** and **last week**. Next actions leaves out deferred tasks until their day, Inbox tasks until you clarify them, and the tasks of a project that's On hold or Someday until it's active again (the task's `projectStatus`, read from its project note's `status`; they still show on the project's page).
 
 - Tick to finish a task; a recurring one gets its next occurrence. ⌘Z undoes.
-- The ⋯ menu, a right-click or the pane on the right renames a task, sets dates, priority, context, effort and project, marks a task in progress or waiting for, cancels, deletes or opens its note.
+- A row's chips (due, defer, priority, context, effort, project) each open a picker with their quick choices, and its **+** adds a field it hasn't got. The ⋯ menu, or a right-click, renames a task, marks it in progress or waiting for, cancels, deletes or opens its note, and its **More…** sets every date, priority, context, effort and project in one place. The pane on the right shows all of them at once.
 - Drag rows into your own order, kept in the file as `^rank-N`.
 - Keys: `↑` `↓` choose, `↩` opens, `Space` ticks, `⌫` deletes (⌘Z puts it back), `/` searches. They work on Today, Projects and the weekly review too.
 - **Search tasks** narrows every list to tasks matching all its words.

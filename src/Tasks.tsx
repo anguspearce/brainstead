@@ -337,8 +337,8 @@ const otherFields = (t: TaskRow) =>
 function TaskDetail({ t }: { t: TaskRow }) {
   return (
     <div className="tdetail">
-      {/* The task menu's own editor, so the pane offers everything the menu does. */}
-      <TaskEditor t={t} onClose={() => {}} wide={false} />
+      {/* The same sections and verbs as the row's chips and its ⋯ menu, so the pane offers everything they do. */}
+      <TaskEditor t={t} />
       {(otherFields(t).length > 0 || t.tags.some((g) => !g.startsWith("context/"))) && (
         <dl className="kv">
           {otherFields(t).map((p, i) => (

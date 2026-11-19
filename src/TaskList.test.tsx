@@ -122,6 +122,44 @@ describe("task rows", () => {
   });
 });
 
+describe("a row's chips, + and ⋯ menu", () => {
+  const task = t("Call Maya 📅 2026-10-09", { due: "2026-10-09", contexts: ["calls"], effort: "15m", effortMin: 15 });
+  const menuText = () => document.querySelector(".popover")?.textContent ?? "";
+
+  it("a chip opens its own field's picker", () => {
+    const { container } = render(<TaskList rows={[task]} manual={false} />);
+    fireEvent.click(container.querySelector(".chip.ed.f-due")!);
+    expect(menuText()).toContain("Due");
+    expect(menuText()).toContain("Next week");
+    expect(menuText()).not.toContain("Priority");
+    cleanup();
+    const again = render(<TaskList rows={[task]} manual={false} />);
+    fireEvent.click(again.container.querySelector(".chip.ed.ctx")!);
+    expect(menuText()).toContain("@calls");
+    expect(menuText()).not.toContain("Next week");
+  });
+
+  it("+ offers only the fields it hasn't got", () => {
+    const { container } = render(<TaskList rows={[task]} manual={false} />);
+    fireEvent.click(container.querySelector(".tadd")!);
+    const items = [...document.querySelectorAll(".popover [role=menuitem]")].map((b) => b.textContent);
+    expect(items).toEqual(["Defer until", "Start date", "Priority", "Project"]);
+    fireEvent.click(screen.getByText("Priority"));
+    expect(menuText()).toContain("Highest");
+  });
+
+  it("⋯ shows the verbs, and More… every field", () => {
+    const { container } = render(<TaskList rows={[task]} manual={false} />);
+    fireEvent.click(container.querySelector(".tmore")!);
+    expect(menuText()).toContain("Waiting for someone");
+    expect(menuText()).toContain("Delete task");
+    expect(menuText()).not.toContain("Next week");
+    fireEvent.click(screen.getByText("More…"));
+    for (const w of ["Due", "Defer until", "Set start date", "Set created date", "Priority", "Context", "Effort", "Project"])
+      expect(menuText()).toContain(w);
+  });
+});
+
 describe("changing a task's words", () => {
   it("keeps its dates and tags, and refuses words it can't find once", () => {
     expect(retitled("- [ ] Call Maya 📅 2026-10-09 #work", "Call Maya", "Call Lena")).toBe("- [ ] Call Lena 📅 2026-10-09 #work");

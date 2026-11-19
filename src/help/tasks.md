@@ -31,20 +31,27 @@ They work on [Today](app:today), [Projects](app:projects) and the [Weekly review
 ## Tick, defer and undo
 Tick a task to mark it done; it gets a done date (`✅ 2026-10-03`). Untick it to remove it. ⌘Z undoes up to five task changes, even after a restart, as long as the line hasn't changed since.
 
-Right-click a row, or click its ⋯ button, for the task's menu:
+Click a chip on a row to change that field: the due or defer date, priority, a context, the effort or the project. Each opens a small picker with its quick choices:
 
 - **Due**: Today, Tomorrow, Mon or Next week.
 - **Defer until**: Tomorrow, Mon, Next week or 2 weeks. A deferred task stays off Next actions until that day, then shows on [Today](app:today).
 - **Pick…** for a calendar, **Clear** to remove.
-- **More dates…** shows the start and created dates. A start date doesn't hide the task; it only makes it less urgent until then.
-- Priority, context, effort and project, with quick chips and **Find…** or **Other…**.
+- Priority, context, effort and project, with quick chips and **Find…** or **Other…**. The project's picker also has **Open** with the project's name, to go to it on [Projects](app:projects).
+
+To add a field the task hasn't got, point at the row (or select it) and click its **+**: it lists the fields the task has none of (due, defer, start, priority, context, effort, project) and opens that field's picker.
+
+Right-click a row, or click its ⋯ button, for the task's menu:
+
 - **Rename…** changes the task's words in the menu (`↩` keeps, `Esc` goes back); its dates and tags stay.
 - **Mark in progress** (its box shows a dot) and **Back to to-do**.
 - **Waiting for someone**, **Cancel task** and **Reopen** on a cancelled task.
+- **More…** shows every field in one place: the due, defer, start and created dates, priority, context, effort and project, with the same quick choices as the chips. A start date doesn't hide the task; it only makes it less urgent until then.
 - **Open** with the note's name, and **Delete task**, which ⌘Z puts back.
 
+The chips, the **+**, the ⋯ menu and the task pane work the same on [Today](app:today), [Projects](app:projects), the [Weekly review](app:weekly) and in task blocks inside a note.
+
 ## Use the task pane
-Click a task to show it in the pane on the right; click it again to let it go. The pane is the task's ⋯ menu, laid out in one column: its dates with quick picks, priority, context, effort and project, then **Rename…**, **Mark in progress**, **Waiting for someone**, **Cancel task**, its note and **Delete task**. Fields the menu doesn't set (a recurrence, an id) and its other tags are listed under them. Context offers the ones in use plus calls, computer, errands, office and personal, or **Other…** for a new one.
+Click a task to show it in the pane on the right; click it again to let it go. The pane shows every field at once, in one column: its dates with quick picks (**More dates…** adds start and created), priority, context, effort and project, then the ⋯ menu's **Rename…**, **Mark in progress**, **Waiting for someone**, **Cancel task**, its note and **Delete task**. Fields the pane doesn't set (a recurrence, an id) and its other tags are listed under them. Context offers the ones in use plus calls, computer, errands, office and personal, or **Other…** for a new one.
 
 To change a task's words in any list, point at it and click the pencil after them, or press `↩` on the selected one (`↩` keeps, `Esc` drops; dates and tags stay).
 

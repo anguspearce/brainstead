@@ -2724,6 +2724,32 @@ html[data-platform="windows"] .scrim.mfull {
   font-weight: 400;
 }
 
+/* A chip that opens its field's picker: plain text until pointed at, as the project's. */
+.trow .ts .chip.ed {
+  cursor: pointer;
+}
+.trow .ts .chip.ed:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.trow .ts .chip.ed.red:hover {
+  color: var(--red);
+}
+
+/* The row's +, for a field it hasn't got: only on the row pointed at, selected or with the keyboard. */
+.trow .tadd {
+  opacity: 0;
+  width: 24px;
+  height: 24px;
+  margin-right: -8px;
+}
+.trow:hover .tadd,
+.trow.sel .tadd,
+.tlist.keys:focus-within .trow.kcur .tadd,
+.trow .tadd:focus-visible {
+  opacity: 1;
+}
+
 /* Always there, muted until the row is hovered or selected, so the menu can be found. */
 .trow .tmore {
   opacity: 0.45;
@@ -10402,12 +10428,14 @@ html.tray-view body {
 .tmenu .mrename .pin {
   width: 100%;
 }
-.tmenu.wide .tmacts {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+
+/* More… on the ⋯ menu: a chevron at its end; the row's +: a line saying what it adds. */
+.tmenu .mend {
+  margin-left: auto;
+  color: var(--ink3);
 }
-.tmenu:not(.wide) .tmacts {
-  display: contents;
+.tmenu .mhead {
+  padding: 6px 9px 4px;
 }
 
 /* A long name (a project's) is cut to the column, in full in its tooltip. */
@@ -10419,8 +10447,9 @@ html.tray-view body {
   line-height: 20px;
 }
 
-.tmenu .tmacts button {
+.tmenu > button {
   min-width: 0;
+  flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

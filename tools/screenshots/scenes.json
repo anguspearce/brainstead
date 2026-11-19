@@ -30,6 +30,21 @@
     "taskMenu": "Project. Orbit App launch.md:9"
   },
   {
+    "name": "task-menu-more",
+    "screen": "tasks",
+    "taskMenu": "Project. Orbit App launch.md:9|more"
+  },
+  {
+    "name": "task-chip",
+    "screen": "tasks",
+    "taskMenu": "Project. Orbit App launch.md:9|due"
+  },
+  {
+    "name": "task-add",
+    "screen": "tasks",
+    "taskMenu": "Project. Orbit App launch.md:9|add"
+  },
+  {
     "name": "tasks-search",
     "screen": "tasks",
     "view": {

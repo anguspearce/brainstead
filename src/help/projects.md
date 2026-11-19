@@ -19,7 +19,7 @@ An active project that's stuck says **No next action** in red, and one that's qu
 ## Work on a project
 Click a project to open it. Edit its name, **Done looks like** (the outcome) and **Area** in place (each has a pencil): click, type and press `↩`. Renaming the project renames its note, as **Rename** in the file menu does: links to it follow, and **Undo** in the toast (or ⌘Z) puts the old name back. To change anything else in the note, click the pencil on the project's row, or **Edit** under its tasks: the project note opens in Edit.
 
-**Next actions** lists its open tasks. Tick them, drag them into order (an assistant can too), use each task's ⋯ menu or the task-list keys. Type in **Add a next action** and press `↩` to add one under the note's `## Next actions` heading; `@calls`, `effort:15m` and `due:fri` work as in capture.
+**Next actions** lists its open tasks. Tick them, drag them into order (an assistant can too), click a task's chips to change its fields, use its ⋯ menu or the task-list keys. Type in **Add a next action** and press `↩` to add one under the note's `## Next actions` heading; `@calls`, `effort:15m` and `due:fri` work as in capture.
 
 **Waiting for** and **Someday / maybe** list those tasks when there are any. Each waiting-for has **Draft nudge**, which asks [Ask](app:ask) for a follow-up to copy into Outlook or Teams.
 
@@ -48,7 +48,7 @@ At the top of the **Active** projects, **Find tasks and projects** has an assist
 Or start one from ⌘K, or from an [Inbox](app:inbox) item with `P`.
 
 ## Link tasks to a project
-Add the project's link to a task's line, as in `- [ ] Draft the launch post [[Project. Orbit App launch]]`, or use Project in its ⋯ menu or the task pane on [Tasks](app:tasks). Rows show the project as a chip; click it to open the project.
+Add the project's link to a task's line, as in `- [ ] Draft the launch post [[Project. Orbit App launch]]`, or click the row's **+** and choose Project (or its project chip, to change it), or use More… in its ⋯ menu or the task pane on [Tasks](app:tasks). Rows show the project as a chip; click it for **Open** with the project's name, or to choose another.
 
 ## Resize the panes
 Drag the line between the project list and the open project to resize them, and the line beside a project's side column; a double-click puts either back ([pane widths](help:settings-general)).

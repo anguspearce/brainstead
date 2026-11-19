@@ -82,7 +82,7 @@ export interface Scene {
   weekprep?: boolean;
   /** For "inbox": a sample suggestion for the open item, as Suggest would make. */
   inboxSuggest?: boolean;
-  /** A task's menu open, by its `path:line` (the task list's key). */
+  /** A task's menu open, by its `path:line` (the task list's key); `path:line|more`, `|add` or a field (`|due`, `|context`…) opens More…, the row's + or that chip's picker. */
   taskMenu?: string;
   /** A toast to show, with an Undo button. */
   toast?: string;
