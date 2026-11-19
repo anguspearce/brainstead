@@ -481,6 +481,16 @@ html[data-platform="windows"] .top {
 }
 
 /* A row that opens a menu (Tools): a chevron after its count. */
+
+/* A fold's chevron: down when open, turned to point right when folded (sidebar sections, the
+   Vault fold, Wiki health's checks). */
+.foldchev {
+  flex: none;
+  transition: transform 0.15s;
+}
+.foldchev.shut {
+  transform: rotate(-90deg);
+}
 .navi .navchev {
   flex: none;
   color: var(--ink3);
@@ -2357,6 +2367,11 @@ details.callout[open] .callout-chev {
   color: var(--accent-ink);
   cursor: pointer;
   font-size: var(--fs-xs);
+}
+
+/* A link inside a sentence takes the sentence's size, as Learn more does. */
+p > .tlink {
+  font-size: inherit;
 }
 
 /* A setting's Learn more (src/help/HelpDrawer.tsx): after its one line, in the line's own size. */
@@ -6732,6 +6747,11 @@ select.sel {
 .row.gap {
   gap: 10px;
 }
+
+/* A checkbox and its words. */
+.row.tight {
+  gap: 6px;
+}
 .chip.ctx {
   background: var(--accent-soft);
   color: var(--accent-ink);
@@ -10711,9 +10731,6 @@ html.tray-view body {
 }
 
 /* The foot's Vault fold (D-20261119-05): its chevron says it folds, and what it holds sits under it. */
-.navi.vaultfold .navchev {
-  transition: transform 0.15s;
-}
 .side .foot .foldkids {
   display: flex;
   flex-direction: column;

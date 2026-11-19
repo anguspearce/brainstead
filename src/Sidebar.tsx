@@ -172,7 +172,7 @@ function Section({
         onClick={() => settings.update({ folded: { ...s.folded, [id]: !folded } })}
       >
         {title}
-        <Icon name="chevdown" size={12} style={{ transform: folded ? "rotate(-90deg)" : undefined, transition: "transform .15s" }} />
+        <Icon name="chevdown" size={12} className={`foldchev ${folded ? "shut" : ""}`} />
       </button>
       {!folded && children}
     </>
@@ -238,7 +238,7 @@ function VaultFold({
         ) : (
           !!x?.n && <span className={`n ${x.hot ? "hot" : ""} ${x.bad ? "bad" : ""}`}>{fmtCount(x.n)}</span>
         )}
-        <Icon name="chevdown" size={12} className="navchev" style={{ transform: open ? undefined : "rotate(-90deg)" }} />
+        <Icon name="chevdown" size={12} className={`navchev foldchev ${open ? "" : "shut"}`} />
       </button>
       {open && <div className="foldkids">{children}</div>}
     </>

@@ -519,7 +519,7 @@ function SidebarRail() {
       <div className="eyebrow">Sidebar</div>
       <div className="row">
         {rows.map(([w, label, tip]) => (
-          <label key={w} className="row" style={{ gap: 6 }} title={tip}>
+          <label key={w} className="row tight" title={tip}>
             <input type="checkbox" checked={railOn(s, w === "narrow")} onChange={(e) => setRail(w, e.target.checked)} />
             {label}
           </label>
@@ -553,8 +553,7 @@ function PaneWidths() {
         {(Object.keys(RESIZE_LOCKS) as ResizeType[]).map((type) => (
           <label
             key={type}
-            className="row"
-            style={{ gap: 6 }}
+            className="row tight"
             title={`${RESIZE_LOCKS[type].what} keep their widths and their dividers are hidden, until this is off`}
           >
             <input type="checkbox" checked={resizeLocked(type, resizeLocks)} onChange={(e) => setResizeLock(type, e.target.checked)} />

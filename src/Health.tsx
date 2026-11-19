@@ -458,7 +458,7 @@ function Group({
                 {c.title}
               </span>
               <span className="c">{n}</span>
-              {n + ignored > 0 && <Icon name="chevdown" size={12} style={{ transform: isOpen ? undefined : "rotate(-90deg)" }} />}
+              {n + ignored > 0 && <Icon name="chevdown" size={12} className={`foldchev ${isOpen ? "" : "shut"}`} />}
             </button>
             {isOpen && (
               <div className={`ckitems ${c.id === "missing-pages" || c.id === "broken-sources" ? "ghosts" : ""}`}>

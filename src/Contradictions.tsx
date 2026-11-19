@@ -22,6 +22,7 @@ import { ASSISTANT_FRONTMATTER } from "./md/scripts";
 import { LayerTag } from "./ui";
 import { usePanes } from "./PaneResizer";
 import { PANES } from "./panes";
+import { LoadFailed } from "./TaskList";
 
 /** How a clash's verdict reads, and its tone. */
 export function verdictLabel(it: ContradictionItem): [string, string] {
@@ -98,12 +99,16 @@ async function saveReport(r: ContradictionsReport) {
 export function ContradictionsScreen() {
   const panes = usePanes({ "contradictions.left": PANES["contradictions.left"] }, { minFlex: 320 });
   const [r, setR] = useState<ContradictionsReport | null>(null);
+  const [err, setErr] = useState("");
   const [sel, setSel] = useViewState<string | null>("contradictions:sel", null);
   const load = () =>
     void api
       .contradictionsReport()
-      .then(setR)
-      .catch(() => {});
+      .then((x) => {
+        setR(x);
+        setErr("");
+      })
+      .catch((e) => setErr(String(e)));
   useEffect(() => {
     load();
     const off = api.onContradictionsChanged(() => load()).catch(() => () => {});
@@ -200,7 +205,9 @@ export function ContradictionsScreen() {
         <div className="cgrid" {...panes.root}>
           {panes.resizers}
           <div className="ilist tb">
-            {!items.length && (
+            {!r && err && <LoadFailed what="the contradictions" error={err} onRetry={load} compact />}
+            {!r && !err && <p className="faint pad">Loading…</p>}
+            {r && !items.length && (
               <p className="faint pad">{last?.finished ? "No pages disagree." : "Run a check to read the wiki's claims."}</p>
             )}
             {items.map((it) => {
@@ -256,6 +263,7 @@ export function ContradictionsScreen() {
                   <span className="eyebrow">Judge's view</span>
                   {cur.verdict.fix && <p className="muted">{cur.verdict.fix}</p>}
                   {cur.verdict.correct && <p className="faint small">Right: {pageName(cur.verdict.correct)}</p>}
+                  {!cur.verdict.fix && !cur.verdict.correct && <p className="faint">{verdictLabel(cur)[0]}, with no fix suggested.</p>}
                 </div>
               )}
               <div className="qfoot">
