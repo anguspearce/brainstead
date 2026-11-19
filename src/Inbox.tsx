@@ -54,6 +54,7 @@ import { keyLabel } from "./platform";
 import { MoveAction } from "./MoveAction";
 import { isStrayKey } from "./strayKeys";
 import { usePanes } from "./PaneResizer";
+import { BookmarksBand } from "./skills/Triage";
 import { PANES } from "./panes";
 
 export { unclarified } from "./gtd";
@@ -651,6 +652,7 @@ export function InboxScreen() {
               </div>
             );
           })}
+          <BookmarksBand />
         </div>
         <div className="iopen">
           {many ? (

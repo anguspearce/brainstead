@@ -11,7 +11,7 @@ Brainstead drafts the reply and never sends anything: you copy it into Outlook o
 Install the Outlook and Teams browser extensions from [Settings › Capture extensions](app:settings/capture): in Chrome or Edge, open `chrome://extensions`, switch on Developer mode, click Load unpacked and choose the extension's folder (**Show in Finder** shows it). Then open a thread and click the extension's button. Captures need Read-only off in [Settings › Vault](app:settings/vault).
 
 ## Open the thread
-Click **Tools › Draft reply** in the sidebar, or press `D` on an email or chat capture in the [Inbox](app:inbox). In [Draft reply](app:reply), pick the thread beside **Thread**, such as "Re Orbit App launch date". For a thread you haven't captured, choose **Paste a thread…** and paste the messages.
+Click **Draft reply** under Assistant in the sidebar, or press `D` on an email or chat capture in the [Inbox](app:inbox). In [Draft reply](app:reply), pick the thread beside **Thread**, such as "Re Orbit App launch date". For a thread you haven't captured, choose **Paste a thread…** and paste the messages.
 
 ## Draft it
 Choose **Brief**, **Warm** or **Formal** and click **Draft**. The AI looks up the thread's people and topics in your vault and writes a plain-text reply. Under the thread, a verdict says whether the question was answered, point by point. [Draft reply](app:reply) lists the pages it drew on and, under **To fill in**, the gaps left for you.

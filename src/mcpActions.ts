@@ -1676,7 +1676,7 @@ async function startRun(a: Args, r: McpRequest): Promise<string> {
     case "contradictions":
       if (!(await api.contradictionsRun(unattended))) return "A contradictions check is running already.";
       noted("started a contradictions check");
-      return "The contradictions check has started; run_status shows how it's going, and its report comes to the Contradictions screen.";
+      return "The contradictions check has started; run_status shows how it's going, and its report comes to Wiki health's Contradictions tab.";
     case "meeting_note": {
       const transcript = str(a, "transcript");
       const all = await api.meetingTranscripts();
@@ -3251,7 +3251,7 @@ async function healthIssue(a: Args): Promise<string> {
   return `Moved ${i.page} to the Trash; restore_from_trash restores it.`;
 }
 
-/** contradictions: the Contradictions screen's findings, its Mark resolved and Ignore, and Save report as note. */
+/** contradictions: Wiki health's Contradictions tab's findings, its Mark resolved and Ignore, and Save report as note. */
 async function contradictionsTool(a: Args, r: McpRequest): Promise<string> {
   const action = str(a, "action") ?? "list";
   const rep = await api.contradictionsReport();

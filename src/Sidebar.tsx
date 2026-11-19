@@ -15,7 +15,7 @@ import { docChecks, docChecksUnseen, startDocChecks } from "./docChecks";
 import { isActive, runs, startRuns } from "./Ingest";
 import { localToday } from "./md/taskQuery";
 import { reportEditError, tasksFailed, todayRows, undoLast, useAllTasks, viewRows, VIEWS } from "./taskModel";
-import { ago, fmtCount, Popover } from "./ui";
+import { ago, fmtCount } from "./ui";
 import { toast } from "./Toast";
 import { changes, health, startKnowledge } from "./knowledge";
 import type { IndexStats, Layer, VaultStatus } from "./api";
@@ -38,7 +38,6 @@ export const DAILY: Item[] = [
   { screen: "tasks", label: "Tasks", icon: "tasks" },
   { screen: "projects", label: "Projects", icon: "project" },
   { screen: "weekly", label: "Weekly review", icon: "calendar" },
-  { screen: "ask", label: "Ask", icon: "ask" },
 ];
 
 export const LIBRARY: Item[] = [
@@ -46,12 +45,10 @@ export const LIBRARY: Item[] = [
   { screen: "notes", label: "Notes", icon: "note", count: (s) => s.notes },
   { screen: "wiki", label: "Wiki", icon: "wiki", count: (s) => s.wiki },
   { screen: "sources", label: "Sources", icon: "source", count: (s) => s.sources },
-  { screen: "templates", label: "Templates", icon: "template", count: (s) => s.templates },
-  { screen: "graph", label: "Graph", icon: "graph" },
 ];
 
-/** The screens that do one job with the AI: the sidebar's Tools menu. ⌘K lists them under Go to
- *  with the other screens, found by what they do too (Palette's TOOL_WORDS); they aren't in ALL_ITEMS. */
+/** The screens that do one job with the AI, under Ask in the sidebar's Assistant section. ⌘K lists
+ *  them under Go to with the other screens, found by what they do too (Palette's TOOL_WORDS). */
 export const TOOLS: Item[] = [
   { screen: "reply", label: "Draft reply", icon: "send", tip: "draft a reply to an email or Teams thread, captured or pasted" },
   { screen: "meeting", label: "Meeting notes", icon: "note", tip: "make meeting and 1-1 notes from Teams transcripts" },
@@ -59,19 +56,28 @@ export const TOOLS: Item[] = [
     screen: "doccheck",
     label: "Compare",
     icon: "shield",
-    tip: "A document against the canonical, or any two versions of a document",
+    tip: "a document against the canonical, or any two versions of a document",
   },
+];
+
+/** The Assistant section: Ask, then the tools (D-20261119-05). */
+export const ASSISTANT: Item[] = [{ screen: "ask", label: "Ask", icon: "ask" }, ...TOOLS];
+
+/** The Vault fold at the foot: the vault's upkeep, folded away until wanted (D-20261119-05). */
+export const VAULT: Item[] = [
+  { screen: "health", label: "Wiki health", icon: "health" },
+  { screen: "activity", label: "Activity", icon: "activity" },
+  { screen: "trash", label: "Trash", icon: "trash" },
+  { screen: "templates", label: "Templates", icon: "template", count: (s) => s.templates },
+  { screen: "graph", label: "Graph", icon: "graph" },
 ];
 
 export const FOOTER: Item[] = [
   { screen: "review", label: "Changes", icon: "review" },
-  { screen: "health", label: "Wiki health", icon: "health" },
-  { screen: "activity", label: "Activity", icon: "activity" },
-  { screen: "trash", label: "Trash", icon: "trash" },
   { screen: "settings", label: "Settings", icon: "settings" },
 ];
 
-export const ALL_ITEMS = [...DAILY, ...LIBRARY, ...FOOTER];
+export const ALL_ITEMS = [...DAILY, ...LIBRARY, ...ASSISTANT, ...VAULT, ...FOOTER];
 
 /** A vault path's layer, by its top folder (as the walker decides it). */
 export function layerOf(path: string): Layer {
@@ -82,8 +88,9 @@ export function layerOf(path: string): Layer {
   return "note";
 }
 
-/** ⌘1 to ⌘9, then ⌘0, go to the sidebar's first ten rows, in its order (a note's View, Edit and
- *  Source are ⌥⌘1 to ⌥⌘3). */
+/** ⌘1 to ⌘9, then ⌘0: the ten screens used most. Today to Weekly review, then Ask, then Search to
+ *  Sources: the keys they had before Ask moved down to the Assistant section, so hands that know them
+ *  keep them (a note's View, Edit and Source are ⌥⌘1 to ⌥⌘3). */
 export const HOTKEYS: Screen[] = ["today", "inbox", "tasks", "projects", "weekly", "ask", "search", "notes", "wiki", "sources"];
 
 /** A screen's hotkey: ⌘1 … ⌘9, and ⌘0 for the tenth. */
@@ -123,85 +130,75 @@ function NavItem({ item, on, stats, extra }: { item: Item; on: boolean; stats: I
   );
 }
 
-/** Draft reply, Meeting notes and Compare behind one row, which opens a menu of the three. The
- *  row shows their spinner or badge, and is lit while one of them is open. */
-function ToolsItem({ lit, extra }: { lit: Screen; extra: Partial<Record<Screen, Extra>> }) {
-  const [at, setAt] = useState<DOMRect | null>(null);
-  const mine = TOOLS.map((t) => extra[t.screen]).filter((x): x is Extra => !!x);
-  const n = mine.reduce((a, x) => a + x.n, 0);
-  const busy = mine.find((x) => x.busy)?.busy;
-  const on = TOOLS.some((t) => t.screen === lit);
-  return (
-    <>
-      <button
-        type="button"
-        className={`navi ${on ? "on" : ""}`}
-        aria-haspopup="menu"
-        aria-expanded={!!at}
-        title={`Draft reply, Meeting notes and Compare${busy ? `. ${busy}` : ""}`}
-        // Open, a click on the row closes it: kept from the menu's click-outside, which would
-        // close it on the press only for the click to open it again.
-        onMouseDown={(e) => at && e.nativeEvent.stopPropagation()}
-        onClick={(e) => setAt(at ? null : e.currentTarget.getBoundingClientRect())}
-      >
-        <Icon name="cpu" />
-        <span className="lbl">Tools</span>
-        {busy && !n ? (
-          <span className="n busy" aria-label={busy}>
-            <span className="spin" />
-          </span>
-        ) : (
-          n > 0 && <span className={`n hot ${mine.some((x) => x.bad) ? "bad" : ""}`}>{fmtCount(n)}</span>
-        )}
-        {/* It opens a menu, not a screen. */}
-        <Icon name="chevright" size={12} className="navchev" />
-      </button>
-      {at && (
-        <Popover anchor={at} onClose={() => setAt(null)} width={250} place="right">
-          <div className="menu" role="menu">
-            {TOOLS.map((t) => {
-              const x = extra[t.screen];
-              return (
-                <button
-                  key={t.screen}
-                  type="button"
-                  role="menuitem"
-                  title={x?.busy ?? `${t.label}: ${t.tip}`}
-                  onClick={() => {
-                    setAt(null);
-                    nav.go(t.screen);
-                  }}
-                >
-                  <Icon name={t.icon} size={14} />
-                  <span className="grow">{t.label}</span>
-                  {x?.busy && !x.n ? <span className="spin" /> : !!x?.n && <span className="faint">{fmtCount(x.n)}</span>}
-                </button>
-              );
-            })}
-          </div>
-        </Popover>
-      )}
-    </>
-  );
-}
-
 /** A section heading that folds its items away; remembered in settings. */
-function Section({ id, title, children }: { id: string; title: string; children: React.ReactNode }) {
+function Section({ id, title, what, children }: { id: string; title: string; what?: string; children: React.ReactNode }) {
   const s = useStore(settings);
   const folded = !!s.folded?.[id];
+  what ??= `the ${title.toLowerCase()}`;
   return (
     <>
       <button
         type="button"
         className="sect"
         aria-expanded={!folded}
-        title={folded ? `Show the ${title.toLowerCase()}` : `Fold the ${title.toLowerCase()} away`}
+        title={folded ? `Show ${what}` : `Fold ${what} away`}
         onClick={() => settings.update({ folded: { ...s.folded, [id]: !folded } })}
       >
         {title}
         <Icon name="chevdown" size={12} style={{ transform: folded ? "rotate(-90deg)" : undefined, transition: "transform .15s" }} />
       </button>
       {!folded && children}
+    </>
+  );
+}
+
+/** Adds up the badges of the rows a closed fold hides: their count, whether any wants attention, a
+ *  warning or a spinner, so nothing that needs you is folded out of sight. */
+export function summed(xs: (Extra | undefined)[]): Extra | undefined {
+  const mine = xs.filter((x): x is Extra => !!x);
+  if (!mine.length) return undefined;
+  return {
+    n: mine.reduce((a, x) => a + x.n, 0),
+    hot: mine.some((x) => x.hot),
+    bad: mine.some((x) => x.bad),
+    err: mine.find((x) => x.err)?.err,
+    busy: mine.find((x) => x.busy)?.busy,
+  };
+}
+
+/** The foot's Vault fold: a row like the others that opens to Wiki health, Activity, Trash, Templates
+ *  and Graph. Closed (as it starts), it carries their badges and is lit while one of them is open. */
+function VaultFold({ lit, extra, children }: { lit: Screen; extra: Partial<Record<Screen, Extra>>; children: React.ReactNode }) {
+  const s = useStore(settings);
+  const open = s.folded?.vault === false;
+  const on = !open && VAULT.some((v) => v.screen === lit);
+  const x = open ? undefined : summed(VAULT.map((v) => extra[v.screen]));
+  const what = "Wiki health, Activity, Trash, Templates and Graph";
+  return (
+    <>
+      <button
+        type="button"
+        className={`navi vaultfold ${on ? "on" : ""}`}
+        aria-expanded={open}
+        title={open ? `Fold ${what} away` : `Show ${what}${x?.err ? `. ${x.err}` : x?.busy ? `. ${x.busy}` : ""}`}
+        onClick={() => settings.update({ folded: { ...s.folded, vault: open } })}
+      >
+        <Icon name="folder" />
+        <span className="lbl">Vault</span>
+        {x?.err ? (
+          <span className="n err" aria-label={x.err}>
+            <Icon name="alert" size={12} />
+          </span>
+        ) : x?.busy && !x.n ? (
+          <span className="n busy" aria-label={x.busy}>
+            <span className="spin" />
+          </span>
+        ) : (
+          !!x?.n && <span className={`n ${x.hot ? "hot" : ""} ${x.bad ? "bad" : ""}`}>{fmtCount(x.n)}</span>
+        )}
+        <Icon name="chevdown" size={12} className="navchev" style={{ transform: open ? undefined : "rotate(-90deg)" }} />
+      </button>
+      {open && <div className="foldkids">{children}</div>}
     </>
   );
 }
@@ -274,6 +271,9 @@ export function ReadOnlyPill({ onOpen }: { onOpen?: () => void }) {
 /** The list a document belongs to, lit in the sidebar while it's open. */
 const LAYER_SCREEN: Record<Layer, Screen> = { note: "notes", wiki: "wiki", source: "sources", template: "templates" };
 
+/** Screens with no row of their own, lit as the row they belong to. */
+const PART_OF: Partial<Record<Screen, Screen>> = { compare: "doccheck", triage: "inbox", contradictions: "health" };
+
 /** The index line at the bottom: no dot when current, amber while indexing, red when it failed. */
 export function statusLine(st: VaultStatus, now: number): { tone: "ok" | "busy" | "bad" | "none"; text: string; tip?: string } {
   switch (st.state) {
@@ -303,8 +303,8 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
   }, []);
   const line = statusLine(st, now);
   const docLayer = place.screen === "doc" && place.path ? layerOf(place.path) : null;
-  // Compare's two tabs are one entry.
-  const lit = docLayer ? LAYER_SCREEN[docLayer] : place.screen === "compare" ? "doccheck" : place.screen;
+  // Compare's two tabs are one entry; Triage is the Inbox's, Contradictions a tab of Wiki health.
+  const lit = docLayer ? LAYER_SCREEN[docLayer] : (PART_OF[place.screen] ?? place.screen);
   // Today: overdue and due today (a badge when any is overdue); Tasks: next actions.
   const tasks = useAllTasks();
   const inbox = useInbox();
@@ -385,13 +385,18 @@ export function Sidebar({ onSearch }: { onSearch: () => void }) {
         {DAILY.map(item)}
         <Section id="library" title="Library">
           {LIBRARY.map(item)}
-          <ToolsItem lit={lit} extra={extra} />
+        </Section>
+        <Section id="assistant" title="Assistant" what="Ask and the assistant's tools">
+          {ASSISTANT.map(item)}
         </Section>
         <Section id="bookmarks" title="Bookmarks">
           <Bookmarks current={place.screen === "doc" ? place.path : undefined} />
         </Section>
       </nav>
       <div className="foot">
+        <VaultFold lit={lit} extra={extra}>
+          {VAULT.map(item)}
+        </VaultFold>
         {FOOTER.map(item)}
         <div className="statusrow">
           <div className={`status ${line.tone}`} title={line.tip} role="status">

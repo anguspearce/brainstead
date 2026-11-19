@@ -7080,7 +7080,8 @@ select.sel {
   gap: 6px;
   align-items: center;
 }
-.irow .iprog.bad {
+.irow .iprog.bad,
+.bmband .irow .faint.bad {
   color: var(--amber);
 }
 
@@ -10594,4 +10595,14 @@ html.tray-view body {
   .body.weekly .wside {
     display: none;
   }
+}
+
+/* The foot's Vault fold (D-20261119-05): its chevron says it folds, and what it holds sits under it. */
+.navi.vaultfold .navchev {
+  transition: transform 0.15s;
+}
+.side .foot .foldkids {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }

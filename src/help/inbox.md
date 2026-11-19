@@ -15,6 +15,8 @@ There's a band per source:
 - **Scratchpad**: each note in the Scratchpad (a `## 2026-10-03 09:15` block). Clarifying it removes the block.
 - **To Do list › Other**: tasks under `#### Other` on the To Do list, where Quick capture puts them. A task leaves once it has a project, a context, `#waiting-for`, `#someday-maybe` or `#followup`, or its box isn't empty (done, cancelled or in progress). Until then it stays off Next actions in [Tasks](app:tasks).
 
+Under them, a **Bookmarks** band lists the bookmarks to triage: gone stale (two weeks untouched) or pointing at a note that's gone, as Today's To process counts them. Click one to open [Triage](help:triage) on it, where you keep it, ingest it into the wiki, make a task of it or archive it. They aren't items to clarify, so `J` and `K` and the count leave them out.
+
 The sidebar shows how many items are waiting.
 
 ## Clarify an item

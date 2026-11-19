@@ -19,6 +19,7 @@ import { reportEditError, undoAction } from "../taskModel";
 import { toast } from "../Toast";
 import { TopBar } from "../TopBar";
 import { toTriage } from "../needsYou";
+import { TableBand } from "../ui";
 import { keyLabel } from "../platform";
 
 export type Decision = "keep" | "promote" | "task" | "archive" | "remove";
@@ -49,6 +50,48 @@ const KEYS: [string, Decision][] = [
   ["Backspace", "remove"],
 ];
 
+/** What a bookmark's row says under its title: how long its note has sat, or that it's gone. */
+export const bookmarkNote = (r: BookmarkRow) =>
+  (r.missing ? "The note isn't there any more" : r.days != null ? `untouched ${r.days} ${r.days === 1 ? "day" : "days"}` : "") +
+  (r.stale && !r.missing ? " · stale" : "");
+
+/** The Inbox's Bookmarks band (D-20261119-05): the bookmarks worth a triage (stale or missing, as
+ *  Today's To process counts them), oldest first. A row opens Triage on it, where it's decided. */
+export function BookmarksBand() {
+  const v = useVaultVersion();
+  const [rows, setRows] = useState<BookmarkRow[]>([]);
+  useEffect(() => {
+    let live = true;
+    void api
+      .bookmarksStatus()
+      .then((b) => live && setRows(b.filter((r) => r.stale || r.missing)))
+      .catch(() => live && setRows([]));
+    return () => {
+      live = false;
+    };
+  }, [v]);
+  if (!rows.length) return null;
+  const sorted = [...rows].sort((a, b) => Number(b.missing) - Number(a.missing) || (b.days ?? 1e9) - (a.days ?? 1e9));
+  return (
+    <div className="tb-group bmband" role="rowgroup">
+      <TableBand icon="pin" label="Bookmarks" n={rows.length} tip={`${rows.length} bookmarks gone stale or missing, to triage`} />
+      {sorted.map((r) => (
+        <div key={r.target} role="row" className="irowc tb-row">
+          <button
+            type="button"
+            className="irow"
+            title="Triage it: keep it, ingest it into the wiki, make a task of it or archive it"
+            onClick={() => nav.go({ screen: "triage", view: { "triage:open": r.target } })}
+          >
+            <span className="tt">{r.title}</span>
+            <span className={`faint ${r.missing ? "bad" : ""}`}>{bookmarkNote(r)}</span>
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function TriageScreen() {
   const v = useVaultVersion();
   const [rows, setRows] = useState<BookmarkRow[] | null>(null);
@@ -57,7 +100,8 @@ export function TriageScreen() {
   const [error, setError] = useState("");
   // Decided this session (kept ones stay in the file, so they're remembered here).
   const [done, setDone] = useViewState<Record<string, Decision>>("triage.done", {});
-  const [open, setOpen] = useState<string | null>(null);
+  // The bookmark shown open: the Inbox's Bookmarks band opens Triage on the one clicked.
+  const [open, setOpen] = useViewState<string | null>("triage:open", null, false);
 
   useEffect(() => {
     void api
@@ -183,14 +227,7 @@ export function TriageScreen() {
                   >
                     <span className="grow">
                       <span className="tt">{r.title}</span>
-                      <span className="faint small">
-                        {r.missing
-                          ? "The note isn't there any more"
-                          : r.days != null
-                            ? `untouched ${r.days} ${r.days === 1 ? "day" : "days"}`
-                            : ""}
-                        {r.stale && !r.missing ? " · stale" : ""}
-                      </span>
+                      <span className="faint small">{bookmarkNote(r)}</span>
                     </span>
                     {d ? (
                       <span className="chip green">

@@ -5,7 +5,7 @@ screens: [activity]
 order: 16
 summary: What has changed in the vault: a heatmap of files changed by day, the files of the day you pick, and Sync & ingest, what the sync brought in and what each ingest did.
 ---
-Activity has two views, picked at the top: **Files by day**, a heatmap of the files changed per day with the files of one day under it, and **Sync & ingest**. Open it from the foot of the sidebar.
+Activity has two views, picked at the top: **Files by day**, a heatmap of the files changed per day with the files of one day under it, and **Sync & ingest**. Open it from **Vault** at the foot of the sidebar.
 
 The vault's `log.md`, the log of Brainstead's own changes, is in [Changes › All](app:review) now, beside every change with **Revert**, so there's one history of what Brainstead and the assistants did. The pie charts and **Most linked** are on [Wiki health](app:health).
 

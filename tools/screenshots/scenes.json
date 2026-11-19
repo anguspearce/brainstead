@@ -430,6 +430,13 @@
     "screen": "contradictions"
   },
   {
+    "name": "sidebar-vault-open",
+    "screen": "graph",
+    "folded": {
+      "vault": false
+    }
+  },
+  {
     "name": "health",
     "screen": "health",
     "docs": true

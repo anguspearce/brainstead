@@ -44,7 +44,7 @@ import { nav, openDoc, useViewState } from "./nav";
 import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
 import { MoreMenu, TopBar } from "./TopBar";
-import { Dialog, Squeeze } from "./ui";
+import { Dialog, fmtCount, Seg, Squeeze } from "./ui";
 import { Store, useStore } from "./store";
 import { keyLabel } from "./platform";
 import { vaultVersion } from "./state";
@@ -126,6 +126,25 @@ const reshaped = (r: { applied: number; failed: string[] }) =>
     r.failed.length ? "bad" : "ok",
   );
 
+/** Wiki health's two tabs, Checks and Contradictions (D-20261119-05). Each is a screen of its own
+ *  (health, contradictions), so links, ⌘K and an assistant's open reach either, and back and forward
+ *  step between them; a tab swaps one for the other in place. */
+export function HealthTabs({ on }: { on: "health" | "contradictions" }) {
+  useEffect(startKnowledge, []);
+  const need = decisions(useStore(health)?.report ?? null);
+  return (
+    <Seg<"health" | "contradictions">
+      label="Show"
+      value={on}
+      onChange={(screen) => screen !== on && nav.replace({ screen })}
+      options={[
+        ["health", "Checks", "The checks over the wiki: what to decide, what's safe to fix", need ? ` ${fmtCount(need)}` : undefined],
+        ["contradictions", "Contradictions", "Places where wiki pages disagree with each other"],
+      ]}
+    />
+  );
+}
+
 export function HealthScreen() {
   const panes = usePanes({ "health.side": PANES["health.side"] }, { minFlex: 360 });
   useEffect(startKnowledge, []);
@@ -185,6 +204,7 @@ export function HealthScreen() {
         sub={r ? `${r.wikiPages} wiki pages · ${r.sources} sources` : "Checking…"}
         ask={{ about: "the wiki's health", prompt: "About my wiki's health: " }}
       >
+        <HealthTabs on="health" />
         <BusyButton
           id="fix-all"
           icon="check"
@@ -209,7 +229,7 @@ export function HealthScreen() {
           Fix with Ask
         </button>
         <MoreMenu
-          title="Check now, Contradictions"
+          title="Check now"
           items={[
             {
               label: rechecking ? "Checking…" : "Check now",
@@ -217,12 +237,6 @@ export function HealthScreen() {
               title: "Run the checks again now (they run by themselves when the vault changes)",
               disabled: rechecking,
               run: recheck,
-            },
-            {
-              label: "Contradictions",
-              icon: "info",
-              title: "Show places where wiki pages disagree with each other",
-              run: () => nav.go("contradictions"),
             },
           ]}
         />

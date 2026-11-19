@@ -16,6 +16,7 @@ import { reportEditError } from "./taskModel";
 import { localToday } from "./md/taskQuery";
 import { toast } from "./Toast";
 import { TopBar } from "./TopBar";
+import { HealthTabs } from "./Health";
 import { DocButton, useGone } from "./docButton";
 import { ASSISTANT_FRONTMATTER } from "./md/scripts";
 import { LayerTag } from "./ui";
@@ -123,8 +124,8 @@ export function ContradictionsScreen() {
   return (
     <main className="main">
       <TopBar
-        title="Contradictions"
-        sub={last?.finished ? `checked ${last.finished.slice(0, 16).replace("T", " ")}` : "not checked yet"}
+        title="Wiki health"
+        sub={last?.finished ? `contradictions checked ${last.finished.slice(0, 16).replace("T", " ")}` : "contradictions not checked yet"}
         ask={
           cur
             ? {
@@ -134,6 +135,7 @@ export function ContradictionsScreen() {
             : { about: "the wiki's contradictions", prompt: "About the contradictions in my wiki: " }
         }
       >
+        <HealthTabs on="contradictions" />
         {r && last?.finished && !last.running && (
           <button
             type="button"

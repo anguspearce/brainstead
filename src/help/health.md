@@ -5,7 +5,7 @@ screens: [health]
 order: 15
 summary: Checks the wiki for missing pages, broken links, stale dates and other problems, and fixes the safe ones for you.
 ---
-Wiki health checks the wiki and its sources whenever the vault changes. **To decide** counts the issues only you can settle; the sidebar and Today's **Wiki health to decide** show the same number. From the second day, a sparkline beside it shows the trend; hover it for the highest count.
+Wiki health checks the wiki and its sources whenever the vault changes. Open it from **Vault** at the foot of the sidebar. It has two tabs, **Checks** (this page) and [Contradictions](help:contradictions), picked at the top. **To decide** counts the issues only you can settle; the Checks tab, the sidebar (on **Vault** while it's shut) and Today's **Wiki health to decide** show the same number. From the second day, a sparkline beside it shows the trend; hover it for the highest count.
 
 ## Read the checks
 The checks come in two groups.
@@ -69,7 +69,7 @@ A page that needs you says why: a heading whose year it can't tell, two summing-
 **Fix with Ask** starts a chat asking the assistant to fix the issues that need judgement. Its edits are listed in [Changes](app:review) with Revert; safe fixes are made at once and `⌘Z` undoes them. The button is greyed out when nothing needs a decision.
 
 ## Side cards and contradictions
-On the right, **Wiki pages by type** and **Wiki pages by tag** are pie charts; click a slice or row to open the [Wiki](app:wiki) filtered to it. **Most linked** lists the notes and wiki pages the most others link to; click one to open it. Sources changed since they were cited are under **More checks**. **Contradictions** on the top bar's ⋯ opens the report of wiki pages that disagree.
+On the right, **Wiki pages by type** and **Wiki pages by tag** are pie charts; click a slice or row to open the [Wiki](app:wiki) filtered to it. **Most linked** lists the notes and wiki pages the most others link to; click one to open it. Sources changed since they were cited are under **More checks**. The **Contradictions** tab at the top has the report of wiki pages that disagree.
 
 ## The daily check
 Turn on **Daily check** in [Settings › Jobs & schedule](app:settings/jobs) to have Brainstead, at the time you set (09:00 to start), look for contradictions in pages that changed and update the list of pages in `index.md`. It catches up after sleep. **Also refresh pages whose sources changed**, in [Settings › AI assistants](app:settings/assistants), has it ingest those sources again. Its notification also says how many pages have left the page shape, for **Reshape pages**. **Run now** runs it straight away and becomes **Stop** while it runs.

@@ -5,7 +5,7 @@ screens: []
 order: 11
 summary: Compare any two documents, or check one against the policy or standard in force, and save the findings.
 ---
-Both live under **Tools › Compare** in the sidebar. They change nothing unless you save the findings as a note.
+Both live under **Compare**, in the sidebar's Assistant section. They change nothing unless you save the findings as a note.
 
 ## Compare two documents
 Open [Compare](app:compare), the **Any two documents** tab. Pick **A** and **B** by typing part of their names, or **Choose a file…** for a PDF, Word, PowerPoint or Excel file on disk. Choose **Differences**, or **What changed** from an earlier version (B) to a newer one (A), and click **Compare**. **Compare with…** on a source's ▾ in [Sources](app:sources) starts with that file as A.

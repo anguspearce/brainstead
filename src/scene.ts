@@ -70,6 +70,8 @@ export interface Scene {
   settings?: Partial<Settings>;
   /** Pane widths as if dragged (src/panes.ts keys), e.g. a wider sidebar. */
   paneWidths?: Record<string, number>;
+  /** Sidebar sections folded or not, as settings keep them: `{ "vault": false }` opens the Vault fold. */
+  folded?: Record<string, boolean>;
   /** Resize locks on, by type (src/panes.ts), e.g. `{ "columns": true }`. */
   resizeLocks?: Settings["resizeLocks"];
   /** For "ask": show a sample chat. */
@@ -265,6 +267,7 @@ export function applyScene(sc: Scene) {
   if (sc.sideFolded) settings.update({ docSideFolded: true });
   if (sc.settings) settings.update(sc.settings);
   if (sc.paneWidths) settings.update({ paneWidths: sc.paneWidths });
+  if (sc.folded) settings.update({ folded: sc.folded });
   if (sc.resizeLocks) settings.update({ resizeLocks: sc.resizeLocks });
   if (sc.view) settings.update({ viewMemory: { ...settings.get().viewMemory, ...sc.view } });
   if (sc.screen) nav.replace({ screen: sc.screen, pane: sc.pane, path: sc.path, q: sc.q, view: sc.view });

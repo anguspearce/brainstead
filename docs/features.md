@@ -46,10 +46,13 @@ Moving over from another notes app? When its files are in the vault, the **Movin
 
 The sidebar, top to bottom:
 
-- **Today**, **Inbox**, **Tasks**, **Projects**, **Weekly review** and **Ask**;
-- the library: **Search**, **Notes**, **Wiki**, **Sources**, **Templates**, **Graph**, then **Tools**, a menu of **Draft reply**, **Meeting notes** and **Compare** (a spinner beside it means one is at work);
+- **Today**, **Inbox**, **Tasks**, **Projects** and **Weekly review**;
+- **Library**: **Search**, **Notes**, **Wiki** and **Sources**;
+- **Assistant**: **Ask**, then the tools, **Draft reply**, **Meeting notes** and **Compare** (a spinner beside one means it's at work);
 - your **Bookmarks**;
-- at the foot, **Changes**, **Wiki health**, **Activity**, **Trash**, **Settings**, and the index's line (a dot only while it's indexing, or if it failed).
+- at the foot, **Vault**, a fold holding **Wiki health**, **Activity**, **Trash**, **Templates** and **Graph** (shut, it shows their count), then **Changes**, **Settings**, and the index's line (a dot only while it's indexing, or if it failed).
+
+The Inbox's **Bookmarks** band lists the bookmarks to triage and opens Triage on one; Contradictions is a tab of Wiki health. ⌘1 to ⌘0 go to Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki and Sources.
 
 Counts that need you, such as overdue tasks, the Inbox and changes held for you, are in bold.
 

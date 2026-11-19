@@ -5,7 +5,7 @@ screens: [triage]
 order: 22
 summary: Go through your bookmarked notes and decide what to do with each one.
 ---
-Triage bookmarks lists every bookmark in `Me. Bookmarks.md`, oldest untouched first, so you can clear the ones that have sat too long. Open it from ⌘K, Ask's `/` picker, or **Triage** in Today's To process card when bookmarks are stale or missing.
+Triage bookmarks lists every bookmark in `Me. Bookmarks.md`, oldest untouched first, so you can clear the ones that have sat too long. Open it from the **Bookmarks** band at the foot of the [Inbox](app:inbox) (a bookmark there opens Triage on it), **Triage** in Today's To process card, ⌘K's **Triage bookmarks**, or Ask's `/` picker. The sidebar lights **Inbox** while it's open.
 
 ## Read the list
 Each bookmark shows how many days its note has gone untouched. "stale" means it has sat a long time; **Link missing** means its note is no longer in the vault. Click a bookmark to see its choices.

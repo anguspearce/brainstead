@@ -20,7 +20,7 @@ Click **Fix safe issues** in the top bar of [Wiki health](app:health). Brainstea
 - The rest: **Fix with Ask**. The assistant makes the fixes, each listed in [Changes](app:review) with Revert.
 
 ## Settle contradictions
-Click **Contradictions** in [Wiki health](app:health)'s top bar, then **Check · changed pages only**. Real contradictions come first. Their fixes are listed in [Changes](app:review); when you're done, mark each one resolved or ignored on [Contradictions](app:contradictions).
+Click the **Contradictions** tab at the top of [Wiki health](app:health), then **Check · changed pages only**. Real contradictions come first. Their fixes are listed in [Changes](app:review); when you're done, mark each one resolved or ignored on [Contradictions](app:contradictions).
 
 ## Turn on the daily check
 In [Settings › Jobs & schedule](app:settings/jobs), turn on **Daily check**. Each day it looks for contradictions in the pages that changed. To have it ingest changed sources again too, turn on **Also refresh pages whose sources changed** in [Settings › AI assistants](app:settings/assistants).

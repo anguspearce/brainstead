@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ready } from "./App";
 import { ask, blankChat } from "./askState";
 import { place } from "./nav";
-import { Sidebar, statusLine } from "./Sidebar";
+import { Sidebar, statusLine, summed } from "./Sidebar";
 import { EMPTY_STATUS, vaultStatus } from "./state";
 import { settings } from "./store";
 import { tasksFailed } from "./taskModel";
@@ -34,12 +34,10 @@ describe("Sidebar", () => {
       "Notes",
       "Wiki",
       "Sources",
-      "Templates",
-      "Graph",
-      "Tools",
-      "Wiki health",
-      "Activity",
-      "Trash",
+      "Draft reply",
+      "Meeting notes",
+      "Compare",
+      "Vault",
       "Settings",
     ]) {
       // Search exactly: the search box above is "Search or jump to…".
@@ -83,22 +81,43 @@ describe("Sidebar", () => {
     ask.set({ chats: [], active: null });
   });
 
-  it("opens Draft reply, Meeting notes and Compare from the Tools menu", () => {
+  it("lists the assistant's tools under Ask, each with its own row", () => {
     render(<Sidebar onSearch={() => {}} />);
-    expect(screen.queryByRole("menuitem", { name: /^Draft reply/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /^Tools/ }));
-    expect(screen.getByRole("menuitem", { name: /^Meeting notes/ })).toBeTruthy();
-    expect(screen.getByRole("menuitem", { name: /^Compare/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole("menuitem", { name: /^Draft reply/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Draft reply/ }));
     expect(place.get().place.screen).toBe("reply");
-    expect(screen.queryByRole("menu")).toBeNull();
-    expect(screen.getByRole("button", { name: /^Tools/ }).classList.contains("on")).toBe(true);
+    expect(screen.getByRole("button", { name: /^Draft reply/ }).getAttribute("aria-current")).toBe("page");
+  });
+
+  it("folds Wiki health, Activity, Trash, Templates and Graph into Vault, whose badge sums theirs while it's shut", () => {
+    settings.update({ folded: {} });
+    render(<Sidebar onSearch={() => {}} />);
+    // Shut to begin with.
+    const fold = screen.getByRole("button", { name: /^Vault/ });
+    expect(fold.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("button", { name: /^Wiki health/ })).toBeNull();
+    fireEvent.click(fold);
+    expect(settings.get().folded?.vault).toBe(false);
+    for (const l of ["Wiki health", "Activity", "Trash", "Templates", "Graph"])
+      expect(screen.getByRole("button", { name: new RegExp(`^${l}`) })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Graph/ }));
+    expect(place.get().place.screen).toBe("graph");
+    fireEvent.click(screen.getByRole("button", { name: /^Vault/ }));
+    expect(screen.queryByRole("button", { name: /^Graph/ })).toBeNull();
+    // Shut on one of its screens, the fold is lit for it.
+    expect(screen.getByRole("button", { name: /^Vault/ }).classList.contains("on")).toBe(true);
+  });
+
+  it("adds up the badges a shut fold hides", () => {
+    expect(summed([undefined, { n: 2 }, { n: 3, hot: true }])).toMatchObject({ n: 5, hot: true, bad: false });
+    expect(summed([undefined])).toBeUndefined();
+    expect(summed([{ n: 0, busy: "Checking" }])?.busy).toBe("Checking");
   });
 
   it("folds a section", () => {
     render(<Sidebar onSearch={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /^Library/ }));
-    expect(screen.queryByRole("button", { name: /^Graph/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Sources/ })).toBeNull();
+    settings.update({ folded: {} });
   });
 });
 
