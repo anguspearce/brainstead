@@ -1,5 +1,5 @@
 ---
-title: Knowledge health
+title: Wiki health
 kind: guide
 screens: []
 order: 6
@@ -7,11 +7,11 @@ summary: Keep the wiki in good order: fix the safe issues, decide the rest, sett
 ---
 Keep the wiki accurate and well linked as it grows.
 
-## Open Knowledge health
-Go to [Knowledge health](app:health). It checks the wiki whenever the vault changes. **Need a decision** counts the issues only you can settle. Click a check to see its issues, and an issue to open its page.
+## Open Wiki health
+Go to [Wiki health](app:health). It checks the wiki whenever the vault changes. **To decide** counts the issues only you can settle. Click a check to see its issues, and an issue to open its page.
 
 ## Fix the safe issues
-Click **Fix safe issues** in the top bar of [Knowledge health](app:health). Brainstead adds missing links, corrects `updated:` dates, adds missing `log.md` lines and puts back lost system note headers. `⌘Z` undoes each fix.
+Click **Fix safe issues** in the top bar of [Wiki health](app:health). Brainstead adds missing links, corrects `updated:` dates, adds missing `log.md` lines and puts back lost system note headers. `⌘Z` undoes each fix.
 
 ## Decide the rest
 - Missing pages: click **Create** or **Link to…**.
@@ -20,7 +20,7 @@ Click **Fix safe issues** in the top bar of [Knowledge health](app:health). Brai
 - The rest: **Fix with Ask**. The assistant makes the fixes, each listed in [Changes](app:review) with Revert.
 
 ## Settle contradictions
-Click **Contradictions** in [Knowledge health](app:health)'s top bar, then **Check · changed pages only**. Real contradictions come first. Their fixes are listed in [Changes](app:review); when you're done, mark each one resolved or ignored on [Contradictions](app:contradictions).
+Click **Contradictions** in [Wiki health](app:health)'s top bar, then **Check · changed pages only**. Real contradictions come first. Their fixes are listed in [Changes](app:review); when you're done, mark each one resolved or ignored on [Contradictions](app:contradictions).
 
 ## Turn on the daily check
 In [Settings › Jobs & schedule](app:settings/jobs), turn on **Daily check**. Each day it looks for contradictions in the pages that changed. To have it ingest changed sources again too, turn on **Also refresh pages whose sources changed** in [Settings › AI assistants](app:settings/assistants).

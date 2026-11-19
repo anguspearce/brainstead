@@ -8,7 +8,7 @@ summary: See what AI assistants and Brainstead's runs changed in your vault, rev
 Every change assistants and Brainstead's runs make to the vault is listed here with **Revert**. You only need to step in when a change is held for you. Open Changes from the foot of the sidebar; the sidebar count and Today's **Changes held for you** card count held changes only.
 
 ## What's made at once, and what's held
-A change you started is made at once: something you asked for in Ask or a terminal session, or a run you started by hand (Ingest, **Run now**, **Draft the note**, a Knowledge health fix, **File this answer**, a bookmark made into a wiki page, a link from the weekly review). If a check fails, it's still made, but flagged.
+A change you started is made at once: something you asked for in Ask or a terminal session, or a run you started by hand (Ingest, **Run now**, **Draft the note**, a Wiki health fix, **File this answer**, a bookmark made into a wiki page, a link from the weekly review). If a check fails, it's still made, but flagged.
 
 A change from a scheduled run is made at once if it passes every check, and held for you otherwise. Scheduled runs are the daily check (with the ingests and contradiction check it starts) and the daily and weekly summaries when they run on their own. A terminal session nobody is watching, such as a loop, is treated the same way.
 

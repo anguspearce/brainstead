@@ -80,7 +80,7 @@ Some notes are Brainstead's own: the To Do list, the Scratchpad, bookmarks, save
 
 - They can't be renamed or moved to the Trash, from the app or by an assistant.
 - The header callout is locked in the editor. Edit freely below it.
-- If the header goes missing or changes, Knowledge health flags it. Its safe fix puts back the last header Brainstead saw.
+- If the header goes missing or changes, Wiki health flags it. Its safe fix puts back the last header Brainstead saw.
 - An assistant's change to the header is always held for you in Changes, and only you can accept it.
 
 Other apps can still change these files.

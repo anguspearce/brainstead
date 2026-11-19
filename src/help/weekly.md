@@ -47,7 +47,7 @@ Each step lists the real items with their usual actions:
 - **Projects** shows active projects with no next action or nothing for two weeks. Type a next action to add it, or click **Someday** or **Done** to change the status. A project moved to Someday takes its tasks out of Next actions.
 - **Waiting for** lists those tasks. **Draft nudges in Ask** asks [Ask](app:ask) to draft a follow-up for each, to copy into Outlook or Teams. Nothing is sent.
 - **Someday / maybe** lists those tasks, and someday projects with **Start now**.
-- **Links to pages not written yet** lists links to missing pages, with a way to [Knowledge health](app:health) to create or link them.
+- **Links to pages not written yet** lists links to missing pages, with a way to [Wiki health](app:health) to create or link them.
 
 Brainstead can't read your calendar, so Look ahead asks you to open Outlook and capture what you find.
 

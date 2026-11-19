@@ -150,7 +150,7 @@ function CaptureShortcut() {
     <section className="sgroup">
       <h2 className="h3">Quick capture</h2>
       <p className="muted">
-        A shortcut that works over any app and opens a capture box. Tasks go to the To Do list, thoughts to the Scratchpad.
+        A shortcut that works over any app and opens a capture box. Tasks go to the To Do list, Scratchpad notes to the Scratchpad.
       </p>
       <div className="row">
         <button
@@ -1345,8 +1345,8 @@ function Assistants() {
 export const SCREEN_NAME: Record<string, string> = {
   sources: "Sources (Ingest)",
   fixname: `Fix a name everywhere (${keyLabel("⌘K")})`,
-  contradictions: "Contradictions (Knowledge health)",
-  health: "Knowledge health",
+  contradictions: "Contradictions (Wiki health)",
+  health: "Wiki health",
   meeting: "Meeting note from a transcript",
   triage: "Bookmarks triage",
   reply: "Draft a reply",

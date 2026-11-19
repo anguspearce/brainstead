@@ -8,7 +8,7 @@ The user guide to Brainstead, a Mac and Windows app for tasks, notes and an [LLM
 |---|---|
 | [Tasks and GTD](tasks.md) | Today, Quick capture, the Inbox, Tasks, Projects, the weekly review, and how tasks are written |
 | [Notes](notes.md) | View, Edit and Source, saving and drafts, queries and callouts, templates, search and ⌘K, the Trash |
-| [The wiki and sources](wiki.md) | Sources and the browser extensions, ingest, Changes, wiki pages, Knowledge health, contradictions, meeting notes and the other tools |
+| [The wiki and sources](wiki.md) | Sources and the browser extensions, ingest, Changes, wiki pages, Wiki health, contradictions, meeting notes and the other tools |
 | [Ask and assistants](ask.md) | Chats with Claude Code, Codex, Copilot and Antigravity, or Ollama's local models through Codex, what an assistant can do, Brainstead's tools in a terminal |
 | [Day to day](day-to-day.md) | The menu bar (system tray on Windows), the daily and weekly summaries and the daily check, help, Settings, and what happens in the background |
 
@@ -49,7 +49,7 @@ The sidebar, top to bottom:
 - **Today**, **Inbox**, **Tasks**, **Projects**, **Weekly review** and **Ask**;
 - the library: **Search**, **Notes**, **Wiki**, **Sources**, **Templates**, **Graph**, then **Tools**, a menu of **Draft reply**, **Meeting notes** and **Compare** (a spinner beside it means one is at work);
 - your **Bookmarks**;
-- at the foot, **Changes**, **Knowledge health**, **Activity**, **Trash**, **Settings**, and the index's line (a dot only while it's indexing, or if it failed).
+- at the foot, **Changes**, **Wiki health**, **Activity**, **Trash**, **Settings**, and the index's line (a dot only while it's indexing, or if it failed).
 
 Counts that need you, such as overdue tasks, the Inbox and changes held for you, are in bold.
 

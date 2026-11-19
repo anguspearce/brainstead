@@ -208,7 +208,7 @@ export function RunCard({ r, on }: { r: IngestRun; on?: boolean }) {
           onClick={() => showRunInChanges(mine)}
         >
           <Icon name="review" size={12} />
-          {queued ? `Review ${queued} held change${queued === 1 ? "" : "s"}` : `See ${mine.length} change${mine.length === 1 ? "" : "s"}`}
+          {queued ? `Open Changes (${queued} held)` : `See ${mine.length} change${mine.length === 1 ? "" : "s"}`}
         </button>
       )}
       <span className="faint small">

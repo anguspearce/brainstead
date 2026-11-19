@@ -666,7 +666,7 @@ struct Switchover {
 }
 
 /// Files only the previous app kept in the vault: its `scripts/` folder with the name
-/// corrections and the scripts Brainstead's reviews, ingest and Knowledge health replaced.
+/// corrections and the scripts Brainstead's reviews, ingest and Wiki health replaced.
 const PREVIOUS_APP_FILES: [&str; 6] = [
     brainstead_core::names::LEGACY,
     "scripts/lint_wiki.py",

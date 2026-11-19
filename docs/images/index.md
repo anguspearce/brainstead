@@ -43,7 +43,7 @@ On [The wiki and sources](../wiki.md).
 - A source's provenance: [light](source-provenance-light.png) · [dark](source-provenance-dark.png)
 - Changes: [light](review-light.png) · [dark](review-dark.png)
 - A wiki page: [light](wiki-page-light.png) · [dark](wiki-page-dark.png)
-- Knowledge health: [light](health-light.png) · [dark](health-dark.png)
+- Wiki health: [light](health-light.png) · [dark](health-dark.png)
 - The graph: [light](graph-light.png) · [dark](graph-dark.png)
 
 ## Ask and assistants

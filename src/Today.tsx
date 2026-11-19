@@ -585,7 +585,7 @@ function OpeningBanner() {
   );
 }
 
-/** What there is to process: the Inbox, bookmarks, wiki issues, and the weekly review on its day
+/** What there is to process: the Inbox, bookmarks, Wiki health, and the weekly review on its day
  *  (or while one is paused). What couldn't be checked says so, with Retry. */
 function ProcessCard() {
   const inbox = useInbox();
@@ -668,17 +668,17 @@ function ProcessCard() {
       {need > 0 && (
         <div className="rrow">
           <Icon name="health" size={14} />
-          <span className="grow ell">Wiki issues to decide</span>
-          <span className="n" title={`${fmtCount(need)} wiki issues need a decision`}>
+          <span className="grow ell">Wiki health to decide</span>
+          <span className="n" title={`${fmtCount(need)} wiki issue${need === 1 ? "" : "s"} only you can settle`}>
             {fmtCount(need)}
           </span>
           <button
             type="button"
             className="btn sm ghost ract"
-            title="Open Knowledge health to decide the wiki issues"
+            title="Go to Wiki health to decide the issues only you can settle"
             onClick={() => nav.go("health")}
           >
-            Check
+            Decide
           </button>
         </div>
       )}
@@ -736,7 +736,7 @@ function HeldCard() {
           title="Open Changes to accept or reject the held changes"
           onClick={() => nav.go("review")}
         >
-          Review {fmtCount(rows.length)}
+          Open Changes ({fmtCount(rows.length)} held)
           <Icon name="forward" size={12} />
         </button>
       </div>

@@ -37,19 +37,19 @@ describe("Sidebar", () => {
       "Templates",
       "Graph",
       "Tools",
-      "Knowledge health",
+      "Wiki health",
       "Activity",
       "Trash",
       "Settings",
     ]) {
       // Search exactly: the search box above is "Search or jump to…".
-      expect(screen.getByRole("button", { name: new RegExp(l === "Search" ? "^Search$" : `^${l}`) })).toBeTruthy();
+      expect(screen.getByRole("button", { name: new RegExp(l === "Search" ? "^Search$" : `^${l}(?! health)`) })).toBeTruthy();
     }
     expect(screen.getByRole("button", { name: /^Notes/ }).textContent).toContain("1,561");
     expect(screen.getByRole("status").textContent).toBe("2,210 files · just now");
-    fireEvent.click(screen.getByRole("button", { name: /^Wiki/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Wiki(?! health)/ }));
     expect(place.get().place.screen).toBe("wiki");
-    expect(screen.getByRole("button", { name: /^Wiki/ }).getAttribute("aria-current")).toBe("page");
+    expect(screen.getByRole("button", { name: /^Wiki(?! health)/ }).getAttribute("aria-current")).toBe("page");
   });
 
   it("shows Read-only while the vault is, which opens Settings › Vault", () => {

@@ -858,8 +858,8 @@ export async function clarifyChanges(
         return { said: `a next action${proj ? ` in ${projectName(proj)}` : ""}`, changes: await task(taskLine(fields)) };
       case "waiting":
         return { said: "waiting for", changes: await task(taskLine({ ...fields, tag: "waiting-for" }), WAITING_FOR) };
-      case "task":
-        // As the Inbox's Task: on the To Do list's To Do, nothing more to set.
+      case "todo":
+        // As the Inbox's To Do: on the To Do list's To Do, nothing more to set.
         return {
           said: "a task on the To Do list",
           changes: [
@@ -878,7 +878,7 @@ export async function clarifyChanges(
       case "delete":
         return { said: "dropped", changes: [await mark({ status: "dropped" }, `Drop “${short}”`)] };
       default:
-        throw new Error("An action becomes next, task, waiting, someday, done or delete (dropped).");
+        throw new Error("An action becomes next, todo, waiting, someday, done or delete (dropped).");
     }
   }
   const captureDone = i.kind === "capture" ? () => markCaptureDone(i.path) : undefined;
@@ -924,8 +924,8 @@ export async function clarifyChanges(
       };
     case "someday":
       return { said: "someday / maybe", changes: settle(taskLine({ ...fields, tag: "someday-maybe" }), proj), after: captureDone };
-    case "task": {
-      // As the Inbox's Task: on the To Do list's To Do as it is, nothing more to set.
+    case "todo": {
+      // As the Inbox's To Do: on the To Do list's To Do as it is, nothing more to set.
       const line = taskLine({ text: fields.text });
       return {
         said: "a task on the To Do list",
@@ -994,7 +994,7 @@ export async function clarifyChanges(
         };
       return { said: "deleted", changes: takeOut() };
     default:
-      throw new Error("becomes is next, waiting, someday, project, done, reference, ingest or delete.");
+      throw new Error("becomes is next, todo, waiting, someday, project, done, reference, ingest or delete.");
   }
 }
 
@@ -1067,25 +1067,27 @@ export async function clarifyItem(i: InboxItem, a: Args, unattended = false): Pr
   return said;
 }
 
-/** Quick capture: a task to the To Do list's Inbox (the top of its Other section) or a thought to
- *  the Scratchpad, written as the capture box writes them (its shorthand for dates, contexts and
- *  effort turned into their formats), as a change in Changes. */
+/** Quick capture: a task to the To Do list's Inbox (the top of its Other section) or a note to
+ *  the Scratchpad (the capture box's Task and Scratchpad note), written as the capture box writes
+ *  them (its shorthand for dates, contexts and effort turned into their formats), as a change in
+ *  Changes. */
 async function captureTool(a: Args, r: McpRequest): Promise<string> {
-  const kind = str(a, "kind");
-  if (kind !== "task" && kind !== "thought") throw new Error("kind is task (to the Inbox) or thought (to the Scratchpad).");
+  const as = str(a, "kind");
+  if (as !== "task" && as !== "scratchpad") throw new Error("kind is task (to the Inbox) or scratchpad (a note to the Scratchpad).");
+  const kind = as === "task" ? "task" : "thought";
   const text = prepareCapture(kind, typeof a.text === "string" ? a.text : "");
   if (!text) throw new Error("Give text: what to capture.");
   const c =
     kind === "task"
       ? sub(a, r, TODO_LIST, "task", `Capture “${taskWords(text)}”`, { op: "add_task", line: `- [ ] ${text}` })
-      : sub(a, r, SCRATCHPAD, "edit", `Capture a thought: “${text.replace(/\s+/g, " ").slice(0, 60)}”`, {
+      : sub(a, r, SCRATCHPAD, "edit", `Capture a Scratchpad note: “${text.replace(/\s+/g, " ").slice(0, 60)}”`, {
           op: "add_thought",
           text,
           stamp: captureStamp(),
         });
   const o = await submitAll([c]);
   told(
-    o.applied ? `captured ${kind === "task" ? "a task to the Inbox" : "a thought to the Scratchpad"}` : "held a capture for you in Changes",
+    o.applied ? `captured ${kind === "task" ? "a task to the Inbox" : "a note to the Scratchpad"}` : "held a capture for you in Changes",
   );
   if (!o.applied) return o.message;
   return `${kind === "task" ? `Added to the Inbox (the To Do list's Other): ${text}` : "Added to the Scratchpad"}; it waits in the Inbox to clarify (list_inbox). ${o.message}`;
@@ -1978,7 +1980,7 @@ async function movingOver(a: Args): Promise<string> {
 async function healthFix(a: Args): Promise<string> {
   const v = await api.healthReport(true);
   const r = v.report;
-  if (!r) throw new Error("Knowledge health has no report yet; try again in a moment.");
+  if (!r) throw new Error("Wiki health has no report yet; try again in a moment.");
   const all = safeFixes(r);
   const wanted = Array.isArray(a.items) ? (a.items as unknown[]).map(String) : null;
   const fixes = wanted
@@ -1991,26 +1993,26 @@ async function healthFix(a: Args): Promise<string> {
       ? "None of those items has a safe fix. lint lists the issues; the ones marked safe can be fixed here."
       : "Nothing to fix safely.";
   const said = await api.healthFix(fixes);
-  told(`fixed ${fixes.length} Knowledge health issue${fixes.length === 1 ? "" : "s"}`);
+  told(`fixed ${fixes.length} Wiki health issue${fixes.length === 1 ? "" : "s"}`);
   return `${said} ${keyLabel("⌘Z")} in the app undoes it.`;
 }
 
-/** ignore_issue: Knowledge health's Ignore, or Show again with show_again. */
+/** ignore_issue: Wiki health's Ignore, or Show again with show_again. */
 async function healthIgnore(a: Args): Promise<string> {
   const v = await api.healthReport(true);
   const r = v.report;
-  if (!r) throw new Error("Knowledge health has no report yet; try again in a moment.");
+  if (!r) throw new Error("Wiki health has no report yet; try again in a moment.");
   if (a.show_again) {
     const check = typeof a.check === "string" && a.check ? a.check : null;
     const n = await api.healthUnignore(check);
-    told(`showed ${n} ignored Knowledge health issue${n === 1 ? "" : "s"} again`);
+    told(`showed ${n} ignored Wiki health issue${n === 1 ? "" : "s"} again`);
     return n ? `${n} ignored issue${n === 1 ? " is" : "s are"} listed again.` : "Nothing was ignored.";
   }
   if (a.all === true) {
     const check = typeof a.check === "string" ? a.check : "";
     if (!IGNORE_ALL.has(check)) throw new Error(`Ignore all is for ${[...IGNORE_ALL].join(" and ")}: give one as check.`);
     const n = await api.healthIgnoreAll(check);
-    told(`ignored ${n} Knowledge health issue${n === 1 ? "" : "s"}`);
+    told(`ignored ${n} Wiki health issue${n === 1 ? "" : "s"}`);
     return n
       ? `Ignored ${n} issue${n === 1 ? "" : "s"}, each until its ${check === "uncited-claims" ? "line" : "page"} changes. show_again lists them again.`
       : "Nothing to ignore.";
@@ -2018,18 +2020,18 @@ async function healthIgnore(a: Args): Promise<string> {
   const text = String(a.item ?? "");
   const c = r.checks.find((c) => c.items.some((i) => i.text === text));
   const i = c?.items.find((i) => i.text === text);
-  if (!c || !i) return "That issue isn't in Knowledge health: give its text as lint gives it.";
+  if (!c || !i) return "That issue isn't in Wiki health: give its text as lint gives it.";
   if (i.safe) return "That issue has a safe fix: use fix_health instead.";
   if (OWN_ACTIONS.has(c.id))
     return `${c.title} issues have buttons of their own instead of Ignore: health_issue, start_run ingest or reshape_pages.`;
   await api.healthIgnore(c.id, text);
-  told("ignored a Knowledge health issue");
+  told("ignored a Wiki health issue");
   return c.id === "uncited-claims"
-    ? "Ignored: it's left out of Knowledge health until its line changes. show_again lists it again."
-    : "Ignored: it's left out of Knowledge health until its page changes. show_again lists it again.";
+    ? "Ignored: it's left out of Wiki health until its line changes. show_again lists it again."
+    : "Ignored: it's left out of Wiki health until its page changes. show_again lists it again.";
 }
 
-/** reshape_pages: Reshape pages, as Knowledge health's Page shape check does it. */
+/** reshape_pages: Reshape pages, as Wiki health's Page shape check does it. */
 async function reshapePages(a: Args): Promise<string> {
   const pages = Array.isArray(a.pages) ? (a.pages as unknown[]).map(String).filter((p) => p.trim()) : null;
   const r = await api.healthReshape(pages?.length ? pages : null, a.unattended === true);
@@ -2043,7 +2045,7 @@ async function reshapePages(a: Args): Promise<string> {
     .join(" ");
 }
 
-/** write_current_state: Knowledge health's Write Current state run: start it, or its status, or stop it. */
+/** write_current_state: Wiki health's Write Current state run: start it, or its status, or stop it. */
 async function writeCurrentState(a: Args): Promise<string> {
   const said = (r: CurrentStateRun) =>
     `${r.running ? "Running" : "Last run"}: ${r.done} of ${r.total} pages done, ${r.written} written, ${r.nothing} with nothing current to say${r.failed.length ? `; couldn't: ${r.failed.join("; ")}` : ""}${r.run ? ` (run group ${r.run}; changes revert_run undoes it)` : ""}.`;
@@ -2573,7 +2575,7 @@ async function captureExtensions(): Promise<string> {
   ].join("\n");
 }
 
-/** Glance's counts, as Activity and Knowledge health show them: notes and wiki pages by type and
+/** Glance's counts, as Activity and Wiki health show them: notes and wiki pages by type and
  *  by tag, most first, and the files the most others link to. */
 async function glanceTool(): Promise<string> {
   const g = await api.glance();
@@ -3077,9 +3079,9 @@ export async function startMcpBridge() {
   return off;
 }
 
-// ---- Knowledge health, as its screen shows it
+// ---- Wiki health, as its screen shows it
 
-/** Each missing link's In the Trash and Did you mean, as Knowledge health's rows show them (ghostHelps). */
+/** Each missing link's In the Trash and Did you mean, as Wiki health's rows show them (ghostHelps). */
 async function ghostsOf(r: LintReport): Promise<Map<string, GhostHelp>> {
   if (!r.checks.some((c) => (c.id === "missing-pages" || c.id === "broken-sources") && c.items.length)) return new Map();
   const [files, trash] = await Promise.all([api.filesList(null), api.trashList()]);
@@ -3100,9 +3102,9 @@ function ghostNote(g: GhostHelp | undefined): string {
 async function healthLint(a: Args): Promise<string> {
   const view = await api.healthReport(true);
   const r = view.report;
-  if (!r) throw new Error("Knowledge health has no report yet; try again in a moment.");
+  if (!r) throw new Error("Wiki health has no report yet; try again in a moment.");
   const page = str(a, "page")?.trim();
-  // The screen's summary card: Need a decision, what's safe to fix, and the trend's ends.
+  // The screen's summary card: To decide, what's safe to fix, and the trend's ends.
   const need = decisions(r);
   const safe = safeFixes(r).length;
   const trend = trendShown(view.history)
@@ -3112,7 +3114,7 @@ async function healthLint(a: Args): Promise<string> {
     : view.history.length < 2
       ? " The trend shows after a second day."
       : "";
-  const summary = page ? "" : `Need a decision: ${need}; ${safe ? `${safe} more are safe to fix` : "nothing safe to fix"}.${trend}`;
+  const summary = page ? "" : `To decide: ${need}; ${safe ? `${safe} more are safe to fix` : "nothing safe to fix"}.${trend}`;
   const out: string[] = [];
   const quiet: string[] = [];
   const ghosts = await ghostsOf(r);
@@ -3132,15 +3134,13 @@ async function healthLint(a: Args): Promise<string> {
   }
   const ignored = quiet.length ? `Ignored, so not listed: ${quiet.join(", ")}. ignore_issue with show_again lists a check's again.` : "";
   if (!out.length) return ["No issues.", summary, ignored].filter(Boolean).join(" ");
-  return [`Knowledge health${page ? ` for ${page}` : ""}:`, ...(summary ? [summary] : []), ...out, ...(ignored ? ["", ignored] : [])].join(
-    "\n",
-  );
+  return [`Wiki health${page ? ` for ${page}` : ""}:`, ...(summary ? [summary] : []), ...out, ...(ignored ? ["", ignored] : [])].join("\n");
 }
 
-/** health_issue: the buttons an issue has of its own on Knowledge health. */
+/** health_issue: the buttons an issue has of its own on Wiki health. */
 async function healthIssue(a: Args): Promise<string> {
   const r = (await api.healthReport(true)).report;
-  if (!r) throw new Error("Knowledge health has no report yet; try again in a moment.");
+  if (!r) throw new Error("Wiki health has no report yet; try again in a moment.");
   const action = str(a, "action");
   const text = str(a, "item") ?? "";
   // Orphan pages' Add them to index.md: the whole check at once, no item.
@@ -3933,7 +3933,7 @@ async function importSources(a: Args): Promise<string> {
 const SCREEN_IDS: Record<string, Screen> = {
   weekly_review: "weekly",
   changes: "review",
-  knowledge_health: "health",
+  wiki_health: "health",
   doc_check: "doccheck",
   compare: "compare",
 };

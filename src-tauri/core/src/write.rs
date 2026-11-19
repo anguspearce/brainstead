@@ -1033,7 +1033,7 @@ pub fn save_file(path: &Path, content: &str, base: &str) -> Result<String> {
     save_file_as(path, content, base, false)
 }
 
-/// `save_file`, keeping the file's modification time when `keep_mtime`: for Knowledge health's
+/// `save_file`, keeping the file's modification time when `keep_mtime`: for Wiki health's
 /// safe fixes, which shouldn't make a page look newly written.
 pub fn save_file_as(path: &Path, content: &str, base: &str, keep_mtime: bool) -> Result<String> {
     let l = lock(path);

@@ -17,10 +17,10 @@ Click a day to filter the log to it. A card lists the files that last changed th
 - Click a slice or its row (except "other tags"): a type opens [Notes](app:notes) filtered to it, a tag searches for it.
 - **Most linked** lists the most linked-to notes and wiki pages; click one to open it.
 
-An assistant can read these counts, and the wiki's from [Knowledge health](app:health).
+An assistant can read these counts, and the wiki's from [Wiki health](app:health).
 
 ## Read the log
-The log lists every change Brainstead makes to the vault: ingests, assistants' changes, Knowledge health fixes, the daily and weekly summaries, name fixes and the daily check's catalogue update. Your own edits, captures and dropped files aren't logged.
+The log lists every change Brainstead makes to the vault: ingests, assistants' changes, Wiki health fixes, the daily and weekly summaries, name fixes and the daily check's catalogue update. Your own edits, captures and dropped files aren't logged.
 
 Entries are grouped by day; click a day's band to show only that day. Click an entry's title to open its page, or hover for its description.
 

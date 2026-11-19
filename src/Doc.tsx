@@ -255,7 +255,7 @@ export function DocScreen() {
     el?.scrollIntoView({ block: "start" });
     el?.classList.add("flash");
   }, [doc, here.anchor, session]); // eslint-disable-line react-hooks/exhaustive-deps
-  // To lines (a page's uncited claims in Knowledge health): highlighted in the editor, or the
+  // To lines (a page's uncited claims in Wiki health): highlighted in the editor, or the
   // blocks that hold them marked in View, scrolled to the first.
   const wantLines = (here.lines ?? []).join("\n");
   useEffect(() => {

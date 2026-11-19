@@ -4,7 +4,7 @@
 
 // The vault at a glance: pie charts of notes and wiki pages by type and by tag, and the files the
 // most others link to. Activity shows the notes' and the most linked, in a column right of the log;
-// Knowledge health the wiki's, in its side column.
+// Wiki health the wiki's, in its side column.
 // A slice, or its row in the legend, opens the list it counts: Notes or the Wiki filtered to that
 // type, the Wiki at that tag, or a search for a note tag. Five slices at most, then Other; each in
 // its type's or tag's own colour (src/tones.ts), as a type pill's dot and the Graph show it.
@@ -187,7 +187,7 @@ function MostLinked({ rows }: { rows: Glance["mostLinked"] }) {
   );
 }
 
-/** Knowledge health's card: wiki pages by type and by tag. */
+/** Wiki health's card: wiki pages by type and by tag. */
 export function WikiGlance({ g }: { g: Glance }) {
   const types = fold(g.wikiTypes, (n) => ({
     label: "Other",

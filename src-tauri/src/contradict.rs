@@ -408,7 +408,7 @@ pub fn open_contradiction(path: &str) -> bool {
     !c::open_on(path, &all, &v, &fixed()).is_empty()
 }
 
-/// Knowledge health's "Claims with no citation", from the cached claims.
+/// Wiki health's "Claims with no citation", from the cached claims.
 pub fn uncited_check(root: &std::path::Path) -> brainstead_core::lint::Check {
     let pages = c::pages(root);
     let texts: HashMap<String, String> = pages.iter().map(|(r, t, _)| (r.clone(), t.clone())).collect();

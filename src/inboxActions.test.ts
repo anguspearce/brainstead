@@ -70,11 +70,11 @@ const action = (owner: "me" | "delegated", initiative = "Orbit launch"): InboxIt
 describe("an initiative's action in the Inbox", () => {
   it("leads with a task for the user's own and a waiting-for for a delegated one", () => {
     expect([inboxChoices(action("me")), leadChoice(action("me"))]).toEqual([
-      ["next", "task", "waiting", "someday", "done", "move", "delete"],
+      ["next", "todo", "waiting", "someday", "done", "move", "delete"],
       "next",
     ]);
     expect([inboxChoices(action("delegated")), leadChoice(action("delegated"))]).toEqual([
-      ["waiting", "next", "task", "someday", "done", "move", "delete"],
+      ["waiting", "next", "todo", "someday", "done", "move", "delete"],
       "waiting",
     ]);
     expect(inboxItemKind(action("delegated"))).toEqual({ icon: "waiting", label: "Waiting for Maya, overdue" });
@@ -121,27 +121,27 @@ describe("each kind of Inbox item's choices", () => {
   it("lets a thread be answered and waited on, but not another capture", () => {
     const mail = cap("sources/Email. Thread. Re Launch - 2026-10-02.md");
     const doc = cap("sources/Orbit App plan.pdf");
-    expect(inboxChoices(mail)).toEqual(["reply", "ingest", "ask", "next", "task", "project", "waiting", "someday", "reference", "delete"]);
-    expect(inboxChoices(doc)).toEqual(["ingest", "ask", "next", "task", "project", "someday", "reference", "delete"]);
+    expect(inboxChoices(mail)).toEqual(["reply", "ingest", "ask", "next", "todo", "project", "waiting", "someday", "reference", "delete"]);
+    expect(inboxChoices(doc)).toEqual(["ingest", "ask", "next", "todo", "project", "someday", "reference", "delete"]);
     expect([leadChoice(mail), leadChoice(doc)]).toEqual(["reply", "ingest"]);
     expect([suggestKind(mail), suggestKind(doc)]).toEqual(["thread", "capture"]);
   });
   it("gives a thought or task every choice but the capture ones", () => {
     const t = { kind: "task", path: "To Do.md", line: 3, text: "Call Maya", lineText: "- [ ] Call Maya", stamp: null } as InboxItem;
-    expect(inboxChoices(t)).toEqual(["next", "task", "project", "waiting", "done", "someday", "reference", "delete"]);
+    expect(inboxChoices(t)).toEqual(["next", "todo", "project", "waiting", "done", "someday", "reference", "delete"]);
     expect(suggestKind(t)).toBe("task");
   });
   it("groups them as GTD asks: does it need doing? Ask is in neither", () => {
     const mail = cap("sources/Email. Thread. Re Launch - 2026-10-02.md");
     expect(choiceGroups(mail)).toEqual({
-      doing: ["reply", "next", "task", "project", "waiting"],
+      doing: ["reply", "next", "todo", "project", "waiting"],
       notDoing: ["ingest", "someday", "reference", "delete"],
       ask: true,
     });
     const t = cap("sources/Teams. Transcript. Steerco - 2026-10-02.md");
     expect(choiceGroups(t)).toEqual({ doing: [], notDoing: ["meeting", "ingest", "reference", "delete"], ask: true });
     const task = { kind: "task", path: "To Do.md", line: 3, text: "Call Maya", lineText: "- [ ] Call Maya", stamp: null } as InboxItem;
-    expect(choiceGroups(task).doing).toEqual(["next", "task", "project", "waiting", "done"]);
+    expect(choiceGroups(task).doing).toEqual(["next", "todo", "project", "waiting", "done"]);
   });
   it("knows a source's type in a subfolder of sources/ too, by its name", () => {
     expect(suggestKind(cap("sources/emails/Email. Steerco minutes - 2026-09-28.md"))).toBe("thread");

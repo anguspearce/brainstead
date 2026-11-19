@@ -300,13 +300,13 @@ export function wikiHealth(path: string, heldPages: Set<string>, report: LintRep
 
 const HEALTH_CHIP = {
   held: ["Held", "amber", "Held: a change to this page waits in Changes for you to accept or reject"],
-  stale: ["Stale", "amber", "Stale: a source changed after this page was written, or Knowledge health flags it as out of date"],
+  stale: ["Stale", "amber", "Stale: a source changed after this page was written, or Wiki health flags it as out of date"],
   issue: [
     "Check",
     "amber",
-    "Check: Knowledge health lists something to look at on this page, such as a link to a page that doesn't exist, or a source that has gone",
+    "Check: Wiki health lists something to look at on this page, such as a link to a page that doesn't exist, or a source that has gone",
   ],
-  ok: ["Healthy", "green", "Healthy: Knowledge health finds nothing to fix on this page"],
+  ok: ["Healthy", "green", "Healthy: Wiki health finds nothing to fix on this page"],
 } as const;
 
 export function WikiScreen() {

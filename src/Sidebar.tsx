@@ -65,7 +65,7 @@ export const TOOLS: Item[] = [
 
 export const FOOTER: Item[] = [
   { screen: "review", label: "Changes", icon: "review" },
-  { screen: "health", label: "Knowledge health", icon: "health" },
+  { screen: "health", label: "Wiki health", icon: "health" },
   { screen: "activity", label: "Activity", icon: "activity" },
   { screen: "trash", label: "Trash", icon: "trash" },
   { screen: "settings", label: "Settings", icon: "settings" },

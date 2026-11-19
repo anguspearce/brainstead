@@ -23,7 +23,7 @@ An assistant can read the same neighbourhood around a page, leaving out kinds yo
 A large neighbourhood is cut to the nearest 400 pages, and the line under the graph says so.
 
 ## Read the colours
-Each kind of page has the colour it has everywhere else in Brainstead. A wiki type is the colour of its type pill's dot and its slice on the Knowledge health pie; notes, sources and other wiki pages are the colour of their square (Note, Source, Wiki):
+Each kind of page has the colour it has everywhere else in Brainstead. A wiki type is the colour of its type pill's dot and its slice on the Wiki health pie; notes, sources and other wiki pages are the colour of their square (Note, Source, Wiki):
 
 - Entities: sky blue.
 - Concepts: olive green.

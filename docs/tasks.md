@@ -15,7 +15,7 @@ Today (⌘1) is what needs you now:
 - The day in one sentence under the greeting, each count a link to its band, then bands for **Overdue**, **Due today**, **Deferred until now**, **Coming up this week** (due in the next seven days) and **Waiting for**. On a wide window the last three sit beside the first two. A task deferred to a later day stays off Today until then, even if it's due. Tick, date and change tasks in place; ⌘Z undoes.
 - `@context` chips to show one context.
 - A capture box, the same as Quick capture.
-- **To process**: the Inbox, bookmarks to triage, wiki issues to decide, and the weekly review on its day.
+- **To process**: the Inbox, bookmarks to triage, Wiki health to decide, and the weekly review on its day.
 - The latest **Weekly summary** and **Daily summary**.
 - **Changes held for you** to accept or reject, and **Continue where you left off**.
 
@@ -26,21 +26,21 @@ A waiting-for row shows how many days it has waited. **Draft nudge** drafts a fo
 Press ⌃⌥Space in any app (change it in Settings › General).
 
 - Type a task and press ↩. It goes on the To Do list under Other.
-- Press Tab for a **Thought**. It goes to the Scratchpad under a date and time heading.
+- Press Tab for a **Scratchpad note**. It goes to the Scratchpad under a date and time heading.
 - As you type, `due: fri`, `defer: +3d`, `@calls` and `effort:15m` become the task format. `[[` links a note and `#` adds a tag.
 
 Both kinds wait in the Inbox.
 
 ## The Inbox
 
-<a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/inbox-dark.png"><img alt="The Inbox: captures, Scratchpad thoughts and tasks to clarify, one open with its choices" src="images/inbox-light.png"></picture></a>
+<a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/inbox-dark.png"><img alt="The Inbox: captures, Scratchpad notes and tasks to clarify, one open with its choices" src="images/inbox-light.png"></picture></a>
 
 The Inbox (⌘2) lists what you've captured but not decided: first the **Actions** on your [initiatives](wiki.md#initiatives) that are yours, and those you delegated that are past their due date or, with no due date, were handed over more than a week ago (Next action or Waiting for makes the task, with the action's due date, and marks the action so it leaves the Inbox; Done and Drop mark it done or dropped, and Move to… (`M`) moves it to another initiative; the task links the action, so ticking it marks the action done), then emails and Teams chats from the browser extensions, sources added to `sources/` and not yet ingested, Scratchpad thoughts, and tasks under Other on the To Do list. Pick one (`J` and `K` move) and choose what it becomes. A suggestion from the AI shows first, and `↩` accepts it; the choices are in two lists, **It needs doing** and **It doesn't need doing**:
 
 | Key | Choice |
 |---|---|
 | `N` | Next action, with its project, context, effort and due date |
-| `T` | Task: at the top of the To Do list's To Do as it is (unranked, so it sorts first), nothing to fill in |
+| `T` | To Do: at the top of the To Do list's To Do as it is (unranked, so it sorts first), nothing to fill in |
 | `P` | A new project |
 | `W` | Waiting for |
 | `D` | Done now (under 2 min); `D` is Draft a reply on an email thread, which has no Done |
@@ -51,9 +51,9 @@ The Inbox (⌘2) lists what you've captured but not decided: first the **Actions
 
 The keys ignore typing that wasn't meant for the Inbox: a key in the second and a half after Brainstead comes back to the front, and keys pressed in quick succession, as when a password goes to the wrong window. Press the key again on its own.
 
-Tick several items (a section's header box ticks them all) to act on them together: make meeting notes, ingest, make tasks, keep in Sources, mark done, move to Someday / maybe or delete. One that fails doesn't stop the rest: it stays ticked and the message says why. Next action, Waiting for and New project stay one at a time.
+Tick several items (a section's header box ticks them all) to act on them together: make meeting notes, ingest, put them on the To Do list, keep in Sources, mark done, move to Someday / maybe or delete. One that fails doesn't stop the rest: it stays ticked and the message says why. Next action, Waiting for and New project stay one at a time.
 
-A capture offers only the choices that fit its kind. A transcript: make a meeting note (`M`), ingest (`I`), ask about it (`A`), keep in Sources (`K`) or delete. An email or chat thread: draft a reply (`D`), ingest, ask, Next action, Task, New project, Waiting for, Someday / maybe, keep in Sources or delete. Any other capture: the same without the reply or Waiting for. A capture has no Done now, and only a thread can be Waiting for. **Ask about this source** starts a chat about it in Ask, where a **Still in the Inbox** strip takes it out when you're done. A transcript stays in the Inbox until its meeting note is made and ingested; if either fails it stays, to be chosen again. Suggest only suggests what the Inbox offers for that kind of item. **Suggest for all** suggests a choice for the first 20 items; ↩ accepts one. ⌘Z undoes each choice.
+A capture offers only the choices that fit its kind. A transcript: make a meeting note (`M`), ingest (`I`), ask about it (`A`), keep in Sources (`K`) or delete. An email or chat thread: draft a reply (`D`), ingest, ask, Next action, To Do, New project, Waiting for, Someday / maybe, keep in Sources or delete. Any other capture: the same without the reply or Waiting for. A capture has no Done now, and only a thread can be Waiting for. **Ask about this source** starts a chat about it in Ask, where a **Still in the Inbox** strip takes it out when you're done. A transcript stays in the Inbox until its meeting note is made and ingested; if either fails it stays, to be chosen again. Suggest only suggests what the Inbox offers for that kind of item. **Suggest for all** suggests a choice for the first 20 items; ↩ accepts one. ⌘Z undoes each choice.
 
 ## Tasks
 

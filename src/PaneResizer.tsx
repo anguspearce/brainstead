@@ -303,7 +303,7 @@ export function PaneResizer<K extends string>({ spec, paneKey, live, layout, roo
       else root.style.removeProperty(spec.cssVar);
     };
   }, [dragging, root, spec.cssVar]);
-  // A screen whose root scrolls (Today, Knowledge health) would scroll its dividers away with its
+  // A screen whose root scrolls (Today, Wiki health) would scroll its dividers away with its
   // first screenful: each is placed at the scroll position, one view tall, as the root scrolls.
   const self = useRef<HTMLDivElement>(null);
   useEffect(() => {

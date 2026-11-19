@@ -9,7 +9,7 @@ While Brainstead runs, its menu-bar icon opens a small window. On Windows the ic
 
 ## What the icon says
 - Plain: nothing to see.
-- Three dots at its foot: a run is going (an ingest, a meeting note, a daily or weekly summary, the daily check, the weekly review's preparation, Find tasks and projects, a contradictions check or Knowledge health's **Write Current state**).
+- Three dots at its foot: a run is going (an ingest, a meeting note, a daily or weekly summary, the daily check, the weekly review's preparation, Find tasks and projects, a contradictions check or Wiki health's **Write Current state**).
 - A dot at its corner: something waits for you (an overdue task, changes held for you, or items in the Inbox).
 
 On Windows the icon is white on a dark taskbar and black on a light one, and changes when you switch Windows' mode. It has no dots there: hover over it and its tooltip says a run is going or something waits.
@@ -17,7 +17,7 @@ On Windows the icon is white on a dark taskbar and black on a light one, and cha
 ## What the window shows
 - A headline: **All clear**, **Things need you** or how many runs are going. Counts that can't be read show "–". While the vault is read-only, a **Read-only** pill opens [Settings › Vault](app:settings/vault) to turn it off.
 - **Overdue**, **Due today** and **Waiting for** counts; click one to open [Today](app:today).
-- A capture box, like Quick capture: type a task and press `↩` for the To Do list, or switch to **Thought** for the Scratchpad.
+- A capture box, like Quick capture: type a task and press `↩` for the To Do list, or switch to **Scratchpad note** for the Scratchpad.
 - Each run going, with its progress and **Stop**.
 - The sync and ingests in a line: when the sync last ran, how many sources came in today, how many are being ingested and any problems today. Click it to open [Activity › Sync & ingest](help:activity).
 - Changes held for you and items in the Inbox, each opening its screen.

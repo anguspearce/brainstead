@@ -95,7 +95,7 @@ describe("changes", () => {
 
   it("says where a change came from", () => {
     expect(originLabel(row({}))).toBe("Ask");
-    expect(originLabel(row({ origin: { kind: "lint" } }))).toBe("Knowledge health");
+    expect(originLabel(row({ origin: { kind: "lint" } }))).toBe("Wiki health");
     expect(originLabel(row({ origin: { kind: "chat", label: "Terminal session" } }))).toBe("Terminal session");
     expect(originLabel(row({ origin: { kind: "review", label: "daily-summary 2026-10-02" } }))).toBe("Daily summary 2026-10-02");
     expect(originLabel(row({ origin: { kind: "review", label: "weekly-summary 2026-W40" } }))).toBe("Weekly summary 2026-W40");
@@ -104,7 +104,7 @@ describe("changes", () => {
   });
 });
 
-describe("knowledge health", () => {
+describe("wiki health", () => {
   it("counts what needs a decision, leaving out stale pages and safe fixes", () => {
     expect(decisions(report)).toBe(1);
     expect(decisions(null)).toBe(0);

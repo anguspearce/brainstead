@@ -1,7 +1,7 @@
 # Copyright © 2026 Wayne Davies. Free software under the GNU General Public License, version 3 or later.
 # See LICENSE for the full text.
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Demo-only wiki pages, so the Graph, Knowledge health and the pies have something to show.
+"""Demo-only wiki pages, so the Graph, Wiki health and the pies have something to show.
 
 The fixture vault (tests/fixtures/vault) stays small because tests count what's in it; these pages
 are written into the screenshot demo's copy only. Everything here is invented.

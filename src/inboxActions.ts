@@ -22,19 +22,19 @@ export function inboxChoices(i: InboxItem): string[] {
   // An initiative's action: a task (a waiting-for when it's delegated), done or dropped.
   if (i.kind === "action")
     return i.action?.owner === "delegated"
-      ? ["waiting", "next", "task", "someday", "done", "move", "delete"]
-      : ["next", "task", "waiting", "someday", "done", "move", "delete"];
-  if (i.kind !== "capture") return ["next", "task", "project", "waiting", "done", "someday", "reference", "delete"];
+      ? ["waiting", "next", "todo", "someday", "done", "move", "delete"]
+      : ["next", "todo", "waiting", "someday", "done", "move", "delete"];
+  if (i.kind !== "capture") return ["next", "todo", "project", "waiting", "done", "someday", "reference", "delete"];
   // A capture's source actions first, as Sources offers them (src/sourceActions.ts).
   const own: string[] = sourceActions(i.path);
   if (isTranscriptPath(i.path)) return [...own, "reference", "delete"];
-  if (isThread(i.path)) return [...own, "next", "task", "project", "waiting", "someday", "reference", "delete"];
-  return [...own, "next", "task", "project", "someday", "reference", "delete"];
+  if (isThread(i.path)) return [...own, "next", "todo", "project", "waiting", "someday", "reference", "delete"];
+  return [...own, "next", "todo", "project", "someday", "reference", "delete"];
 }
 
 /** The choices that make it something to do (GTD's "is it actionable?"); the rest file, park or
  *  drop it. */
-const NEEDS_DOING = new Set(["reply", "next", "task", "waiting", "project", "done"]);
+const NEEDS_DOING = new Set(["reply", "next", "todo", "waiting", "project", "done"]);
 
 /** An item's choices as the Inbox groups them: those that make it something to do, those that
  *  don't, in inboxChoices' order, and whether it can be asked about (Ask leaves it in the Inbox,
@@ -60,7 +60,7 @@ export function inboxItemKind(i: InboxItem): { icon: string; label: string } {
     return i.action?.owner === "delegated"
       ? { icon: "waiting", label: `Waiting for ${i.action.person ?? "someone"}${i.action.overdue ? ", overdue" : ""}` }
       : { icon: "tasks", label: "Your action" };
-  if (i.kind === "thought") return { icon: "bulb", label: "Scratchpad thought" };
+  if (i.kind === "thought") return { icon: "bulb", label: "Scratchpad note" };
   if (i.kind === "task") return { icon: "tasks", label: "Task" };
   if (isTranscriptPath(i.path)) return { icon: "mic", label: "Teams transcript" };
   const name = i.path.split("/").pop() ?? "";
@@ -168,7 +168,7 @@ export async function settleInboxItem(
   return api.inboxRemoveThought(i.line, i.block ?? i.lineText);
 }
 
-/** Task: the item as a task at the end of the To Do list's To Do, as it is (an action's due date
+/** To Do: the item as a task at the end of the To Do list's To Do, as it is (an action's due date
  *  and its link come with it), then out of the Inbox: an action marked with where its task went, a
  *  task's line or a thought taken out, a capture marked done. */
 export async function makeTask(i: InboxItem, text: string): Promise<unknown> {

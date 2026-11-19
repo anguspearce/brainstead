@@ -3311,7 +3311,7 @@ button.rrow.rlink:hover {
   background: var(--accent-soft);
 }
 
-/* Knowledge health's Link to…: the wiki's pages under the box as you type (in the dialog's flow,
+/* Wiki health's Link to…: the wiki's pages under the box as you type (in the dialog's flow,
    which clips anything floating out of it). */
 .csugg.pagelist {
   margin: 6px 0 0;
@@ -7767,7 +7767,7 @@ select.sel {
   padding-top: 4px;
 }
 
-/* Knowledge health (stage 7a) */
+/* Wiki health (stage 7a) */
 .body.health {
   --pane-side: 380px;
 
@@ -8730,7 +8730,7 @@ select.sel {
 }
 
 /* Activity: the log's column and the side column (the pies, Most linked), each the full height, as
-   on Knowledge health. In the log's column everything above the rows stays put and only the rows
+   on Wiki health. In the log's column everything above the rows stays put and only the rows
    scroll; the side column scrolls on its own; the page itself never does. Narrow, the side column
    goes under the log. */
 .body.activity {

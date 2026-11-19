@@ -226,7 +226,7 @@ pub fn ingested(path: &str) {
     }
 }
 
-/// The sources an ingest has read, whatever came of them, for Knowledge health: one read with nothing
+/// The sources an ingest has read, whatever came of them, for Wiki health: one read with nothing
 /// in it worth citing isn't "not yet ingested" (D-20261118-28). Every one, not capped like the
 /// Inbox's list; started from that list the first time, as its ingested sources were read.
 fn sources_read_file() -> PathBuf {

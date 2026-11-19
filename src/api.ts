@@ -693,7 +693,7 @@ export interface TrashEntry {
   sizeBytes: number;
 }
 
-// Stage 7a: Changes and Knowledge health (src-tauri/src/knowledge.rs).
+// Stage 7a: Changes and Wiki health (src-tauri/src/knowledge.rs).
 export interface MeetingInference {
   filename: string;
   kind: string;
@@ -1022,7 +1022,7 @@ export interface AutomationSuggestion {
 }
 
 export interface ChangeOrigin {
-  /** chat (Ask or a terminal), ingest, meeting, lint (Knowledge health), review (a summary or the weekly review) or contradiction. */
+  /** chat (Ask or a terminal), ingest, meeting, lint (Wiki health), review (a summary or the weekly review) or contradiction. */
   kind: string;
   chat?: string;
   label?: string;

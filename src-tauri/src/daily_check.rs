@@ -280,7 +280,7 @@ fn run(app: &AppHandle, trigger: Option<&str>) {
         did.push(index_md(app, trigger, &group));
     }
 
-    // Pages edited out of the page shape elsewhere: reported, for Knowledge health's Reshape pages.
+    // Pages edited out of the page shape elsewhere: reported, for Wiki health's Reshape pages.
     if !stopped() {
         if let Some(root) = app.state::<VaultService>().root() {
             step("shape");
@@ -302,7 +302,7 @@ fn plural(n: usize, one: &str) -> String {
     format!("{n} {one}{}", if n == 1 { "" } else { "s" })
 }
 
-/// Knowledge health's Add them to index.md, on Orphan pages: the catalogue brought up to date now,
+/// Wiki health's Add them to index.md, on Orphan pages: the catalogue brought up to date now,
 /// rather than at the next daily check, so every wiki page is linked from it. What happened.
 #[tauri::command]
 pub async fn catalogue_update(app: AppHandle) -> Result<String, String> {

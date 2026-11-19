@@ -174,13 +174,13 @@ const CHOICE: Record<string, { key: string | ((i: InboxItem) => string); label: 
       label: () => SOURCE_ACTION.ask.label(false),
       tip: () => `${SOURCE_ACTION.ask.tip(false)}; it stays in the Inbox`,
     },
-    task: {
+    todo: {
       key: "T",
-      label: () => "Task",
+      label: () => "To Do",
       tip: (i) =>
         i.kind === "action"
-          ? "Make it a task on the To Do list as it is, due date and all, with nothing more to fill in"
-          : "Make it a task on the To Do list as it is, with nothing more to fill in",
+          ? "Put it on the To Do list as it is, due date and all, with nothing to fill in (Next action asks for a project or context)"
+          : "Put it on the To Do list as it is, with nothing to fill in (Next action asks for a project or context)",
     },
     move: {
       key: "M",
@@ -226,11 +226,11 @@ const keyOf = (b: string, i: InboxItem) => {
 };
 
 /** The choices that can be made for several ticked items at once, in order. */
-const BULK = ["meeting", "ingest", "task", "done", "someday", "reference", "delete"];
+const BULK = ["meeting", "ingest", "todo", "done", "someday", "reference", "delete"];
 const BULK_LABEL: Record<string, (n: number, caps: boolean) => [string, string, string]> = {
   meeting: (n) => ["M", followThrough().ingest ? `Make and ingest ${n} meeting notes` : `Make ${n} meeting notes`, meetingTip(n)],
   ingest: (n) => ["I", `Ingest ${n} into the wiki`, "Have the AI read each into the wiki and take it out of the Inbox"],
-  task: (n) => ["T", `Make ${n} tasks`, "Make each a task on the To Do list as it is, with nothing more to fill in"],
+  todo: (n) => ["T", `Put ${n} on the To Do list`, "Put each on the To Do list as it is, with nothing to fill in"],
   done: (n) => ["D", `Mark ${n} done`, "Each took two minutes: done, and out of the Inbox"],
   someday: (n) => ["S", `Move ${n} to Someday / maybe`, "Park each as a task tagged someday-maybe"],
   reference: (n) => ["K", `Keep ${n} in Sources`, "Keep the captures in Sources and take them out of the Inbox"],
@@ -406,8 +406,8 @@ export function InboxScreen() {
         return act(() => settle(i, taskLine({ ...full, tag: "someday-maybe" }), proj, "Next actions"), "Moved to Someday / maybe");
       case "move":
         return setMoving(true);
-      case "task":
-        return act(() => makeTask(i, base.text), "Made a task on the To Do list");
+      case "todo":
+        return act(() => makeTask(i, base.text), "Put on the To Do list");
       case "reference":
         if (i.kind === "capture") return act(() => captureDone(i.path), "Kept in Sources");
         return setFiling(true);
@@ -434,7 +434,7 @@ export function InboxScreen() {
     const one = (i: InboxItem): Promise<unknown> => {
       if (b === "ingest" || b === "reference") return captureDone(i.path);
       if (b === "done") return doneNow(i);
-      if (b === "task") return makeTask(i, startText(i));
+      if (b === "todo") return makeTask(i, startText(i));
       if (b === "someday") return settle(i, taskLine({ text: startText(i), project: null, tag: "someday-maybe" }), null, "Next actions");
       if (i.kind === "capture") return trashCapture(i.path);
       return settle(i, null);

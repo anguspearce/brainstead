@@ -17,14 +17,14 @@ These change things straight away, and each is undoable with `⌘Z`. A toast in 
 - Save an [Ask](app:ask) chat to the vault.
 - Add or remove bookmarks, save a search, add files to Sources, and restore from the Trash.
 - Put areas and projects in order on [Projects](app:projects). The order is kept in Brainstead's settings, not in a note, so it isn't in Changes; moving it back undoes it.
-- Knowledge health's safe fixes and its issue buttons (**Create**, **Not duplicates**, **Add them to index.md**, **Restore from Trash**, moving an unused image to the Trash), and Fix a name everywhere, with the same choices as its screen.
+- Wiki health's safe fixes and its issue buttons (**Create**, **Not duplicates**, **Add them to index.md**, **Restore from Trash**, moving an unused image to the Trash), and Fix a name everywhere, with the same choices as its screen.
 
 These happen at once with no `⌘Z`, and only when you ask:
 
 - The Weekly review's **Start over**. Its progress and notes go; what it changed in the vault stays.
 - Moving over ([Settings › General](app:settings/general)): ticking items, and **Retire them** once **The other app is stopped** is ticked. The other app's skills and scripts go to the Trash, where you can restore them.
 - Going through the Weekly review, and marking a [contradiction](app:contradictions) resolved or ignored.
-- Knowledge health's **Ignore**, **Ignore all** and **Show again**.
+- Wiki health's **Ignore**, **Ignore all** and **Show again**.
 - Ask's chats (rename, pin, set a chat's effort, move to the Trash), Tasks' saved lists, and a note's own look.
 - Settings, except the vault, **Read-only** and the folders left out, which are yours to change. This includes how long [Changes](app:review) keeps its history, **Rebuild index**, and your tools that start Claude Code sessions.
 - Runs, with their progress and **Stop**: an ingest, the daily or weekly summary, the weekly review's preparation, the daily check, Find tasks and projects, a contradictions check, a meeting note from a transcript, **Write Current state**, bookmark triage, a drafted reply (never sent, and revised when you ask for a change), a doc check and a comparison of two documents. They use the models set in [Settings › AI assistants](app:settings/assistants). What a run changes in the vault is listed in Changes, and an assistant can undo a run when you ask.
@@ -33,12 +33,12 @@ These happen at once with no `⌘Z`, and only when you ask:
 These are made at once too. Each is listed in [Changes](app:review), where you can revert it, and `⌘Z` undoes it straight after.
 
 - Tasks: tick or untick, change the words, dates, priority, contexts, effort, project, waiting for or follow-up, cancel, reorder, add and delete.
-- [Quick capture](help:capture): a task to the Inbox or a thought to the Scratchpad.
+- [Quick capture](help:capture): a task to the Inbox or a note to the Scratchpad.
 - The Inbox: clarify an item, as the form does. When that changes two notes, both are made, or both held, together.
 - Projects: create one, rename it, or set its status, area or **Done looks like**; rename an area on every project under it.
 - Pages: edit any page, make a note (from a template too) or a wiki page, rename a file, or move it to the Trash.
 - Images: add one to the vault's `images/` folder, as pasting it into a note does, for a note it writes to embed. It's never held, and **Revert** moves it to Brainstead's Trash.
-- **Add the example notes**, Doc check's **Save as note** and **Start the register**, a saved Contradictions report, and Knowledge health's **Reshape pages**, **Link to…** and **Link to it**.
+- **Add the example notes**, Doc check's **Save as note** and **Start the register**, a saved Contradictions report, and Wiki health's **Reshape pages**, **Link to…** and **Link to it**.
 
 A quote that isn't in its source is flagged, once.
 
@@ -59,7 +59,7 @@ An assistant can read what the screens show:
 - tasks by list, the Inbox (with suggestions when asked), projects (flagged **Stuck** or **Quiet**) and [Today](app:today);
 - the daily and weekly summaries, so it can answer "what did I do yesterday?";
 - the Weekly review, Changes, runs, transcripts, the Trash and Activity;
-- Sources and their status, Knowledge health's report, a source's provenance, and the contradictions found;
+- Sources and their status, Wiki health's report, a source's provenance, and the contradictions found;
 - the links around a page, as [Graph](app:graph) shows them;
 - Ask's chats, your settings, the assistants found, and whether the app is running;
 - this help.

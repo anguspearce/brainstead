@@ -21,8 +21,8 @@ Click a column heading to sort by it.
 Each page has a health chip; hover one for what it means:
 
 - **Held**: a change to the page is held for you in [Changes](app:review).
-- **Stale**: a source changed since the page was written, or Knowledge health calls it stale.
-- **Check**: another check in [Knowledge health](app:health) lists it.
+- **Stale**: a source changed since the page was written, or Wiki health calls it stale.
+- **Check**: another check in [Wiki health](app:health) lists it.
 - **Healthy**: nothing to do.
 
 ## Make a new page
@@ -40,14 +40,14 @@ Each action is one list item: what's to be done, then whose it is, its status an
 
 `[owner:: me]` is yours, `[delegated:: Lena]` is one you handed to Lena (you're waiting for her), and `[owner:: Lena]` is Lena's own. A delegated action also gets `[since:: …]`, the day it was handed over, written for you. The status is open, done or dropped. Each decision is a dated item, newest first: `- 2026-11-12 — Annual billing ^d-91c2`, with its quotes under it the same way. Actions are plain list items, not checkboxes, so they don't show up in Tasks.
 
-You can write and edit them by hand; [Knowledge health](app:health) says when one has no owner, a status or date that doesn't read, or a quote that isn't in the note it cites. Assistants add and change them for you too, each change listed in [Changes](app:review).
+You can write and edit them by hand; [Wiki health](app:health) says when one has no owner, a status or date that doesn't read, or a quote that isn't in the note it cites. Assistants add and change them for you too, each change listed in [Changes](app:review).
 
 To move an action to another initiative, hover over it on the initiative's page and choose **Move to…**: it moves whole, with its quotes, and a task made from it follows it. (`M` in the [Inbox](app:inbox) does the same.)
 
 An action made a task in the Inbox links its task to it: the task ends with the initiative's name, which links the action. Tick the task, wherever you tick it, and the action is marked done; cancel it and the action is dropped; open it again and so is the action. Each of these is listed in [Changes](app:review). Tasks made before this link existed aren't followed.
 
 ## Read a wiki page
-Entity, concept and initiative pages share one layout: the opening text, **Current state**, the page's topics, a **Timeline** of dated entries (newest first, each with a **Source** line), then **See also**. [Knowledge health](app:health) lists pages laid out another way, and **Reshape pages** there fixes them.
+Entity, concept and initiative pages share one layout: the opening text, **Current state**, the page's topics, a **Timeline** of dated entries (newest first, each with a **Source** line), then **See also**. [Wiki health](app:health) lists pages laid out another way, and **Reshape pages** there fixes them.
 
 Under the title are the page's aliases, its `updated:` date and its source count. A link to a source shows as a small number: click it to open the source at the passage cited. The **Sources** card lists them in the same order.
 
@@ -71,7 +71,7 @@ In Edit and Source, **Page details** sits above the text:
 Each change is an ordinary edit to the page. While it is unsaved, a banner offers **Save** (`⌘S`) and **Discard**.
 
 ## Changes from the assistants
-Changes from ingest, Ask and Knowledge health apply at once and are listed in [Changes](app:review), where you can revert them. Some are held there for you instead: a scheduled run's change that fails a check, and any change to a template, to a system note's header, or that adds code that runs.
+Changes from ingest, Ask and Wiki health apply at once and are listed in [Changes](app:review), where you can revert them. Some are held there for you instead: a scheduled run's change that fails a check, and any change to a template, to a system note's header, or that adds code that runs.
 
 ## Resize the panes
 Drag the line between the tags and the list to resize them, and a column heading's left edge to resize that column (**Tags** included); **Title** takes the rest, and a double-click puts either back ([pane widths](help:settings-general)).

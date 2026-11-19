@@ -4,7 +4,7 @@ Tauri 2: a React 19 and TypeScript frontend (Vite), a Rust backend.
 
 | Folder | Holds |
 |---|---|
-| `src-tauri/core/` (`brainstead-core`) | Vault parsing, SQLite index and search, tasks, safe writes, agent changes, ingest, reviews, Knowledge health. No Tauri |
+| `src-tauri/core/` (`brainstead-core`) | Vault parsing, SQLite index and search, tasks, safe writes, agent changes, ingest, reviews, Wiki health. No Tauri |
 | `src-tauri/mcp/` (`brainstead-mcp`) | The MCP server |
 | `src-tauri/src/` | The app: commands, watcher, jobs, menu bar, MCP actions bridge; OS-specific code in `platform/` |
 | `src-tauri/evals/` | Workflows run against real models |
@@ -80,7 +80,7 @@ In `~/Library/Application Support/Brainstead/` on a Mac or `%APPDATA%\Brainstead
 | Agent changes; texts before and after, compressed. Kept 90 days or 500 MB (Settings › AI assistants) | `changes/<id>.json`, `changes/text/` |
 | The old review queue, moved in once, kept one release | `proposals-backup/` |
 | Runs: ingest, daily and weekly summaries, daily check, contradictions, Write Current state | `runs/`, `summaries/`, `daily-check.json`, `contradictions/`, `current-state.json` |
-| Knowledge health: not-duplicates, daily counts | `health.json` |
+| Wiki health: not-duplicates, daily counts | `health.json` |
 | Doc check and Compare results, kept while neither document changes | `doc-checks/` |
 | Weekly review in progress | `weekly.json` |
 | Weekly review's prepared suggestions (by week) and runs | `weekly-prep/` |

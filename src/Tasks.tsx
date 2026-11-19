@@ -117,8 +117,8 @@ export function TasksScreen() {
   return (
     <main className="main">
       <TopBar
-        title={view.label}
-        sub={all && !failed ? (rows.length === 1 ? "1 task" : `${fmtCount(rows.length)} tasks`) : undefined}
+        title="Tasks"
+        sub={[view.label, all && !failed && (rows.length === 1 ? "1 task" : `${fmtCount(rows.length)} tasks`)].filter(Boolean).join(" · ")}
         ask={
           selected
             ? {

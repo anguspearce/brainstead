@@ -2,7 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Knowledge health (stage 7a): runs the lint in the background whenever the index changes, keeps
+//! Wiki health (stage 7a): runs the lint in the background whenever the index changes, keeps
 //! a day-by-day count for the trend, and applies its safe fixes (cross-links, dates, log lines, system-note headers)
 //! straight away, keeping the pages' modification times. Its other fixes are agent changes
 //! (src/changes.rs).
@@ -42,7 +42,7 @@ fn read_opt(p: &Path) -> Option<String> {
     std::fs::read(p).ok().map(|b| String::from_utf8_lossy(&b).into_owned())
 }
 
-// ── Knowledge health ──────────────────────────────────────────────────────────
+// ── Wiki health ──────────────────────────────────────────────────────────
 
 /// What's kept in `health.json`: duplicate pairs marked as not duplicates, issues ignored, and
 /// each day's counts.
@@ -296,7 +296,7 @@ fn health_fix_now(app: AppHandle, fixes: Vec<Fix>) -> Res<String> {
     let log = root.join(LOG);
     let log_existed = log.exists();
     let log_before = read_opt(&log).unwrap_or_default();
-    let entry = reviews::log_entry("lint-fix", "Knowledge health", Some(&summary), chrono::Local::now().naive_local());
+    let entry = reviews::log_entry("lint-fix", "Wiki health", Some(&summary), chrono::Local::now().naive_local());
     let log_after = reviews::log_insert(&log_before, &entry);
     let v = if log_existed {
         write::save_file(&log, &log_after, &write::version(log_before.as_bytes()))?
@@ -395,7 +395,7 @@ fn health_reshape_now(app: AppHandle, pages: Option<Vec<String>>, unattended: bo
     if done.applied > 0 {
         let n = done.applied;
         let detail = format!("reshaped {n} page{}", if n == 1 { "" } else { "s" });
-        let entry = reviews::log_entry("lint-fix", "Knowledge health", Some(&detail), chrono::Local::now().naive_local());
+        let entry = reviews::log_entry("lint-fix", "Wiki health", Some(&detail), chrono::Local::now().naive_local());
         if let Err(e) = crate::edits::add_log(&root, &entry) {
             crate::applog!("reshape log line: {e}");
         }
@@ -425,7 +425,7 @@ fn health_ignore_now(app: AppHandle, check: String, text: String) -> Res<()> {
         .and_then(|r| r.check(&check))
         .and_then(|c| c.items.iter().find(|i| i.text == text))
         .cloned()
-        .ok_or_else(|| invalid("That issue isn't in Knowledge health any more."))?;
+        .ok_or_else(|| invalid("That issue isn't in Wiki health any more."))?;
     let version = item.page.as_deref().and_then(|p| page_version(&root, p)).unwrap_or_default();
     with_kept(|k| k.ignored.insert(lint::ignore_key(&check, &text), version));
     // Taken out of the last report at once: running every check again takes seconds.
@@ -450,7 +450,7 @@ fn health_ignore_now(app: AppHandle, check: String, text: String) -> Res<()> {
     Ok(())
 }
 
-/// Knowledge health's Ignore all, on the checks that offer it (`IGNORE_ALL`): every issue it lists
+/// Wiki health's Ignore all, on the checks that offer it (`IGNORE_ALL`): every issue it lists
 /// ignored, each until its page (or a claim's line) changes, as Ignore does one. How many.
 fn health_ignore_all_now(app: AppHandle, check: String) -> Res<usize> {
     if !IGNORE_ALL.contains(&check.as_str()) {
@@ -587,7 +587,7 @@ fn health_link_ghost_now(app: AppHandle, target: String, to: String, pages: Vec<
             &page,
             Kind::Edit,
             &title,
-            "A missing page from Knowledge health.",
+            "A missing page from Wiki health.",
             origin,
             brainstead_core::changes::from_texts(Some(&before), &after),
         );

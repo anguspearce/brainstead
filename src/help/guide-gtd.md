@@ -11,7 +11,7 @@ This guide takes you once round the GTD loop, from catching a task to the weekly
 Press `⌃⌥Space` in any app, type the task and press `↩`; it waits in the [Inbox](app:inbox). [Capture and write](help:guide-capture) has the details.
 
 ## Clarify the Inbox
-Open the [Inbox](app:inbox). Everything you've captured waits there until you decide what it is. For each item press `T` to make it a task as it is, `N` for a next action with its project and context, `P` for a new project, `W` for waiting for, `D` if you can do it in two minutes, `S` for someday, `F` to file it, or `⌫` to delete. `J` and `K` move between items, and ⌘Z undoes a choice.
+Open the [Inbox](app:inbox). Everything you've captured waits there until you decide what it is. For each item press `T` (**To Do**) to put it on the To Do list as it is, `N` for a next action with its project and context, `P` for a new project, `W` for waiting for, `D` if you can do it in two minutes, `S` for someday, `F` to file it, or `⌫` to delete. `J` and `K` move between items, and ⌘Z undoes a choice.
 
 ## Give every project a next action
 Open [Projects](app:projects). A project is a `Project. <name>.md` note; **New project** makes one. Each active project shows its next actions and waiting-fors. A red flag means it has no next action: open it and type one into **Add a next action**. An amber flag means nothing has happened for two weeks.

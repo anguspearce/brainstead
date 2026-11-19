@@ -546,7 +546,7 @@ fn run(app: &AppHandle, r: &mut Run) {
     // Only a failure needs the user; the rest is in Activity › Sync & ingest.
     let need = if r.status == "failed" { crate::notify::Need::You } else { crate::notify::Need::News };
     let body = match r.status.as_str() {
-        "done" => format!("{link}: {} change{} to review", r.proposals.len(), if r.proposals.len() == 1 { "" } else { "s" }),
+        "done" => format!("{link}: {} change{}, in Changes", r.proposals.len(), if r.proposals.len() == 1 { "" } else { "s" }),
         "stopped" => format!("{link}: stopped"),
         _ => format!("{link}: {}", r.error.clone().unwrap_or_default()),
     };

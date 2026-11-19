@@ -57,7 +57,7 @@ pub enum Status {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Origin {
-    /// chat (a model in Ask or a terminal), ingest, meeting, lint (Knowledge health), review (a
+    /// chat (a model in Ask or a terminal), ingest, meeting, lint (Wiki health), review (a
     /// summary) or contradiction.
     pub kind: String,
     /// The Ask chat it came from, when Brainstead started the CLI.

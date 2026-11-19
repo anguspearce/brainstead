@@ -2,7 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Knowledge health: the previous app's `scripts/lint_wiki.py` ported check for check, with its
+//! Wiki health: the previous app's `scripts/lint_wiki.py` ported check for check, with its
 //! rules and its wording (the tests compare with the script's own output, frozen in
 //! `tests/fixtures/lint/`), plus three checks of Brainstead's own: possible duplicate pages, stale
 //! pages that others rely on, and sources changed since the pages citing them. It reads the files

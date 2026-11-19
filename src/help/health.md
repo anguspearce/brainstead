@@ -1,11 +1,11 @@
 ---
-title: Knowledge health
+title: Wiki health
 kind: screen
 screens: [health]
 order: 15
 summary: Checks the wiki for missing pages, broken links, stale dates and other problems, and fixes the safe ones for you.
 ---
-Knowledge health checks the wiki and its sources whenever the vault changes. **Need a decision** counts the issues only you can settle; the sidebar and Today's **Wiki issues to decide** show the same number. From the second day, a sparkline beside it shows the trend; hover it for the highest count.
+Wiki health checks the wiki and its sources whenever the vault changes. **To decide** counts the issues only you can settle; the sidebar and Today's **Wiki health to decide** show the same number. From the second day, a sparkline beside it shows the trend; hover it for the highest count.
 
 ## Read the checks
 The checks come in two groups.

@@ -44,7 +44,7 @@ If another app changes other lines, the change is merged in and saving keeps bot
 Nothing is overwritten.
 
 ## System notes
-System notes, such as the To Do list and the Scratchpad, are ones Brainstead relies on; [Trash](help:trash) lists them. Their header (the "This is a system note" callout) shows a lock and can't be edited here; the rest edits as usual. If another app changes it, [Knowledge health](app:health) offers to put it back.
+System notes, such as the To Do list and the Scratchpad, are ones Brainstead relies on; [Trash](help:trash) lists them. Their header (the "This is a system note" callout) shows a lock and can't be edited here; the rest edits as usual. If another app changes it, [Wiki health](app:health) offers to put it back.
 
 ## Find and replace
 Press `⌘F` to find in the note. `↩` goes to the next match, `⇧↩` to the previous one, and `Esc` closes the bar.

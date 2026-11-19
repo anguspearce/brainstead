@@ -176,7 +176,7 @@ const PANE_WHERE: Record<string, string> = {
   projects: "Projects",
   changes: "Changes",
   today: "Today",
-  health: "Knowledge health",
+  health: "Wiki health",
   activity: "Activity",
   sources: "Sources",
   graph: "Graph",

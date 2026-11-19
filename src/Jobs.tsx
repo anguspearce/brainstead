@@ -353,7 +353,7 @@ function RunRow({ r }: { r: ReviewRun }) {
             onClick={() =>
               void api
                 .reviewUndo(r.id)
-                .then(() => toast("Review undone"))
+                .then(() => toast("Run undone"))
                 .catch((e) => toast(String(e), undefined, "bad"))
             }
           >

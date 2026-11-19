@@ -29,7 +29,7 @@ const AT_ONCE: usize = 4;
 static RUNNING: AtomicBool = AtomicBool::new(false);
 static STOP: AtomicBool = AtomicBool::new(false);
 
-/// The run going now or the last one, for Knowledge health.
+/// The run going now or the last one, for Wiki health.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Last {
@@ -145,8 +145,7 @@ pub fn start(app: &AppHandle, pages: Option<Vec<String>>, limit: Option<usize>, 
         if l.written > 0 {
             let n = l.written;
             let detail = format!("wrote Current state on {n} page{}", if n == 1 { "" } else { "s" });
-            let entry =
-                brainstead_core::reviews::log_entry("lint-fix", "Knowledge health", Some(&detail), chrono::Local::now().naive_local());
+            let entry = brainstead_core::reviews::log_entry("lint-fix", "Wiki health", Some(&detail), chrono::Local::now().naive_local());
             if let Err(e) = crate::edits::add_log(&root, &entry) {
                 crate::applog!("current state log line: {e}");
             }

@@ -79,16 +79,16 @@ pub fn inbox_kind(kind: &str, path: &str) -> &'static str {
 /// trashed.
 pub fn fits(kind: &str, becomes: &str) -> bool {
     match kind {
-        "thought" | "task" => matches!(becomes, "next" | "task" | "project" | "waiting" | "done" | "someday" | "reference" | "delete"),
+        "thought" | "task" => matches!(becomes, "next" | "todo" | "project" | "waiting" | "done" | "someday" | "reference" | "delete"),
         // An initiative's action (D-20261118-12): a task, a waiting-for, done, dropped, or moved to
         // another initiative (D-20261118-26).
-        "action" => matches!(becomes, "next" | "task" | "waiting" | "someday" | "done" | "move" | "delete"),
+        "action" => matches!(becomes, "next" | "todo" | "waiting" | "someday" | "done" | "move" | "delete"),
         "transcript" => matches!(becomes, "meeting" | "ingest" | "ask" | "reference" | "delete"),
         "thread" => {
-            matches!(becomes, "reply" | "ingest" | "ask" | "next" | "task" | "project" | "waiting" | "someday" | "reference" | "delete")
+            matches!(becomes, "reply" | "ingest" | "ask" | "next" | "todo" | "project" | "waiting" | "someday" | "reference" | "delete")
         }
-        "capture" => matches!(becomes, "ingest" | "ask" | "next" | "task" | "project" | "someday" | "reference" | "delete"),
-        "file" => matches!(becomes, "next" | "task" | "project" | "someday" | "reference" | "delete"),
+        "capture" => matches!(becomes, "ingest" | "ask" | "next" | "todo" | "project" | "someday" | "reference" | "delete"),
+        "file" => matches!(becomes, "next" | "todo" | "project" | "someday" | "reference" | "delete"),
         _ => false,
     }
 }

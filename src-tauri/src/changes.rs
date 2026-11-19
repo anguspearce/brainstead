@@ -412,7 +412,7 @@ fn log_line(c: &Change) -> Option<String> {
         "lint" if c.origin.run.as_deref().is_some_and(|r| r.starts_with(RESHAPE_RUN) || r.starts_with(crate::currentstate::RUN)) => {
             return None
         }
-        "lint" => reviews::log_entry("lint-fix", "Knowledge health", Some(&c.title), now),
+        "lint" => reviews::log_entry("lint-fix", "Wiki health", Some(&c.title), now),
         _ => reviews::log_entry(
             if c.kind == Kind::New { "create" } else { "update" },
             brainstead_core::filename::stem(&c.page),

@@ -2,7 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Knowledge health (stage 7a): the previous app's eight wiki checks, ported to Rust, and
+// Wiki health (stage 7a): the previous app's eight wiki checks, ported to Rust, and
 // "More checks", Brainstead's own (possible duplicates, stale pages others rely on, sources changed since
 // they were cited, page shape, system notes' headers and the rest). They rerun in the background whenever the index changes. Safe fixes
 // (cross-links, `updated:` dates, log lines, system notes' headers) apply straight away and can be undone; anything that
@@ -180,7 +180,7 @@ export function HealthScreen() {
   return (
     <main className="main">
       <TopBar
-        title="Knowledge health"
+        title="Wiki health"
         sub={r ? `${r.wikiPages} wiki pages · ${r.sources} sources` : "Checking…"}
         ask={{ about: "the wiki's health", prompt: "About my wiki's health: " }}
       >
@@ -231,7 +231,7 @@ export function HealthScreen() {
         <div className="hmain">
           <div className="hsum">
             <div className="hnum">
-              <span className="eyebrow">Need a decision</span>
+              <span className="eyebrow">To decide</span>
               <b>{r ? need : "…"}</b>
               <span className="faint small">{fixes.length ? `${fixes.length} more are safe to fix` : "nothing safe to fix"}</span>
             </div>

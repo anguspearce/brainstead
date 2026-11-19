@@ -2,7 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Changes (what assistants and runs changed, and what's held for you) and Knowledge health's last
+// Changes (what assistants and runs changed, and what's held for you) and Wiki health's last
 // report, loaded once and reloaded when Rust says they changed: changes arrive from the MCP server
 // and from runs in the background, and the checks rerun after the index changes.
 
@@ -42,9 +42,9 @@ export function startKnowledge() {
 /** The changes waiting for you. */
 export const held = (rows: ChangeRow[]) => rows.filter((c) => c.status === "held");
 
-/** Where a change came from, for its row: "Ask · Sonnet", "Knowledge health", "Daily summary 2026-10-02". */
+/** Where a change came from, for its row: "Ask · Sonnet", "Wiki health", "Daily summary 2026-10-02". */
 export function originLabel(c: ChangeRow): string {
-  if (c.origin.kind === "lint") return c.origin.label === "Missing page" || !c.origin.label ? "Knowledge health" : c.origin.label;
+  if (c.origin.kind === "lint") return c.origin.label === "Missing page" || !c.origin.label ? "Wiki health" : c.origin.label;
   if (c.origin.kind === "review") return c.origin.label ? reviewLabel(c.origin.label) : "Scheduled run";
   if (c.origin.label) return c.origin.label;
   return c.origin.chat ? "Ask" : "An assistant";
@@ -149,7 +149,7 @@ const linkStem = (name: string) => (name.trim().split("/").pop() ?? "").replace(
 /** The Trash's files by name (lower case, no `.md`), for a missing link that names one. */
 export const trashByName = (entries: TrashEntry[]) => new Map(entries.map((e) => [linkStem(e.basename).toLowerCase(), e]));
 
-/** What Knowledge health offers for a missing link (a missing page, or a source a page cites that
+/** What Wiki health offers for a missing link (a missing page, or a source a page cites that
  *  isn't there): the file it names if that's in the Trash, and Did you mean, the note it most likely
  *  meant (the meeting note a trashed transcript became, else one a slip away). The screen's rows and
  *  lint and health_issue all use this. */
@@ -270,7 +270,7 @@ export function fixWithAskPrompt(r: LintReport): string {
     for (const i of open.slice(0, 15)) lines.push(`- ${i.text}`);
   }
   return [
-    "Knowledge health found these issues in the wiki. For each one you can fix from the vault, make the fix with edit_page (one change per page; quote the source for any fact). Say which ones need me to decide.",
+    "Wiki health found these issues in the wiki. For each one you can fix from the vault, make the fix with edit_page (one change per page; quote the source for any fact). Say which ones need me to decide.",
     "",
     ...lines,
   ].join("\n");

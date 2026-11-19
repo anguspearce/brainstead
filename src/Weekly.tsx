@@ -735,7 +735,7 @@ function Step({ id, ctx, log }: { id: string; ctx: WeeklyContext | null; log: (l
   return null;
 }
 
-/** Missing pages: Knowledge health's list (the same one it shows), else the review's inputs. */
+/** Missing pages: Wiki health's list (the same one it shows), else the review's inputs. */
 function Ghosts({ fallback }: { fallback: { target: string; refs: number }[] }) {
   useEffect(startKnowledge, []);
   const h = useStore(health);
@@ -756,10 +756,10 @@ function Ghosts({ fallback }: { fallback: { target: string; refs: number }[] }) 
         <button
           type="button"
           className="btn sm"
-          title="Go to Knowledge health to create these pages or link them"
+          title="Go to Wiki health to create these pages or link them"
           onClick={() => nav.go("health")}
         >
-          Create or link them in Knowledge health
+          Create or link them in Wiki health
         </button>
       )}
     </div>

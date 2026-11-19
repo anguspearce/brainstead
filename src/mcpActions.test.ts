@@ -330,9 +330,9 @@ describe("MCP actions", () => {
       old: [act.lineText],
       new: [expect.stringContaining('{"task":"[[Me. To Do List]]"}')],
     });
-    // Task: on the To Do list's To Do as it is, nothing more to set.
+    // To Do: on the To Do list's To Do as it is, nothing more to set.
     calls.length = 0;
-    await run("inbox.clarify", { item: "action:a-2", becomes: "task" });
+    await run("inbox.clarify", { item: "action:a-2", becomes: "todo" });
     expect(submitted()[0]).toMatchObject({
       page: "Me. To Do List.md",
       instruction: { op: "add_task", heading: "To Do", line: "- [ ] Maya: Book the room [[Orbit launch#^a-2|Orbit launch]] 📅 2026-11-01" },
@@ -818,7 +818,7 @@ describe("MCP actions", () => {
       expect(out).toMatch(/\n\nIgnored, so not listed: Orphan pages 2\./);
       expect(out).toMatch(/Stale pages \(1, not counted/);
       expect(out).toMatch(/Acme: updated is old \[safe fix\]/);
-      expect(await run("health.lint", { page: "Lena" })).toMatch(/^Knowledge health for Lena:\n\nOrphan pages \(1; check orphans\)/);
+      expect(await run("health.lint", { page: "Lena" })).toMatch(/^Wiki health for Lena:\n\nOrphan pages \(1; check orphans\)/);
     });
 
     it("gives a missing link's Did you mean and In the Trash as its row does, and no Create for a page in the Trash", async () => {
@@ -1079,7 +1079,7 @@ describe("MCP actions", () => {
     });
 
     it("opens the window on a screen or a note", async () => {
-      expect(await run("open", { screen: "knowledge_health" })).toBe("Brainstead is open on knowledge health.");
+      expect(await run("open", { screen: "wiki_health" })).toBe("Brainstead is open on wiki health.");
       expect(calls.find(([c]) => c === "main_show")![1]).toEqual({ screen: null });
       answers.links_resolve = () => ["wiki/entities/Orbit App.md"];
       expect(await run("open", { page: "[[Orbit App]]" })).toBe("Brainstead is open on Orbit App.");
@@ -2201,11 +2201,11 @@ describe("MCP actions", () => {
       await expect(run("task.edit", { task: "Me. To Do List.md:12", text: "go", words: "x" })).rejects.toThrow(/isn't on its line once/);
     });
 
-    it("captures a task to the Inbox and a thought to the Scratchpad, through Changes", async () => {
+    it("captures a task to the Inbox and a note to the Scratchpad, through Changes", async () => {
       answers.changes_submit_many = outcomes(true);
       const out = (await run("inbox.capture", { kind: "task", text: "Ask  Maya about the venue @calls" })) as string;
       expect(out).toMatch(/^Added to the Inbox \(the To Do list's Other\): Ask Maya about the venue #context\/calls;/);
-      await run("inbox.capture", { kind: "thought", text: "The venue\nneeds a ramp" });
+      await run("inbox.capture", { kind: "scratchpad", text: "The venue\nneeds a ramp" });
       const [task, thought] = submitted();
       expect(task).toMatchObject({ page: "Me. To Do List.md", kind: "task", instruction: { op: "add_task" } });
       expect(thought).toMatchObject({ page: "Me. Scratchpad.md", instruction: { op: "add_thought", text: "The venue\nneeds a ramp" } });
@@ -3070,7 +3070,7 @@ describe("MCP actions", () => {
       await expect(run("source.provenance", { source: "sources/Gone.pdf" })).rejects.toThrow(/no source at/);
     });
 
-    it("gives Knowledge health's summary and trend", async () => {
+    it("gives Wiki health's summary and trend", async () => {
       const report = {
         checks: [
           { id: "orphans", title: "Orphan pages", classic: true, items: [{ text: "Lena", page: "wiki/entities/Lena.md", safe: false }] },
@@ -3085,7 +3085,7 @@ describe("MCP actions", () => {
         ranAt: null,
       });
       expect(await run("health.lint")).toMatch(
-        /^Knowledge health:\nNeed a decision: 1; nothing safe to fix\. Trend: 1 Oct: 3 → 6 Oct: 1 \(1 Oct to 6 Oct\. Highest: 3\.\)/,
+        /^Wiki health:\nTo decide: 1; nothing safe to fix\. Trend: 1 Oct: 3 → 6 Oct: 1 \(1 Oct to 6 Oct\. Highest: 3\.\)/,
       );
       answers.health_report = () => ({ report, history: [], ranAt: null });
       expect(await run("health.lint")).toContain("The trend shows after a second day.");

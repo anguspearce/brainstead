@@ -106,7 +106,7 @@ pub(crate) async fn writing<T: Send + 'static>(f: impl FnOnce() -> Res<T> + Send
 }
 
 pub fn written(app: &AppHandle, paths: &[PathBuf]) {
-    // Knowledge health reads these again (a write that kept the file's time and size is otherwise
+    // Wiki health reads these again (a write that kept the file's time and size is otherwise
     // invisible to its cache), and reruns once the vault is quiet.
     brainstead_core::lint::forget(paths);
     crate::knowledge::vault_changed(app);

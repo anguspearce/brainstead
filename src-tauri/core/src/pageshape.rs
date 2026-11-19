@@ -1017,7 +1017,7 @@ pub fn one(path: &str, text: &str, sources: &Sources) -> (PageResult, Option<Str
     (PageResult { path: path.to_string(), in_shape, auto, report }, (new != text).then_some(new))
 }
 
-/// The Knowledge health item for a page not in the shape: safe when Reshape pages can do it by
+/// The Wiki health item for a page not in the shape: safe when Reshape pages can do it by
 /// itself; else why it needs the user.
 pub fn item(path: &str, text: &str, sources: &Sources) -> Option<crate::lint::Item> {
     let (r, _) = one(path, text, sources);
@@ -1262,10 +1262,7 @@ pub fn drift_line(results: &[PageResult]) -> String {
     }
     let auto = out.iter().filter(|r| r.auto && r.report.broken.is_empty()).count();
     let n = out.len();
-    format!(
-        "{n} wiki page{} not in the page shape ({auto} Reshape pages can do by itself, in Knowledge health)",
-        if n == 1 { "" } else { "s" }
-    )
+    format!("{n} wiki page{} not in the page shape ({auto} Reshape pages can do by itself, in Wiki health)", if n == 1 { "" } else { "s" })
 }
 
 /// The page with its Current state's text `text`: replaced when it has one, else put after the opening.
@@ -1694,7 +1691,7 @@ mod tests {
         let drifted = format!("{page}\n\n## 5 Oct 2026 — Sync\n\nScope agreed [[Meeting. Orbit App Sync - 2026-10-05]].\n");
         let (r, new) = one("wiki/entities/Orbit App.md", &drifted, &sources);
         assert!(!r.in_shape && r.auto, "{r:?}");
-        assert_eq!(drift_line(&[ok, r]), "1 wiki page not in the page shape (1 Reshape pages can do by itself, in Knowledge health)");
+        assert_eq!(drift_line(&[ok, r]), "1 wiki page not in the page shape (1 Reshape pages can do by itself, in Wiki health)");
         let new = new.unwrap();
         assert!(new.contains("## Timeline\n\n### 2026-10-05 — Sync\nSource: [[Meeting. Orbit App Sync - 2026-10-05]]"), "{new}");
         assert!(in_shape(&new, &|t| sources.is_source(t)));

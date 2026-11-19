@@ -8,7 +8,7 @@ summary: See and revert what assistants changed, decide the changes held for you
 Nothing Brainstead or an assistant does to the vault is final. This guide shows where to put it back.
 
 ## Undo what you just did
-Press `⌘Z` straight after ticking a task on [Tasks](app:tasks), a choice in the [Inbox](app:inbox), a Knowledge health fix or a bookmark taken away, and it's put back. While you're writing a note, `⌘Z` undoes your typing as usual.
+Press `⌘Z` straight after ticking a task on [Tasks](app:tasks), a choice in the [Inbox](app:inbox), a Wiki health fix or a bookmark taken away, and it's put back. While you're writing a note, `⌘Z` undoes your typing as usual.
 
 ## Read what assistants changed
 Open [Changes](app:review) from the foot of the sidebar. The feed groups changes by run, newest first; `J` and `K` move between them. On the right is the diff, and **What it rests on** lists the quotes behind it, each marked found or not found in its source.
