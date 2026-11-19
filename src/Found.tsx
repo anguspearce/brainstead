@@ -4,17 +4,18 @@
 
 // Find tasks and projects (decided 2026-10-05): a run over your notes from the last 90 days
 // (src-tauri/src/find.rs) suggests tasks, shown at the top of Tasks, and projects, at the top of
-// Projects. Each rests on a quote from a note; Accept makes it (revertable in Changes), Edit
-// changes it first, Skip drops it. Neither comes back in a later run.
+// Projects, as the one suggestion component (src/Suggestions.tsx): a chip that opens to the list.
+// Each rests on a quote from a note; Accept makes it (revertable in Changes), Edit changes it
+// first, Skip drops it. Neither comes back in a later run.
 
 import { useEffect, useState } from "react";
 import { api, FindState, FindSuggestion } from "./api";
-import { Icon } from "./icons";
 import { nav, openDoc } from "./nav";
 import { Store, useStore } from "./store";
 import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
 import { iconizeEmoji } from "./md/fieldEmoji";
+import { SuggestButton, SuggestChip, SuggestionRow, useSuggestFold } from "./Suggestions";
 
 export const found = new Store<FindState | null>(null);
 let started = false;
@@ -41,23 +42,19 @@ export function findRun() {
 
 const noteName = (path: string) => path.replace(/\.md$/, "").split("/").pop() ?? path;
 
-/** The run's state in a line: running with its progress, or when it last ran. */
+/** The run's state in a line, at the top of the open list: when it last looked, or why it failed. */
 function RunState({ s }: { s: FindState | null }) {
   const r = s?.run;
-  if (!r) return <span className="faint small">Reads your notes from the last 90 days.</span>;
+  if (!r) return <span className="faint small">Suggest reads your notes from the last 90 days.</span>;
   if (r.status === "running")
     return (
-      <span className="faint small row">
-        <span className="spin" />
+      <span className="faint small">
         Reading {r.notes} notes{r.batches > 1 ? `, part ${Math.min(r.done + 1, r.batches)} of ${r.batches}` : ""}…
-        <button type="button" className="btn sm ghost" title="Stop looking" onClick={() => void api.findStop()}>
-          Stop
-        </button>
       </span>
     );
   const when = new Date(r.finishedAt ?? r.startedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
   return (
-    <span className="faint small">
+    <span className={`small ${r.status === "error" ? "err" : "faint"}`}>
       {r.status === "error"
         ? `The last look failed: ${r.error ?? "it stopped"}`
         : r.status === "stopped"
@@ -67,19 +64,29 @@ function RunState({ s }: { s: FindState | null }) {
   );
 }
 
-function FindButton({ s, what }: { s: FindState | null; what: string }) {
+/** The chip and Suggest (again), with Stop while it runs: in Tasks' filter bar, and Projects' line. */
+export function FoundBar({ kind }: { kind: "task" | "project" }) {
+  useEffect(startFind, []);
+  const s = useStore(found);
+  const [open, setOpen] = useSuggestFold(kind === "task" ? "tasks" : "projects");
+  const n = (s?.suggestions ?? []).filter((g) => g.kind === kind).length;
   const running = s?.run?.status === "running";
+  const what = kind === "task" ? "tasks you haven't written down" : "projects your notes keep coming back to";
   return (
-    <button
-      type="button"
-      className="btn sm"
-      disabled={running}
-      title={`Have the AI read your notes from the last 90 days and suggest ${what}; nothing changes until you accept one`}
-      onClick={() => void findRun()}
-    >
-      <Icon name="search" size={12} />
-      {s?.run ? "Look again" : "Find tasks and projects"}
-    </button>
+    <span className="suggbar">
+      <SuggestChip n={n} busy={running} open={open} onToggle={() => setOpen(!open)} />
+      {running ? (
+        <button type="button" className="btn sm ghost" title="Stop reading your notes" onClick={() => void api.findStop()}>
+          Stop
+        </button>
+      ) : (
+        <SuggestButton
+          again={!!s?.run}
+          title={`Have the AI read your notes from the last 90 days and suggest ${what}; nothing changes until you accept one`}
+          onClick={() => void findRun()}
+        />
+      )}
+    </span>
   );
 }
 
@@ -127,168 +134,71 @@ function useDecide(g: FindSuggestion) {
   return [busy, decide] as const;
 }
 
-/** Suggested tasks, at the top of Tasks. */
-export function FoundTasks() {
+/** The open list of suggested tasks (under Tasks' filters) or projects (under Projects' line):
+ *  nothing while it's folded. */
+export function FoundList({ kind }: { kind: "task" | "project" }) {
   useEffect(startFind, []);
   const s = useStore(found);
-  const rows = (s?.suggestions ?? []).filter((g) => g.kind === "task");
+  const [open] = useSuggestFold(kind === "task" ? "tasks" : "projects");
+  const rows = (s?.suggestions ?? []).filter((g) => g.kind === kind);
+  if (!open || !rows.length) return null;
   return (
-    <section className="found">
-      <div className="foundhead">
-        <Icon name="zap" size={14} />
-        <span className="pt grow">{rows.length ? `${rows.length} suggested from your notes` : "Tasks in your notes"}</span>
+    <section className="sugglist" aria-label="Suggestions">
+      <div className="sugghead">
         <RunState s={s} />
-        <FindButton s={s} what="tasks you haven't written down" />
       </div>
-      {rows.map((g) => (
-        <FoundRow key={g.id} g={g} />
-      ))}
+      {rows.map((g) => (kind === "task" ? <FoundTask key={g.id} g={g} /> : <FoundProject key={g.id} g={g} />))}
     </section>
   );
 }
 
-function FoundRow({ g }: { g: FindSuggestion }) {
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(g.text);
+const SKIP = "Leave it out; it won't be suggested again";
+
+function FoundTask({ g }: { g: FindSuggestion }) {
   const [busy, decide] = useDecide(g);
   return (
-    <div className="foundrow">
-      <div className="t">
-        {editing ? (
-          <label className="inp">
-            <input
-              aria-label="The task"
-              value={text}
-              autoFocus
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void decide("accept", { text });
-                if (e.key === "Escape") setEditing(false);
-              }}
-            />
-          </label>
-        ) : (
-          <div className="pt">{iconizeEmoji(g.text)}</div>
-        )}
-        <div className="faint small">
-          {g.project ? `${g.project} · ` : "To Do list · "}
-          {g.waiting ? "waiting for · " : ""}
-          {g.due ? `due ${g.due} · ` : ""}
-          <Sources g={g} />
-        </div>
-      </div>
-      <button
-        type="button"
-        className="btn sm pri"
-        disabled={busy}
-        title={`Add it${g.project ? ` to ${g.project}'s Next actions` : " to the To Do list"}; revertable in Changes`}
-        onClick={() => void decide("accept", editing ? { text } : undefined)}
-      >
-        Accept
-      </button>
-      {!editing && (
-        <button type="button" className="btn sm" title="Change the wording before adding it" onClick={() => setEditing(true)}>
-          Edit
-        </button>
-      )}
-      <button
-        type="button"
-        className="btn sm ghost"
-        disabled={busy}
-        title="Leave it out; it won't be suggested again"
-        onClick={() => void decide("skip")}
-      >
-        Skip
-      </button>
-    </div>
-  );
-}
-
-/** Suggested projects, at the top of Projects. */
-export function FoundProjects() {
-  useEffect(startFind, []);
-  const s = useStore(found);
-  const rows = (s?.suggestions ?? []).filter((g) => g.kind === "project");
-  return (
-    <section className="found">
-      <div className="foundhead">
-        <Icon name="zap" size={14} />
-        <span className="pt grow">{rows.length ? `${rows.length} suggested from your notes` : "Projects in your notes"}</span>
-        <FindButton s={s} what="projects your notes keep coming back to" />
-      </div>
-      {rows.length === 0 && (
-        <div className="foundrow">
-          <RunState s={s} />
-        </div>
-      )}
-      {rows.map((g) => (
-        <FoundProject key={g.id} g={g} />
-      ))}
-    </section>
+    <SuggestionRow
+      id={g.id}
+      busy={busy}
+      text={iconizeEmoji(g.text)}
+      detail={`${g.project ? `${g.project} · ` : "To Do list · "}${g.waiting ? "waiting for · " : ""}${g.due ? `due ${g.due} · ` : ""}`}
+      source={<Sources g={g} />}
+      accept={{
+        title: `Add it${g.project ? ` to ${g.project}'s Next actions` : " to the To Do list"}; revertable in Changes`,
+        run: (e) => void decide("accept", e && { text: e.text }),
+      }}
+      edit={{ title: "Change the wording before adding it", fields: [{ key: "text", label: "The task", value: g.text }] }}
+      skip={{ title: SKIP, run: () => void decide("skip") }}
+    />
   );
 }
 
 function FoundProject({ g }: { g: FindSuggestion }) {
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(g.text);
-  const [outcome, setOutcome] = useState(g.outcome ?? "");
   const [busy, decide] = useDecide(g);
   return (
-    <div className="foundrow">
-      <div className="t">
-        {editing ? (
-          <>
-            <label className="inp">
-              <input aria-label="The project's name" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
-            </label>
-            <label className="inp">
-              <input
-                aria-label="What done looks like"
-                placeholder="What done looks like"
-                value={outcome}
-                onChange={(e) => setOutcome(e.target.value)}
-              />
-            </label>
-          </>
-        ) : (
-          <>
-            <div className="pt">{iconizeEmoji(g.text)}</div>
-            {g.outcome && <div className="small">{g.outcome}</div>}
-          </>
-        )}
-        {g.tasks.length > 0 && <div className="faint small">First: {g.tasks.join(" · ")}</div>}
-        <div className="faint small">
-          <Sources g={g} />
-        </div>
-      </div>
-      <button
-        type="button"
-        className="btn sm pri"
-        disabled={busy}
-        title="Make the project note with what done looks like and its first next actions; revertable in Changes"
-        onClick={() => void decide("accept", editing ? { text: name, outcome } : undefined)}
-      >
-        Accept
-      </button>
-      {!editing && (
-        <button
-          type="button"
-          className="btn sm"
-          title="Change the name or what done looks like before making it"
-          onClick={() => setEditing(true)}
-        >
-          Edit
-        </button>
-      )}
-      <button
-        type="button"
-        className="btn sm ghost"
-        disabled={busy}
-        title="Leave it out; it won't be suggested again"
-        onClick={() => void decide("skip")}
-      >
-        Skip
-      </button>
-    </div>
+    <SuggestionRow
+      id={g.id}
+      busy={busy}
+      text={
+        <>
+          {iconizeEmoji(g.text)}
+          {g.outcome && <div className="small">{g.outcome}</div>}
+        </>
+      }
+      detail={g.tasks.length > 0 ? `First: ${g.tasks.join(" · ")} · ` : ""}
+      source={<Sources g={g} />}
+      accept={{
+        title: "Make the project note with what done looks like and its first next actions; revertable in Changes",
+        run: (e) => void decide("accept", e && { text: e.text, outcome: e.outcome }),
+      }}
+      edit={{
+        title: "Change the name or what done looks like before making it",
+        fields: [
+          { key: "text", label: "The project's name", value: g.text },
+          { key: "outcome", label: "What done looks like", value: g.outcome ?? "" },
+        ],
+      }}
+      skip={{ title: SKIP, run: () => void decide("skip") }}
+    />
   );
 }

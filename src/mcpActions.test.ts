@@ -702,6 +702,19 @@ describe("MCP actions", () => {
       expect(saved.log).toEqual(["Added “Book the room”", "Ticked"]);
     });
 
+    it("accepts one with its words changed, as Edit does, and refuses text where there are none", async () => {
+      const add = { do: "add", text: "Book the room", project: null, context: null, tags: [], due: null, scheduled: null };
+      answers.weekprep_status = () => ({
+        prep: { ...prep, suggestions: [...prep.suggestions, { id: "s5", step: "back", text: "You said so", source: null, action: add }] },
+        running: false,
+        error: null,
+      });
+      answers.task_add = edited;
+      await run("weekly.suggestion", { id: "s5", action: "accept", text: "Book the big room" });
+      expect(calls.find(([c]) => c === "task_add")![1]).toMatchObject({ text: "Book the big room" });
+      await expect(run("weekly.suggestion", { id: "s1", action: "accept", text: "Something" })).rejects.toThrow(/no words to change/);
+    });
+
     it("skips one, and refuses a prompt, one dealt with, or an unknown id", async () => {
       await run("weekly.suggestion", { id: "s2", action: "skip" });
       expect((calls.find(([c]) => c === "weekly_state_write")![1]!.state as typeof state).handled).toEqual({

@@ -28,7 +28,7 @@ import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
 import { askQuote, TopBar } from "./TopBar";
 import { reviewWeek } from "./Weekly";
-import { Dialog, LayerTag, Squeeze, TableBand } from "./ui";
+import { Dialog, LayerTag, TableBand } from "./ui";
 import { Markdown } from "./md/Markdown";
 import { settings, useStore } from "./store";
 import { useVaultVersion } from "./state";
@@ -54,6 +54,7 @@ import { keyLabel } from "./platform";
 import { MoveAction } from "./MoveAction";
 import { isStrayKey } from "./strayKeys";
 import { usePanes } from "./PaneResizer";
+import { SuggestButton, SuggestChip, SuggestionRow } from "./Suggestions";
 import { BookmarksBand } from "./skills/Triage";
 import { PANES } from "./panes";
 
@@ -120,7 +121,7 @@ const SOURCES: { kind: InboxItem["kind"]; label: string; icon: string; tip: stri
   { kind: "task", label: "To Do list › Other", icon: "tasks", tip: "under Other on the To Do list" },
 ];
 /** The items to clarify in the order the list shows them, band by band (Actions, Captures, Scratchpad,
- *  To Do list › Other), so Suggest for all asks about the same first 20 (an assistant's list_inbox too). */
+ *  To Do list › Other), so the top bar's Suggest asks about the same first 20 (an assistant's list_inbox too). */
 export function inboxRows(raw: InboxItem[]): InboxItem[] {
   const open = raw.filter(unclarified);
   return SOURCES.flatMap((g) => open.filter((i) => i.kind === g.kind));
@@ -281,6 +282,8 @@ export function InboxScreen() {
   const [moving, setMoving] = useState(false);
   const [sugg, setSugg] = useState<Record<string, ClarifySuggestion>>({});
   const [thinking, setThinking] = useState(false);
+  // Asked this visit (or a suggestion skipped): the button is Suggest again.
+  const [asked, setAsked] = useState(false);
   // Every item seen in the Inbox this visit: one that has left it, however (clarified here, ingested
   // by a run, cleared by an assistant), counts as done, so the total holds still while the count climbs.
   const [seen, setSeen] = useState<string[]>([]);
@@ -496,6 +499,7 @@ export function InboxScreen() {
 
   const suggest = (which: InboxItem[]) => {
     setThinking(true);
+    setAsked(true);
     api
       .clarifySuggest(
         which.map((i) => ({ id: key(i), kind: suggestKind(i), text: itemText(i) })),
@@ -526,6 +530,12 @@ export function InboxScreen() {
   const done = total - items.length;
   // What Suggest asks about: not transcripts, whose choice is the meeting note.
   const askable = items.filter((i) => !unsuggested(i));
+  // The items with a suggestion waiting: the chip counts them and goes to the next one.
+  const suggested = askable.filter((i) => sugg[key(i)]);
+  const nextSuggested = () => {
+    const after = suggested.find((i) => items.indexOf(i) > idx) ?? suggested[0];
+    if (after) setSel(key(after));
+  };
   return (
     <main className="main">
       <TopBar
@@ -547,28 +557,19 @@ export function InboxScreen() {
             </span>
           </>
         )}
-        <span
+        <SuggestChip n={suggested.length} busy={thinking} onToggle={nextSuggested} />
+        <SuggestButton
+          big
+          again={asked}
+          busy={thinking}
+          disabled={!askable.length}
           title={
-            thinking
-              ? "The AI is working on its suggestions"
-              : askable.length
-                ? `Ask the AI what ${askable.length > 20 ? "the first 20 items" : "each item"} should become (a transcript is a meeting note, so it isn't asked about); nothing changes until you choose`
-                : "Nothing in the Inbox to ask about"
+            askable.length
+              ? `Ask the AI what ${askable.length > 20 ? "the first 20 items" : "each item"} should become (a transcript is a meeting note, so it isn't asked about); nothing changes until you choose`
+              : "Nothing in the Inbox to ask about"
           }
-        >
-          <button type="button" className="btn" disabled={!askable.length || thinking} onClick={() => suggest(askable.slice(0, 20))}>
-            <Icon name="cpu" size={14} />
-            {thinking ? (
-              "Thinking…"
-            ) : (
-              <Squeeze
-                full={askable.length > 20 ? "Suggest for all (first 20)" : "Suggest for all"}
-                tight="Suggest for all"
-                narrow="Suggest"
-              />
-            )}
-          </button>
-        </span>
+          onClick={() => suggest(askable.slice(0, 20))}
+        />
       </TopBar>
       <div className="body inbox" {...panes.root}>
         {panes.resizers}
@@ -709,20 +710,22 @@ export function InboxScreen() {
                 </div>
               )}
               {unsuggested(cur) ? null : sugg[key(cur)] ? (
-                <SuggestionCard s={sugg[key(cur)]} onAccept={busy(cur) ? undefined : () => outcome(cur, sugg[key(cur)])} />
+                <SuggestionCard
+                  s={sugg[key(cur)]}
+                  onAccept={busy(cur) ? undefined : (text) => outcome(cur, text ? { ...sugg[key(cur)], text } : sugg[key(cur)])}
+                  onSkip={() => {
+                    const k = key(cur);
+                    setSugg((m) => Object.fromEntries(Object.entries(m).filter(([x]) => x !== k)));
+                    setAsked(true);
+                  }}
+                />
               ) : (
-                <span
-                  title={
-                    thinking
-                      ? "The AI is working on its suggestions"
-                      : "Ask the AI what this item should become; nothing changes until you choose"
-                  }
-                >
-                  <button type="button" className="btn sm" disabled={thinking} onClick={() => suggest([cur])}>
-                    <Icon name="cpu" size={12} />
-                    {thinking ? "Thinking…" : "Suggest"}
-                  </button>
-                </span>
+                <SuggestButton
+                  again={asked}
+                  busy={thinking}
+                  title="Ask the AI what this item should become; nothing changes until you choose"
+                  onClick={() => suggest([cur])}
+                />
               )}
               {!busy(cur) && (
                 // GTD's question, does it need doing? The choices that make it a task or a reply, and
@@ -923,38 +926,46 @@ const LABEL: Record<string, string> = {
   reply: "a reply",
 };
 
-/** What the AI suggests the item becomes, first, with Accept (↩): one press does it. */
-function SuggestionCard({ s, onAccept }: { s: ClarifySuggestion; onAccept?: () => void }) {
+/** Suggestions whose words Edit can change first: what the item becomes when it's a task or a project. */
+const WORDED = new Set(["next", "waiting", "project", "someday", "todo"]);
+
+/** What the AI suggests the item becomes, first, as the one suggestion component's row
+ *  (src/Suggestions.tsx): Accept (↩) does it in one press, Edit changes its words first, Skip drops
+ *  the suggestion and leaves the item. */
+function SuggestionCard({ s, onAccept, onSkip }: { s: ClarifySuggestion; onAccept?: (text?: string) => void; onSkip: () => void }) {
+  const what = LABEL[s.becomes] ?? s.becomes;
   return (
     <div className="card isugg">
-      <div className="isugg-head">
-        <div className="grow">
-          <div className="isugg-what">
-            <Icon name="cpu" size={13} />
-            Suggested: {LABEL[s.becomes] ?? s.becomes}
-          </div>
-          {s.text && s.becomes !== "delete" && <div className="isugg-text">{s.text}</div>}
-        </div>
-        {onAccept && (
-          <button
-            type="button"
-            className="btn pri"
-            title={`Do what the AI suggests: ${LABEL[s.becomes] ?? s.becomes} (↩)`}
-            onClick={onAccept}
-          >
-            Accept
-            <span className="kbd">{keyLabel("↩")}</span>
-          </button>
-        )}
-      </div>
-      {(s.project || s.context || s.effort || s.due) && (
-        <div className="isugg-meta">
-          {s.project && <span>{s.project}</span>}
-          {s.context && <span>@{s.context}</span>}
-          {s.effort && effortMinutes(s.effort) !== null && <span>{fmtEffort(effortMinutes(s.effort)!)}</span>}
-          {s.due && <span>Due {fmtShortDate(s.due)}</span>}
-        </div>
-      )}
+      <SuggestionRow
+        id={s.id}
+        enterKey
+        text={
+          <>
+            <div className="isugg-what">
+              <Icon name="cpu" size={13} />
+              Suggested: {what}
+            </div>
+            {s.text && s.becomes !== "delete" && <div className="isugg-text">{s.text}</div>}
+          </>
+        }
+        detail={
+          (s.project || s.context || s.effort || s.due) && (
+            <span className="isugg-meta">
+              {s.project && <span>{s.project}</span>}
+              {s.context && <span>@{s.context}</span>}
+              {s.effort && effortMinutes(s.effort) !== null && <span>{fmtEffort(effortMinutes(s.effort)!)}</span>}
+              {s.due && <span>Due {fmtShortDate(s.due)}</span>}
+            </span>
+          )
+        }
+        accept={onAccept && { title: `Do what the AI suggests: ${what}`, run: (e) => onAccept(e?.text) }}
+        edit={
+          onAccept && WORDED.has(s.becomes)
+            ? { title: "Change the words before doing it", fields: [{ key: "text", label: "The words", value: s.text }] }
+            : undefined
+        }
+        skip={{ title: "Drop the suggestion; the item stays in the Inbox to clarify yourself", run: onSkip }}
+      />
       {s.why && <p className="isugg-why">{s.why}</p>}
     </div>
   );

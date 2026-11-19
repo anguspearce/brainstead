@@ -4,6 +4,14 @@
     "screen": "tasks"
   },
   {
+    "name": "tasks-suggestions",
+    "screen": "tasks",
+    "view": {
+      "tasks:view": "next",
+      "tasks:suggestions": true
+    }
+  },
+  {
     "name": "system-lock",
     "screen": "doc",
     "path": "Me. To Do List.md",
@@ -388,6 +396,14 @@
     "screen": "projects",
     "path": "Project. Orbit App launch.md",
     "docs": true
+  },
+  {
+    "name": "projects-suggestions",
+    "screen": "projects",
+    "path": "Project. Orbit App launch.md",
+    "view": {
+      "projects:suggestions": true
+    }
   },
   {
     "name": "projects-folded",

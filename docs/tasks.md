@@ -53,7 +53,7 @@ The keys ignore typing that wasn't meant for the Inbox: a key in the second and 
 
 Tick several items (a section's header box ticks them all) to act on them together: make meeting notes, ingest, put them on the To Do list, keep in Sources, mark done, move to Someday / maybe or delete. One that fails doesn't stop the rest: it stays ticked and the message says why. Next action, Waiting for and New project stay one at a time.
 
-A capture offers only the choices that fit its kind. A transcript: make a meeting note (`M`), ingest (`I`), ask about it (`A`), keep in Sources (`K`) or delete. An email or chat thread: draft a reply (`D`), ingest, ask, Next action, To Do, New project, Waiting for, Someday / maybe, keep in Sources or delete. Any other capture: the same without the reply or Waiting for. A capture has no Done now, and only a thread can be Waiting for. **Ask about this source** starts a chat about it in Ask, where a **Still in the Inbox** strip takes it out when you're done. A transcript stays in the Inbox until its meeting note is made and ingested; if either fails it stays, to be chosen again. Suggest only suggests what the Inbox offers for that kind of item. **Suggest for all** suggests a choice for the first 20 items; ↩ accepts one. ⌘Z undoes each choice.
+A capture offers only the choices that fit its kind. A transcript: make a meeting note (`M`), ingest (`I`), ask about it (`A`), keep in Sources (`K`) or delete. An email or chat thread: draft a reply (`D`), ingest, ask, Next action, To Do, New project, Waiting for, Someday / maybe, keep in Sources or delete. Any other capture: the same without the reply or Waiting for. A capture has no Done now, and only a thread can be Waiting for. **Ask about this source** starts a chat about it in Ask, where a **Still in the Inbox** strip takes it out when you're done. A transcript stays in the Inbox until its meeting note is made and ingested; if either fails it stays, to be chosen again. Suggest only suggests what the Inbox offers for that kind of item. **Suggest** in the top bar suggests a choice for the first 20 items (then it's **Suggest again**); ↩ or **Accept** takes one, **Edit** changes its words first, **Skip** drops it. ⌘Z undoes each choice.
 
 ## Tasks
 
@@ -68,7 +68,7 @@ Tasks (⌘3) has the GTD lists: **Next actions**, **Follow-ups**, **Waiting for*
 - **Search tasks** narrows every list to tasks matching all its words.
 - Group by **Project**, **Context** or **Due**, filter by context and effort, and **Save this list…**.
 - **New task** takes the current list's tag and context. From a list with neither, it waits in the Inbox.
-- **Find tasks and projects** has an assistant read your last 90 days of notes for tasks and projects you haven't written down. Each suggestion quotes its note; **Accept**, **Edit** or **Skip** it. Accepted ones are listed in Changes with Revert. It runs only when you start it.
+- **Find tasks and projects** has an assistant read your last 90 days of notes for tasks and projects you haven't written down. A one-line chip (at the end of Tasks' filter bar, at the top of Projects) says how many it found, with **Suggest**, then **Suggest again**; click it to open the list. Each suggestion quotes its note; **Accept**, **Edit** or **Skip** it. Accepted ones are listed in Changes with Revert. It runs only when you start it.
 
 ## Projects
 
@@ -97,7 +97,7 @@ The weekly review walks you through GTD's three phases, Get clear, Get current a
 
 On a Monday or Tuesday it covers the week just ended, otherwise this week. The scheduled weekly summary is separate, and reads your review note.
 
-With an AI assistant set up, each step shows suggestions from your week, such as a task to add from a meeting, or one to tick, defer or reword. Nothing changes until you click, and each one can be undone. Assistants use `weekly_review`, `weekly_suggestion` and `weekly_step`.
+With an AI assistant set up, each step shows suggestions from your week, such as a task to add from a meeting, or one to tick, defer or reword. Each has **Accept**, **Edit** (where there are words to change) and **Skip**, as suggestions do elsewhere; **Suggest again** prepares a fresh set. Nothing changes until you click, and each one can be undone. Assistants use `weekly_review`, `weekly_suggestion` and `weekly_step`.
 
 ## How tasks are written
 

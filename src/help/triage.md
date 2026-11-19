@@ -11,7 +11,7 @@ Triage bookmarks lists every bookmark in `Me. Bookmarks.md`, oldest untouched fi
 Each bookmark shows how many days its note has gone untouched. "stale" means it has sat a long time; **Link missing** means its note is no longer in the vault. Click a bookmark to see its choices.
 
 ## Get a suggestion
-Click **Suggest for all** and the AI suggests a choice for each note, with a short reason. For **Ingest into the wiki** it names the page and whether it's a concept or an entity; for **Make a task** it words the task. Nothing changes until you choose.
+Click **Suggest** in the top bar (then **Suggest again**) and the AI suggests a choice for each note, with a short reason. The chip beside it counts the bookmarks with a suggestion; click it to open the next one. For **Ingest into the wiki** it names the page and whether it's a concept or an entity; for **Make a task** it words the task. Nothing changes until you choose. On the open bookmark the suggestion has **Accept** (`↩`), **Edit**, to change the page's name or the task's words first, and **Skip**, to drop it and choose yourself.
 
 ## Decide
 Press a key, or click the choice:
@@ -21,7 +21,7 @@ Press a key, or click the choice:
 - `T` **Make a task**: add a task to the To Do list.
 - `A` **Archive**: drop the bookmark; the note stays where it is.
 - `⌫` **Remove**: drop the bookmark. The button shows on a bookmark whose note is missing, but the key works on any.
-- `↩` **Accept suggestion**: do what was suggested. On a bookmark whose note is missing, `↩` removes it.
+- `↩` **Accept**: do what was suggested. On a bookmark whose note is missing, `↩` removes it.
 
 Every choice but Keep takes the line out of `Me. Bookmarks.md`. Press `⌘Z` to undo. **Open** opens the note.
 

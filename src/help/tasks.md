@@ -65,12 +65,12 @@ To change a task's words in any list, point at it and click the pencil after the
 **Save this list…** keeps a context, effort and grouping under a name, under Saved on the left. Its x forgets it; the tasks stay. An assistant can use the same search, grouping and filters.
 
 ## Find tasks in your notes
-At the top of **Next actions**, **Find tasks and projects** has an assistant read your last 90 days of notes (not the wiki, sources, templates or project notes) for things you'd do, or are waiting on, that aren't tasks yet. It runs only when you start it, here, in [Projects](app:projects) or from `⌘K`, with progress and **Stop** on its row.
+In **Next actions**, **Find tasks and projects** has an assistant read your last 90 days of notes (not the wiki, sources, templates or project notes) for things you'd do, or are waiting on, that aren't tasks yet. At the end of the search and filter bar, a chip says how many it found (**2 suggestions**, with a spinner while it reads) and **Suggest** starts it, then **Suggest again** looks once more; **Stop** shows while it runs. It runs only when you start it, here, in [Projects](app:projects) or from `⌘K`. Click the chip to open the list under the filters and again to fold it; Brainstead remembers which.
 
 Each suggestion names its note: hover for the quote, click to open it. Brainstead checks the quote is in that note and leaves out anything that's already a task.
 
 - **Accept** adds the task to its project's Next actions, or the To Do list, and lists it in [Changes](app:review), where you can revert it.
-- **Edit** lets you reword it first (`↩` adds it).
+- **Edit** lets you reword it first (`↩` adds it, `Esc` leaves it).
 - **Skip** leaves it out.
 
 Neither comes back. Suggested projects are at the top of [Projects](app:projects). Its model is set under Models by job in [Settings › AI assistants](app:settings/assistants).

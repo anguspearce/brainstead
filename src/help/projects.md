@@ -36,7 +36,7 @@ Under the tasks are **Mark complete** (or **Make active**), **Edit** and ⋯. Th
 **Ask about this project** (on ⋯) opens [Ask](app:ask) with the project note attached. **Move to the Trash** (on ⋯) says how many tasks are in the note and how many elsewhere link it, then moves it to the [Trash](app:trash). **Undo** in the toast, or restoring it, brings it back; until then, tasks elsewhere link a missing note.
 
 ## Find projects in your notes
-At the top of the **Active** projects, **Find tasks and projects** has an assistant read your last 90 days of notes for work they keep coming back to that isn't a project yet. Each suggestion has a name, what done looks like, the notes it rests on and up to three next actions. Suggested tasks show at the top of [Tasks](app:tasks).
+At the top of the **Active** projects, **Find tasks and projects** has an assistant read your last 90 days of notes for work they keep coming back to that isn't a project yet. A one-line chip says how many it found (**2 suggestions**, with a spinner while it reads), with **Suggest**, then **Suggest again**, beside it. Click the chip to open the list and again to fold it; Brainstead remembers which. Each suggestion has a name, what done looks like, the notes it rests on and up to three next actions. Suggested tasks show in [Tasks](app:tasks)' Next actions.
 
 - **Accept** makes the project note with its first actions, revertable in [Changes](app:review).
 - **Edit** changes its name or outcome first. A name can't contain `/ \ : * ? " < > | [ ] # ^` or start with a dot.

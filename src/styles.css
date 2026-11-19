@@ -7148,10 +7148,10 @@ select.sel {
   container: iopen / inline-size;
 }
 
-/* A narrow detail (a wide list beside it in a small window): the suggestion's Accept goes under
-   "Suggested: ..." (together they take about 270px of the card) rather than past the card's edge. */
+/* A narrow detail (a wide list beside it in a small window): the suggestion's Accept, Edit and Skip
+   go under "Suggested: ..." (together they take about 300px of the card) rather than past its edge. */
 @container iopen (width <= 400px) {
-  .isugg-head {
+  .isugg .suggrow {
     flex-wrap: wrap;
   }
 }
@@ -7183,9 +7183,9 @@ select.sel {
   align-self: stretch;
   border-color: var(--ring);
 }
-.isugg-head {
-  display: flex;
-  align-items: center;
+.isugg .suggrow,
+.bmbody .suggrow {
+  padding: 0;
   gap: 16px;
 }
 .isugg-what {
@@ -7211,12 +7211,6 @@ select.sel {
   margin: 0;
   font-size: 12.5px;
   color: var(--ink2);
-}
-.isugg .btn .kbd {
-  margin-left: 4px;
-  background: none;
-  border-color: color-mix(in srgb, var(--on-accent) 45%, transparent);
-  color: inherit;
 }
 
 /* Clarifying one item: GTD's question, does it need doing? A list of choices under each answer. */
@@ -7487,21 +7481,8 @@ select.sel {
   display: block;
   padding: 10px 0 2px;
 }
-.wsugg {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.wprep .suggrow {
   padding: 7px 0;
-}
-.wsugg + .wsugg {
-  border-top: 1px solid var(--line);
-}
-.wsugg > .t {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
 }
 .wsrc {
   max-width: 180px;
@@ -9179,8 +9160,8 @@ button.hc {
   flex-direction: column;
   gap: 10px;
 }
-.bmwhy p {
-  margin: 0 0 4px;
+.bmbody .suggrow p {
+  margin: 2px 0 0;
 }
 .bmkeys {
   display: flex;
@@ -10354,49 +10335,89 @@ html.tray-view body {
   padding: 8px 12px;
 }
 
-/* Find tasks and projects: suggestions at the top of Tasks (Next actions) and Projects (Active). */
-.card.found {
-  margin: 12px 16px 16px;
+/* The one suggestion component (src/Suggestions.tsx, D-20261119-06): a chip that opens to the list,
+   each row with Accept, Edit and Skip, and Suggest (again). Tasks has the chip at the end of its
+   filter bar and the list under it; Projects a line at the top of the list; the Inbox and Triage
+   the chip in the top bar; the weekly review the rows, always open. */
+.suggbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
-
-/* Suggested from your notes, at the top of Tasks and Projects: a heading and rows, no box. */
-.found {
+.tfilters .suggbar {
+  margin-left: auto;
+}
+.chip.suggchip {
+  gap: 5px;
+  cursor: pointer;
+}
+.chip.suggchip.on {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+.chip.suggchip:disabled {
+  cursor: default;
+}
+.chip.suggchip > svg {
+  flex: none;
+}
+.suggline {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--line);
 }
-.foundhead,
-.foundrow {
+.sugglist {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  container: sugglist / inline-size;
+}
+.sugghead {
+  padding: 6px 16px 0;
+}
+.suggrow {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 7px 16px;
 }
-.foundhead > svg {
-  color: var(--accent);
-}
-.foundrow {
+.sugglist .suggrow + .suggrow,
+.wprep .suggrow + .suggrow {
   border-top: 1px solid var(--line);
 }
-.foundrow .t {
+.suggrow > .t {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
-.foundrow .tlink + .tlink::before {
+.suggrow .suggbtns {
+  display: flex;
+  gap: 6px;
+  flex: none;
+  align-items: center;
+}
+.suggmeta .tlink + .tlink::before {
   content: "· ";
 }
+.suggrow .btn .kbd {
+  margin-left: 4px;
+  background: none;
+  border-color: color-mix(in srgb, var(--on-accent) 45%, transparent);
+  color: inherit;
+}
 
-/* Tasks' list between two wide panes in a small window: a suggestion's Accept, Edit and Skip, and
-   the heading's Look again, go under the text (the buttons and the heading's words take about
-   190px; the text keeps 200px to a line) rather than squeezing it to a word a line. After the
-   rules above, which set the text's flex. */
-@container tpage (width <= 400px) {
-  .foundhead,
-  .foundrow {
+/* A narrow list (Projects' list column, Tasks' list between two wide panes in a small window): a
+   suggestion's Accept, Edit and Skip go under the text (they take about 170px; the text keeps 240px
+   to a line) rather than squeezing it to a word a line. After the rules above, which set the text's
+   flex. */
+@container sugglist (width <= 440px) {
+  .suggrow {
     flex-wrap: wrap;
   }
-  .foundrow .t {
+  .suggrow > .t {
     flex-basis: 100%;
   }
 }

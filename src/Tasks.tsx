@@ -4,7 +4,7 @@
 
 // Tasks: the previous app's To Do lists as views, each task live from the notes it's written in.
 
-import { FoundTasks } from "./Found";
+import { FoundBar, FoundList } from "./Found";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CaptureBox } from "./Capture";
 import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from "./taskGroups";
@@ -225,7 +225,6 @@ export function TasksScreen() {
           )}
         </nav>
         <div className="tpage">
-          {view.id === "next" && <FoundTasks />}
           {failed ? (
             <TasksFailed />
           ) : all === null ? (
@@ -277,7 +276,9 @@ export function TasksScreen() {
                     </option>
                   ))}
                 </select>
+                {view.id === "next" && <FoundBar kind="task" />}
               </div>
+              {view.id === "next" && <FoundList kind="task" />}
               <div className="ttable" role="table" aria-label={view.label}>
                 {groups.map((g) => (
                   <div key={g.key} className="tb-group" role="rowgroup">

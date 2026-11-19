@@ -6,7 +6,7 @@
 // forward. A project with nothing to do next is flagged red, one that's gone quiet for two weeks
 // muted (worth a look, not a problem). The open one shows its outcome, next actions, waiting-fors and the notes that link it.
 
-import { FoundProjects } from "./Found";
+import { FoundBar, FoundList } from "./Found";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ProjectRow, TaskRow } from "./api";
 import { askAboutNote } from "./Ask";
@@ -171,7 +171,14 @@ export function ProjectsScreen() {
       <div className="body projects" {...panes.root}>
         {panes.resizers}
         <div className="plistcol">
-          {tab === "active" && <FoundProjects />}
+          {tab === "active" && (
+            <>
+              <div className="suggline">
+                <FoundBar kind="project" />
+              </div>
+              <FoundList kind="project" />
+            </>
+          )}
           {projects === null && <p className="faint pad">Loading…</p>}
           {projects && !shown.length && (
             <p className="faint pad">

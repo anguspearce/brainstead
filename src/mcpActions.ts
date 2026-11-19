@@ -160,7 +160,7 @@ import { focusMode } from "./focus";
 import { RAIL_BELOW, RailWidth, railOn, railWidth, setRail } from "./sidebarRail";
 import { DEFAULT_SCHEDULE, DEFAULT_WEEKLY_REVIEW } from "./Jobs";
 import { foundDetail, handedOver, INSTALL, languageName, SCREEN_NAME, scriptsFolder, terminalCommands, WEBSITE } from "./Settings";
-import { choice, prepStep, WEEKLY_STATE_CHANGED } from "./weeklyPrep";
+import { choice, editableText, prepStep, WEEKLY_STATE_CHANGED, withText } from "./weeklyPrep";
 import { draftNotes, followThrough, isTranscriptPath, keepNote, noteFile, specOf, specOk, trashTranscript } from "./meetingFlow";
 import { DONE as MEETING_DONE, needsDate, noteExists, TYPES as MEETING_TYPES } from "./Meeting";
 import { order as contradictionsOrder, reportMarkdown } from "./Contradictions";
@@ -686,7 +686,7 @@ async function projectPath(name: string, activeOnly = false): Promise<string> {
 const inboxKey = (i: InboxItem) =>
   i.kind === "action" && i.action?.id ? `action:${i.action.id}` : i.kind === "capture" ? `capture:${i.path}` : `${i.kind}:${i.line + 1}`;
 
-/** How many items Suggest asks about at once, as the Inbox's Suggest for all (first 20) does. */
+/** How many items Suggest asks about at once, as the Inbox's top-bar Suggest (the first 20) does. */
 const SUGGEST_AT_MOST = 20;
 
 async function listInbox(a: Args): Promise<Listing> {
@@ -1974,7 +1974,9 @@ async function weeklySuggestion(a: Args): Promise<string> {
   let line = "";
   if (how === "accept") {
     const projects = (await api.projectsList()).filter((p) => p.status === "active");
-    const c = toFile(s) ? null : choice(s, week, projects, a.unattended === true);
+    const text = str(a, "text");
+    if (text && editableText(s) === null) throw new Error("That suggestion has no words to change: accept it as it is, or skip it.");
+    const c = toFile(s) ? null : choice(withText(s, text), week, projects, a.unattended === true);
     if (!c) throw new Error(`Accepting it does ${offers(s, week, projects)}. Skip it once it's dealt with.`);
     line = await c.run();
   }
