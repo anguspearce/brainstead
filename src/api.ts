@@ -70,6 +70,8 @@ export interface Settings {
   meetingIngest?: boolean;
   meetingTrash?: boolean;
   refreshStale?: boolean;
+  /** Settings › General › Notifications: all, needs_me (the default: only when something needs you) or off. */
+  notifications?: "all" | "needs_me" | "off";
   /** A model per background job (summaries, weekprep, find, ingest, meeting, clarify, contradictions, skills); a
    *  job not named uses `askModel`. */
   jobModels?: Record<string, string>;
@@ -448,6 +450,31 @@ export interface SyncReport {
   blocked: string | null;
   /** The sources written or topped up. */
   paths: string[];
+  /** Those of them topped up in place rather than written new. */
+  toppedUp?: string[];
+}
+
+/** One sync pass, or a run of the same blocked or failing one (src-tauri/src/sync/log.rs). */
+export interface SyncPass {
+  /** When it ran (local, YYYY-MM-DDTHH:MM:SS); the first of a run of repeats. */
+  at: string;
+  backfill: boolean;
+  /** Sources written new. */
+  added: string[];
+  /** Sources that grew in place. */
+  toppedUp: string[];
+  problems: string[];
+  /** Why it couldn't run at all. */
+  blocked: string | null;
+  /** How many passes after the first went the same way, and when the last ran. */
+  repeats: number;
+  last: string | null;
+}
+
+/** The sync's passes over the last two weeks, newest first, and when the last one ran. */
+export interface SyncLog {
+  lastPass: string | null;
+  passes: SyncPass[];
 }
 
 /** An upcoming meeting for the Today screen. */
@@ -921,6 +948,8 @@ export interface IngestRun {
   error: string | null;
   /** "scheduled" when the daily check or an unattended assistant started it; absent when the user did. */
   trigger?: string;
+  /** A chat day it found nothing in, moved to the Trash. */
+  trashed?: boolean;
 }
 
 export interface FixNameRequest {
@@ -1461,6 +1490,7 @@ export const api = {
   syncSignOutOutlook: () => invoke<void>("sync_sign_out_outlook"),
   /** One sync pass; with `from` (YYYY-MM-DD), a back-fill from that day (Settings › Sync › Fetch again). */
   syncNow: (from?: string) => invoke<SyncReport>("sync_now", from ? { from } : {}),
+  syncLog: () => invoke<SyncLog>("sync_log"),
   syncTodayMeetings: () => invoke<SyncMeeting[]>("sync_today_meetings"),
   /** The last calendar read's meetings that haven't ended — instant, no network. */
   syncCachedMeetings: () => invoke<SyncMeeting[]>("sync_cached_meetings"),

@@ -1460,6 +1460,48 @@ describe("MCP actions", () => {
       });
       expect(await run("activity")).toBe("1 entry in log.md, newest first:\n- 2026-10-01 ingest Orbit");
       expect(await run("activity", { detail: true })).toMatch(/2026-10-01 09:30 ingest Orbit — two pages/);
+      // Activity › Sync & ingest: the screen's timeline, its chips as filter.
+      answers.sync_log = () => ({
+        lastPass: "2026-11-19T10:00:00",
+        passes: [
+          {
+            at: "2026-11-19T10:00:00",
+            backfill: false,
+            added: ["sources/Slack. Chat. Lena - 2026-11-19.md"],
+            toppedUp: [],
+            problems: [],
+            blocked: null,
+            repeats: 0,
+            last: null,
+          },
+        ],
+      });
+      answers.ingest_runs = () => [
+        {
+          id: "r1",
+          source: "sources/Slack. Chat. Lena - 2026-11-19.md",
+          started: "2026-11-19T10:01:00",
+          finished: null,
+          model: "m",
+          status: "failed",
+          steps: [],
+          proposals: [],
+          dropped: [],
+          pages: [],
+          error: "Timed out.",
+        },
+      ];
+      const sync = (await run("sync_activity")) as string;
+      expect(sync.split("\n").slice(1)).toEqual([
+        "2 sync passes and ingests, newest first:",
+        "- 2026-11-19 10:01 Ingested Slack. Chat. Lena - 2026-11-19: failed",
+        "- 2026-11-19 10:00 Synced: 1 new",
+      ]);
+      expect(await run("sync_activity", { filter: "failed", detail: true })).toMatch(
+        /failed\n {2}Source: Slack\. Chat\. Lena - 2026-11-19\n {2}Timed out\./,
+      );
+      expect(((await data("sync_activity", { filter: "outlook" })).items as unknown[]).length).toBe(0);
+      await expect(run("sync_activity", { filter: "mail" })).rejects.toThrow(/filter is all, teams, outlook, slack, failed/);
       answers.graph = () => ({
         nodes: [
           { id: "a", title: "A", layer: "wiki", type: "entity", depth: 0, degree: 3 },

@@ -414,6 +414,32 @@ function General() {
       <OpenAtLogin />
       <CaptureShortcut />
       <section className="sgroup">
+        <h2 className="h3">Notifications</h2>
+        <Seg<"all" | "needs_me" | "off">
+          label="Notifications"
+          value={s.notifications ?? "needs_me"}
+          options={[
+            ["needs_me", "Only when it needs me", "A failure, a refused capture, a capture you clicked, or the sync's sign-in gone stale"],
+            ["all", "All", "Also every synced chat or thread, every ingest done and every summary written"],
+            ["off", "Off", "No notifications from Brainstead"],
+          ]}
+          onChange={(v) => settings.update({ notifications: v })}
+        />
+        <p className="faint">
+          Teams, Outlook and Slack already tell you about new messages, so by default Brainstead doesn't repeat them. What the sync brought
+          in and what each ingest did is in{" "}
+          <button
+            type="button"
+            className="tlink"
+            title="Open Activity › Sync & ingest"
+            onClick={() => nav.go({ screen: "activity", view: { "activity.view": "sync" } })}
+          >
+            Activity › Sync & ingest
+          </button>
+          .
+        </p>
+      </section>
+      <section className="sgroup">
         <h2 className="h3">Your name</h2>
         <label className="inp" style={{ maxWidth: 320 }}>
           <input

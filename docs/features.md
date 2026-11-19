@@ -29,7 +29,7 @@ No vault yet? **Create a new vault** asks for a name and a place, and adds a few
 
 Once the vault is open, a welcome offers **Getting started**: step-by-step guides in the help, beginning with your vault and finding your way around. **Not now** closes it until the next launch; tick **Don't ask me again**, or turn off **Offer Getting started when Brainstead opens** in Settings › General, to stop it. The guides are always in the help: press `?` and click **Getting started**.
 
-Notifications are asked for the first time Brainstead has something to tell you.
+Notifications are asked for the first time Brainstead has something to tell you. By default it only notifies you when something needs you (a failure, a refused capture, a capture you clicked, the sync's sign-in gone stale), not for each synced message or ingest; **Notifications** in Settings › General can make that All or Off.
 
 Moving over from another notes app? When its files are in the vault, the **Moving over from another notes app** checklist at the top of Settings › General lists what's left to do:
 

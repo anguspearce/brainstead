@@ -23,6 +23,7 @@ import { applyLook } from "./accent";
 import { Switch } from "./ui";
 import { deferredPast, todayRows, viewRows, VIEWS } from "./taskModel";
 import { isMod, keyLabel } from "./platform";
+import { syncLine } from "./syncActivity";
 
 export interface Running {
   key: string;
@@ -43,6 +44,8 @@ export interface TrayData {
   held: number | null;
   running: Running[];
   nextReview: string | null;
+  /** The sync and ingests in a line (src/syncActivity.ts), or null when nothing has synced or been ingested. */
+  sync?: { text: string; problem: boolean } | null;
 }
 
 /** What couldn't be loaded, in words. */
@@ -156,7 +159,7 @@ export function runningOf({ ingests, dailyCheck, reviews, contradictions, weekpr
 }
 
 async function load(): Promise<TrayData> {
-  const [tasks, inbox, changes, ingests, dailyCheck, reviews, contra, weekprep, find, currentState] = await Promise.all([
+  const [tasks, inbox, changes, ingests, dailyCheck, reviews, contra, weekprep, find, currentState, syncLog] = await Promise.all([
     api.tasksAll().catch(() => null as TaskRow[] | null),
     api.inboxList().catch(() => null),
     api.changesList().catch(() => null),
@@ -167,6 +170,7 @@ async function load(): Promise<TrayData> {
     api.weekprepJob().catch(() => null),
     api.findStatus().catch(() => null),
     api.currentStateStatus().catch(() => null),
+    api.syncLog().catch(() => null),
   ]);
   const today = localToday();
   const t = tasks && todayRows(tasks, today);
@@ -185,6 +189,7 @@ async function load(): Promise<TrayData> {
     held: changes && changes.filter((c) => c.status === "held").length,
     running: runningOf({ ingests, dailyCheck, reviews, contradictions: !!contra?.last?.running, weekprep, find, currentState }),
     nextReview: next ? `${next[1]} ${when(next[0])}` : null,
+    sync: syncLog && syncLine(syncLog, ingests),
   };
 }
 
@@ -379,6 +384,11 @@ export function TrayWindow() {
               <span className="faint small ell">{r.doing}</span>
             </div>
           ))}
+        </div>
+      )}
+      {d.sync && (
+        <div className="tray-sec tray-list">
+          <Item icon={d.sync.problem ? "alert" : "refresh"} label={d.sync.text} onClick={() => show("activity/sync")} />
         </div>
       )}
       {(!!d.held || !!d.inbox) && (

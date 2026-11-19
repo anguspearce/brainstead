@@ -762,7 +762,7 @@ pub fn reverted_in_changes(app: &AppHandle, run: &str) {
 }
 
 fn notify(app: &AppHandle, kind: ReviewKind, w: &Window, result: &Result<String, String>, retrying: bool) {
-    use tauri_plugin_notification::NotificationExt;
+    let need = if result.is_ok() { crate::notify::Need::News } else { crate::notify::Need::You };
     let (title, body) = match result {
         Ok(f) => (format!("{} written", run_name(kind)), format!("{} is in {}.", label(w), f.trim_end_matches(".md"))),
         Err(e) => (
@@ -770,7 +770,7 @@ fn notify(app: &AppHandle, kind: ReviewKind, w: &Window, result: &Result<String,
             format!("{}{}", e.chars().take(180).collect::<String>(), if retrying { " Brainstead tries again in 15 minutes." } else { "" }),
         ),
     };
-    let _ = app.notification().builder().title(title).body(body).show();
+    crate::notify::show(app, need, &title, &body);
 }
 
 #[cfg(test)]

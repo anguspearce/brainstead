@@ -295,7 +295,7 @@ fn run(app: &AppHandle, trigger: Option<&str>) {
     st.summary = did.join("; ");
     save(&st);
     let _ = app.emit("daily-check-changed", ());
-    let _ = tauri_plugin_notification::NotificationExt::notification(app).builder().title("Daily check").body(&st.summary).show();
+    crate::notify::show(app, crate::notify::Need::News, "Daily check", &st.summary);
 }
 
 fn plural(n: usize, one: &str) -> String {

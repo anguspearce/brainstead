@@ -19,6 +19,7 @@ On Windows the icon is white on a dark taskbar and black on a light one, and cha
 - **Overdue**, **Due today** and **Waiting for** counts; click one to open [Today](app:today).
 - A capture box, like Quick capture: type a task and press `↩` for the To Do list, or switch to **Thought** for the Scratchpad.
 - Each run going, with its progress and **Stop**.
+- The sync and ingests in a line: when the sync last ran, how many sources came in today, how many are being ingested and any problems today. Click it to open [Activity › Sync & ingest](help:activity).
 - Changes held for you and items in the Inbox, each opening its screen.
 - **Open at login**, as in [Settings › General](app:settings/general), when the system can manage it (on a Mac, if macOS asks for approval, System Settings opens at Login Items).
 - **Run the daily check now**, which says **Daily check started** or what went wrong.

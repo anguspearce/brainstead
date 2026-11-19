@@ -19,6 +19,10 @@ import { settings, useStore } from "./store";
 import { actionLabel, actionsIn, buildGrid, cellTip, filterLog, fmtDate, iso, linkTarget, marks, rankLog } from "./activityModel";
 import { usePanes } from "./PaneResizer";
 import { PANES } from "./panes";
+import { SyncFeed } from "./SyncFeed";
+
+/** Activity's views: log.md, or what the sync brought in and each ingest did (D-20261119-01). */
+export type ActivityView = "log" | "sync";
 
 const PAGE = 200;
 
@@ -32,6 +36,7 @@ export function ActivityScreen() {
   const [q, setQ] = useViewState("activity.q", "");
   const [action, setAction] = useViewState<string | null>("activity.action", null);
   const [day, setDay] = useViewState<string | null>("activity.day", null);
+  const [view, setView] = useViewState<ActivityView>("activity.view", "log");
   const [shown, setShown] = useState(PAGE);
   const [active, setActive] = useState(0);
   const dq = useDebounced(q);
@@ -133,7 +138,7 @@ export function ActivityScreen() {
     return () => io.disconnect();
   }, [more, shown]);
   const actions = useMemo(() => (data ? actionsIn(data.log) : []), [data]);
-  const sub = day ? fmtDate(day) : undefined;
+  const sub = view === "sync" ? "Sync & ingest" : day ? fmtDate(day) : undefined;
 
   return (
     <main className="main">
@@ -141,87 +146,105 @@ export function ActivityScreen() {
         title="Activity"
         sub={sub}
         ask={
-          day
-            ? { about: `what changed on ${day}`, prompt: `About what changed in the vault on ${day}: ` }
-            : { about: "what changed in the vault lately", prompt: "About what changed in the vault lately: " }
+          view === "sync"
+            ? { about: "what the sync brought in and what was ingested", prompt: "About what Brainstead synced and ingested lately: " }
+            : day
+              ? { about: `what changed on ${day}`, prompt: `About what changed in the vault on ${day}: ` }
+              : { about: "what changed in the vault lately", prompt: "About what changed in the vault lately: " }
         }
-      />
+      >
+        <Seg<ActivityView>
+          label="Show"
+          value={view}
+          onChange={setView}
+          options={[
+            ["log", "Log", "Every change Brainstead made to the vault, from log.md"],
+            ["sync", "Sync & ingest", "What the sync brought in from Teams, Outlook and Slack, and what each ingest did with it"],
+          ]}
+        />
+      </TopBar>
       <div className="body activity" {...panes.root}>
         {panes.resizers}
-        <div className="actmain">
-          {error && <p className="faint">{error}</p>}
-          {data && <Heatmap days={data.days} day={day} onDay={pickDay} />}
-          {day && <DayFiles day={day} onClear={() => setDay(null)} />}
-          {data && (
-            <div className="actfilters">
-              <SearchBox value={q} onChange={setQ} onKeyDown={key} placeholder="Search activity" className="listq">
+        {view === "sync" ? (
+          <div className="actmain">
+            <SyncFeed />
+          </div>
+        ) : (
+          <div className="actmain">
+            {error && <p className="faint">{error}</p>}
+            {data && <Heatmap days={data.days} day={day} onDay={pickDay} />}
+            {day && <DayFiles day={day} onClear={() => setDay(null)} />}
+            {data && (
+              <div className="actfilters">
+                <SearchBox value={q} onChange={setQ} onKeyDown={key} placeholder="Search activity" className="listq">
+                  {searching && (
+                    <span className="faint nav">
+                      {log.length ? `${idx + 1}/${log.length}` : "0"}
+                      <span className="kbd">↑↓</span>
+                    </span>
+                  )}
+                </SearchBox>
+                {/* The order only means something while there are search results. */}
                 {searching && (
-                  <span className="faint nav">
-                    {log.length ? `${idx + 1}/${log.length}` : "0"}
-                    <span className="kbd">↑↓</span>
-                  </span>
+                  <Seg
+                    label="Search results order"
+                    value={latest ? "latest" : "ranked"}
+                    options={[
+                      ["ranked", "Best match", "Search results with the best matches first"],
+                      ["latest", "Latest", "Search results with the newest first"],
+                    ]}
+                    onChange={(v) => settings.update({ searchOrder: { ...settings.get().searchOrder, activity: v } })}
+                  />
                 )}
-              </SearchBox>
-              {/* The order only means something while there are search results. */}
-              {searching && (
-                <Seg
-                  label="Search results order"
-                  value={latest ? "latest" : "ranked"}
-                  options={[
-                    ["ranked", "Best match", "Search results with the best matches first"],
-                    ["latest", "Latest", "Search results with the newest first"],
-                  ]}
-                  onChange={(v) => settings.update({ searchOrder: { ...settings.get().searchOrder, activity: v } })}
-                />
-              )}
-              {actions.length > 0 && (
-                <div className="chips">
-                  <button
-                    type="button"
-                    className={`chip f ${action ? "" : "on"}`}
-                    title="Show every kind of change"
-                    onClick={() => setAction(null)}
-                  >
-                    All
-                  </button>
-                  {actions.map((a) => (
+                {actions.length > 0 && (
+                  <div className="chips">
                     <button
-                      key={a}
                       type="button"
-                      className={`chip f ${action === a ? "on" : ""}`}
-                      title={action === a ? "Show every kind of change again" : `Show only “${actionLabel(a)}” changes`}
-                      onClick={() => setAction(action === a ? null : a)}
+                      className={`chip f ${action ? "" : "on"}`}
+                      title="Show every kind of change"
+                      onClick={() => setAction(null)}
                     >
-                      {actionLabel(a)}
+                      All
                     </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          {data && (
-            <LogTable
-              count={
-                log.length === data.log.length
-                  ? `${fmtCount(log.length)} ${log.length === 1 ? "entry" : "entries"}`
-                  : `${fmtCount(log.length)} of ${fmtCount(data.log.length)} entries`
-              }
-              entries={visible}
-              paths={paths}
-              q={searching ? dq.trim() : ""}
-              active={searching ? idx : -1}
-              perDay={banded ? perDay : null}
-              empty={!data.log.length ? "log.md has no entries yet." : searching ? `Nothing matches “${dq.trim()}”.` : "Nothing matches."}
-              onDay={showDay}
-            >
-              {more && (
-                <div ref={end} className="faint actmore">
-                  Loading more…
-                </div>
-              )}
-            </LogTable>
-          )}
-        </div>
+                    {actions.map((a) => (
+                      <button
+                        key={a}
+                        type="button"
+                        className={`chip f ${action === a ? "on" : ""}`}
+                        title={action === a ? "Show every kind of change again" : `Show only “${actionLabel(a)}” changes`}
+                        onClick={() => setAction(action === a ? null : a)}
+                      >
+                        {actionLabel(a)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {data && (
+              <LogTable
+                count={
+                  log.length === data.log.length
+                    ? `${fmtCount(log.length)} ${log.length === 1 ? "entry" : "entries"}`
+                    : `${fmtCount(log.length)} of ${fmtCount(data.log.length)} entries`
+                }
+                entries={visible}
+                paths={paths}
+                q={searching ? dq.trim() : ""}
+                active={searching ? idx : -1}
+                perDay={banded ? perDay : null}
+                empty={!data.log.length ? "log.md has no entries yet." : searching ? `Nothing matches “${dq.trim()}”.` : "Nothing matches."}
+                onDay={showDay}
+              >
+                {more && (
+                  <div ref={end} className="faint actmore">
+                    Loading more…
+                  </div>
+                )}
+              </LogTable>
+            )}
+          </div>
+        )}
         {glance && (
           <aside className="actside">
             <VaultGlance g={glance} />

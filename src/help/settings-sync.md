@@ -50,3 +50,6 @@ With sync on, you can ask an assistant (in Ask, or any connected assistant) to g
 
 ## Turning it off
 Switch **Sync Teams** or **Sync Outlook mail** off to stop that one, or **Sign out** on its card to forget its sign-in; the other's stays. The capture extensions still work by hand either way.
+
+## What it did
+[Activity › Sync & ingest](help:activity) lists each pass that brought something in, or had a problem, and what each ingest did with what came in. By default Brainstead doesn't notify you about each synced message, which Teams, Outlook and Slack have already done; it tells you when the sign-in goes stale or is signed out. **Notifications** in [Settings › General](app:settings/general) changes that.

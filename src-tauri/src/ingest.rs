@@ -154,6 +154,9 @@ pub struct Run {
     /// line is written as that one applies, before the run on disk lists any.
     #[serde(default)]
     pub planned: usize,
+    /// A chat day it found nothing in, moved to the Trash (a change with Revert).
+    #[serde(default)]
+    pub trashed: bool,
 }
 
 fn ingest_kind() -> String {
@@ -481,6 +484,7 @@ fn queue_ingests(app: &AppHandle, paths: Vec<String>, actions: &[bool], trigger:
             error: None,
             logged: false,
             planned: 0,
+            trashed: false,
         };
         runs.push(r);
     }
@@ -539,15 +543,14 @@ fn run(app: &AppHandle, r: &mut Run) {
     }
     emit(app, r);
     let link = brainstead_core::lint::name_of(&r.source).to_string();
-    let _ = tauri_plugin_notification::NotificationExt::notification(app)
-        .builder()
-        .title("Ingest")
-        .body(match r.status.as_str() {
-            "done" => format!("{link}: {} change{} to review", r.proposals.len(), if r.proposals.len() == 1 { "" } else { "s" }),
-            "stopped" => format!("{link}: stopped"),
-            _ => format!("{link}: {}", r.error.clone().unwrap_or_default()),
-        })
-        .show();
+    // Only a failure needs the user; the rest is in Activity › Sync & ingest.
+    let need = if r.status == "failed" { crate::notify::Need::You } else { crate::notify::Need::News };
+    let body = match r.status.as_str() {
+        "done" => format!("{link}: {} change{} to review", r.proposals.len(), if r.proposals.len() == 1 { "" } else { "s" }),
+        "stopped" => format!("{link}: stopped"),
+        _ => format!("{link}: {}", r.error.clone().unwrap_or_default()),
+    };
+    crate::notify::show(app, need, "Ingest", &body);
 }
 
 /// A day of a Teams or Slack chat whose ingest found nothing (no page change, no action or
@@ -580,7 +583,10 @@ fn trash_if_quiet(app: &AppHandle, r: &mut Run) {
         brainstead_core::changes::Instruction::Trash,
     );
     match crate::changes::submit(app, s) {
-        Ok(o) => r.proposals.push(o.id),
+        Ok(o) => {
+            r.proposals.push(o.id);
+            r.trashed = true;
+        }
         Err(e) => crate::applog!("ingest {}: {} not trashed: {}", r.id, r.source, e.message()),
     }
 }
@@ -1015,6 +1021,7 @@ pub fn meeting_draft(app: AppHandle, items: Vec<(String, NoteSpec)>, unattended:
             error: None,
             logged: false,
             planned: 0,
+            trashed: false,
         };
         runs.push(r);
     }
@@ -1113,6 +1120,7 @@ mod tests {
             error: None,
             logged: false,
             planned: 0,
+            trashed: false,
         }
     }
 

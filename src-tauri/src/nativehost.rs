@@ -321,14 +321,16 @@ pub fn watch(app: tauri::AppHandle) {
                 // A notification too when Brainstead isn't the window in front.
                 let focused = app.get_webview_window("main").and_then(|w| w.is_focused().ok()).unwrap_or(false);
                 if !focused && !c.backfill {
-                    use tauri_plugin_notification::NotificationExt;
+                    // A synced item is only news (Teams, Outlook or Slack has said so already); a
+                    // capture the user clicked, or one refused, is theirs to hear about.
+                    let need = if c.sync && c.path.is_some() { crate::notify::Need::News } else { crate::notify::Need::You };
                     let (title, body) = match (&c.path, &c.error) {
                         (Some(p), _) => {
                             (format!("{} captured", c.what), p.trim_start_matches("sources/").trim_end_matches(".md").to_string())
                         }
                         (None, e) => (format!("{} not captured", c.what), e.clone().unwrap_or_default().chars().take(200).collect()),
                     };
-                    let _ = app.notification().builder().title(title).body(body).show();
+                    crate::notify::show(&app, need, &title, &body);
                 }
             }
         })

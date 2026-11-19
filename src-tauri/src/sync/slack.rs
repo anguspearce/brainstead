@@ -623,6 +623,7 @@ fn workspace(
                     if brainstead_core::webcapture::rewrite(vault, &path, &cap, Local::now()).is_ok() {
                         prog.counts.insert(key, n);
                         r.chats += 1;
+                        r.topped_up.push(path.clone());
                         r.paths.push(path);
                     }
                 }

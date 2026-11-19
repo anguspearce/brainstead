@@ -8761,6 +8761,45 @@ select.sel {
   display: flex;
   flex-direction: column;
 }
+
+/* Activity › Sync & ingest (src/SyncFeed.tsx). */
+.syncfeed {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1 1 0;
+  min-height: 0;
+}
+.syncfeed > .actfilters {
+  flex: none;
+}
+.syncfeed .actfilters .amber {
+  color: var(--amber);
+}
+.syncfeed > .actrows {
+  padding: 0;
+}
+.syncrow {
+  align-items: flex-start;
+}
+.syncrow > .icon,
+.syncrow > svg {
+  flex: none;
+  margin-top: 2px;
+}
+.syncrow .pt {
+  overflow-wrap: anywhere;
+}
+.synclinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 4px;
+}
+.synclinks .tlink:disabled {
+  color: var(--ink3);
+  cursor: default;
+}
 .actside {
   min-width: 0;
   min-height: 0;

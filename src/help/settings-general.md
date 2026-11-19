@@ -3,7 +3,7 @@ title: Settings › General
 kind: screen
 screens: [settings, settings/general]
 order: 30
-summary: The switch-over checklist, the menu bar and opening at login, the quick capture shortcut, your name and the app's appearance.
+summary: The switch-over checklist, the menu bar and opening at login, the quick capture shortcut, notifications, your name and the app's appearance.
 ---
 General holds the settings that affect the whole app. Open Settings with `⌘,`.
 
@@ -31,6 +31,15 @@ You tick the rest yourself: the other app's summaries off, its browser extension
 
 What the two together do is in [The menu bar](help:menubar).
 
+
+## Notifications
+**Notifications** says when Brainstead notifies you:
+
+- **Only when it needs me** (the default): an ingest or summary that failed, a capture that was refused, a capture you clicked in a browser extension, the sync's sign-in gone stale or signed out (once, until it's fixed and goes again), and a settings file that had to be put back.
+- **All**: those, and every synced chat, email thread or Slack conversation, every ingest done, each summary written and the daily check.
+- **Off**: none.
+
+What the sync brought in and what each ingest did is always in [Activity › Sync & ingest](help:activity). An assistant can change this with the `settings` tool (`notifications`: `needs_me`, `all` or `off`).
 ## Change the quick capture shortcut
 The [Quick capture](help:capture) shortcut has a default, shown on its button (Ctrl+Shift+Space on Windows). Click the shortcut button and press the new keys, including at least one modifier. `Esc` or a click elsewhere keeps the old one. **Reset to ⌃⌥Space** puts it back. If macOS won't take a shortcut, a message says why. An assistant can change it when you ask, with the same checks.
 

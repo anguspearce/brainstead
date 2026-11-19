@@ -461,6 +461,13 @@
     "screen": "activity"
   },
   {
+    "name": "activity-sync",
+    "screen": "activity",
+    "view": {
+      "activity.view": "sync"
+    }
+  },
+  {
     "name": "settings-about",
     "screen": "settings",
     "pane": "about"

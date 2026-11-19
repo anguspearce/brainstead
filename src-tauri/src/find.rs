@@ -170,21 +170,19 @@ fn start(app: &AppHandle, unattended: bool) -> Result<String, String> {
                 }
             }
         });
-        let _ = tauri_plugin_notification::NotificationExt::notification(&app2)
-            .builder()
-            .title("Find tasks and projects")
-            .body(match &result {
-                Ok(()) => {
-                    let s = crate::lock(&f.state);
-                    let (t, p) = (
-                        s.suggestions.iter().filter(|x| x.kind == "task").count(),
-                        s.suggestions.iter().filter(|x| x.kind == "project").count(),
-                    );
-                    format!("{t} tasks and {p} projects suggested: see Tasks and Projects")
-                }
-                Err(e) => e.clone(),
-            })
-            .show();
+        let body = match &result {
+            Ok(()) => {
+                let s = crate::lock(&f.state);
+                let (t, p) = (
+                    s.suggestions.iter().filter(|x| x.kind == "task").count(),
+                    s.suggestions.iter().filter(|x| x.kind == "project").count(),
+                );
+                format!("{t} tasks and {p} projects suggested: see Tasks and Projects")
+            }
+            Err(e) => e.clone(),
+        };
+        let need = if result.is_ok() || stopped { crate::notify::Need::News } else { crate::notify::Need::You };
+        crate::notify::show(&app2, need, "Find tasks and projects", &body);
     });
     Ok(id)
 }

@@ -42,6 +42,12 @@ pub struct Report {
     pub blocked: Option<String>,
     /// The sources written or topped up, in the order written.
     pub paths: Vec<String>,
+    /// Those of them topped up in place rather than written new.
+    #[serde(default)]
+    pub topped_up: Vec<String>,
+    /// Sync is off, or another pass was running: nothing to log.
+    #[serde(skip)]
+    pub idle: bool,
 }
 
 /// Runs one sync pass. Safe to call from the timer or a command; overlapping calls return a
@@ -56,10 +62,14 @@ pub fn run_once(data: &Path) -> Report {
 /// rather than being ingested on arrival.
 pub fn run_from(data: &Path, from: Option<NaiveDate>) -> Report {
     if RUNNING.swap(true, Ordering::SeqCst) {
-        return Report { blocked: Some("A sync is already running.".into()), ..Default::default() };
+        return Report { blocked: Some("A sync is already running.".into()), idle: true, ..Default::default() };
     }
     nativehost::BACKFILL.store(from.is_some(), Ordering::SeqCst);
+    let at = Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
     let report = run_inner(data, from);
+    if !report.idle {
+        super::log::record(data, &report, &at, from.is_some());
+    }
     nativehost::BACKFILL.store(false, Ordering::SeqCst);
     RUNNING.store(false, Ordering::SeqCst);
     report
@@ -71,6 +81,7 @@ fn run_inner(data: &Path, from: Option<NaiveDate>) -> Report {
     let vault = s.vault_path.as_deref().filter(|p| !p.trim().is_empty());
     if !s.sync_enabled && !s.mail_on() && !s.sync_slack {
         r.blocked = Some("Sync is off: switch on Teams, Outlook or Slack in Settings › Sync.".into());
+        r.idle = true;
         return r;
     }
     let Some(vault) = vault else {
@@ -174,6 +185,7 @@ fn rewrite(vault: &Path, path: &str, c: &brainstead_core::webcapture::Capture, r
     match brainstead_core::webcapture::rewrite(vault, path, c, Local::now()) {
         Ok(()) => {
             r.paths.push(path.to_string());
+            r.topped_up.push(path.to_string());
             true
         }
         Err(e) => {
@@ -459,23 +471,73 @@ pub fn today_meetings(data: &Path) -> Result<Vec<Event>, String> {
 
 /// Starts the sync timer: a pass on launch (after a short delay) and every [`EVERY_MIN`] minutes,
 /// when sync is on. A pass just blocks where there is no sign-in store (Linux).
-pub fn watch(_app: tauri::AppHandle) {
+pub fn watch(app: tauri::AppHandle) {
     let data = platform::data_dir();
     std::thread::Builder::new()
         .name("teams-sync".into())
         .spawn(move || {
             std::thread::sleep(std::time::Duration::from_secs(20));
+            let mut told = String::new();
             loop {
                 let _ = run_once(&data);
+                // A sign-in that has just gone stale or been turned down needs the user: told once,
+                // and again only after it has come back and gone again.
+                let s = settings::load(&data.join("settings.json"));
+                let now = sign_in_trouble(&auth::state(), s.sync_enabled, s.mail_on());
+                if !now.is_empty() && now != told {
+                    crate::notify::show(&app, crate::notify::Need::You, "Sync needs you", &now);
+                }
+                told = now;
                 std::thread::sleep(std::time::Duration::from_secs(EVERY_MIN * 60));
             }
         })
         .expect("can start a thread");
 }
 
+/// What's wrong with the Teams and Outlook sign-in, for the services switched on, in words; empty
+/// when nothing is (or the sync isn't signed in at all, which Settings › Sync says).
+fn sign_in_trouble(st: &auth::SignInState, teams: bool, mail: bool) -> String {
+    let on = |svc: &&String| if svc.as_str() == "mail" { mail } else { teams };
+    let rejected: Vec<&str> = st.rejected.iter().filter(on).map(String::as_str).collect();
+    let stale: Vec<&str> = st.stale.iter().filter(on).filter(|s| !st.rejected.contains(s)).map(String::as_str).collect();
+    let mut out = Vec::new();
+    if !rejected.is_empty() {
+        out.push(format!("Signed out: {}. Sign in again in that Chrome tab.", rejected.join(", ")));
+    }
+    if !stale.is_empty() {
+        out.push(format!("Gone stale: {}. Keep Teams (and Outlook on the web, for mail) open in Chrome.", stale.join(", ")));
+    }
+    if !st.signed_in || out.is_empty() {
+        return String::new();
+    }
+    out.join(" ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sign_in_trouble_names_what_is_switched_on() {
+        let st = auth::SignInState {
+            signed_in: true,
+            handed_over: None,
+            stale: vec!["mail".into(), "transcripts".into()],
+            rejected: vec![],
+            extension_outdated: None,
+            extension_shipped: String::new(),
+            teams: true,
+            outlook: false,
+        };
+        assert_eq!(
+            sign_in_trouble(&st, true, false),
+            "Gone stale: transcripts. Keep Teams (and Outlook on the web, for mail) open in Chrome."
+        );
+        assert_eq!(sign_in_trouble(&st, false, false), "");
+        let out = auth::SignInState { rejected: vec!["chats".into()], stale: vec!["chats".into()], ..st.clone() };
+        assert_eq!(sign_in_trouble(&out, true, false), "Signed out: chats. Sign in again in that Chrome tab.");
+        assert_eq!(sign_in_trouble(&auth::SignInState { signed_in: false, ..out }, true, false), "");
+    }
 
     #[test]
     fn cutoff_day_counts_inclusive_days_or_none() {

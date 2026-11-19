@@ -173,6 +173,7 @@ import { findingsMarkdown, findingsNote, governingDocs, REGISTER, REGISTER_STUB,
 import { LABEL as TRIAGE } from "./skills/Triage";
 import { ANSWERED, replyTask } from "./skills/Reply";
 import { actionLabel, actionsIn, filterLog, rankLog } from "./activityModel";
+import { FEED_FILTERS, FeedFilter, FeedRow, groupLine, syncFeed, syncLine } from "./syncActivity";
 import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from "./taskGroups";
 import { captureDefault, isMac, keyLabel, terminalApp, vaultFile } from "./platform";
 
@@ -2281,6 +2282,37 @@ async function activity(a: Args): Promise<Listing> {
   });
 }
 
+/** Activity › Sync & ingest's timeline (src/syncActivity.ts), as the screen and the menu-bar line show it. */
+async function syncActivityTool(a: Args): Promise<Listing> {
+  const filter = (str(a, "filter") ?? "all") as FeedFilter;
+  if (!FEED_FILTERS.some(([v]) => v === filter))
+    throw new Error(`filter is ${FEED_FILTERS.map(([v]) => v).join(", ")}, as Activity › Sync & ingest's chips are.`);
+  const [log, runs] = await Promise.all([api.syncLog(), api.ingestRuns()]);
+  const rows = syncFeed(log, runs, filter);
+  const line = syncLine(log, runs);
+  const when = (r: FeedRow) => r.at.replace("T", " ").slice(0, 16);
+  return listed(a, rows, {
+    text: (r) => [r.title, ...r.groups.map(groupLine), ...r.detail].join(" "),
+    noun: ["sync pass or ingest, newest first", "sync passes and ingests, newest first"],
+    def: 30,
+    before: [line ? `${line.text}.` : "Nothing has synced or been ingested yet."],
+    line: (r) =>
+      a.detail === true
+        ? [`- ${when(r)} ${r.title}`, ...[...r.groups.map(groupLine), ...r.detail].map((d) => `  ${d}`)].join("\n")
+        : `- ${when(r)} ${r.title}`,
+    item: (r) => ({
+      at: r.at,
+      kind: r.kind,
+      status: r.status,
+      services: r.services,
+      title: r.title,
+      files: Object.fromEntries(r.groups),
+      detail: r.detail,
+    }),
+    empty: filter === "all" ? "No sync passes or ingests in the last two weeks." : `Nothing for ${filter} in the last two weeks.`,
+  });
+}
+
 async function graph(a: Args): Promise<string> {
   // The page by its name or [[link]], as open and note_look take it; the whole wiki without one.
   const page = str(a, "page");
@@ -2958,6 +2990,7 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   bookmarks: bookmarks,
   saved_searches: savedSearches,
   activity: activity,
+  sync_activity: syncActivityTool,
   graph: graph,
   status: status,
   "index.rebuild": rebuildIndex,
@@ -3465,6 +3498,18 @@ const settingRows = (): SettingRow[] => [
   ["menuBarOnly", "General", `Only in the menu bar when the window is closed${isMac ? "" : " (Mac only; no effect here)"}`, "bool", false],
   ["offerGuide", "General", "Offer Getting started when Brainstead opens", "bool", true],
   ["captureShortcut", "General", `Quick capture shortcut (as ${captureDefault()})`, "shortcut", captureDefault()],
+  [
+    "notifications",
+    "General",
+    "Notifications",
+    "choice",
+    "needs_me",
+    () => [
+      ["needs_me", "Only when it needs me"],
+      ["all", "All"],
+      ["off", "Off"],
+    ],
+  ],
   ["spellCheck", "Notes", "Check spelling", "bool", true],
   ["grammarCheck", "Notes", "Check grammar", "bool", true],
   [

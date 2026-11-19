@@ -15,6 +15,7 @@ Brainstead's menu-bar icon shows three dots while a run is going, and a dot when
 - A headline: **All clear**, **Things need you**, runs going, or what couldn't load. A **Read-only** pill shows while the vault is read-only and opens Settings › Vault. **Overdue**, **Due today** and **Waiting for** counts open Today.
 - A capture box, the same as Quick capture.
 - Each run that's going (an ingest, a summary, the daily check, Find tasks and projects and so on), with its progress and **Stop**.
+- A line summing up the sync and ingests (when the sync last ran, what came in today, what's being ingested, problems today), which opens Activity › Sync & ingest.
 - Changes held for you and items in the Inbox, each opening its screen.
 - **Open Brainstead** (⌘O), **Today** (⌘T), **Ask** (⌘J), **Run the daily check now**, **Settings…** (⌘,) and **Quit Brainstead** (⌘Q).
 
@@ -75,4 +76,5 @@ Settings (⌘,) has General, Notes, Vault, AI assistants, Jobs & schedule, Captu
 - **Drafts.** Unsaved text is kept as a draft a second after you stop typing, and offered back after a crash.
 - **Undo.** ⌘Z undoes the app's last five changes (a tick, a date, a clarified item, an assistant's change, a rename), even after a restart. In a note, ⌘Z undoes your typing.
 - **`log.md` and Activity.** Brainstead records what it changes in the vault's `log.md`. **Activity** shows it with a heatmap of files changed by day, charts of your notes by type and tag, and the most linked notes.
+- **Sync & ingest.** Activity's other view lists what the sync brought in from Teams, Outlook and Slack, pass by pass, and what each ingest did with it (the pages changed, nothing found and the chat day moved to the Trash, or why it failed), over the last two weeks. The menu-bar window sums it up in a line. Brainstead doesn't notify you about each synced message or ingest unless **Notifications** in Settings › General is **All**; by default it only tells you when something needs you.
 - **The vault is yours.** Brainstead keeps only what you'd expect in the vault: notes, tasks, chats, the wiki and `log.md`. Settings, the index, drafts, name corrections and kept Doc check and Compare results live in `~/Library/Application Support/Brainstead/`.

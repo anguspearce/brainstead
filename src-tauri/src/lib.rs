@@ -21,6 +21,7 @@ mod listnotes;
 mod menu;
 mod nativehost;
 mod notes;
+mod notify;
 mod ollama;
 mod platform;
 mod reviews;
@@ -1006,6 +1007,7 @@ pub fn run() {
             nativehost::capture_status,
             nativehost::capture_reveal,
             sync::sync_sign_in_state,
+            sync::log::sync_log,
             sync::sync_sign_out,
             sync::sync_now,
             sync::sync_sign_out_outlook,
@@ -1188,8 +1190,7 @@ pub fn run() {
             }
             // A bad settings file: say what was put back, once the app is up.
             if let Some(w) = settings_warning {
-                use tauri_plugin_notification::NotificationExt;
-                let _ = app.notification().builder().title("Brainstead's settings").body(w).show();
+                crate::notify::show(app.handle(), crate::notify::Need::You, "Brainstead's settings", &w);
             }
             if let Err(e) = menu::install(app.handle()) {
                 crate::applog!("menu: {e}");

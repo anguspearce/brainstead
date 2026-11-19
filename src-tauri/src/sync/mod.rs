@@ -13,6 +13,7 @@ pub mod attachments;
 pub mod auth;
 pub mod fetch;
 pub mod html;
+pub mod log;
 pub mod pull;
 pub mod run;
 pub mod skips;

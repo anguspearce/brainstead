@@ -780,6 +780,9 @@ pub fn tools() -> Vec<Value> {
         tool("activity", "Recent activity", Read,
             "log.md, newest first: what Brainstead and the assistants changed in the vault (needs the app), a line an entry with its date, action and title. action keeps one kind of entry, as the Activity screen's action chips do; query keeps the entries with all its words in their title, description or action's label, as its search does, best matches first or with order latest the newest first. With date, the day picked as on the screen: the files changed that day, then that day's entries (action and query narrow the entries, not the files). detail adds each entry's time and description.",
             schema(json!({"date": day("the files changed that day and its entries."), "action": {"type": "string", "description": "Only entries of this action, as the log names it or its chip on the Activity screen does: ingest, review, trash…"}, "order": {"type": "string", "enum": ["best_match", "latest"], "description": "With query, the screen's order of search results: best_match (Best match, the default) or latest (Latest). Newest first without query."}, "detail": detail}), &[])),
+        tool("sync_activity", "Sync and ingest activity", Read,
+            "What the sync brought in and what each ingest did with it (needs the app), newest first over the last two weeks, as Activity › Sync & ingest shows it: each Teams, Outlook and Slack sync pass (the sources it wrote new or topped up, its problems, or why it couldn't run, counted when the same wall repeats) and each ingest (what it changed, that it found nothing and moved a chat day to the Trash, or why it failed). The first line says when the sync last ran, as the menu-bar window does. filter keeps one service, or problems only, as the screen's chips do; query keeps the rows with all its words. detail adds the files each row names, by what they are, and what went wrong or was left out.",
+            schema(json!({"filter": {"type": "string", "enum": ["all", "teams", "outlook", "slack", "failed"], "description": "As the screen's chips: all (the default), teams, outlook, slack, or failed (Problems: failed ingests and passes with a problem or that couldn't run)."}, "detail": detail}), &[])),
         tool("graph", "Links around a page", Read,
             "The pages linked to and from a page (by name, [[link]] or path), to a depth of 1 to 3 (needs the app), as the Graph screen draws it; the whole wiki without page. Like the screen it keeps the nearest 400 pages, and says so when there were more. It lists the links between them, one `from → to` a line. hide leaves out kinds of page, as the screen's chips do (the page itself stays). detail lists the pages too, each with its type, how far it is from the page and how many links it has.",
             schema(json!({"page": page, "depth": {"type": "integer", "minimum": 1, "maximum": 3, "description": "How many links away to go. Default 2, as the Graph screen starts."}, "hide": {"type": "array", "items": {"type": "string", "enum": ["Entities", "Concepts", "Summaries", "Other wiki", "Sources", "Notes", "Not written yet"]}, "description": "The kind chips turned off: those pages and their links are left out."}, "detail": detail}), &[])),
@@ -934,7 +937,7 @@ const DATE: &str = r"^\d{4}-\d{2}-\d{2}$";
 const DAY_OR_MONTH: &str = r"^\d{4}-\d{2}(-\d{2})?$";
 
 /// The tools that list something: each gives how many there are and a page of them at a time.
-const PAGED: [&str; 20] = [
+const PAGED: [&str; 21] = [
     "list_tasks",
     "pending_sources",
     "backlinks",
@@ -949,6 +952,7 @@ const PAGED: [&str; 20] = [
     "list_contradictions",
     "page_shape",
     "activity",
+    "sync_activity",
     "graph",
     "list_suggestions",
     "list_automated_tools",
@@ -1032,6 +1036,12 @@ fn outputs() -> std::collections::HashMap<&'static str, Value> {
             "activity",
             page_schema(
                 json!({"date": s("string"), "time": sn(), "action": s("string"), "title": s("string"), "description": s("string"), "path": s("string")}),
+            ),
+        ),
+        (
+            "sync_activity",
+            page_schema(
+                json!({"at": s("string"), "kind": s("string"), "status": s("string"), "services": {"type": "array", "items": s("string")}, "title": s("string"), "files": {"type": "object", "description": "The files it names, by what they are (New from Teams, Topped up from Outlook, Source, Changed).", "additionalProperties": {"type": "array", "items": s("string")}}, "detail": {"type": "array", "items": s("string")}}),
             ),
         ),
         ("list_chats", chats),
@@ -1337,6 +1347,7 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
             act(if run { "doccheck.run" } else { "doccheck.register" }, obj)
         }
         "activity" => act("activity", obj),
+        "sync_activity" => act("sync_activity", obj),
         "graph" => act("graph", obj),
         "open" => act("open", obj),
         "capture_extensions" => act("capture.status", obj),
