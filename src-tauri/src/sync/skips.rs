@@ -23,6 +23,9 @@ pub struct Learned {
     pub counts: BTreeMap<String, Count>,
     /// Suggestions the user turned down.
     pub dismissed: Vec<String>,
+    /// Each chat's title, by conversation id, kept after its count goes (a skipped chat is still
+    /// named on Chats to skip).
+    pub names: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -78,6 +81,10 @@ pub fn learn(data: &Path, rel: &str, text: &str, today: &str, chat_of: impl Fn(&
     c.label = label;
     c.deletes += 1;
     c.last = today.to_string();
+    if c.kind == "chat" {
+        let (id, title) = (c.value.clone(), c.label.clone());
+        l.names.insert(id, title);
+    }
     save(data, &l)
 }
 
@@ -136,7 +143,34 @@ pub fn forget(data: &Path, key: &str) -> Result<(), String> {
 
 /// A chat's title, from what was learned of it: for the skipped chats' list.
 pub fn chat_names(l: &Learned) -> BTreeMap<String, String> {
-    l.counts.values().filter(|c| c.kind == "chat").map(|c| (c.value.clone(), c.label.clone())).collect()
+    let mut out = l.names.clone();
+    out.extend(l.counts.values().filter(|c| c.kind == "chat").map(|c| (c.value.clone(), c.label.clone())));
+    out
+}
+
+/// The chat's title in a synced chat day's file name: `Slack. Chat. Lena - 2026-11-16.md` → `Lena`.
+pub fn title_of_chat_file(rel: &str) -> Option<String> {
+    let name = rel.rsplit('/').next()?;
+    let rest = name.strip_prefix("Teams. Chat. ").or_else(|| name.strip_prefix("Slack. Chat. "))?;
+    let rest = rest.strip_suffix(".md")?;
+    let (title, day) = rest.rsplit_once(" - ")?;
+    (day.len() == 10 && chrono::NaiveDate::parse_from_str(day, "%Y-%m-%d").is_ok() && !title.trim().is_empty())
+        .then(|| title.trim().to_string())
+}
+
+/// Titles for chats nothing was learned of (skipped before titles were kept), from the files the
+/// Teams and Slack syncs wrote for them: (conversation id, file) pairs, the newest day last.
+pub fn names_from_paths<'a>(paths: impl IntoIterator<Item = (&'a String, &'a String)>, want: &[String]) -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    for (k, p) in paths {
+        let id = k.split('\n').next().unwrap_or(k);
+        if want.iter().any(|w| w == id) {
+            if let Some(t) = title_of_chat_file(p) {
+                out.insert(id.to_string(), t);
+            }
+        }
+    }
+    out
 }
 
 /// The conversation a synced chat day's source came from, by where the sync wrote it.
@@ -171,8 +205,20 @@ pub struct Listed {
 #[tauri::command]
 pub fn skip_suggestions(st: tauri::State<crate::AppState>) -> Listed {
     let s = st.settings.lock().unwrap().clone();
-    let l = load(&crate::platform::data_dir());
-    Listed { suggestions: suggestions(&l, &s.sync_ignore_senders, &s.sync_ignore_chats), chat_names: chat_names(&l) }
+    let data = crate::platform::data_dir();
+    let l = load(&data);
+    let mut names = chat_names(&l);
+    let unnamed: Vec<String> = s.sync_ignore_chats.iter().filter(|id| !names.contains_key(*id)).cloned().collect();
+    if !unnamed.is_empty() {
+        let teams = super::state::load(&data);
+        let slack = super::slack::progress(&data);
+        let mut found = names_from_paths(&teams.chat_paths, &unnamed);
+        found.extend(names_from_paths(&slack.paths, &unnamed));
+        for (id, t) in found {
+            names.entry(id).or_insert(t);
+        }
+    }
+    Listed { suggestions: suggestions(&l, &s.sync_ignore_senders, &s.sync_ignore_chats), chat_names: names }
 }
 
 /// **Not this one**: never suggested again.
@@ -221,6 +267,12 @@ mod tests {
             [("chat", "Lunch club"), ("sender", "offers@shop.example")]
         );
         assert_eq!(chat_names(&load(data)).get("19:abc").map(String::as_str), Some("Lunch club"));
+        // Accepted: its count goes, but its title stays for Chats to skip.
+        forget(data, "chat:19:abc").unwrap();
+        assert_eq!(chat_names(&load(data)).get("19:abc").map(String::as_str), Some("Lunch club"));
+        for _ in 0..3 {
+            learn(data, "sources/teams/Teams. Chat. Lunch club - 2026-11-17.md", "# Lunch club\n\nhi", "2026-11-18", chat).unwrap();
+        }
         // Turned down: gone for good; accepted: its count starts again.
         dismiss(data, "chat:19:abc").unwrap();
         forget(data, "sender:offers@shop.example").unwrap();
@@ -229,5 +281,21 @@ mod tests {
         learn(data, "sources/Report.pdf", "", "2026-11-18", chat).unwrap();
         learn(data, "Me. Scratchpad.md", "**From:** x@y.z", "2026-11-18", chat).unwrap();
         assert_eq!(load(data).counts.len(), 1);
+    }
+
+    #[test]
+    fn a_skipped_chat_nothing_was_learned_of_is_named_from_its_files() {
+        assert_eq!(title_of_chat_file("sources/Slack. Chat. Ops Alerts - 2026-11-18.md").as_deref(), Some("Ops Alerts"));
+        assert_eq!(title_of_chat_file("sources/teams/Teams. Chat. Maya - Lena - 2026-10-24.md").as_deref(), Some("Maya - Lena"));
+        assert_eq!(title_of_chat_file("sources/Email. Thread. Offers - 2026-11-18.md"), None);
+        assert_eq!(title_of_chat_file("sources/Slack. Chat. Lena.md"), None);
+        let paths: BTreeMap<String, String> = [
+            ("D01\n2026-11-09".to_string(), "sources/Slack. Chat. Jira - 2026-11-09.md".to_string()),
+            ("D02\n2026-11-10".to_string(), "sources/Slack. Chat. Other - 2026-11-10.md".to_string()),
+        ]
+        .into();
+        let got = names_from_paths(&paths, &["D01".to_string()]);
+        assert_eq!(got.get("D01").map(String::as_str), Some("Jira"));
+        assert!(!got.contains_key("D02"), "only the chats asked for");
     }
 }
