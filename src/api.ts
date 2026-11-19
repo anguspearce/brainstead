@@ -176,6 +176,10 @@ export interface WeeklyReviewTime {
   time: string;
 }
 
+/** What Settings › Jobs & schedule's Recent runs, and run_status, call a summary run's kind. */
+export const reviewKindName = (k: ReviewRun["kind"]) =>
+  k === "daily" ? "Daily summary" : k === "brief" ? "Daily brief" : "Weekly summary";
+
 export interface ReviewRun {
   id: string;
   kind: "daily" | "weekly" | "brief";

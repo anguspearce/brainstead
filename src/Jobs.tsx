@@ -8,7 +8,17 @@
 // can be undone while the file is as the run left it.
 
 import { useEffect, useState } from "react";
-import { api, DailyCheckStatus, ReviewRun, ReviewsStatus, SummarySchedule, Weekday, WeeklyReviewTime, WeekPrepJob } from "./api";
+import {
+  api,
+  DailyCheckStatus,
+  ReviewRun,
+  reviewKindName,
+  ReviewsStatus,
+  SummarySchedule,
+  Weekday,
+  WeeklyReviewTime,
+  WeekPrepJob,
+} from "./api";
 import { Icon } from "./icons";
 import { openReviewRun, selectReviewRun } from "./askState";
 import { nav } from "./nav";
@@ -307,7 +317,7 @@ function RunRow({ r }: { r: ReviewRun }) {
       />
       <div className="t">
         <div className="pt">
-          {r.kind === "daily" ? "Daily summary" : r.kind === "brief" ? "Daily brief" : "Weekly summary"} {r.target}
+          {reviewKindName(r.kind)} {r.target}
           <span className="faint"> · {r.trigger === "schedule" ? "scheduled" : "run now"}</span>
         </div>
         <div className="faint">

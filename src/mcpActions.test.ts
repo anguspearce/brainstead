@@ -20,8 +20,8 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 // Interface size zooms the window itself (src/interfaceSize.ts); here there is none.
 vi.mock("@tauri-apps/api/webviewWindow", () => ({ getCurrentWebviewWindow: () => ({ setZoom: vi.fn(async () => {}) }) }));
 
-import type { InboxItem, TaskRow } from "./api";
-import { findTask, Listing, runAction, taskLineOut } from "./mcpActions";
+import type { InboxItem, ReviewRun, TaskRow } from "./api";
+import { findTask, Listing, runAction, summaryRunLine, taskLineOut } from "./mcpActions";
 import { settings } from "./store";
 import { focusMode, startFocus } from "./focus";
 import { nav } from "./nav";
@@ -756,6 +756,23 @@ describe("MCP actions", () => {
       await expect(run("weekly.suggestion", { id: "s1", action: "skip" })).rejects.toThrow(/isn't started.*weekly_step start/);
       expect(calls.some(([c]) => c === "weekly_state_write" || c === "task_toggle")).toBe(false);
     });
+  });
+
+  it("names a brief run as Recent runs does, not as a weekly summary", () => {
+    const run = (kind: ReviewRun["kind"], target: string) =>
+      ({
+        id: "r",
+        kind,
+        target,
+        trigger: "schedule",
+        model: "m",
+        startedAt: "2026-11-19T08:26:15",
+        status: "done",
+        file: null,
+      }) as unknown as ReviewRun;
+    expect(summaryRunLine(run("brief", "2026-11-19"), [])).toMatch(/^- Daily brief 2026-11-19 · scheduled/);
+    expect(summaryRunLine(run("daily", "2026-11-18"), [])).toMatch(/^- Daily summary 2026-11-18/);
+    expect(summaryRunLine(run("weekly", "2026-W46"), [])).toMatch(/^- Weekly summary 2026-W46/);
   });
 
   describe("tools for what the screens do", () => {

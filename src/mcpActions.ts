@@ -38,6 +38,7 @@ import {
   NoteSpec,
   ProjectRow,
   ReviewRun,
+  reviewKindName,
   Settings,
   ChatSummary,
   TaskDateKind,
@@ -1675,7 +1676,7 @@ const RECENT_SUMMARIES = 8;
  *  (or held) as an agent change in the run's group (src-tauri/src/reviews.rs), so changes revert
  *  with its id undoes it, as Undo does. */
 export function summaryRunLine(r: ReviewRun, changes: ChangeRow[]): string {
-  const name = `${r.kind === "daily" ? "Daily summary" : "Weekly summary"} ${r.target}`;
+  const name = `${reviewKindName(r.kind)} ${r.target}`;
   const how = r.trigger === "schedule" ? "scheduled" : r.trigger === "manual" ? "run now" : r.trigger;
   const when = r.startedAt.slice(0, 16).replace("T", " ");
   const c = changes.find((x) => x.group === r.id);
