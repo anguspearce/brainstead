@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ready } from "./App";
 import { ask, blankChat } from "./askState";
 import { place } from "./nav";
+import { keyLabel } from "./platform";
 import { Sidebar, statusLine, summed } from "./Sidebar";
 import { EMPTY_STATUS, vaultStatus } from "./state";
 import { settings } from "./store";
@@ -127,11 +128,11 @@ describe("the icon rail", () => {
     settings.update({ folded: { library: true } });
     const { container } = render(<Sidebar onSearch={() => {}} rail />);
     const today = screen.getByRole("button", { name: "Today" });
-    expect(today.getAttribute("title")).toMatch(/^Go to Today \(⌘1\)/);
+    expect(today.getAttribute("title")?.startsWith(`Go to Today (${keyLabel("⌘1")})`)).toBe(true);
     // No names on the rail, and the index's totals only in the tooltip.
     const notes = screen.getByRole("button", { name: "Notes" });
     expect(notes.textContent).toBe("");
-    expect(notes.getAttribute("title")).toBe("Go to Notes (⌘8) · 1,561");
+    expect(notes.getAttribute("title")).toBe(`Go to Notes (${keyLabel("⌘8")}) · 1,561`);
     // A folded section's rows still show: the rail has no heading to unfold them with.
     expect(screen.getAllByRole("separator").map((x) => x.getAttribute("aria-label"))).toEqual(["Library", "Assistant", "Bookmarks"]);
     expect(container.querySelector(".sect")).toBeNull();
