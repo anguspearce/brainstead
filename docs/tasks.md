@@ -64,6 +64,7 @@ Tasks (⌘3) has the GTD lists: **Next actions**, **Follow-ups**, **Waiting for*
 - Keys: `↑` `↓` choose, `↩` opens, `Space` ticks, `⌫` deletes (⌘Z puts it back), `/` searches. They work on Today, Projects and the weekly review too.
 - **Search tasks** narrows every list to tasks matching all its words.
 - Group by **Project**, **Context**, **Due** or **Priority**, filter by context and effort, and **Save this list…**.
+- Click a group's band to fold its tasks away, or **Collapse all** and **Expand all** in the top bar; what's folded is remembered for each grouping.
 - **New task** takes the current list's tag and context. From a list with neither, it waits in the Inbox.
 - **Find tasks and projects** has an assistant read your last 90 days of notes for tasks and projects you haven't written down. Each suggestion quotes its note; **Accept**, **Edit** or **Skip** it. Accepted ones are listed in Changes with Revert. It runs only when you start it.
 

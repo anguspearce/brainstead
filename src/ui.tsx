@@ -485,6 +485,31 @@ export function TableBand({
   );
 }
 
+/** A band's name as a button that folds the group's rows away, as an area's band does in Projects:
+ *  a TableBand's `label`, with the band's icon given here so it sits after the chevron. The caller
+ *  leaves a folded group's rows out. */
+export function BandFold({
+  icon,
+  label,
+  folded,
+  onFold,
+  title,
+}: {
+  icon?: string;
+  label: string;
+  folded: boolean;
+  onFold: () => void;
+  title: string;
+}) {
+  return (
+    <button type="button" className="pfold" aria-expanded={!folded} title={title} onClick={onFold}>
+      <Icon name={folded ? "chevright" : "chevdown"} size={13} />
+      {icon && <Icon name={icon} size={13} />}
+      <span className="ell">{label}</span>
+    </button>
+  );
+}
+
 /** A choice from a long list, found by typing: a button showing what's chosen (like a select),
  *  that opens a search box over the list. ↑↓ move, ↩ picks, Esc closes. */
 export function SearchPick({
