@@ -201,6 +201,14 @@ impl Index {
         Ok(sha.and_then(|s| crate::extract::TextCache::lookup(dir, &s)))
     }
 
+    /// Prunes the text cache in `dir` to the files indexed now (`TextCache::prune`): for after a
+    /// scan of the whole vault, never partway through one. Returns how many kept texts went.
+    pub fn prune_text(&self, dir: &Path) -> Result<usize> {
+        let mut st = self.conn.prepare("SELECT DISTINCT sha256 FROM files").map_err(e)?;
+        let current = st.query_map([], |r| r.get(0)).map_err(e)?.collect::<std::result::Result<_, _>>().map_err(e)?;
+        Ok(crate::extract::TextCache::prune(dir, &current))
+    }
+
     pub fn conn(&self) -> &Connection {
         &self.conn
     }

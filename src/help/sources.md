@@ -45,7 +45,7 @@ On a long page the AI rewrites only a section it saw in full; "left out by the c
 
 A change is dropped only when none of its quotes is found in the source. One with some quotes missing is kept and flagged. A change from an image is never dropped for a missing quote (the AI may read what text recognition missed); it's kept and flagged.
 
-The changes are made at once, with a line in `log.md`, and listed in [Changes](app:review), where you can revert them. Only when the daily check runs on its schedule is a flagged change held there for you instead. The source is added to each page's `sources:`.
+The changes are made at once, with a line in `log.md`, and listed in [Changes](app:review), where you can revert them. Only when the daily check runs on its schedule is a flagged change held there for you instead. The source is added to each page's `sources:`; where a page's properties don't read as YAML it can't be, and the change is flagged to say so.
 
 To ingest new sources as soon as they arrive, turn on **Ingest new sources as they arrive** in [Settings › AI assistants](app:settings/assistants).
 

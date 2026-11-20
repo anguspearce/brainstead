@@ -280,6 +280,25 @@ pub enum SourceText {
 /// The warning every change from an image carries, so it waits for review.
 pub const IMAGE_WARNING: &str = "From an image: check it against the picture.";
 
+/// The warning on a change to a page whose properties couldn't take the source in `sources`.
+pub const SOURCES_WARNING: &str = "The page's properties don't read as YAML, so this source wasn't added to its sources.";
+
+/// The page with the source cited in its `sources`, or as it is with a warning when its
+/// properties can't take it.
+fn with_source(text: String, cite: &str, warnings: &mut Vec<String>) -> String {
+    use crate::fixname::ListValue;
+    match crate::fixname::list_value_added(&text, &["sources"], cite) {
+        ListValue::Changed(t) => t,
+        ListValue::Already => text,
+        ListValue::CannotEdit => {
+            if !warnings.iter().any(|w| w == SOURCES_WARNING) {
+                warnings.push(SOURCES_WARNING.into());
+            }
+            text
+        }
+    }
+}
+
 impl Source {
     /// How a page links it: by name without `.md`, with its extension otherwise.
     pub fn link(&self) -> String {
@@ -739,7 +758,10 @@ pub fn plan(
             }
         });
         let current_state = p.current_state.as_deref().map(str::trim).filter(|t| !t.is_empty());
-        match read(&rel) {
+        // Two entries that come to one page ("Orbit App" and its path): the second builds on what
+        // the first made of the page, in the one change, so neither's text or claims are lost.
+        let earlier = out.iter().position(|o| o.page == rel);
+        match earlier.map(|i| out[i].after.clone()).or_else(|| read(&rel)) {
             Some(before) => {
                 let view = crate::pageview::view(&before, budget);
                 let mut after = before.clone();
@@ -800,15 +822,37 @@ pub fn plan(
                     dropped.push(Dropped { page: rel, reason });
                     continue;
                 }
-                if let Some(t) = crate::fixname::with_list_value(&after, &["sources"], &cite) {
-                    after = t;
-                }
+                after = with_source(after, &cite, &mut warnings);
                 after = proposals::bump_updated(&before, &after, today);
                 if after.replace("\r\n", "\n") == before.replace("\r\n", "\n") {
                     dropped.push(Dropped { page: rel, reason: "It changed nothing.".into() });
                     continue;
                 }
-                out.push(Planned { page: rel, kind: Kind::Edit, title, before: Some(before), after, quotes, claims, entry, warnings });
+                match earlier {
+                    Some(i) => {
+                        let o = &mut out[i];
+                        o.after = after;
+                        o.quotes.extend(quotes);
+                        o.claims.extend(claims);
+                        for w in warnings {
+                            if !o.warnings.contains(&w) {
+                                o.warnings.push(w);
+                            }
+                        }
+                        o.entry = o.entry.take().or(entry);
+                    }
+                    None => out.push(Planned {
+                        page: rel,
+                        kind: Kind::Edit,
+                        title,
+                        before: Some(before),
+                        after,
+                        quotes,
+                        claims,
+                        entry,
+                        warnings,
+                    }),
+                }
             }
             None => {
                 let kind = if rel.starts_with("wiki/concepts/") { "concept" } else { "entity" };
@@ -1007,13 +1051,11 @@ pub fn plan_tracking(
             }),
         }
     }
-    for Edited { rel, mut text, quotes, warnings, done } in pages {
+    for Edited { rel, text, quotes, mut warnings, done } in pages {
         if done.is_empty() {
             continue;
         }
-        if let Some(t) = crate::fixname::with_list_value(&text, &["sources"], &cite) {
-            text = t;
-        }
+        let text = with_source(text, &cite, &mut warnings);
         let summary = done.join(", ");
         match out.iter_mut().find(|p| p.page == rel) {
             Some(p) => {
@@ -1028,7 +1070,7 @@ pub fn plan_tracking(
                     Some(b) => proposals::bump_updated(b, &text, today),
                     None => text,
                 };
-                if before.as_deref().is_some_and(|b| b.replace("\r\n", "\n") == after) {
+                if before.as_deref().is_some_and(|b| b.replace("\r\n", "\n") == after.replace("\r\n", "\n")) {
                     continue;
                 }
                 let kind = if before.is_some() { Kind::Edit } else { Kind::New };
@@ -1186,6 +1228,71 @@ mod tests {
         let a = shaped_answer(r#""section": {"heading": "Architecture", "content": "Rewritten."},"#);
         let (planned, dropped) = plan(&pdf(), &a, read, resolve, "2026-10-02", page_budget(1));
         assert!(planned.is_empty() && dropped[0].reason.contains("Architecture"), "{dropped:?}");
+    }
+
+    #[test]
+    fn two_entries_for_one_page_make_one_change() {
+        let read = |r: &str| (r == "wiki/entities/Orbit App.md").then(|| SHAPED.to_string());
+        // The page by name, then by path: one planned change, with both entries' text and claims.
+        let a = parse_answer(
+            r#"{"pages": [
+              {"page": "Orbit App", "title": "Launch moves",
+               "current_state": "Soft launch to staff on 28 November.",
+               "claims": [{"subject": "Orbit App", "attribute": "go_live_date", "value": "28 November", "quote": "Staff launch now targeted for 28 November", "anchor": "page=2"}]},
+              {"page": "wiki/entities/Orbit App.md", "title": "The pen test gates it",
+               "section": {"heading": "Risks", "content": "- The pen test gates the launch."},
+               "entry": {"date": "2026-09-28", "title": "Steerco", "body": "Pending the pen test."},
+               "claims": [{"subject": "Orbit App", "attribute": "status", "value": "gated", "quote": "pending pen-test closure", "anchor": "page=2"}]}]}"#,
+        )
+        .unwrap();
+        let (planned, dropped) = plan(&pdf(), &a, read, resolve, "2026-10-02", page_budget(1));
+        assert!(dropped.is_empty(), "{dropped:?}");
+        assert_eq!(planned.len(), 1);
+        let p = &planned[0];
+        assert_eq!((p.page.as_str(), p.kind, p.before.as_deref()), ("wiki/entities/Orbit App.md", Kind::Edit, Some(SHAPED)));
+        assert!(p.after.contains("## Current state\n\nSoft launch to staff on 28 November."), "{}", p.after);
+        assert!(
+            p.after.contains("## Risks\n\n- The pen test gates the launch.") && p.after.contains("### 2026-09-28 — Steerco"),
+            "{}",
+            p.after
+        );
+        assert_eq!(p.claims.iter().map(|c| c.attribute.as_str()).collect::<Vec<_>>(), ["go_live_date", "status"]);
+        assert_eq!(p.quotes.len(), 2);
+        assert_eq!(p.entry.as_deref(), Some("2026-09-28 — Steerco"));
+        // A second entry for a page the first one made.
+        let a = parse_answer(
+            r#"{"pages": [
+              {"page": "wiki/entities/Pen test.md", "current_state": "Gates the launch.",
+               "claims": [{"subject": "Pen test", "attribute": "status", "value": "pending", "quote": "pending pen-test closure", "anchor": "page=2"}]},
+              {"page": "[[wiki/entities/Pen test]]", "entry": {"date": "2026-09-28", "title": "Pending", "body": "Pending closure."},
+               "claims": [{"subject": "Pen test", "attribute": "owner", "value": "Acme", "quote": "Staff launch now targeted", "anchor": "page=2"}]}]}"#,
+        )
+        .unwrap();
+        let (planned, dropped) = plan(&pdf(), &a, |_| None, |_| None, "2026-10-02", page_budget(1));
+        assert!(dropped.is_empty(), "{dropped:?}");
+        assert_eq!(planned.len(), 1);
+        let p = &planned[0];
+        assert_eq!((p.kind, p.before.as_deref(), p.claims.len()), (Kind::New, None, 2));
+        assert!(p.after.contains("Gates the launch.") && p.after.contains("### 2026-09-28 — Pending"), "{}", p.after);
+    }
+
+    #[test]
+    fn properties_that_cant_take_the_source_are_a_warning() {
+        // Properties that don't read as YAML (a list never closed).
+        let page = "---\ntype: entity\nsources: [Roadmap\n---\n# Orbit App\n\n## Current state\n\nSoft launch on 14 November.\n";
+        assert_eq!(
+            crate::fixname::list_value_added(page, &["sources"], "[[x]]"),
+            crate::fixname::ListValue::CannotEdit,
+            "the page for this test"
+        );
+        let read = move |r: &str| (r == "wiki/entities/Orbit App.md").then(|| page.to_string());
+        let (planned, dropped) = plan(&pdf(), &shaped_answer(""), read, resolve, "2026-10-02", page_budget(1));
+        assert!(dropped.is_empty(), "{dropped:?}");
+        assert_eq!(planned[0].warnings, [SOURCES_WARNING]);
+        assert!(planned[0].after.contains("sources: [Roadmap\n---\n") && !planned[0].after.contains(".pdf]]\"]"), "{}", planned[0].after);
+        // A page that takes it has no warning.
+        let (planned, _) = plan(&pdf(), &answer(), super::tests::read, resolve, "2026-10-02", page_budget(1));
+        assert!(planned[1].warnings.is_empty());
     }
 
     #[test]

@@ -186,10 +186,10 @@ fn reading_tools() {
     // Images are ingested too (their text read from the picture), so they're listed.
     assert!(pending.contains("sources/Whiteboard photo.png"), "{pending}");
     // A file ingest can't read isn't one to ingest, as the Sources screen gives it no Ingest; all marks it.
-    std::fs::write(f.ctx.vault.join("sources/Diagram.svg"), "<svg/>").unwrap();
-    std::fs::write(f.ctx.vault.join("sources/Bundle.zip"), "PK").unwrap();
+    std::fs::write(f.ctx.vault().join("sources/Diagram.svg"), "<svg/>").unwrap();
+    std::fs::write(f.ctx.vault().join("sources/Bundle.zip"), "PK").unwrap();
     let mut ix = Index::open(&f.ctx.data.join("index.db")).unwrap();
-    ix.sync(&brainstead_core::vault::Vault::new(f.ctx.vault.clone(), vec![])).unwrap();
+    ix.sync(&brainstead_core::vault::Vault::new(f.ctx.vault().clone(), vec![])).unwrap();
     drop(ix);
     let pending = ok(&f.ctx, "pending_sources", json!({}));
     assert!(!pending.contains("Diagram.svg") && !pending.contains("Bundle.zip"), "{pending}");
@@ -201,8 +201,8 @@ fn reading_tools() {
     // Each check names its id; the grey ones say they aren't counted, and safe fixes are marked.
     // A page written after the log's last change is an unlogged write, a safe fix. Set here, as a
     // fresh checkout (CI's) gives every file the same moment in no particular order.
-    let log = std::fs::metadata(f.ctx.vault.join("log.md")).unwrap().modified().unwrap();
-    let page = std::fs::OpenOptions::new().write(true).open(f.ctx.vault.join("wiki/entities/Acme Pilot.md")).unwrap();
+    let log = std::fs::metadata(f.ctx.vault().join("log.md")).unwrap().modified().unwrap();
+    let page = std::fs::OpenOptions::new().write(true).open(f.ctx.vault().join("wiki/entities/Acme Pilot.md")).unwrap();
     page.set_modified(log + std::time::Duration::from_secs(3600)).unwrap();
     drop(page);
     let all = ok(&f.ctx, "lint", json!({}));
@@ -240,7 +240,7 @@ fn example_notes_are_added_as_new_notes_only_where_missing() {
     let all = brainstead_core::starter::files(now);
     // Every example note there but Start here: only that one is sent, as a new note.
     for (rel, text) in &all {
-        let abs = f.ctx.vault.join(rel);
+        let abs = f.ctx.vault().join(rel);
         if rel != "Start here.md" && !abs.exists() {
             std::fs::create_dir_all(abs.parent().unwrap()).unwrap();
             std::fs::write(abs, text).unwrap();
@@ -249,7 +249,7 @@ fn example_notes_are_added_as_new_notes_only_where_missing() {
     let (t, c) = submitted(&f, "add_example_notes", json!({}));
     assert!(t.starts_with("1 example note:\n- Start here.md: Changed it."), "{t}");
     assert_eq!((c["kind"].as_str(), c["page"].as_str()), (Some("new"), Some("Start here.md")));
-    std::fs::write(f.ctx.vault.join("Start here.md"), "# Start here\n").unwrap();
+    std::fs::write(f.ctx.vault().join("Start here.md"), "# Start here\n").unwrap();
     assert!(refused(&f.ctx, "add_example_notes", json!({})).contains("all there already"));
 }
 
@@ -271,7 +271,7 @@ fn facts_from_kept_claims() {
     };
     let one = brainstead_core::claims::with_source(None, page, "a.md", &[kept("14 October", "2026-09-01", "a.md")]);
     let two = brainstead_core::claims::with_source(one.as_deref(), page, "b.md", &[kept("28 November", "2026-09-28", "b.md")]).unwrap();
-    let file = f.ctx.vault.join(brainstead_core::claims::path(page).unwrap());
+    let file = f.ctx.vault().join(brainstead_core::claims::path(page).unwrap());
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
     std::fs::write(&file, two).unwrap();
     let t = ok(&f.ctx, "facts", json!({"subject": "orbit app", "attribute": "launch date"}));
@@ -292,14 +292,14 @@ fn submitted(f: &Fixture, name: &str, args: Value) -> (String, Value) {
 fn made(f: &Fixture, c: &Value) -> String {
     let i: Instruction = serde_json::from_value(c["instruction"].clone()).unwrap();
     let page = c["page"].as_str().unwrap();
-    let now = std::fs::read_to_string(f.ctx.vault.join(page)).ok();
+    let now = std::fs::read_to_string(f.ctx.vault().join(page)).ok();
     i.text(page, now.as_deref()).unwrap()
 }
 
 #[test]
 fn edit_page_sends_a_checked_change() {
     let f = fixture();
-    let page = f.ctx.vault.join("wiki/entities/Orbit App.md");
+    let page = f.ctx.vault().join("wiki/entities/Orbit App.md");
     let before = std::fs::read_to_string(&page).unwrap();
     let (t, c) = submitted(
         &f,
@@ -582,11 +582,11 @@ fn renames_trash_and_deletes_are_sent() {
         json!({"page": "Project. Orbit App launch", "type": "Project", "title": "Orbit App rollout", "preview": true}),
     );
     assert!(t.contains("will be updated:") && t.contains("→ ") && t.contains("[[Project. Orbit App rollout"), "{t}");
-    assert!(f.ctx.vault.join("Project. Orbit App launch.md").exists());
+    assert!(f.ctx.vault().join("Project. Orbit App launch.md").exists());
     let (_, c) = submitted(&f, "trash_note", json!({"page": "Idea. Accents", "reason": "Old"}));
     assert_eq!((c["kind"].as_str(), c["instruction"]["op"].as_str()), (Some("trash"), Some("trash")));
     // A task's line taken out, found by its text even when the line number is off.
-    let todo = std::fs::read_to_string(f.ctx.vault.join("Me. To Do List.md")).unwrap();
+    let todo = std::fs::read_to_string(f.ctx.vault().join("Me. To Do List.md")).unwrap();
     let (n, line) = todo.lines().enumerate().find(|(_, l)| l.contains("Walk through the Dashboard")).unwrap();
     let (_, c) =
         submitted(&f, "delete_task", json!({"task": format!("Me. To Do List.md:{}", n + 5), "text": "Walk through the Dashboard"}));
@@ -596,7 +596,7 @@ fn renames_trash_and_deletes_are_sent() {
     assert!(refused(&f.ctx, "delete_task", json!({"task": "Me. To Do List.md:1", "text": "no such task"})).contains("no task"));
     // Text with no words in it (only a tag, or nothing) fits any task, so it never goes looking: a
     // note's only task isn't taken for a line that isn't one. The line itself is still taken.
-    std::fs::write(f.ctx.vault.join("Idea. Single.md"), "# Single\n\n- [ ] Call Maya #followup\n").unwrap();
+    std::fs::write(f.ctx.vault().join("Idea. Single.md"), "# Single\n\n- [ ] Call Maya #followup\n").unwrap();
     let t = refused(&f.ctx, "delete_task", json!({"task": "Idea. Single.md:1", "text": "#followup"}));
     assert!(t.contains("no task at Idea. Single.md:1 reading “#followup”"), "{t}");
     let t = refused(&f.ctx, "delete_task", json!({"task": "Idea. Single.md:1", "text": ""}));
@@ -621,7 +621,7 @@ fn a_page_is_sent_as_the_file_system_spells_it() {
     let want = ["Templates/Meeting.md", "Templates/Meeting.md", "Templates/Meeting note.md", "Templates/Meeting.md"].map(String::from);
     assert_eq!(sent_pages(&f, "Templates/Meeting.md"), want);
     // A system that doesn't mind case (Windows, macOS by default) names the file in any case.
-    if f.ctx.vault.join("TEMPLATES/MEETING.MD").is_file() {
+    if f.ctx.vault().join("TEMPLATES/MEETING.MD").is_file() {
         assert_eq!(sent_pages(&f, "templates/meeting.md"), want);
         assert!(refused(&f.ctx, "create_note", json!({"title": "Retro", "folder": "templates", "content": "x"})).contains("can't go in"));
     }
@@ -633,7 +633,7 @@ fn every_windows_spelling_of_a_template_is_sent_as_its_own_path() {
     let f = fixture();
     let want = ["Templates/Meeting.md", "Templates/Meeting.md", "Templates/Meeting note.md", "Templates/Meeting.md"].map(String::from);
     let mut spellings = vec!["Templates\\Meeting.md".to_string(), "templates\\MEETING.md".into()];
-    match paths::short_name(&f.ctx.vault.join("Templates")) {
+    match paths::short_name(&f.ctx.vault().join("Templates")) {
         Some(short) => spellings.extend([format!("{short}/Meeting.md"), format!("{short}\\Meeting")]),
         None => eprintln!("This volume makes no 8.3 names, so the short spelling isn't tried."),
     }
@@ -647,7 +647,7 @@ fn every_windows_spelling_of_a_template_is_sent_as_its_own_path() {
             assert!(t.contains("Not a path in the vault"), "{tool_name} {s}: {t}");
         }
     }
-    if let Some(short) = paths::short_name(&f.ctx.vault.join("Templates")) {
+    if let Some(short) = paths::short_name(&f.ctx.vault().join("Templates")) {
         assert!(refused(&f.ctx, "create_note", json!({"title": "Retro", "folder": short, "content": "x"})).contains("can't go in"));
     }
 }
@@ -656,12 +656,12 @@ fn every_windows_spelling_of_a_template_is_sent_as_its_own_path() {
 fn summaries_by_day_or_the_latest() {
     let f = fixture();
     std::fs::write(
-        f.ctx.vault.join("Me. Daily Summaries - 2026-10.md"),
+        f.ctx.vault().join("Me. Daily Summaries - 2026-10.md"),
         "> log\n\n## Daily summary 2026-10-02\n\nShipped the pilot.\n\n---\n\n## Daily summary 2026-10-01\n\nPlanned the pilot.\n",
     )
     .unwrap();
     // A week from before the rename, in the old file under the old heading.
-    std::fs::write(f.ctx.vault.join("Me. Weekly Reviews - 2026-09.md"), "## Weekly review 2026-W39\n\nA quiet week.\n").unwrap();
+    std::fs::write(f.ctx.vault().join("Me. Weekly Reviews - 2026-09.md"), "## Weekly review 2026-W39\n\nA quiet week.\n").unwrap();
     let latest = ok(&f.ctx, "summary", json!({}));
     assert!(
         latest.starts_with("The daily summary for 2026-10-02") && latest.contains("Shipped") && !latest.contains("Planned"),
@@ -675,8 +675,8 @@ fn summaries_by_day_or_the_latest() {
     assert!(refused(&f.ctx, "summary", json!({"day": "2026-09-29"})).contains("no daily summary for 2026-09-29"));
     assert!(refused(&f.ctx, "summary", json!({"kind": "monthly"})).contains("kind is daily, weekly or brief"));
     // A brief: the note itself, the latest or a day's.
-    std::fs::create_dir_all(f.ctx.vault.join("Briefs")).unwrap();
-    std::fs::write(f.ctx.vault.join("Briefs/Brief 2026-10-01.md"), "---\ntype: brief\n---\n\n# Brief\n\n## Themes\n\nLaunch moved.\n")
+    std::fs::create_dir_all(f.ctx.vault().join("Briefs")).unwrap();
+    std::fs::write(f.ctx.vault().join("Briefs/Brief 2026-10-01.md"), "---\ntype: brief\n---\n\n# Brief\n\n## Themes\n\nLaunch moved.\n")
         .unwrap();
     let b = ok(&f.ctx, "summary", json!({"kind": "brief"}));
     assert!(b.contains("The brief for 2026-10-01, from Briefs/Brief 2026-10-01.md") && b.contains("Launch moved."), "{b}");
@@ -716,6 +716,9 @@ fn task_inbox_and_project_edits_carry_the_session() {
         ("create_project", "project.create", json!({"name": "Orbit App beta"})),
         ("update_project", "project.update", json!({"project": "Orbit App launch", "status": "completed"})),
         ("rename_area", "project.rename_area", json!({"area": "Work", "to": "Acme"})),
+        // Wiki health's safe fixes and Fix name go through Changes too, as this session's.
+        ("fix_health", "health.fix", json!({})),
+        ("fix_name", "fix_name", json!({"written_as": "Lenna", "correct_spelling": "Lena", "apply": true})),
         // Said unattended, which holds for the calls after it, so these come last.
         ("edit_task", "task.edit", json!({"task": "Me. To Do List.md:12", "text": "Call Sam", "done": true, "unattended": true})),
         // A restore and a saved contradictions report are changes too, held unattended when a check fails.
@@ -1105,7 +1108,7 @@ fn add_image_sends_the_bytes_to_the_app() {
     let pdf = f._tmp.path().join("report.pdf");
     std::fs::write(&pdf, b"%PDF-1.7").unwrap();
     assert!(refused(&f.ctx, "add_image", json!({"path": pdf})).contains("isn't an image"));
-    let inside = f.ctx.vault.join("images/in-vault.png");
+    let inside = f.ctx.vault().join("images/in-vault.png");
     std::fs::create_dir_all(inside.parent().unwrap()).unwrap();
     std::fs::write(&inside, png).unwrap();
     assert!(refused(&f.ctx, "add_image", json!({"path": inside})).contains("![[images/in-vault.png]]"));
@@ -1124,8 +1127,8 @@ fn initiatives_are_listed_made_and_changed_through_the_app() {
 
     // As the app would have made it.
     let rel = "wiki/initiatives/Orbit launch.md";
-    std::fs::create_dir_all(f.ctx.vault.join("wiki/initiatives")).unwrap();
-    std::fs::write(f.ctx.vault.join(rel), &page).unwrap();
+    std::fs::create_dir_all(f.ctx.vault().join("wiki/initiatives")).unwrap();
+    std::fs::write(f.ctx.vault().join(rel), &page).unwrap();
     let quote = json!([{"source": "Roadmap Update 2026-09-18", "text": "Staff soft launch remains on track for 14 November."}]);
     let (t, c) = submitted(
         &f,
@@ -1140,7 +1143,7 @@ fn initiatives_are_listed_made_and_changed_through_the_app() {
     );
     assert!(after.contains("  - \"Staff soft launch remains on track for 14 November.\" — [[Roadmap Update 2026-09-18]]"), "{after}");
     assert_eq!(c["quotes"][0]["checked"], true, "{c}");
-    std::fs::write(f.ctx.vault.join(rel), &after).unwrap();
+    std::fs::write(f.ctx.vault().join(rel), &after).unwrap();
 
     let listed = ok(&f.ctx, "list_initiatives", json!({}));
     assert!(listed.contains("Orbit launch (active): 1 open: 0 mine, 1 delegated"), "{listed}");
@@ -1175,6 +1178,48 @@ fn initiatives_are_listed_made_and_changed_through_the_app() {
     assert!(t.contains("The decision's id is d-"), "{t}");
     assert!(made(&f, &c).contains("## Decisions\n\n- 2026-09-18 — Staff first, customers in Q1 ^d-"));
     assert!(refused(&f.ctx, "add_decision", json!({"initiative": rel, "text": "x", "date": "18 Sep"})).contains("YYYY-MM-DD"));
+
+    // Moved to another initiative: both pages in one batch, for the app to make or hold together.
+    let other = "wiki/initiatives/Acme rollout.md";
+    std::fs::write(f.ctx.vault().join(other), &page).unwrap();
+    let app = fake_app(f.ctx.data.clone(), |_| bridge::Reply { ok: true, result: json!("Moved."), error: None });
+    let t = ok(&f.ctx, "set_action", json!({"initiative": rel, "action": "Brief the support team", "move_to": "Acme rollout"}));
+    let req = app.join().unwrap();
+    assert_eq!((req.action.as_str(), t.as_str()), ("change.submit_many", "Moved."));
+    let batch = req.args["changes"].as_array().unwrap();
+    assert_eq!(batch.iter().map(|c| c["page"].as_str().unwrap()).collect::<Vec<_>>(), [other, rel]);
+    assert!(made(&f, &batch[0]).contains("- Brief the support team"));
+    assert!(!made(&f, &batch[1]).contains("- Brief the support team"));
+    assert_eq!(batch[1]["origin"]["chat"], "chat-1");
+}
+
+/// The user opens another vault in Settings while a session runs: the next call works there, as
+/// the app does, not on the vault the server started with.
+#[test]
+fn the_vault_is_followed_when_the_user_opens_another() {
+    let f = fixture();
+    let first = f.ctx.vault();
+    let other = f.ctx.data.join("another vault");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(other.join("Idea. Only here.md"), "Maya's idea.\n").unwrap();
+    let settings = f.ctx.data.join("settings.json");
+    std::fs::write(&settings, serde_json::to_vec(&json!({"vaultPath": other})).unwrap()).unwrap();
+    // Not until a call: then the vault is the new one, and its files are the ones read.
+    assert_eq!(f.ctx.vault(), first);
+    ok(&f.ctx, "help", json!({"topic": "tasks"}));
+    assert_eq!(f.ctx.vault(), other);
+    assert!(refused(&f.ctx, "create_note", json!({"type": "Idea", "title": "Only here", "content": "x"})).contains("already"));
+    // Settings that can't be read just now, or name no vault, leave it where it was.
+    std::fs::write(&settings, b"{").unwrap();
+    ok(&f.ctx, "help", json!({"topic": "tasks"}));
+    assert_eq!(f.ctx.vault(), other);
+    std::fs::write(&settings, serde_json::to_vec(&json!({"vaultPath": ""})).unwrap()).unwrap();
+    ok(&f.ctx, "help", json!({"topic": "tasks"}));
+    assert_eq!(f.ctx.vault(), other);
+    // And back.
+    std::fs::write(&settings, serde_json::to_vec(&json!({"vaultPath": first})).unwrap()).unwrap();
+    ok(&f.ctx, "help", json!({"topic": "tasks"}));
+    assert_eq!(f.ctx.vault(), first);
 }
 
 /// Put in Outlook / Put in Teams leaves a reply where the user sends it from: only while they're there.

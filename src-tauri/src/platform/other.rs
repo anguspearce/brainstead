@@ -263,62 +263,97 @@ mod tests {
 
 // ── Secret store (the Teams and Outlook sign-in) ─────────────────────────────────────────
 //
-// Windows: the user's Credential Manager (a generic credential, DPAPI-encrypted per user), keyed by
-// "<service>/<account>". Linux: no store yet, so the sync stays off there.
+// Windows: the user's Credential Manager (generic credentials, DPAPI-encrypted per user), keyed by
+// "<service>/<account>". One credential holds 2,560 bytes at most and a Teams sign-in is several
+// times that, so a long value is split across "<service>/<account>/0", "/1"… with their count in
+// the base credential (`secret_chunks`). Linux: no store yet, so the sync stays off there.
+
+/// The credentials one secret is kept in: the base one and its numbered ones.
+#[cfg(windows)]
+struct Credentials<'a> {
+    service: &'a str,
+    account: &'a str,
+}
 
 #[cfg(windows)]
-fn cred_target(service: &str, account: &str) -> Vec<u16> {
-    use std::os::windows::ffi::OsStrExt;
-    std::ffi::OsString::from(format!("{service}/{account}")).encode_wide().chain(std::iter::once(0)).collect()
+impl Credentials<'_> {
+    /// The credential's target name, NUL-terminated.
+    fn target(&self, slot: Option<usize>) -> Vec<u16> {
+        use std::os::windows::ffi::OsStrExt;
+        let name = match slot {
+            None => format!("{}/{}", self.service, self.account),
+            Some(i) => format!("{}/{}/{i}", self.service, self.account),
+        };
+        std::ffi::OsString::from(name).encode_wide().chain(std::iter::once(0)).collect()
+    }
+}
+
+#[cfg(windows)]
+impl super::secret_chunks::Slots for Credentials<'_> {
+    fn read(&self, slot: Option<usize>) -> Option<Vec<u8>> {
+        use windows::core::PCWSTR;
+        use windows::Win32::Security::Credentials::{CredFree, CredReadW, CREDENTIALW, CRED_TYPE_GENERIC};
+        let target = self.target(slot);
+        unsafe {
+            let mut cred: *mut CREDENTIALW = std::ptr::null_mut();
+            CredReadW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, None, &mut cred).ok()?;
+            let c = &*cred;
+            // An empty credential has no blob to point at.
+            let bytes = if c.CredentialBlob.is_null() || c.CredentialBlobSize == 0 {
+                Vec::new()
+            } else {
+                std::slice::from_raw_parts(c.CredentialBlob, c.CredentialBlobSize as usize).to_vec()
+            };
+            CredFree(cred as *const core::ffi::c_void);
+            Some(bytes)
+        }
+    }
+
+    fn write(&mut self, slot: Option<usize>, bytes: &[u8]) -> Result<(), String> {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::core::PWSTR;
+        use windows::Win32::Security::Credentials::{CredWriteW, CREDENTIALW, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC};
+        let mut target = self.target(slot);
+        let mut user: Vec<u16> = std::ffi::OsString::from(self.account).encode_wide().chain(std::iter::once(0)).collect();
+        let mut blob = bytes.to_vec();
+        let cred = CREDENTIALW {
+            Type: CRED_TYPE_GENERIC,
+            TargetName: PWSTR(target.as_mut_ptr()),
+            CredentialBlobSize: blob.len() as u32,
+            CredentialBlob: blob.as_mut_ptr(),
+            Persist: CRED_PERSIST_LOCAL_MACHINE,
+            UserName: PWSTR(user.as_mut_ptr()),
+            ..Default::default()
+        };
+        unsafe { CredWriteW(&cred, 0) }.map_err(|e| format!("Couldn't keep the sign-in in Credential Manager: {e}"))
+    }
+
+    fn remove(&mut self, slot: Option<usize>) -> Result<bool, String> {
+        use windows::core::PCWSTR;
+        use windows::Win32::Foundation::ERROR_NOT_FOUND;
+        use windows::Win32::Security::Credentials::{CredDeleteW, CRED_TYPE_GENERIC};
+        let target = self.target(slot);
+        match unsafe { CredDeleteW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, None) } {
+            Ok(()) => Ok(true),
+            Err(e) if e.code() == ERROR_NOT_FOUND.to_hresult() => Ok(false),
+            Err(e) => Err(format!("Couldn't remove the sign-in from Credential Manager: {e}")),
+        }
+    }
 }
 
 #[cfg(windows)]
 pub fn secret_get(service: &str, account: &str) -> Option<String> {
-    use windows::core::PCWSTR;
-    use windows::Win32::Security::Credentials::{CredFree, CredReadW, CREDENTIALW, CRED_TYPE_GENERIC};
-    let target = cred_target(service, account);
-    unsafe {
-        let mut cred: *mut CREDENTIALW = std::ptr::null_mut();
-        CredReadW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, None, &mut cred).ok()?;
-        let c = &*cred;
-        let bytes = std::slice::from_raw_parts(c.CredentialBlob, c.CredentialBlobSize as usize);
-        let value = String::from_utf8(bytes.to_vec()).ok();
-        CredFree(cred as *const core::ffi::c_void);
-        value
-    }
+    super::secret_chunks::get(&Credentials { service, account })
 }
 
 #[cfg(windows)]
 pub fn secret_set(service: &str, account: &str, value: &str) -> Result<(), String> {
-    use std::os::windows::ffi::OsStrExt;
-    use windows::core::PWSTR;
-    use windows::Win32::Security::Credentials::{CredWriteW, CREDENTIALW, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC};
-    let mut target = cred_target(service, account);
-    let mut user: Vec<u16> = std::ffi::OsString::from(account).encode_wide().chain(std::iter::once(0)).collect();
-    let mut blob = value.as_bytes().to_vec();
-    let cred = CREDENTIALW {
-        Type: CRED_TYPE_GENERIC,
-        TargetName: PWSTR(target.as_mut_ptr()),
-        CredentialBlobSize: blob.len() as u32,
-        CredentialBlob: blob.as_mut_ptr(),
-        Persist: CRED_PERSIST_LOCAL_MACHINE,
-        UserName: PWSTR(user.as_mut_ptr()),
-        ..Default::default()
-    };
-    unsafe { CredWriteW(&cred, 0) }.map_err(|e| format!("Couldn't keep the sign-in in Credential Manager: {e}"))
+    super::secret_chunks::set(&mut Credentials { service, account }, value)
 }
 
 #[cfg(windows)]
 pub fn secret_delete(service: &str, account: &str) -> Result<(), String> {
-    use windows::core::PCWSTR;
-    use windows::Win32::Foundation::ERROR_NOT_FOUND;
-    use windows::Win32::Security::Credentials::{CredDeleteW, CRED_TYPE_GENERIC};
-    let target = cred_target(service, account);
-    match unsafe { CredDeleteW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, None) } {
-        Ok(()) => Ok(()),
-        Err(e) if e.code() == ERROR_NOT_FOUND.to_hresult() => Ok(()),
-        Err(e) => Err(format!("Couldn't remove the sign-in from Credential Manager: {e}")),
-    }
+    super::secret_chunks::delete(&mut Credentials { service, account })
 }
 
 #[cfg(not(windows))]

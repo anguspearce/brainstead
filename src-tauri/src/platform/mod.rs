@@ -23,6 +23,9 @@ mod macos;
 mod now_playing;
 #[cfg(target_os = "macos")]
 mod quick_look;
+// Windows' secret store uses it (`other.rs`); built for tests everywhere.
+#[cfg(any(windows, test))]
+mod secret_chunks;
 #[cfg(windows)]
 mod single_instance_win;
 #[cfg(windows)]

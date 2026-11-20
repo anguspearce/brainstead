@@ -301,13 +301,17 @@ fn save_note(root: &Path, file: &str, w: &reviews::Window, body: &str, now: Naiv
 /// rewritten keeping what you added under its `## Added later` heading (reviews::note). Logged in
 /// `log.md` and undoable with ⌘Z. The weekly summaries aren't touched. Returns the note's path.
 #[tauri::command]
-pub fn weekly_finish(app: AppHandle, week: String, body: String) -> Res<String> {
+pub async fn weekly_finish(app: AppHandle, week: String, body: String) -> Res<String> {
+    crate::edits::writing(move || finish(&app, &week, &body)).await
+}
+
+fn finish(app: &AppHandle, week: &str, body: &str) -> Res<String> {
     writable(&app.state::<AppState>())?;
-    let w = week_window(&week)?;
+    let w = week_window(week)?;
     let root = app.state::<VaultService>().root().ok_or("No vault is open.".to_string())?;
-    let file = review_note(&app, w.label());
+    let file = review_note(app, w.label());
     let now = Local::now().naive_local();
-    let saved = save_note(&root, &file, &w, &body, now)?;
+    let saved = save_note(&root, &file, &w, body, now)?;
     let title = file.trim_end_matches(".md").rsplit('/').next().unwrap_or(&file).to_string();
     let what = if saved.before.is_some() { "rewritten" } else { "written" };
     let abs = root.join(&file);
@@ -318,7 +322,7 @@ pub fn weekly_finish(app: AppHandle, week: String, body: String) -> Res<String> 
         Err(e) => crate::applog!("weekly log: {e}"),
     }
     app.state::<UndoStack>().push(UndoEntry::files(format!("Weekly review {} saved", w.label()), files));
-    written(&app, &[abs, root.join("log.md")]);
+    written(app, &[abs, root.join("log.md")]);
     Ok(file)
 }
 

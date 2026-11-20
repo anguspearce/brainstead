@@ -730,7 +730,11 @@ fn hold(app: &AppHandle, w: &Window, block: &str, title: &str, model: &str, orig
 
 /// Puts the files back as they were before the run, if they're still as it left them.
 #[tauri::command]
-pub fn review_undo(app: AppHandle, id: String) -> Result<(), String> {
+pub async fn review_undo(app: AppHandle, id: String) -> Result<(), String> {
+    crate::blocking(move || undo_run(&app, &id)).await
+}
+
+fn undo_run(app: &AppHandle, id: &str) -> Result<(), String> {
     writable(&app.state::<AppState>()).map_err(|_| "Brainstead is read-only: turn it off in Settings › Vault to undo.".to_string())?;
     let root = app.state::<VaultService>().root().ok_or("No vault is open.")?;
     let file = dir().join("undo").join(format!("{id}.json"));
@@ -756,10 +760,10 @@ pub fn review_undo(app: AppHandle, id: String) -> Result<(), String> {
         }
         paths.push(abs);
     }
-    written(&app, &paths);
+    written(app, &paths);
     let _ = std::fs::remove_file(file);
-    crate::changes::mark_reverted(&app, &id);
-    app.state::<Reviews>().update_run(&id, |r| r.undone = true);
+    crate::changes::mark_reverted(app, id);
+    app.state::<Reviews>().update_run(id, |r| r.undone = true);
     let _ = app.emit("reviews-changed", ());
     Ok(())
 }

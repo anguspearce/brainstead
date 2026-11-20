@@ -24,7 +24,7 @@ use brainstead_core::{trash, write};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::edits::{writable, written, Res};
+use crate::edits::{writable, writing, written, Res};
 use crate::platform;
 use crate::vault::VaultService;
 use crate::AppState;
@@ -952,8 +952,9 @@ pub fn chat_read(app: AppHandle, filename: String) -> Result<Chat, String> {
 /// the note is left as it was until the next save that can write it. A new chat (no file name)
 /// gets one from its title. Returns its summary as written.
 #[tauri::command]
-pub fn chat_save(app: AppHandle, chat: Chat, keep: Option<bool>) -> Res<Summary> {
-    save_chat(&app, chat, keep.unwrap_or(false))
+pub async fn chat_save(app: AppHandle, chat: Chat, keep: Option<bool>) -> Res<Summary> {
+    // Off the main thread: a saved chat is re-indexed, which waits on the index lock.
+    writing(move || save_chat(&app, chat, keep.unwrap_or(false))).await
 }
 
 pub fn save_chat(app: &AppHandle, chat: Chat, keep: bool) -> Res<Summary> {
@@ -1052,11 +1053,15 @@ fn keep_pending(note: &Path, mut c: Chat, name: &str) -> Res<Summary> {
 
 /// Renames a chat; in the vault through the rename that rewrites links to it. Returns the new file name.
 #[tauri::command]
-pub fn chat_rename(app: AppHandle, filename: String, title: String) -> Res<String> {
-    let to = chats::filename_for(&title, |_| false);
+pub async fn chat_rename(app: AppHandle, filename: String, title: String) -> Res<String> {
+    writing(move || rename_chat(&app, &filename, &title)).await
+}
+
+fn rename_chat(app: &AppHandle, filename: &str, title: &str) -> Res<String> {
+    let to = chats::filename_for(title, |_| false);
     if let Some(n) = filename.strip_prefix(LOCAL) {
         let dir = local_dir();
-        let to = chats::filename_for(&title, |x| x != n && dir.join(x).exists());
+        let to = chats::filename_for(title, |x| x != n && dir.join(x).exists());
         std::fs::rename(dir.join(n), dir.join(&to)).map_err(|e| e.to_string())?;
         return Ok(format!("{LOCAL}{to}"));
     }
@@ -1066,31 +1071,34 @@ pub fn chat_rename(app: AppHandle, filename: String, title: String) -> Res<Strin
     if to != filename && root.join(&to).exists() {
         return Err(format!("There's already a chat called “{}”.", chats::title_of(&to)).into());
     }
-    crate::notes::with_links(&svc, &filename, |linkers, resolves| {
-        let plan = brainstead_core::rename::plan(&root, &filename, &to, linkers, resolves)?;
+    crate::notes::with_links(&svc, filename, |linkers, resolves| {
+        let plan = brainstead_core::rename::plan(&root, filename, &to, linkers, resolves)?;
         Ok(brainstead_core::rename::commit(&root, &plan, linkers, resolves)?)
     })?;
     // Turns still waiting for the vault go with it.
-    let pending = pending_dir().join(&filename);
+    let pending = pending_dir().join(filename);
     if pending.exists() {
         let _ = std::fs::rename(&pending, pending_dir().join(&to));
     }
-    written(&app, &[root.join(&filename), root.join(&to)]);
+    written(app, &[root.join(filename), root.join(&to)]);
     Ok(to)
 }
 
 /// Moves a chat to the vault's trash (a local one is deleted).
 #[tauri::command]
-pub fn chat_trash(app: AppHandle, filename: String) -> Res<()> {
-    if let Some(n) = filename.strip_prefix(LOCAL) {
-        return Ok(std::fs::remove_file(local_dir().join(n)).map_err(|e| e.to_string())?);
-    }
-    writable(&app.state::<AppState>())?;
-    let root = app.state::<VaultService>().root().ok_or("No vault is open.".to_string())?;
-    trash::move_to_trash(&root, &filename, "note")?;
-    let _ = std::fs::remove_file(pending_dir().join(&filename));
-    written(&app, &[root.join(&filename)]);
-    Ok(())
+pub async fn chat_trash(app: AppHandle, filename: String) -> Res<()> {
+    writing(move || {
+        if let Some(n) = filename.strip_prefix(LOCAL) {
+            return Ok(std::fs::remove_file(local_dir().join(n)).map_err(|e| e.to_string())?);
+        }
+        writable(&app.state::<AppState>())?;
+        let root = app.state::<VaultService>().root().ok_or("No vault is open.".to_string())?;
+        trash::move_to_trash(&root, &filename, "note")?;
+        let _ = std::fs::remove_file(pending_dir().join(&filename));
+        written(&app, &[root.join(&filename)]);
+        Ok(())
+    })
+    .await
 }
 
 #[derive(Serialize)]

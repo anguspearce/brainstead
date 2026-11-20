@@ -5,7 +5,7 @@
 // Taking an item out of the Inbox once it's clarified: the writes the Inbox screen makes, kept
 // here so the MCP bridge (src/mcpActions.ts) makes the same ones.
 
-import { ActionEdit, api, InboxItem } from "./api";
+import { ActionEdit, api, Edited, InboxItem } from "./api";
 import { captureDone } from "./gtd";
 import { isTranscriptPath, trashTranscript } from "./meetingFlow";
 import { isThread } from "./skills/Reply";
@@ -154,23 +154,38 @@ export async function settleInboxItem(
   toProject?: string | null,
   heading = "Next actions",
 ): Promise<unknown> {
+  // The task is made first, so nothing is lost if that fails (addThenSettle).
+  const add = (l: string) => () =>
+    toProject ? api.projectAddTask(toProject, l.replace(/^- \[ \] /, ""), heading) : api.taskAdd(l.replace(/^- \[ \] /, ""));
   if (i.kind === "action") {
     // The task made, then the action marked with where it went; deleted, it's dropped.
     if (!line) return setAction(i, { status: "dropped" });
-    if (toProject) await api.projectAddTask(toProject, line.replace(/^- \[ \] /, ""), heading);
-    else await api.capture("task", line.replace(/^- \[ \] /, ""), "");
-    return setAction(i, { task: taskWent(toProject) });
+    return addThenSettle(add(line), () => setAction(i, { task: taskWent(toProject) }));
   }
   if (i.kind === "task") {
     if (toProject && line) return api.inboxMoveTask(i.line, i.lineText, toProject, heading, line);
     return api.taskReplace({ path: i.path, line: i.line, lineText: i.lineText }, line ? [line] : [], line ? "Clarified" : "Deleted");
   }
-  if (line) {
-    if (toProject) await api.projectAddTask(toProject, line.replace(/^- \[ \] /, ""), heading);
-    else await api.capture("task", line.replace(/^- \[ \] /, ""), "");
+  const out = () => (i.kind === "capture" ? captureDone(i.path) : api.inboxRemoveThought(i.line, i.block ?? i.lineText));
+  return line ? addThenSettle(add(line), out) : out();
+}
+
+/** Makes the task (`add`), then takes the item out of the Inbox (`settle`). When that second step
+ *  fails the task just made is taken back, so the item is in one place and trying again doesn't
+ *  make it twice; the failure is what's thrown. The task is taken back with the undo it left,
+ *  only while that's still the last change. */
+async function addThenSettle(add: () => Promise<Edited>, settle: () => Promise<unknown>): Promise<unknown> {
+  const added = await add();
+  try {
+    return await settle();
+  } catch (e) {
+    try {
+      if (added.undo && (await api.undoPeek())?.label === added.undo) await api.undo();
+    } catch {
+      // The item's own failure is the one to show.
+    }
+    throw e;
   }
-  if (i.kind === "capture") return captureDone(i.path);
-  return api.inboxRemoveThought(i.line, i.block ?? i.lineText);
 }
 
 /** To Do: the item as a task at the end of the To Do list's To Do, as it is (an action's due date
@@ -179,15 +194,16 @@ export async function settleInboxItem(
 export async function makeTask(i: InboxItem, text: string): Promise<unknown> {
   const words = text.replace(/^- \[.\] /, "").trim();
   const line = i.kind === "action" && i.action?.due && !/📅/.test(words) ? `${words} 📅 ${i.action.due}` : words;
-  // A task on the To Do list's Other leaves it first, so adding above it doesn't move its line.
-  if (i.kind === "task") {
-    await api.taskReplace({ path: i.path, line: i.line, lineText: i.lineText }, [], "Made a task of");
-    return api.todoAddTask(line);
-  }
-  await api.todoAddTask(line);
-  if (i.kind === "action") return setAction(i, { task: taskWent(null) });
-  if (i.kind === "capture") return captureDone(i.path);
-  return api.inboxRemoveThought(i.line, i.block ?? i.lineText);
+  // A task on the To Do list's Other moves to To Do in one write: never taken out without being added.
+  if (i.kind === "task") return api.inboxTaskToTodo(i.line, i.lineText, line);
+  return addThenSettle(
+    () => api.todoAddTask(line),
+    () => {
+      if (i.kind === "action") return setAction(i, { task: taskWent(null) });
+      if (i.kind === "capture") return captureDone(i.path);
+      return api.inboxRemoveThought(i.line, i.block ?? i.lineText);
+    },
+  );
 }
 
 /** Moves a capture's file to the Trash (Delete), a transcript's links first pointed at its meeting

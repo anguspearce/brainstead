@@ -488,9 +488,21 @@ fn action_head(
     h
 }
 
+/// A page that uses CRLF, changed as LF text, gets its line endings back.
+fn keep_crlf(page: &str, changed: (String, String)) -> (String, String) {
+    if page.contains("\r\n") {
+        (changed.0.replace('\n', "\r\n"), changed.1)
+    } else {
+        changed
+    }
+}
+
 /// The page with an action added or changed, and the action's id. Only that action's lines change.
 pub fn with_action(page: &str, edit: &ActionEdit, seed: &str) -> Result<(String, String), String> {
-    let page = page.replace("\r\n", "\n");
+    with_action_lf(&page.replace("\r\n", "\n"), edit, seed).map(|out| keep_crlf(page, out))
+}
+
+fn with_action_lf(page: &str, edit: &ActionEdit, seed: &str) -> Result<(String, String), String> {
     let person = edit.person.as_deref().map(field_value).transpose()?.filter(|p| !p.is_empty());
     if person.as_deref().is_some_and(|p| p.eq_ignore_ascii_case("me")) {
         return Err("For the user's own action, give owner me and no person.".into());
@@ -507,7 +519,7 @@ pub fn with_action(page: &str, edit: &ActionEdit, seed: &str) -> Result<(String,
         return Err(format!("“{d}” isn't a date (YYYY-MM-DD)."));
     }
     let on = edit.on.as_deref();
-    let items = section_items(&page, ACTIONS).map(|(_, _, i)| i).unwrap_or_default();
+    let items = section_items(page, ACTIONS).map(|(_, _, i)| i).unwrap_or_default();
     match edit.id.as_deref().filter(|k| !k.trim().is_empty()) {
         Some(key) => {
             let it = find_item(&items, key).ok_or_else(|| format!("There's no action “{key}” on this page."))?;
@@ -572,7 +584,7 @@ pub fn with_action(page: &str, edit: &ActionEdit, seed: &str) -> Result<(String,
             if owner != Owner::Me && person.is_none() {
                 return Err("Give the person it's delegated to, or whose it is.".into());
             }
-            let id = new_id(&page, "a", &format!("{seed}\n{text}"));
+            let id = new_id(page, "a", &format!("{seed}\n{text}"));
             let head = action_head(
                 &text,
                 owner,
@@ -584,7 +596,7 @@ pub fn with_action(page: &str, edit: &ActionEdit, seed: &str) -> Result<(String,
                 &id,
             );
             let block = format!("{head}\n{}", new_quote_lines(&[], &edit.quotes)?);
-            Ok((insert_in_section(&page, ACTIONS, &block, None)?, id))
+            Ok((insert_in_section(page, ACTIONS, &block, None)?, id))
         }
     }
 }
@@ -628,7 +640,10 @@ pub fn wants_inbox(a: &Action, today: &str) -> bool {
 
 /// The page with a decision added, newest first by date (undated ones last), and its id.
 pub fn with_decision(page: &str, date: Option<&str>, text: &str, quotes: &[Quote], seed: &str) -> Result<(String, String), String> {
-    let page = page.replace("\r\n", "\n");
+    with_decision_lf(&page.replace("\r\n", "\n"), date, text, quotes, seed).map(|out| keep_crlf(page, out))
+}
+
+fn with_decision_lf(page: &str, date: Option<&str>, text: &str, quotes: &[Quote], seed: &str) -> Result<(String, String), String> {
     let text = one_line(text);
     if text.is_empty() {
         return Err("Give the decision's words in text.".into());
@@ -637,17 +652,17 @@ pub fn with_decision(page: &str, date: Option<&str>, text: &str, quotes: &[Quote
     if let Some(d) = date.filter(|d| !valid_day(d)) {
         return Err(format!("“{d}” isn't a date: give date as YYYY-MM-DD."));
     }
-    let id = new_id(&page, "d", &format!("{seed}\n{text}"));
+    let id = new_id(page, "d", &format!("{seed}\n{text}"));
     let head = match date {
         Some(d) => format!("- {d} — {text} ^{id}"),
         None => format!("- {text} ^{id}"),
     };
     let block = format!("{head}\n{}", new_quote_lines(&[], quotes)?);
-    let items = section_items(&page, DECISIONS).map(|(_, _, i)| i).unwrap_or_default();
+    let items = section_items(page, DECISIONS).map(|(_, _, i)| i).unwrap_or_default();
     let before = date.and_then(|d| items.iter().find(|i| decision_of(i).date.as_deref().is_none_or(|o| o < d)).map(|i| i.start));
     let out = match before {
         Some(at) => format!("{}{block}{}", &page[..at], &page[at..]),
-        None => insert_in_section(&page, DECISIONS, &block, None)?,
+        None => insert_in_section(page, DECISIONS, &block, None)?,
     };
     Ok((out, id))
 }
@@ -796,6 +811,26 @@ mod tests {
         let want = format!("^a-3333\n- Chase the signed order [delegated:: Maya] [status:: open] ^{id}\n  - \"Maya will chase it\" — [[Meeting. Acme - 2026-11-12]]\n\n## Decisions");
         assert!(out.contains(&want), "{out}");
         assert_eq!(out.replace(&want, "^a-3333\n\n## Decisions"), PAGE);
+    }
+
+    #[test]
+    fn a_page_with_crlf_line_endings_keeps_them() {
+        let crlf = PAGE.replace('\n', "\r\n");
+        let lone = |s: &str| s.replace("\r\n", "").contains('\n');
+        // An action added, one changed, a decision added: each as on the LF page, in CRLF.
+        let add = ActionEdit { text: Some("Chase the signed order".into()), owner: Some(Owner::Me), ..Default::default() };
+        let change = ActionEdit { id: Some("^a-2222".into()), status: Some(Status::Done), ..Default::default() };
+        for edit in [&add, &change] {
+            let (out, id) = with_action(&crlf, edit, "seed").unwrap();
+            assert!(!lone(&out), "{out:?}");
+            assert_eq!((out.replace("\r\n", "\n"), id), with_action(PAGE, edit, "seed").unwrap());
+        }
+        let (out, id) = with_decision(&crlf, Some("2026-11-19"), "Renew for two years", &[], "seed").unwrap();
+        assert!(!lone(&out), "{out:?}");
+        assert_eq!((out.replace("\r\n", "\n"), id), with_decision(PAGE, Some("2026-11-19"), "Renew for two years", &[], "seed").unwrap());
+        // A change that changes nothing leaves the page as it is.
+        let same = ActionEdit { id: Some("^a-2222".into()), ..Default::default() };
+        assert_eq!(with_action(&crlf, &same, "s").unwrap().0, crlf);
     }
 
     #[test]

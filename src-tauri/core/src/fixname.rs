@@ -348,16 +348,13 @@ pub fn with_substitution(json: Option<&str>, r: &Request) -> Result<Option<Strin
     Ok(Some(serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())? + "\n"))
 }
 
-/// Applies the plan: each `rewrite` file's occurrences become the right name (modification time
-/// kept), the right page gets the alias, the substitution is registered. All or nothing: a file
-/// that changed since the audit stops it before anything is written. Returns the changes, for
-/// one undo.
-/// `subs_path` is the corrections file (`names::path`), which a remembered correction is added to.
-pub fn apply(root: &Path, subs_path: &Path, r: &Request, rows: &[Row]) -> Result<Vec<FileChange>, WriteError> {
+/// The notes `apply` would rewrite, each with its text before and after, without writing any: an
+/// assistant's fix is made through Changes (the app's `fixname_changes`).
+pub fn planned(root: &Path, r: &Request, rows: &[Row]) -> Result<Vec<(String, String, String)>, WriteError> {
     if r.wrong.trim().is_empty() || r.right.trim().is_empty() || r.wrong == r.right {
         return Err(WriteError::Invalid("Give the wrong name and the right one.".into()));
     }
-    let mut plans: Vec<(std::path::PathBuf, String, String, bool)> = Vec::new();
+    let mut plans: Vec<(String, String, String)> = Vec::new();
     for row in rows {
         crate::trash::safe_rel(&row.file)?;
         let abs = root.join(&row.file);
@@ -394,8 +391,19 @@ pub fn apply(root: &Path, subs_path: &Path, r: &Request, rows: &[Row]) -> Result
             },
             _ => continue,
         };
-        plans.push((abs, before, after, true));
+        plans.push((row.file.clone(), before, after));
     }
+    Ok(plans)
+}
+
+/// Applies the plan: each `rewrite` file's occurrences become the right name (modification time
+/// kept), the right page gets the alias, the substitution is registered. All or nothing: a file
+/// that changed since the audit stops it before anything is written. Returns the changes, for
+/// one undo.
+/// `subs_path` is the corrections file (`names::path`), which a remembered correction is added to.
+pub fn apply(root: &Path, subs_path: &Path, r: &Request, rows: &[Row]) -> Result<Vec<FileChange>, WriteError> {
+    let mut plans: Vec<(std::path::PathBuf, String, String, bool)> =
+        planned(root, r, rows)?.into_iter().map(|(file, before, after)| (root.join(file), before, after, true)).collect();
     let subs_before = std::fs::read_to_string(subs_path).ok();
     let subs_after = if r.skip_substitution { None } else { with_substitution(subs_before.as_deref(), r).map_err(WriteError::Invalid)? };
     if let Some(after) = subs_after {

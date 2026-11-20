@@ -892,6 +892,12 @@ function Vault() {
           </span>
         </div>
       </section>
+      {st.warning && (
+        <div className="doc-banner warn" role="status">
+          <Icon name="info" size={14} />
+          <span>{st.warning}</span>
+        </div>
+      )}
       <div className="card">
         <div className="srow">
           <Icon

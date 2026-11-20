@@ -21,6 +21,48 @@ pub const ALIVE: &str = "alive.json";
 /// app's reply isn't lost by a tick. A request older than this has nobody waiting for it.
 pub const ACT_TIMEOUT: Duration = Duration::from_secs(160);
 
+/// How long the window may take over an action that waits on a model before it answers
+/// ([`waits_on_model`]): cut off at the usual two minutes, its work carried on with nobody to
+/// tell, and trying again started a second run.
+pub const MODEL_WINDOW_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// [`ACT_TIMEOUT`] for an action that waits on a model: the same margin over the window's wait.
+pub const MODEL_ACT_TIMEOUT: Duration = Duration::from_secs(640);
+
+/// The actions (src/mcpActions.ts's names) that ask a model and wait for its answer inside the
+/// request: Doc check, Compare, Draft reply and Triage's suggestions. The app's wait for its
+/// window and the server's wait for the app both go by this one list, so they can't drift.
+pub const MODEL_ACTIONS: [&str; 4] = ["doccheck.run", "compare.run", "reply.draft", "triage.suggest"];
+
+/// The Inbox's listing, which asks a model only when its `suggest` is true.
+const INBOX_LIST: &str = "inbox.list";
+
+/// Whether this request waits on a model before it answers, so both sides give it longer.
+pub fn waits_on_model(action: &str, args: &serde_json::Value) -> bool {
+    MODEL_ACTIONS.contains(&action) || (action == INBOX_LIST && args.get("suggest").and_then(|s| s.as_bool()) == Some(true))
+}
+
+/// How long the app waits for its window over this request.
+pub fn window_timeout(action: &str, args: &serde_json::Value) -> Duration {
+    if waits_on_model(action, args) {
+        MODEL_WINDOW_TIMEOUT
+    } else {
+        WINDOW_TIMEOUT
+    }
+}
+
+/// How long the server waits for the app over this request.
+pub fn act_timeout(action: &str, args: &serde_json::Value) -> Duration {
+    if waits_on_model(action, args) {
+        MODEL_ACT_TIMEOUT
+    } else {
+        ACT_TIMEOUT
+    }
+}
+
+/// How long the window may take over one request. Runs answer as soon as they've started.
+pub const WINDOW_TIMEOUT: Duration = Duration::from_secs(120);
+
 /// The bridge folder in the app data folder.
 pub fn dir(data: &Path) -> PathBuf {
     data.join("bridge")
@@ -328,5 +370,28 @@ mod tests {
         };
         assert_eq!(names(&requests), ["waiting.json"]);
         assert_eq!(names(&replies), [format!("{fresh}.json")]);
+    }
+
+    /// An action that waits on a model gets the longer wait on both sides, the server's always a
+    /// little over the window's; the rest keep the short one. Every name listed is an action the
+    /// window has (src/mcpActions.ts).
+    #[test]
+    fn model_actions_get_longer_on_both_sides() {
+        let none = json!({});
+        for a in MODEL_ACTIONS {
+            assert_eq!((window_timeout(a, &none), act_timeout(a, &none)), (MODEL_WINDOW_TIMEOUT, MODEL_ACT_TIMEOUT), "{a}");
+        }
+        assert_eq!(window_timeout(INBOX_LIST, &json!({"suggest": true})), MODEL_WINDOW_TIMEOUT);
+        assert_eq!(act_timeout(INBOX_LIST, &json!({"suggest": true})), MODEL_ACT_TIMEOUT);
+        for (a, args) in [(INBOX_LIST, none.clone()), (INBOX_LIST, json!({"suggest": false})), ("tasks.list", json!({"suggest": true}))] {
+            assert_eq!((window_timeout(a, &args), act_timeout(a, &args)), (WINDOW_TIMEOUT, ACT_TIMEOUT), "{a} {args}");
+        }
+        // The server outlasts the app's wait for its window to be ready (30 s) and for its answer.
+        assert!(ACT_TIMEOUT > WINDOW_TIMEOUT + Duration::from_secs(30));
+        assert!(MODEL_ACT_TIMEOUT > MODEL_WINDOW_TIMEOUT + Duration::from_secs(30));
+        let window = include_str!("../../../src/mcpActions.ts");
+        for a in MODEL_ACTIONS.iter().chain([&INBOX_LIST]) {
+            assert!(window.contains(&format!("\n  \"{a}\": ")), "{a} isn't one of the window's actions");
+        }
     }
 }

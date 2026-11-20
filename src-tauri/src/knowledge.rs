@@ -266,38 +266,50 @@ pub struct Fix {
     detail: Option<String>,
 }
 
-/// Applies safe fixes: a link at a name's first plain mention, `updated:` set to the file's date,
-/// and a `log.md` line for the fixes (which also logs any unlogged writes). Pages keep their
-/// modification times. One undo for all of them.
-fn health_fix_now(app: AppHandle, fixes: Vec<Fix>) -> Res<String> {
-    writable(&app.state::<AppState>())?;
-    let root = root(&app)?;
+/// A page with its safe fixes made, not yet written.
+struct FixedPage {
+    page: String,
+    before: String,
+    after: String,
+    /// What was fixed, for the log line.
+    what: Vec<String>,
+    /// A system note's header was put back.
+    header: bool,
+}
+
+/// The safe fixes worked out, page by page, and how many unlogged writes are to be logged.
+/// `callouts` are the system notes' headers as last seen whole. `day`, when given, is the day
+/// `updated:` is set to in place of the file's own date: the day a write that moves the file's
+/// date is made.
+fn fixed_pages(root: &Path, fixes: &[Fix], callouts: &BTreeMap<String, String>, day: Option<&str>) -> Res<(Vec<FixedPage>, usize)> {
     let mut by_page: BTreeMap<String, Vec<&Fix>> = BTreeMap::new();
     let mut unlogged = 0;
-    for f in &fixes {
+    for f in fixes {
         match f.check.as_str() {
             "missing-crossrefs" | "stale-dates" | "system-callouts" => by_page.entry(f.page.clone()).or_default().push(f),
             "unlogged-writes" => unlogged += 1,
             other => return Err(invalid(format!("{other} has no safe fix."))),
         }
     }
-    let mut changes: Vec<FileChange> = Vec::new();
-    let mut what: Vec<String> = Vec::new();
+    let mut pages = Vec::new();
     for (page, fs) in &by_page {
         brainstead_core::trash::safe_rel(page).map_err(EditError::from)?;
-        let abs = root.join(page);
-        let Some(before) = read_opt(&abs) else { continue };
+        let Some(before) = read_opt(&root.join(page)) else { continue };
         let mut text = before.clone();
+        let mut what: Vec<String> = Vec::new();
+        let mut header = false;
         for f in fs {
             let next = match (f.check.as_str(), f.name.as_deref(), f.detail.as_deref()) {
                 ("missing-crossrefs", Some(n), _) => lint::link_first_mention(&text, n).inspect(|_| what.push(format!("linked {n}"))),
-                ("stale-dates", _, Some(d)) => lint::fix_updated(&text, d).inspect(|_| what.push("updated date".into())),
-                ("system-callouts", _, _) => kept()
-                    .callouts
+                ("stale-dates", _, Some(d)) => lint::fix_updated(&text, day.unwrap_or(d)).inspect(|_| what.push("updated date".into())),
+                ("system-callouts", _, _) => callouts
                     .get(page)
                     .filter(|_| brainstead_core::rename::system_callout(&text).is_none())
                     .map(|c| brainstead_core::rename::with_callout(&text, c))
-                    .inspect(|_| what.push("system-note header put back".into())),
+                    .inspect(|_| {
+                        header = true;
+                        what.push("system-note header put back".into())
+                    }),
                 _ => None,
             };
             if let Some(t) = next {
@@ -305,9 +317,72 @@ fn health_fix_now(app: AppHandle, fixes: Vec<Fix>) -> Res<String> {
             }
         }
         if text != before {
-            let v = write::save_file_as(&abs, &text, &write::version(before.as_bytes()), true)?;
-            changes.push(FileChange { path: abs, before: Some(before), version: v });
+            pages.push(FixedPage { page: page.clone(), before, after: text, what, header });
         }
+    }
+    Ok((pages, unlogged))
+}
+
+/// One safe fix as a change to submit to Changes.
+#[derive(Debug, Serialize)]
+pub struct FixChange {
+    page: String,
+    title: String,
+    instruction: brainstead_core::changes::Instruction,
+    /// Why only the user can accept it: a system note's header put back.
+    hold: Option<String>,
+}
+
+/// An assistant's safe fixes (the MCP's fix_health): what `health_fix_now` would write, worked out
+/// and not written, one change a page, for the window to submit to Changes, where they're
+/// recorded, held by its rules and can be reverted. A header put back is always held (changing a
+/// system note's header is the user's to accept, D-20261005-08). `updated:` is `today`, the day
+/// the write is made, since a write through Changes moves the file's date. Unlogged writes are
+/// logged by the changes' own log lines; with no page to fix, by a line added to `log.md`.
+fn fix_changes(root: &Path, fixes: &[Fix], callouts: &BTreeMap<String, String>, now: chrono::NaiveDateTime) -> Res<Vec<FixChange>> {
+    let today = now.date().to_string();
+    let (pages, unlogged) = fixed_pages(root, fixes, callouts, Some(&today))?;
+    let mut out: Vec<FixChange> = pages
+        .into_iter()
+        .map(|p| FixChange {
+            title: format!("Wiki health: {}", p.what.join(", ")),
+            instruction: brainstead_core::changes::from_texts(Some(&p.before), &proposals::bump_updated(&p.before, &p.after, &today)),
+            hold: p.header.then(|| "It puts back the note's system-note header, which other parts of Brainstead rely on.".to_string()),
+            page: p.page,
+        })
+        .collect();
+    if out.is_empty() && unlogged > 0 {
+        if let Some(before) = read_opt(&root.join(LOG)) {
+            let summary = format!("logged {unlogged} wiki write{}", if unlogged == 1 { "" } else { "s" });
+            let entry = reviews::log_entry("lint-fix", "Wiki health", Some(&summary), now);
+            out.push(FixChange {
+                page: LOG.into(),
+                title: format!("Wiki health: {summary}"),
+                instruction: brainstead_core::changes::from_texts(Some(&before), &reviews::log_insert(&before, &entry)),
+                hold: None,
+            });
+        }
+    }
+    if out.is_empty() {
+        return Err(invalid("Nothing needed fixing any more."));
+    }
+    Ok(out)
+}
+
+/// Applies safe fixes: a link at a name's first plain mention, `updated:` set to the file's date,
+/// and a `log.md` line for the fixes (which also logs any unlogged writes). Pages keep their
+/// modification times. One undo for all of them.
+fn health_fix_now(app: AppHandle, fixes: Vec<Fix>) -> Res<String> {
+    writable(&app.state::<AppState>())?;
+    let root = root(&app)?;
+    let (pages, unlogged) = fixed_pages(&root, &fixes, &kept().callouts, None)?;
+    let mut changes: Vec<FileChange> = Vec::new();
+    let mut what: Vec<String> = Vec::new();
+    for p in pages {
+        let abs = root.join(&p.page);
+        let v = write::save_file_as(&abs, &p.after, &write::version(p.before.as_bytes()), true)?;
+        changes.push(FileChange { path: abs, before: Some(p.before), version: v });
+        what.extend(p.what);
     }
     if changes.is_empty() && unlogged == 0 {
         return Err(invalid("Nothing needed fixing any more."));
@@ -698,6 +773,11 @@ pub async fn health_fix(app: AppHandle, fixes: Vec<Fix>) -> Res<String> {
 }
 
 #[tauri::command]
+pub async fn health_fix_changes(app: AppHandle, fixes: Vec<Fix>) -> Res<Vec<FixChange>> {
+    blocking(move || fix_changes(&root(&app)?, &fixes, &kept().callouts, chrono::Local::now().naive_local())).await
+}
+
+#[tauri::command]
 pub async fn health_reshape(app: AppHandle, pages: Option<Vec<String>>, unattended: Option<bool>) -> Res<Reshaped> {
     blocking(move || health_reshape_now(app, pages, unattended.unwrap_or(false))).await
 }
@@ -740,6 +820,49 @@ pub async fn health_link_ghost(app: AppHandle, target: String, to: String, pages
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_assistants_safe_fixes_are_changes_and_a_header_put_back_is_held() {
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path();
+        std::fs::create_dir_all(root.join("wiki/entities")).unwrap();
+        let page = "wiki/entities/Orbit App.md";
+        let before = "---\nupdated: 2026-10-01\n---\n# Orbit App\n\nMaya leads it.\n";
+        std::fs::write(root.join(page), before).unwrap();
+        std::fs::write(root.join("Me. To Do List.md"), "- [ ] a\n").unwrap();
+        std::fs::write(root.join(LOG), "# Log\n").unwrap();
+        let callouts = BTreeMap::from([("Me. To Do List.md".to_string(), "> **This is a system note** - Tasks.".to_string())]);
+        let fix = |check: &str, page: &str, detail: Option<&str>| Fix {
+            check: check.into(),
+            page: page.into(),
+            name: None,
+            detail: detail.map(String::from),
+        };
+        let now = chrono::NaiveDate::from_ymd_opt(2026, 11, 20).unwrap().and_hms_opt(9, 0, 0).unwrap();
+        let fixes = vec![
+            fix("stale-dates", page, Some("2026-10-05")),
+            fix("system-callouts", "Me. To Do List.md", None),
+            fix("unlogged-writes", page, None),
+        ];
+        let out = fix_changes(root, &fixes, &callouts, now).unwrap();
+        // One change a page, nothing written; the log is left to the changes' own lines.
+        assert_eq!(out.iter().map(|c| c.page.as_str()).collect::<Vec<_>>(), ["Me. To Do List.md", page]);
+        assert_eq!(std::fs::read_to_string(root.join(page)).unwrap(), before);
+        // The header put back waits for the user; the date is the day the write is made.
+        assert!(out[0].hold.is_some() && out[1].hold.is_none());
+        assert!(out[0]
+            .instruction
+            .text("Me. To Do List.md", Some("- [ ] a\n"))
+            .unwrap()
+            .starts_with("> **This is a system note** - Tasks."));
+        assert_eq!(out[1].instruction.text(page, Some(before)).unwrap(), before.replace("2026-10-01", "2026-11-20"));
+        // Unlogged writes alone: a line in the log.
+        let out = fix_changes(root, &[fix("unlogged-writes", page, None)], &callouts, now).unwrap();
+        assert_eq!((out.len(), out[0].page.as_str()), (1, LOG));
+        assert!(out[0].instruction.text(LOG, Some("# Log\n")).unwrap().contains("Wiki health"));
+        // Nothing left to fix says so.
+        assert!(fix_changes(root, &[], &callouts, now).is_err());
+    }
 
     #[test]
     fn a_system_note_that_lost_its_header() {

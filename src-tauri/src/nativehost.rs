@@ -253,8 +253,14 @@ fn write_list(f: &Path, all: &[Captured]) {
 /// Runs `f` holding `captures.lock` in the app data folder: Chrome starts one host process per
 /// extension, and the app changes the Inbox list too, so each read-change-write is one at a time.
 fn locked<T>(data: &Path, f: impl FnOnce() -> T) -> T {
+    locked_by(data, "captures.lock", f)
+}
+
+/// Runs `f` holding the lock file `name` in `data`, across processes: one holder at a time, the
+/// rest wait. Not to be taken again by `f` itself, which would wait for ever.
+pub(crate) fn locked_by<T>(data: &Path, name: &str, f: impl FnOnce() -> T) -> T {
     let _ = std::fs::create_dir_all(data);
-    let lock = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(data.join("captures.lock"));
+    let lock = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(data.join(name));
     // Unlocked when the file closes, at the end of this function.
     let _held = lock.as_ref().ok().filter(|l| l.lock().is_ok());
     f()
@@ -298,6 +304,21 @@ pub fn inbox(data: &Path, gone: impl Fn(&Captured) -> bool) -> Vec<Captured> {
     })
 }
 
+/// The captures noted after `seen` (a capture's `at`), newest first. Those written come from the
+/// Inbox list, which keeps every one: a burst of more than `captures.json` holds between two looks
+/// would otherwise lose the surplus. Refusals are only in `captures.json`, as are all of them
+/// before the Inbox list exists.
+fn noted_since(data: &Path, seen: &str) -> Vec<Captured> {
+    let recent = recent(data);
+    let mut fresh: Vec<Captured> = match read_list(&data.join(INBOX)) {
+        Some(inbox) => inbox.into_iter().chain(recent.into_iter().filter(|c| c.path.is_none())).collect(),
+        None => recent,
+    };
+    fresh.retain(|c| c.at.as_str() > seen);
+    fresh.sort_by(|a, b| b.at.cmp(&a.at));
+    fresh
+}
+
 /// In the app: looks at `captures.json` every couple of seconds and, for each new capture,
 /// re-indexes the file and tells the window (`capture`, then `vault-changed`). The folder watcher
 /// would see the file too, but a synced folder can be slow to report it.
@@ -316,9 +337,8 @@ pub fn watch(app: tauri::AppHandle) {
                 continue;
             }
             last = now;
-            let all = recent(&data);
-            let fresh: Vec<Captured> = all.iter().take_while(|c| c.at > seen).cloned().collect();
-            if let Some(c) = all.first() {
+            let fresh = noted_since(&data, &seen);
+            if let Some(c) = fresh.first() {
                 seen = c.at.clone();
             }
             for c in fresh.into_iter().rev() {
@@ -495,6 +515,62 @@ mod tests {
         let mut r = &big[..];
         assert!(read_message(&mut r).unwrap().is_err());
         assert_eq!(read_message(&mut r).unwrap().unwrap(), v);
+    }
+
+    fn noted(i: usize, path: Option<&str>) -> Captured {
+        Captured {
+            extension: "teams".into(),
+            what: "Teams chat".into(),
+            path: path.map(str::to_string),
+            error: path.is_none().then(|| "The vault is read-only.".to_string()),
+            at: format!("2026-10-24T09:00:00.{i:03}Z"),
+            sync: true,
+            item_date: None,
+            backfill: false,
+        }
+    }
+
+    #[test]
+    fn a_burst_bigger_than_the_recent_list_is_all_seen() {
+        let data = tempfile::tempdir().unwrap();
+        note(data.path(), noted(0, Some("sources/Teams. Chat. Maya - 2026-10-01.md")));
+        let seen = recent(data.path())[0].at.clone();
+        // Between two looks: more written than captures.json keeps, and a refusal among them.
+        let burst = KEEP + 10;
+        for i in 1..=burst {
+            note(data.path(), noted(i, Some(&format!("sources/Teams. Chat. Lena - {i}.md"))));
+        }
+        note(data.path(), noted(burst + 1, None));
+        assert_eq!(recent(data.path()).len(), KEEP);
+        let fresh = noted_since(data.path(), &seen);
+        assert_eq!(fresh.len(), burst + 1, "every one, not only the last {KEEP}");
+        assert!(fresh[0].path.is_none() && fresh[0].at > fresh[1].at, "newest first, the refusal with them");
+        assert_eq!(fresh.last().unwrap().path.as_deref(), Some("sources/Teams. Chat. Lena - 1.md"));
+        assert!(noted_since(data.path(), &fresh[0].at).is_empty());
+        // Before the Inbox has its own list, captures.json is all there is.
+        std::fs::remove_file(data.path().join(INBOX)).unwrap();
+        assert_eq!(noted_since(data.path(), &seen).len(), KEEP);
+    }
+
+    #[test]
+    fn a_lock_file_is_held_by_one_at_a_time() {
+        let data = tempfile::tempdir().unwrap();
+        let file = data.path().join("count");
+        std::fs::write(&file, "0").unwrap();
+        let bump = || {
+            locked_by(data.path(), "test.lock", || {
+                let n: u32 = std::fs::read_to_string(&file).unwrap().parse().unwrap();
+                std::thread::sleep(std::time::Duration::from_millis(2));
+                std::fs::write(&file, (n + 1).to_string()).unwrap();
+            })
+        };
+        // Each takes the lock through its own open file, as separate processes do.
+        std::thread::scope(|s| {
+            for _ in 0..8 {
+                s.spawn(|| (0..5).for_each(|_| bump()));
+            }
+        });
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "40");
     }
 
     #[test]

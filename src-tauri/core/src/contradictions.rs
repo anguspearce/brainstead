@@ -449,6 +449,22 @@ impl State {
         let j = serde_json::to_vec(&Cached { page: rel.into(), claims }).map_err(|e| e.to_string())?;
         crate::write::write_atomic(&p, &j, false).map_err(|e| e.to_string())
     }
+    /// Deletes the cached claims no page has any more: each edit to a page caches its claims under
+    /// a new name, and the old file would otherwise stay for good. Returns how many went. Does
+    /// nothing when there are no pages (a vault that couldn't be read keeps its cache).
+    pub fn prune(&self, pages: &[(String, String, Vec<String>)]) -> usize {
+        if pages.is_empty() {
+            return 0;
+        }
+        let keep: HashSet<String> = pages.iter().map(|(rel, text, _)| format!("{}.json", page_hash(rel, text))).collect();
+        let Ok(rd) = std::fs::read_dir(self.dir.join("claims")) else { return 0 };
+        rd.flatten()
+            .filter(|e| {
+                let name = e.file_name().to_string_lossy().into_owned();
+                name.ends_with(".json") && !keep.contains(&name) && std::fs::remove_file(e.path()).is_ok()
+            })
+            .count()
+    }
     pub fn verdicts(&self) -> HashMap<String, Verdict> {
         let mut out = HashMap::new();
         if let Ok(t) = std::fs::read_to_string(self.dir.join("verdicts.jsonl")) {
@@ -658,6 +674,23 @@ pub fn uncited(claims: &[Dated], texts: &HashMap<String, String>) -> Vec<(String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cached_claims_are_pruned_to_the_pages_as_they_are() {
+        let t = tempfile::tempdir().unwrap();
+        let st = State::new(t.path());
+        let page = |text: &str| vec![("wiki/entities/Orbit App.md".to_string(), text.to_string(), vec![])];
+        st.cache("wiki/entities/Orbit App.md", "as it was", vec![]).unwrap();
+        st.cache("wiki/entities/Orbit App.md", "as it is", vec![]).unwrap();
+        st.cache("wiki/entities/Acme.md", "a page since deleted", vec![]).unwrap();
+        // No pages at all (the vault couldn't be read): nothing goes.
+        assert_eq!(st.prune(&[]), 0);
+        assert_eq!(st.prune(&page("as it is")), 2);
+        assert!(st.cached("wiki/entities/Orbit App.md", "as it is").is_some());
+        assert!(st.cached("wiki/entities/Orbit App.md", "as it was").is_none());
+        assert_eq!(current(&st, &page("as it is")).1, Vec::<String>::new());
+        assert_eq!(st.prune(&page("as it is")), 0);
+    }
 
     #[test]
     fn a_fixed_contradiction_is_no_longer_open() {

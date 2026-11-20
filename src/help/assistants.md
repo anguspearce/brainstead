@@ -17,7 +17,7 @@ These change things straight away, and each is undoable with `⌘Z`. A toast in 
 - Save an [Ask](app:ask) chat to the vault.
 - Add or remove bookmarks, save a search, add files to Sources, and restore from the Trash.
 - Put areas and projects in order on [Projects](app:projects). The order is kept in Brainstead's settings, not in a note, so it isn't in Changes; moving it back undoes it.
-- Wiki health's safe fixes and its issue buttons (**Create**, **Not duplicates**, **Add them to index.md**, **Restore from Trash**, moving an unused image to the Trash), and Fix a name everywhere, with the same choices as its screen.
+- Wiki health's issue buttons (**Create**, **Not duplicates**, **Add them to index.md**, **Restore from Trash**, moving an unused image to the Trash).
 
 These happen at once with no `⌘Z`, and only when you ask:
 
@@ -38,6 +38,8 @@ These are made at once too. Each is listed in [Changes](app:review), where you c
 - Projects: create one, rename it, or set its status, area or **Done looks like**; rename an area on every project under it.
 - Pages: edit any page, make a note (from a template too) or a wiki page, rename a file, or move it to the Trash.
 - Images: add one to the vault's `images/` folder, as pasting it into a note does, for a note it writes to embed. It's never held, and **Revert** moves it to Brainstead's Trash.
+- Wiki health's safe fixes. Each page fixed is a change of its own, with `updated:` set to today. Putting a system note's header back is held for you to accept.
+- Fix a name everywhere, with the same choices as its screen. Each file is a change, and they're made, or held, together. The correction is remembered once the files are changed.
 - **Add the example notes**, Doc check's **Save as note** and **Start the register**, a saved Contradictions report, and Wiki health's **Reshape pages**, **Link to…** and **Link to it**.
 
 A quote that isn't in its source is flagged, once.

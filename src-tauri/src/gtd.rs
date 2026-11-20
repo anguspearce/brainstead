@@ -558,13 +558,40 @@ pub async fn todo_add_task(app: AppHandle, text: String) -> Res<Edited> {
     .await
 }
 
+/// The Inbox's Task for a task already on the To Do list (under Other): its line leaves Other and
+/// `text` is added at the top of To Do in one write, so a failure leaves the task where it was.
+/// ⌘Z undoes it.
+#[tauri::command]
+pub async fn inbox_task_to_todo(app: AppHandle, line: usize, line_text: String, text: String) -> Res<Edited> {
+    writing(move || {
+        writable(&app.state::<AppState>())?;
+        let svc = app.state::<VaultService>();
+        let root = root(&svc)?;
+        let t = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        if t.is_empty() {
+            return Err(invalid("Nothing to add.".into()));
+        }
+        let item = format!("- [ ] {t}");
+        let abs = root.join(inbox::TODO_LIST);
+        let (i, ch) = write::move_task_under_todo(&abs, line, &line_text, inbox::TODO_TASKS, &item)?;
+        let label = format!("Added “{}” to the To Do list", task_label(&item));
+        let undo = push_files(&app, &root, label, std::slice::from_ref(&ch));
+        written(&app, &[abs]);
+        Ok(Edited { line: i, line_text: item, undo: Some(undo) })
+    })
+    .await
+}
+
 /// The initiatives, for Move to…'s list: (name, path, status), A to Z.
 #[tauri::command]
-pub fn initiatives_list(app: AppHandle) -> Res<Vec<(String, String, String)>> {
-    let root = root(&app.state::<VaultService>())?;
-    let mut v: Vec<_> = brainstead_core::initiatives::all(&root).into_iter().map(|i| (i.name, i.path, i.status)).collect();
-    v.sort_by_key(|x| x.0.to_lowercase());
-    Ok(v)
+pub async fn initiatives_list(app: AppHandle) -> Res<Vec<(String, String, String)>> {
+    crate::blocking(move || {
+        let root = root(&app.state::<VaultService>())?;
+        let mut v: Vec<_> = brainstead_core::initiatives::all(&root).into_iter().map(|i| (i.name, i.path, i.status)).collect();
+        v.sort_by_key(|x| x.0.to_lowercase());
+        Ok(v)
+    })
+    .await
 }
 
 /// Moves an initiative's action, whole, to another initiative's Actions (D-20261118-26), as the
@@ -660,5 +687,27 @@ mod tests {
         let done = read_done(&file);
         assert!((0..16).all(|n| done.contains(&format!("sources/{n}.md"))), "{done:?}");
         assert!(!done.contains(&"sources/restored.md".to_string()));
+    }
+
+    /// The Inbox's Task for a To Do list task: the line leaves Other and lands in To Do in one
+    /// write. A line that has changed since is refused with the file untouched: the task is never
+    /// removed without being added.
+    #[test]
+    fn an_inbox_task_moves_to_to_do_in_one_write() {
+        let t = tempfile::tempdir().unwrap();
+        let p = t.path().join(inbox::TODO_LIST);
+        let src = "#### To Do\n\n- [ ] Ring Maya\n\n#### Other\n\n- [ ] Book the room\n- [ ] Pay Acme\n";
+        std::fs::write(&p, src).unwrap();
+        let stale = write::move_task_under_todo(&p, 6, "- [ ] Book a room", inbox::TODO_TASKS, "- [ ] Book the room 📅 2026-11-01");
+        assert!(matches!(stale, Err(write::WriteError::Stale(_))));
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), src);
+        let (i, ch) =
+            write::move_task_under_todo(&p, 6, "- [ ] Book the room", inbox::TODO_TASKS, "- [ ] Book the room 📅 2026-11-01").unwrap();
+        assert_eq!(i, 2);
+        assert_eq!(ch.before.as_deref(), Some(src));
+        assert_eq!(
+            std::fs::read_to_string(&p).unwrap(),
+            "#### To Do\n\n- [ ] Book the room 📅 2026-11-01\n- [ ] Ring Maya\n\n#### Other\n\n- [ ] Pay Acme\n"
+        );
     }
 }

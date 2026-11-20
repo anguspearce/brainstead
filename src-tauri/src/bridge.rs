@@ -27,9 +27,6 @@ pub struct Waiting {
     ready: Mutex<bool>,
 }
 
-/// How long the window may take over one request. Runs answer as soon as they've started.
-const WINDOW_TIMEOUT: Duration = Duration::from_secs(120);
-
 /// Starts the heartbeat and the request loop. Not in a screenshot demo.
 pub fn start(app: AppHandle) {
     let dir = wire::dir(&platform::data_dir());
@@ -122,7 +119,8 @@ fn handle(app: &AppHandle, req: &Request) -> Reply {
         waiting.senders.lock().unwrap().remove(&req.id);
         return Reply::err("Couldn't reach Brainstead's window.");
     }
-    let r = rx.recv_timeout(WINDOW_TIMEOUT).unwrap_or_else(|_| {
+    // Longer for an action that waits on a model (the list is the server's too: core's bridge).
+    let r = rx.recv_timeout(wire::window_timeout(&req.action, &req.args)).unwrap_or_else(|_| {
         Reply::err("Brainstead took too long to answer. The action may still have happened: check before trying again.")
     });
     waiting.senders.lock().unwrap().remove(&req.id);

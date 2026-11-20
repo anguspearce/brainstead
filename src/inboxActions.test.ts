@@ -22,6 +22,7 @@ import {
   inboxChoices,
   inboxItemKind,
   leadChoice,
+  makeTask,
   settleInboxItem,
   suggestKind,
 } from "./inboxActions";
@@ -102,7 +103,7 @@ describe("an initiative's action in the Inbox", () => {
     });
     invoke.mockClear();
     await settleInboxItem(action("me"), "- [ ] Book the room #context/calls");
-    expect(invoke.mock.calls.map((c) => c[0])).toEqual(["capture", "initiative_action_set"]);
+    expect(invoke.mock.calls.map((c) => c[0])).toEqual(["task_add", "initiative_action_set"]);
     expect(invoke.mock.calls[1][1]).toMatchObject({ change: { task: "[[Me. To Do List]]" } });
     invoke.mockClear();
     await settleInboxItem(action("me"), null);
@@ -191,5 +192,55 @@ describe("filing as reference", () => {
     expect(withReference("# Note\n\n\n", "two\nlines")).toBe("# Note\n\n\n- two lines\n");
     expect(withReference("# Note\r\n", "A fact")).toBe("# Note\r\n\r\n- A fact\r\n");
     expect(withReference("", "A fact")).toBe("- A fact\n");
+  });
+});
+
+describe("an Inbox item made a task", () => {
+  const task: InboxItem = {
+    ...action("me"),
+    kind: "task",
+    path: "Me. To Do List.md",
+    line: 6,
+    lineText: "- [ ] Book the room",
+    action: undefined,
+  };
+  const thought: InboxItem = { ...task, kind: "thought", path: "Me. Scratchpad.md", block: "## 2026-11-01 09:00\nBook the room" };
+  /** `invoke` with the item's removal failing, and the undo stack's top labelled `top`. */
+  const failing = (top: string) =>
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "inbox_remove_thought" || cmd === "initiative_action_set") throw { code: "stale", message: "It changed." };
+      if (cmd === "undo_peek") return { label: top };
+      return { line: 0, lineText: "", undo: "Added “Book the room” to the To Do list" };
+    });
+  const calls = () => invoke.mock.calls.map((c) => c[0]);
+
+  it("moves a To Do list task to To Do in one write", async () => {
+    invoke.mockClear();
+    await makeTask(task, "- [ ] Book the room");
+    expect(invoke.mock.calls).toEqual([["inbox_task_to_todo", { line: 6, lineText: "- [ ] Book the room", text: "Book the room" }]]);
+  });
+
+  it("takes the task back when the item can't then leave the Inbox, and says why", async () => {
+    invoke.mockClear();
+    failing("Added “Book the room” to the To Do list");
+    await expect(makeTask(thought, "Book the room")).rejects.toMatchObject({ message: "It changed." });
+    expect(calls()).toEqual(["todo_add_task", "inbox_remove_thought", "undo_peek", "undo"]);
+    invoke.mockClear();
+    await expect(settleInboxItem(thought, "- [ ] Book the room")).rejects.toMatchObject({ message: "It changed." });
+    expect(calls()).toEqual(["task_add", "inbox_remove_thought", "undo_peek", "undo"]);
+    invoke.mockClear();
+    await expect(settleInboxItem(action("me"), "- [ ] Book the room", "Project. Orbit App launch.md")).rejects.toMatchObject({
+      message: "It changed.",
+    });
+    expect(calls()).toEqual(["project_add_task", "initiative_action_set", "undo_peek", "undo"]);
+  });
+
+  it("leaves the undo alone when something else was done since", async () => {
+    invoke.mockClear();
+    failing("Renamed a note");
+    await expect(makeTask(thought, "Book the room")).rejects.toMatchObject({ message: "It changed." });
+    expect(calls()).toEqual(["todo_add_task", "inbox_remove_thought", "undo_peek"]);
+    invoke.mockReset();
+    invoke.mockImplementation(async () => ({ line: 0, lineText: "", undo: "Done" }));
   });
 });

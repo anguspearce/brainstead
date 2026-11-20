@@ -165,8 +165,9 @@ fn pull_chats(
         if !take {
             continue;
         }
-        let msgs = match fetch::chat_messages(client, sign_in, &conv.id) {
-            Ok(m) => m,
+        // The newest page only: a pull looks at what's recent.
+        let msgs = match fetch::chat_messages(client, sign_in, &conv.id, 1, |_, _| true) {
+            Ok((m, _)) => m,
             Err(e) => {
                 out.problems.push(format!("Couldn't read a chat: {e}"));
                 continue;
@@ -206,6 +207,9 @@ fn pull_chats(
                     st.mark_chat_day(&conv.id, &day, Some(&path));
                     // As the sync pass does, so messages that come later are topped up.
                     st.set_chat_day_count(&conv.id, &day, day_msgs.len());
+                    if let Some(t) = when {
+                        st.set_chat_day_last(&conv.id, &day, t.timestamp_millis());
+                    }
                     out.items.push(Item { kind: "chat".into(), title: label.clone(), date: day, path, already_had: false });
                 }
             }
@@ -272,6 +276,9 @@ fn pull_mail(
         let date = when.unwrap_or(m.received).with_timezone(&Local).format("%Y-%m-%d").to_string();
         if let Some(path) = deliver(data, vault, &cap, "outlook", when, out) {
             st.mark_thread(&m.conversation_id, &path, thread.len());
+            if let Some(t) = when {
+                st.set_thread_last(&m.conversation_id, t.timestamp_millis());
+            }
             out.items.push(Item { kind: "email".into(), title, date, path, already_had: false });
         }
     }

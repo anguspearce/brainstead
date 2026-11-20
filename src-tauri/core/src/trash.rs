@@ -69,19 +69,32 @@ fn new_id() -> String {
     format!("{b36}-{}", &crate::write::version(seed.as_bytes())[..6])
 }
 
-/// Renames, or copies and deletes across volumes, keeping the modification time.
+/// Renames, or copies and deletes across volumes, keeping the modification time. Never onto a
+/// file that's there already (`Exists`): the check is part of the move, so one that turns up at
+/// `to` meanwhile (another restore, sync) is never replaced.
 fn move_file(from: &Path, to: &Path) -> Result<()> {
-    match crate::write::rename(from, to) {
+    let exists = |e: std::io::Error| match e.kind() {
+        std::io::ErrorKind::AlreadyExists => {
+            WriteError::Exists(format!("There's already a file called “{}” there.", to.file_name().unwrap_or_default().to_string_lossy()))
+        }
+        _ => io(e),
+    };
+    match crate::write::rename_new(from, to) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::CrossesDevices => {
             let mtime = fs::metadata(from).and_then(|m| m.modified()).map_err(io)?;
-            fs::copy(from, to).map_err(io)?;
-            if let Ok(f) = fs::File::options().write(true).open(to) {
-                let _ = f.set_modified(mtime);
+            let mut src = fs::File::open(from).map_err(io)?;
+            let mut dst = fs::File::options().write(true).create_new(true).open(to).map_err(exists)?;
+            if let Err(e) = std::io::copy(&mut src, &mut dst) {
+                drop(dst);
+                let _ = fs::remove_file(to);
+                return Err(io(e));
             }
+            let _ = dst.set_modified(mtime);
+            drop((src, dst));
             fs::remove_file(from).map_err(io)
         }
-        Err(e) => Err(io(e)),
+        Err(e) => Err(exists(e)),
     }
 }
 
@@ -188,7 +201,10 @@ pub fn restore(root: &Path, id: &str, as_rel: Option<&str>) -> Result<String> {
         fs::create_dir_all(d).map_err(io)?;
     }
     let dir = entry_dir(root, id);
-    move_file(&dir.join(&m.basename), &target)?;
+    move_file(&dir.join(&m.basename), &target).map_err(|e| match e {
+        WriteError::Exists(_) => WriteError::Exists(format!("There's already a file at {to}. Restore it under another name.")),
+        e => e,
+    })?;
     if let Some(c) = crate::claims::path(&to).map(|c| root.join(c)).filter(|c| dir.join(CLAIMS).exists() && !c.exists()) {
         let _ = c.parent().map(fs::create_dir_all);
         let _ = move_file(&dir.join(CLAIMS), &c);
@@ -218,6 +234,22 @@ pub fn empty(root: &Path) -> Result<usize> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_move_never_replaces_a_file() {
+        let t = tempfile::tempdir().unwrap();
+        let (a, b) = (t.path().join("Idea. Pricing.md"), t.path().join("Idea. Launch.md"));
+        std::fs::write(&a, "pricing").unwrap();
+        std::fs::write(&b, "launch").unwrap();
+        // A file that turned up where the entry goes back to, after `restore` looked: kept.
+        assert!(matches!(move_file(&a, &b), Err(WriteError::Exists(_))));
+        assert_eq!(std::fs::read_to_string(&a).unwrap(), "pricing");
+        assert_eq!(std::fs::read_to_string(&b).unwrap(), "launch");
+        let e = move_to_trash(t.path(), "Idea. Pricing.md", "note").unwrap();
+        assert!(matches!(restore(t.path(), &e.id, Some("Idea. Launch.md")), Err(WriteError::Exists(_))));
+        assert_eq!(restore(t.path(), &e.id, None).unwrap(), "Idea. Pricing.md");
+        assert_eq!(std::fs::read_to_string(&a).unwrap(), "pricing");
+    }
+
     #[test]
     fn a_folder_goes_to_the_trash_and_back() {
         let t = tempfile::tempdir().unwrap();

@@ -583,6 +583,7 @@ dependencies = [
  "dunce",
  "flate2",
  "hex",
+ "libc",
  "notify",
  "rayon",
  "regex",
@@ -597,6 +598,7 @@ dependencies = [
  "unicode-normalization",
  "walkdir",
  "windows-sys 0.61.2",
+ "xattr",
  "zip 9.3.0",
 ]
 

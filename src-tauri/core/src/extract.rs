@@ -481,6 +481,23 @@ impl TextCache {
         std::fs::read(dir.join(format!("{sha}.json"))).ok().and_then(|b| serde_json::from_slice(&b).ok())
     }
 
+    /// Deletes the kept text of content no file has any more: `current` is the content hash of
+    /// every file in the vault now (the index's). Each change to a PDF, an Office file or an image
+    /// keeps its text under a new name, and the old would otherwise stay for good. Returns how
+    /// many went. Does nothing when `current` is empty (an index not built yet keeps the cache).
+    pub fn prune(dir: &Path, current: &std::collections::HashSet<String>) -> usize {
+        if current.is_empty() {
+            return 0;
+        }
+        let Ok(rd) = std::fs::read_dir(dir) else { return 0 };
+        rd.flatten()
+            .filter(|e| {
+                let name = e.file_name().to_string_lossy().into_owned();
+                name.strip_suffix(".json").is_some_and(|sha| !current.contains(sha)) && std::fs::remove_file(e.path()).is_ok()
+            })
+            .count()
+    }
+
     /// The file's text: kept, or read now and kept. A file that can't be read is kept as having
     /// no parts, so it isn't tried again until it changes. One there's no reader for here (an
     /// image, without `with_image`) isn't kept, so a cache that has the reader still reads it.
@@ -627,6 +644,29 @@ mod tests {
         assert_eq!(x.page(3), Some("Page three"));
         assert_eq!(x.page(2), None);
         assert_eq!(TextCache::lookup(&t.path().join("text"), "abc"), Some(x));
+    }
+
+    #[test]
+    fn the_cache_is_pruned_to_the_files_there_are() {
+        fn reader(_: &Path) -> Result<Vec<String>, String> {
+            Ok(vec!["Programme update".into()])
+        }
+        let t = tempfile::tempdir().unwrap();
+        let dir = t.path().join("text");
+        let p = t.path().join("Steerco.pdf");
+        std::fs::write(&p, b"%PDF").unwrap();
+        let c = TextCache::new(dir.clone(), Some(reader));
+        // The file as it was, and as it is now.
+        c.get(&p, "old");
+        c.get(&p, "new");
+        std::fs::write(dir.join("notes.txt"), "not the cache's").unwrap();
+        let current = |shas: &[&str]| shas.iter().map(|s| s.to_string()).collect::<std::collections::HashSet<_>>();
+        // No hashes at all (an index not built yet): nothing goes.
+        assert_eq!(TextCache::prune(&dir, &current(&[])), 0);
+        assert_eq!(TextCache::prune(&dir, &current(&["new", "other"])), 1);
+        assert!(TextCache::lookup(&dir, "old").is_none() && TextCache::lookup(&dir, "new").is_some());
+        assert!(dir.join("notes.txt").exists());
+        assert_eq!(TextCache::prune(&t.path().join("missing"), &current(&["new"])), 0);
     }
 
     #[test]

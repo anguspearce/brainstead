@@ -65,12 +65,21 @@ pub struct State {
     /// day that gains messages is topped up in place rather than frozen.
     #[serde(default)]
     pub chat_counts: BTreeMap<String, usize>,
+    /// When a chat day's last message came, as of its last write (`"<conv>\n<day>"` → milliseconds
+    /// since 1970). A pass can see only the end of a busy day, so the count alone can't say whether
+    /// it has grown; the last message can. Absent on older state (then the count decides).
+    #[serde(default)]
+    pub chat_last: BTreeMap<String, i64>,
     /// Email threads captured, by Outlook ConversationId → the thread source's path.
     #[serde(default)]
     pub thread_paths: BTreeMap<String, String>,
     /// How many messages a thread's source held when last written (ConversationId → count).
     #[serde(default)]
     pub thread_counts: BTreeMap<String, usize>,
+    /// When a thread's last message came, as of its last write (ConversationId → milliseconds since
+    /// 1970), so a thread that lost one message and gained another still reads as grown.
+    #[serde(default)]
+    pub thread_last: BTreeMap<String, i64>,
     /// Each thread's ConversationIndex header (hex) → its ConversationId, so a thread carried on
     /// under a new subject can link back to it (D-20261118-06).
     #[serde(default)]
@@ -137,7 +146,13 @@ impl State {
             days.sort();
             if days.len() > DAYS_CAP {
                 let drop = days.len() - DAYS_CAP;
-                days.drain(0..drop);
+                // What was kept about a dropped day goes with it, or those maps grow for ever.
+                for old in days.drain(0..drop).collect::<Vec<_>>() {
+                    let key = chat_key(conv, &old);
+                    self.chat_paths.remove(&key);
+                    self.chat_counts.remove(&key);
+                    self.chat_last.remove(&key);
+                }
             }
         }
         if let Some(p) = path {
@@ -166,6 +181,16 @@ impl State {
         self.chat_counts.insert(chat_key(conv, day), count);
     }
 
+    /// When this chat day's last message came, as of its last write (None on older state).
+    pub fn chat_day_last(&self, conv: &str, day: &str) -> Option<i64> {
+        self.chat_last.get(&chat_key(conv, day)).copied()
+    }
+
+    /// Records when a chat day's last message came (after writing or topping it up).
+    pub fn set_chat_day_last(&mut self, conv: &str, day: &str, last: i64) {
+        self.chat_last.insert(chat_key(conv, day), last);
+    }
+
     /// The thread source's path for an email conversation, when captured.
     pub fn thread_path(&self, conv_id: &str) -> Option<&str> {
         self.thread_paths.get(conv_id).map(String::as_str)
@@ -176,7 +201,16 @@ impl State {
         self.thread_counts.get(conv_id).copied().unwrap_or(0)
     }
 
-    /// Records a thread source's path and message count.
+    /// When the thread's last message came, as of its last write (None on older state).
+    pub fn thread_last(&self, conv_id: &str) -> Option<i64> {
+        self.thread_last.get(conv_id).copied()
+    }
+
+    /// Records when a thread's last message came (after writing or topping it up).
+    pub fn set_thread_last(&mut self, conv_id: &str, last: i64) {
+        self.thread_last.insert(conv_id.to_string(), last);
+    }
+
     pub fn attachment_path(&self, key: &str) -> Option<&str> {
         self.attachment_paths.get(key).map(String::as_str)
     }
@@ -185,6 +219,7 @@ impl State {
         self.attachment_paths.insert(key.to_string(), path.to_string());
     }
 
+    /// Records a thread source's path and message count.
     pub fn mark_thread(&mut self, conv_id: &str, path: &str, count: usize) {
         self.thread_paths.insert(conv_id.to_string(), path.to_string());
         self.thread_counts.insert(conv_id.to_string(), count);
@@ -280,6 +315,27 @@ mod tests {
         }
         assert_eq!(s.chats["c1"].len(), DAYS_CAP);
         assert!(!s.chat_day_done("c1", &days[0]));
+    }
+
+    #[test]
+    fn a_dropped_days_path_count_and_last_message_go_with_it() {
+        let mut s = State::default();
+        let first = chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+        let day = |i: i64| (first + chrono::Duration::days(i)).to_string();
+        for i in 0..=DAYS_CAP as i64 {
+            s.mark_chat_day("c1", &day(i), Some(&format!("sources/Teams. Chat. Maya - {}.md", day(i))));
+            s.set_chat_day_count("c1", &day(i), 3);
+            s.set_chat_day_last("c1", &day(i), i);
+        }
+        // Another chat's days are left alone.
+        s.mark_chat_day("c2", &day(0), Some("sources/Teams. Chat. Lena - 2026-01-01.md"));
+        s.set_chat_day_count("c2", &day(0), 1);
+        assert!(!s.chat_day_done("c1", &day(0)), "one over the cap: the oldest day dropped");
+        assert_eq!(s.chat_day_path("c1", &day(0)), None);
+        assert!(!s.chat_day_counted("c1", &day(0)));
+        assert_eq!(s.chat_day_last("c1", &day(0)), None);
+        assert_eq!((s.chat_paths.len(), s.chat_counts.len(), s.chat_last.len()), (DAYS_CAP + 1, DAYS_CAP + 1, DAYS_CAP));
+        assert!(s.chat_day_path("c1", &day(1)).is_some() && s.chat_day_path("c2", &day(0)).is_some());
     }
 
     #[test]

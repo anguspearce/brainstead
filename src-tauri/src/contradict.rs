@@ -219,6 +219,8 @@ fn run(app: &AppHandle, l: &mut Last, trigger: Option<&str>, group: &str) -> Res
     l.doing = "Finding clashes".into();
     save_last(app, l);
     let (claims, _) = c::current(&st, &pages);
+    // Every page's claims are cached under its text as it is now: the files of older texts go.
+    st.prune(&pages);
     let claims = c::with_kept(claims, &brainstead_core::claims::all(&root), &pages);
     l.claims = claims.len();
     let idx_pages: Vec<(String, Vec<String>)> = pages.iter().map(|(r, _, a)| (r.clone(), a.clone())).collect();

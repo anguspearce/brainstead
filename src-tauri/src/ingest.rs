@@ -88,6 +88,58 @@ pub async fn fixname_apply(app: AppHandle, req: Request, rows: Vec<Row>) -> Res<
     .await
 }
 
+/// One note an assistant's fix changes, as a change to submit to Changes.
+#[derive(Debug, Serialize)]
+pub struct NoteChange {
+    pub page: String,
+    pub instruction: brainstead_core::changes::Instruction,
+}
+
+/// Notes worked out as whole texts (page, before, after), as changes for Changes. `updated:` moves
+/// to `today` where the page has one, as the write through Changes moves its modification time
+/// (the screens' own fixes keep both).
+pub fn note_changes(planned: Vec<(String, String, String)>, today: &str) -> Vec<NoteChange> {
+    planned
+        .into_iter()
+        .map(|(page, before, after)| {
+            let after = proposals::bump_updated(&before, &after, today);
+            NoteChange { page, instruction: brainstead_core::changes::from_texts(Some(&before), &after) }
+        })
+        .collect()
+}
+
+/// An assistant's Fix name (the MCP's fix_name): what `fixname_apply` would write to the ticked
+/// notes, worked out and not written. The window submits them to Changes, so they're recorded,
+/// held by its rules and can be reverted, as every change an assistant makes is.
+#[tauri::command]
+pub async fn fixname_changes(app: AppHandle, req: Request, rows: Vec<Row>) -> Res<Vec<NoteChange>> {
+    blocking(move || {
+        let root = root(&app)?;
+        let today = chrono::Local::now().date_naive().to_string();
+        Ok(note_changes(fixname::planned(&root, &req, &rows)?, &today))
+    })
+    .await
+}
+
+/// Remembers the correction and nothing else, once an assistant's fix is made through Changes:
+/// the corrections file is the app's own, not a note. One undo. False when it's remembered already.
+#[tauri::command]
+pub async fn fixname_remember(app: AppHandle, req: Request) -> Res<bool> {
+    blocking(move || {
+        writable(&app.state::<AppState>())?;
+        let root = root(&app)?;
+        let subs = brainstead_core::names::path(&crate::platform::data_dir());
+        let changes = fixname::apply(&root, &subs, &req, &[])?;
+        let Some(c) = changes.first() else { return Ok(false) };
+        let label = format!("Remembered the correction “{}” → “{}”", req.wrong, req.right);
+        let file = FileUndo { path: brainstead_core::names::UNDO_NAME.to_string(), before: c.before.clone(), version: c.version.clone() };
+        app.state::<UndoStack>().push(UndoEntry::files(label, vec![file]));
+        written(&app, std::slice::from_ref(&c.path));
+        Ok(true)
+    })
+    .await
+}
+
 // ── The staged ingest ─────────────────────────────────────────────────────────
 
 use brainstead_core::claims::Kept;
@@ -483,17 +535,21 @@ pub fn resume_stale(app: &AppHandle) {
 #[tauri::command]
 /// `mode`: `actions` reads each source for its actions and decisions only; `auto` does that for a
 /// source a wiki page already cites and a full ingest for the rest; a full ingest when left out.
-pub fn ingest_start(app: AppHandle, paths: Vec<String>, unattended: Option<bool>, mode: Option<String>) -> Res<Vec<String>> {
-    let actions = match mode.as_deref() {
-        None | Some("full") => vec![false; paths.len()],
-        Some("actions") => vec![true; paths.len()],
-        Some("auto") => app
-            .state::<VaultService>()
-            .with_index(|ix, _| ix.ingested(&paths).map_err(|e| e.to_string()))
-            .map_err(|e| EditError::from(format!("Couldn't tell which sources the wiki has: {e}")))?,
-        Some(m) => return Err(EditError::from(format!("{m} isn't an ingest mode: full, actions or auto."))),
-    };
-    queue_ingests(&app, paths, &actions, unattended.unwrap_or(false).then_some("scheduled"), None)
+pub async fn ingest_start(app: AppHandle, paths: Vec<String>, unattended: Option<bool>, mode: Option<String>) -> Res<Vec<String>> {
+    // Off the main thread: `auto` asks the index, whose lock the watcher can hold for a while.
+    blocking(move || {
+        let actions = match mode.as_deref() {
+            None | Some("full") => vec![false; paths.len()],
+            Some("actions") => vec![true; paths.len()],
+            Some("auto") => app
+                .state::<VaultService>()
+                .with_index(|ix, _| ix.ingested(&paths).map_err(|e| e.to_string()))
+                .map_err(|e| EditError::from(format!("Couldn't tell which sources the wiki has: {e}")))?,
+            Some(m) => return Err(EditError::from(format!("{m} isn't an ingest mode: full, actions or auto."))),
+        };
+        queue_ingests(&app, paths, &actions, unattended.unwrap_or(false).then_some("scheduled"), None)
+    })
+    .await
 }
 
 /// [`ingest_start`] for a job: its trigger, and the group its changes go in.
@@ -1177,6 +1233,20 @@ fn meeting_steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_assistants_fix_is_worked_out_as_changes_not_written() {
+        let before = "---\nupdated: 2026-10-01\n---\n# Orbit App\n\nLenna leads it.\n\nAcme pays.\n";
+        let after = before.replace("Lenna", "Lena");
+        let out = note_changes(vec![("wiki/entities/Orbit App.md".into(), before.into(), after)], "2026-11-20");
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].page, "wiki/entities/Orbit App.md");
+        // Run on the page as it is, the instruction makes the fix, with `updated:` moved to today.
+        let made = out[0].instruction.text(&out[0].page, Some(before)).unwrap();
+        assert_eq!(made, before.replace("Lenna", "Lena").replace("2026-10-01", "2026-11-20"));
+        // Not the whole page: lines edited since elsewhere on it are kept.
+        assert!(matches!(out[0].instruction, brainstead_core::changes::Instruction::Replace { .. }));
+    }
 
     fn run(status: &str, started: &str, steps: &[&str]) -> Run {
         Run {

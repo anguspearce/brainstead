@@ -1845,13 +1845,28 @@ describe("MCP actions", () => {
       expect(calls.some(([c]) => c === "update_check")).toBe(true);
     });
 
+    /** fixname_changes answers: each ticked row's file, with the edit the fix makes in it. */
+    const instruction = { op: "replace", edits: [{ find: "Lenna", replace: "Lena" }] };
+    const fixed = (a: Record<string, unknown> | undefined) => (a!.rows as { file: string }[]).map((x) => ({ page: x.file, instruction }));
+
     it("fixes a name only in the files given, as ticking them does", async () => {
       const r = (file: string, action = "rewrite") => ({ file, layer: "note", inFilename: false, count: 1, lines: [], action });
       answers.fixname_plan = () => ({ rows: [r("Idea. A.md"), r("Idea. B.md"), r("Idea. C.md", "guarded")], rightPage: null });
-      answers.fixname_apply = () => "Fixed the name in 1 file.";
-      const args = { written_as: "Lenna", correct_spelling: "Lena", apply: true };
-      await run("fix_name", { ...args, files: ["Idea. B.md"] });
-      const rows = () => (calls.filter(([c]) => c === "fixname_apply").at(-1)![1]!.rows as { file: string }[]).map((x) => x.file);
+      // The app works out what the screen's Fix would write; the tool sends it through Changes.
+      answers.fixname_changes = fixed;
+      answers.changes_submit_many = outcomes(true);
+      answers.fixname_remember = () => true;
+      const origin = { kind: "chat", chat: "t1", trigger: "scheduled" };
+      const args = { written_as: "Lenna", correct_spelling: "Lena", apply: true, origin };
+      const out = await run("fix_name", { ...args, files: ["Idea. B.md"] });
+      // Recorded in Changes as this session's, not written by the screen's own command; the
+      // correction remembered once it's made.
+      expect(calls.some(([c]) => c === "fixname_apply")).toBe(false);
+      expect(submitted()).toMatchObject([
+        { page: "Idea. B.md", kind: "edit", title: "Fix the name “Lenna” → “Lena”", origin, instruction },
+      ]);
+      expect(out).toMatch(/^Fixed “Lenna” → “Lena” in 1 file, each a change in Changes.*The correction is remembered/);
+      const rows = () => (calls.filter(([c]) => c === "fixname_changes").at(-1)![1]!.rows as { file: string }[]).map((x) => x.file);
       expect(rows()).toEqual(["Idea. B.md"]);
       await run("fix_name", args);
       expect(rows()).toEqual(["Idea. A.md", "Idea. B.md"]);
@@ -1861,31 +1876,41 @@ describe("MCP actions", () => {
       // Spelt the same: nothing to fix, as the screen plans nothing.
       await expect(run("fix_name", { written_as: "Lena", correct_spelling: " Lena " })).rejects.toThrow(/spelt the same/);
       // Remember is on unless false, with Where it's from; Files to leave alone go to the plan.
-      const req = () => calls.filter(([c]) => c === "fixname_apply").at(-1)![1]!.req as Record<string, unknown>;
+      const req = () => calls.filter(([c]) => c === "fixname_changes").at(-1)![1]!.req as Record<string, unknown>;
       expect(req()).toMatchObject({ skipSubstitution: false, guards: [], note: "" });
       await run("fix_name", { ...args, files_to_leave_alone: ["Lenna Park", " "], where_its_from: "confirmed in a 1-1" });
       expect(calls.filter(([c]) => c === "fixname_plan").at(-1)![1]!.req).toMatchObject({ guards: ["Lenna Park"] });
       expect(req()).toMatchObject({ skipSubstitution: false, guards: ["Lenna Park"], note: "confirmed in a 1-1" });
+      const remembered = () => calls.filter(([c]) => c === "fixname_remember").length;
+      const before = remembered();
       await run("fix_name", { ...args, remember: false, where_its_from: "x" });
       expect(req()).toMatchObject({ skipSubstitution: true, note: "" });
+      expect(remembered()).toBe(before);
+      // Held (a template among them, or a check failed unattended): nothing made, nothing remembered.
+      answers.changes_submit_many = outcomes(false);
+      expect(await run("fix_name", args)).toMatch(/^Held for the user in Changes.*The correction isn't remembered while they wait\.$/);
+      expect(remembered()).toBe(before);
     });
 
     it("takes Ask about each file: the notes to rewrite start unticked, and the correction is ambiguous", async () => {
       const r = (file: string, action = "rewrite") => ({ file, layer: "note", inFilename: false, count: 1, lines: [], action });
       answers.fixname_plan = () => ({ rows: [r("Idea. A.md"), r("wiki/people/Lena.md", "alias")], rightPage: "wiki/people/Lena.md" });
-      answers.fixname_apply = () => "Fixed the name.";
+      answers.fixname_changes = fixed;
+      answers.changes_submit_many = outcomes(true);
       const args = { written_as: "Lenna", correct_spelling: "Lena", ask_about_each_file: true };
       const out = (await run("fix_name", args)) as string;
       expect(calls.find(([c]) => c === "fixname_plan")![1]!.req).toMatchObject({ ambiguous: true });
       expect(out).toMatch(/would change 1 of the 2 files it's in \(1 more to tick one by one: Ask about each file\)/);
       expect(out).toContain("- Idea. A.md: 1 line · Rewrite · unticked: read it, then give it in files");
       // Applied without files: only what's ticked to start with, the alias; with files, those too.
-      const rows = () => (calls.filter(([c]) => c === "fixname_apply").at(-1)![1]!.rows as { file: string }[]).map((x) => x.file);
+      const rows = () => (calls.filter(([c]) => c === "fixname_changes").at(-1)![1]!.rows as { file: string }[]).map((x) => x.file);
       await run("fix_name", { ...args, apply: true });
       expect(rows()).toEqual(["wiki/people/Lena.md"]);
-      expect(calls.filter(([c]) => c === "fixname_apply").at(-1)![1]!.req).toMatchObject({ ambiguous: true });
+      expect(calls.filter(([c]) => c === "fixname_changes").at(-1)![1]!.req).toMatchObject({ ambiguous: true });
       await run("fix_name", { ...args, apply: true, files: ["Idea. A.md"] });
       expect(rows()).toEqual(["Idea. A.md"]);
+      // The alias is its own change, named for what it does.
+      expect(submitted().map((c) => c.title)).toEqual(["Add “Lenna” as an alias of Lena", "Fix the name “Lenna” → “Lena”"]);
     });
 
     it("previews a name fix as the screen lists it, counting only what will change", async () => {
@@ -1909,7 +1934,81 @@ describe("MCP actions", () => {
       expect(await run("fix_name", { written_as: "Lenna", correct_spelling: "Lena" })).toMatch(
         /would change 0 of the 1 file.*\nNone of them would change/s,
       );
-      expect(calls.some(([c]) => c === "fixname_apply")).toBe(false);
+      expect(calls.some(([c]) => c === "fixname_apply" || c === "fixname_changes")).toBe(false);
+    });
+
+    it("makes Wiki health's safe fixes through Changes, one change a page, a header put back held", async () => {
+      const item = (text: string, page: string) => ({ text, page, safe: true });
+      answers.health_report = () => ({
+        report: {
+          checks: [
+            {
+              id: "stale-dates",
+              title: "Stale dates",
+              items: [item("wiki/entities/Orbit App.md  (updated)", "wiki/entities/Orbit App.md")],
+            },
+            { id: "system-callouts", title: "System notes", items: [item("Me. To Do List.md", "Me. To Do List.md")] },
+          ],
+        },
+        history: [],
+      });
+      const set = { op: "properties", set: [["updated", "2026-11-20"]] };
+      const why = "It puts back the note's system-note header, which other parts of Brainstead rely on.";
+      answers.health_fix_changes = () => [
+        {
+          page: "Me. To Do List.md",
+          title: "Wiki health: system-note header put back",
+          instruction: { op: "page", content: "x" },
+          hold: why,
+        },
+        { page: "wiki/entities/Orbit App.md", title: "Wiki health: updated date", instruction: set, hold: null },
+      ];
+      answers.changes_submit_many = (a) => {
+        const [c] = a!.changes as { page: string; hold: string | null }[];
+        return [{ id: "c1", applied: !c.hold, page: c.page, flags: c.hold ? [c.hold] : [], message: "Changed it." }];
+      };
+      const origin = { kind: "chat", chat: "t1" };
+      const out = (await run("health.fix", { origin })) as string;
+      // Not the screen's own write: each page its own change, so the held one doesn't hold the other.
+      expect(calls.some(([c]) => c === "health_fix")).toBe(false);
+      expect(calls.filter(([c]) => c === "changes_submit_many").map(([, a]) => (a!.changes as unknown[]).length)).toEqual([1, 1]);
+      expect(submitted()).toMatchObject([
+        { page: "Me. To Do List.md", kind: "edit", hold: why, origin },
+        { page: "wiki/entities/Orbit App.md", kind: "edit", instruction: set, hold: null, origin },
+      ]);
+      expect(out).toBe(
+        `Fixed 1 page, each a change in Changes, where the user can revert it. Held for the user in Changes, to accept there: Me. To Do List (${why}).`,
+      );
+      // Only the items named, by their text; one that can't be made is said, the rest still made.
+      calls.length = 0;
+      answers.health_fix_changes = (a) =>
+        (a!.fixes as { page: string }[]).map((f) => ({ page: f.page, title: "Wiki health: updated date", instruction: set, hold: null }));
+      answers.changes_submit_many = () => Promise.reject({ message: "Orbit App changed since it was read." });
+      await expect(run("health.fix", { items: ["wiki/entities/Orbit App.md  (updated)"] })).rejects.toThrow(
+        /None fixed\. Couldn't: Orbit App: Orbit App changed since it was read\./,
+      );
+      expect(calls.find(([c]) => c === "health_fix_changes")![1]!.fixes).toMatchObject([
+        { check: "stale-dates", page: "wiki/entities/Orbit App.md" },
+      ]);
+    });
+
+    it("sends changes that belong together as one batch", async () => {
+      const change = (page: string) => ({
+        page,
+        kind: "edit",
+        title: "Action moved",
+        instruction: { op: "page", content: "x" },
+        origin: { kind: "chat" },
+      });
+      const changes = [change("wiki/initiatives/Orbit launch.md"), change("wiki/initiatives/Acme rollout.md")];
+      answers.changes_submit_many = outcomes(true);
+      expect(await run("change.submit_many", { changes })).toBe(
+        "Changed wiki/initiatives/Orbit launch.md. Revert it in Changes. Changed wiki/initiatives/Acme rollout.md. Revert it in Changes.",
+      );
+      expect(calls.filter(([c]) => c === "changes_submit_many").map(([, a]) => a!.changes)).toEqual([changes]);
+      answers.changes_submit_many = outcomes(false);
+      expect(await run("change.submit_many", { changes })).toMatch(/^Held for the user in Changes/);
+      await expect(run("change.submit_many", { changes: [] })).rejects.toThrow(/No change given/);
     });
 
     it("opens Meeting notes, Draft a reply and Doc check on their file", async () => {

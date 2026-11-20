@@ -151,15 +151,42 @@ fn path_key(p: &str) -> String {
     crate::links::nfc(p).to_lowercase()
 }
 
-/// One line with its links to `from` pointed at `to`. `resolves(target)` says whether a link
-/// target goes to `from` under the index's rules.
-pub fn rewrite_line(line: &str, from: &str, to: &str, resolves: &dyn Fn(&str) -> bool) -> String {
+/// A path with its `.` and `..` parts worked out.
+fn without_dots(p: &str) -> String {
+    let mut out: Vec<&str> = Vec::new();
+    for part in p.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => _ = out.pop(),
+            _ => out.push(part),
+        }
+    }
+    out.join("/")
+}
+
+/// Whether a link with a folder, written in `linker`, names `from` by part of its path: the end
+/// of it from a folder on (`entities/Orbit App` for `wiki/entities/Orbit App.md`), which the
+/// index resolves by name (`resolves`), or the way there from the linking file's own folder.
+fn names_in_part(target: &str, from: &str, linker: &str, resolves: &dyn Fn(&str) -> bool) -> bool {
+    let (t, f) = (path_key(target), path_key(from));
+    if f.strip_suffix(&t).is_some_and(|head| head.ends_with('/')) && resolves(target) {
+        return true;
+    }
+    let dir = linker.rsplit_once('/').map_or("", |(d, _)| d);
+    without_dots(&path_key(&format!("{dir}/{target}"))) == f
+}
+
+/// One line of `linker` with its links to `from` pointed at `to`. `resolves(target)` says whether
+/// a link target goes to `from` under the index's rules.
+pub fn rewrite_line(line: &str, linker: &str, from: &str, to: &str, resolves: &dyn Fn(&str) -> bool) -> String {
     if !line.contains("[[") && !line.contains("\\[\\[") {
         return line.to_string();
     }
     let old_key = key(from);
     let new_stem = crate::filename::stem(to);
     let new_path = to.rsplit_once('/').map(|(d, _)| format!("{d}/{new_stem}"));
+    let folder = |p: &str| p.rsplit_once('/').map(|(d, _)| d.to_string());
+    let same_folder = folder(from) == folder(to);
     let blanked = blank_code_spans(line);
     let mut out = String::new();
     let mut last = 0;
@@ -173,15 +200,21 @@ pub fn rewrite_line(line: &str, from: &str, to: &str, resolves: &dyn Fn(&str) ->
         if target.is_empty() || key(target) != old_key {
             continue;
         }
-        // A link with a folder names one file: it must be this one. A bare one goes wherever the
-        // index sends that name.
+        // A link with a folder names one file: it must be this one, by its whole path or part of
+        // it. A bare one goes wherever the index sends that name.
         let qualified = target.contains(['/', '\\']);
-        let ok = if qualified { path_key(target) == path_key(from) } else { resolves(target) };
+        let whole = qualified && path_key(target) == path_key(from);
+        let ok = if qualified { whole || names_in_part(target, from, linker, resolves) } else { resolves(target) };
         if !ok {
             continue;
         }
         let lead = dest.len() - dest.trim_start().len();
-        let stem = if qualified { new_path.clone().unwrap_or_else(|| new_stem.to_string()) } else { new_stem.to_string() };
+        let stem = match target.rfind(['/', '\\']) {
+            None => new_stem.to_string(),
+            // Part of the path, and the note stays in its folder: the folder as the link spells it.
+            Some(i) if !whole && same_folder => format!("{}{new_stem}", &target[..=i]),
+            Some(_) => new_path.clone().unwrap_or_else(|| new_stem.to_string()),
+        };
         let at = inner.start() + lead;
         out.push_str(&line[last..at]);
         out.push_str(&stem);
@@ -196,7 +229,7 @@ pub fn rewrite_line(line: &str, from: &str, to: &str, resolves: &dyn Fn(&str) ->
 fn changes_in(path: &str, text: &str, from: &str, to: &str, resolves: &dyn Fn(&str) -> bool) -> Vec<LinkChange> {
     let mut out = Vec::new();
     for l in lines(text, 0).iter().filter(|l| !l.code) {
-        let after = rewrite_line(l.text, from, to, resolves);
+        let after = rewrite_line(l.text, path, from, to, resolves);
         if after != l.text {
             out.push(LinkChange { path: path.to_string(), line: l.no, before: l.text.to_string(), after });
         }
@@ -217,8 +250,11 @@ pub fn plan(root: &Path, from: &str, to: &str, linkers: &[String], resolves: &dy
     if !src.is_file() {
         return Err(WriteError::NotFound(format!("{from} isn't there any more.")));
     }
+    // A change of case finds the note itself there on a disk that ignores case. On one that
+    // doesn't, a file under the other spelling is another note.
     let case_only = from.to_lowercase() == to.to_lowercase();
-    if !case_only && root.join(to).exists() {
+    let dst = root.join(to);
+    if dst.exists() && !(case_only && crate::write::same_file(&src, &dst)) {
         return Err(WriteError::Exists(format!("There's already a file at {to}.")));
     }
     check_conflict_copies(&src)?;
@@ -276,8 +312,9 @@ pub fn commit(root: &Path, shown: &RenamePlan, linkers: &[String], resolves: &dy
         let after = join_lines(&ls, &eol, trailing);
         writes.push((abs, text, after));
     }
-    if !case_only && dst.exists() {
-        return Err(WriteError::Exists(format!("There's already a file at {}.", now.to)));
+    let exists = || WriteError::Exists(format!("There's already a file at {}.", now.to));
+    if dst.exists() && !(case_only && crate::write::same_file(&src, &dst)) {
+        return Err(exists());
     }
     if let Some(d) = dst.parent() {
         fs::create_dir_all(d).map_err(io)?;
@@ -324,17 +361,21 @@ pub fn commit(root: &Path, shown: &RenamePlan, linkers: &[String], resolves: &dy
         // A change of case only: on a case-insensitive disk a direct rename does nothing. If the
         // second step fails the note goes back to its name, not left under the hidden one.
         let tmp = src.with_file_name(format!(".rename-{}", std::process::id()));
-        crate::write::rename(&src, &tmp).and_then(|_| {
-            crate::write::rename(&tmp, &dst).inspect_err(|_| {
-                let _ = crate::write::rename(&tmp, &src);
+        crate::write::rename_new(&src, &tmp).and_then(|_| {
+            crate::write::rename_new(&tmp, &dst).inspect_err(|_| {
+                let _ = crate::write::rename_new(&tmp, &src);
             })
         })
     } else {
-        crate::write::rename(&src, &dst)
+        crate::write::rename_new(&src, &dst)
     };
-    // The note itself may have been rewritten (links to its own headings); a failed move leaves
-    // it at `src`, where `undo` puts it back.
-    moved.map_err(|e| undo(&written, &claims_written, io(e)))
+    // The move never replaces a file: one that turned up at the new name since the check (another
+    // rename, sync) stays, and this rename is refused. The note itself may have been rewritten
+    // (links to its own headings); a failed move leaves it at `src`, where `undo` puts it back.
+    moved.map_err(|e| {
+        let e = if e.kind() == std::io::ErrorKind::AlreadyExists { exists() } else { io(e) };
+        undo(&written, &claims_written, e)
+    })
 }
 
 #[cfg(test)]
@@ -384,7 +425,7 @@ mod tests {
 
     #[test]
     fn rewrites_link_shapes() {
-        let r = |l: &str| rewrite_line(l, "wiki/entities/Orbit App.md", "wiki/entities/Orbit Platform.md", &always);
+        let r = |l: &str| rewrite_line(l, "Notes.md", "wiki/entities/Orbit App.md", "wiki/entities/Orbit Platform.md", &always);
         assert_eq!(
             r("See [[Orbit App]], [[orbit app|the app]], [[Orbit App#Current state]], [[Orbit App#^q3]], ![[Orbit App]]."),
             "See [[Orbit Platform]], [[Orbit Platform|the app]], [[Orbit Platform#Current state]], [[Orbit Platform#^q3]], ![[Orbit Platform]]."
@@ -397,8 +438,32 @@ mod tests {
         assert_eq!(r("\\[\\[Orbit App\\]\\]"), "\\[\\[Orbit Platform\\]\\]");
         assert_eq!(r("`[[Orbit App]]` [[Orbit Apps]] [[OA]]"), "`[[Orbit App]]` [[Orbit Apps]] [[OA]]");
         // Owned by another note of the same name: left alone.
-        assert_eq!(rewrite_line("[[Orbit App]]", "x/Orbit App.md", "x/New.md", &|_| false), "[[Orbit App]]");
+        assert_eq!(rewrite_line("[[Orbit App]]", "Notes.md", "x/Orbit App.md", "x/New.md", &|_| false), "[[Orbit App]]");
         assert_eq!(r("[[other/Orbit App]]"), "[[other/Orbit App]]");
+    }
+
+    #[test]
+    fn rewrites_links_that_spell_part_of_the_path() {
+        let (from, to) = ("wiki/entities/Orbit App.md", "wiki/entities/Orbit Platform.md");
+        let r = |linker: &str, l: &str| rewrite_line(l, linker, from, to, &always);
+        // The end of the path from a folder on, which the index resolves by name.
+        assert_eq!(r("wiki/index.md", "- [[entities/Orbit App]]"), "- [[entities/Orbit Platform]]");
+        assert_eq!(r("Notes.md", "[[Entities\\Orbit App.md|the app]]"), "[[Entities\\Orbit Platform.md|the app]]");
+        // Not a whole folder name, or a folder the note isn't in: another file.
+        assert_eq!(r("Notes.md", "[[ties/Orbit App]] [[concepts/Orbit App]]"), "[[ties/Orbit App]] [[concepts/Orbit App]]");
+        // By name the index sends it elsewhere, so the part of a path isn't enough.
+        assert_eq!(rewrite_line("[[entities/Orbit App]]", "Notes.md", from, to, &|_| false), "[[entities/Orbit App]]");
+        // The way there from the linking file's own folder, whatever the index makes of the name.
+        let rel = |linker: &str, l: &str| rewrite_line(l, linker, from, to, &|_| false);
+        assert_eq!(rel("wiki/index.md", "[[entities/Orbit App#Current state]]"), "[[entities/Orbit Platform#Current state]]");
+        assert_eq!(rel("wiki/concepts/Pricing.md", "[[../entities/Orbit App]]"), "[[../entities/Orbit Platform]]");
+        assert_eq!(rel("wiki/entities/Acme.md", "[[./Orbit App]]"), "[[./Orbit Platform]]");
+        assert_eq!(rel("wiki/concepts/Pricing.md", "[[entities/Orbit App]]"), "[[entities/Orbit App]]");
+        // Moved to another folder: the whole new path, as the link's own folder no longer leads there.
+        assert_eq!(
+            rewrite_line("[[entities/Orbit App]]", "wiki/index.md", from, "wiki/concepts/Orbit App.md", &always),
+            "[[wiki/concepts/Orbit App]]"
+        );
     }
 
     fn copy_dir(from: &Path, to: &Path) {
@@ -490,7 +555,7 @@ mod tests {
         assert_eq!(note_ext("会議.md"), ".md");
         assert_eq!(note_ext("🚀🚀"), "");
         assert_eq!(path_key("ノート/会議.MD"), "ノート/会議");
-        let r = rewrite_line("[[x/会議]] [[x/🚀]]", "x/会議.md", "x/新.md", &always);
+        let r = rewrite_line("[[x/会議]] [[x/🚀]]", "Notes.md", "x/会議.md", "x/新.md", &always);
         assert_eq!(r, "[[x/新]] [[x/🚀]]");
     }
 
@@ -583,5 +648,35 @@ mod tests {
         let p = plan(root, "Idea. Images.md", "Idea. images.md", &none, &always).unwrap();
         commit(root, &p, &none, &always).unwrap();
         assert!(fs::read_dir(root).unwrap().flatten().any(|e| e.file_name() == "Idea. images.md"));
+    }
+
+    #[test]
+    fn a_change_of_case_never_replaces_another_file() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path();
+        let none: Vec<String> = vec![];
+        fs::write(root.join("idea.md"), "Maya's\n").unwrap();
+        // A note left halfway through a change of case by a crash is in the way: it stays, and so
+        // does the note being renamed.
+        let left = root.join(format!(".rename-{}", std::process::id()));
+        fs::write(&left, "Lena's\n").unwrap();
+        let p = plan(root, "idea.md", "Idea.md", &none, &always).unwrap();
+        assert!(matches!(commit(root, &p, &none, &always), Err(WriteError::Exists(_))));
+        assert_eq!(fs::read_to_string(&left).unwrap(), "Lena's\n");
+        assert_eq!(fs::read_to_string(root.join("idea.md")).unwrap(), "Maya's\n");
+        fs::remove_file(&left).unwrap();
+        if root.join("IDEA.MD").exists() {
+            // A disk that ignores case: the file found at the new name is the note itself.
+            commit(root, &p, &none, &always).unwrap();
+            assert!(fs::read_dir(root).unwrap().flatten().any(|e| e.file_name() == "Idea.md"));
+            assert_eq!(fs::read_to_string(root.join("Idea.md")).unwrap(), "Maya's\n");
+        } else {
+            // One that doesn't: `Idea.md` is another note, and is never replaced.
+            fs::write(root.join("Idea.md"), "Lena's\n").unwrap();
+            assert!(matches!(plan(root, "idea.md", "Idea.md", &none, &always), Err(WriteError::Exists(_))));
+            assert!(matches!(commit(root, &p, &none, &always), Err(WriteError::Exists(_))));
+            assert_eq!(fs::read_to_string(root.join("Idea.md")).unwrap(), "Lena's\n");
+            assert_eq!(fs::read_to_string(root.join("idea.md")).unwrap(), "Maya's\n");
+        }
     }
 }

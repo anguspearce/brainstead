@@ -230,8 +230,9 @@ pub fn stop(app: &AppHandle) {
 }
 
 #[tauri::command]
-pub fn current_state_start(app: AppHandle, pages: Option<Vec<String>>, limit: Option<usize>, unattended: Option<bool>) -> Res<bool> {
-    start(&app, pages, limit, unattended.unwrap_or(false))
+pub async fn current_state_start(app: AppHandle, pages: Option<Vec<String>>, limit: Option<usize>, unattended: Option<bool>) -> Res<bool> {
+    // Off the main thread: finding the pages that want one reads every shaped page.
+    crate::blocking(move || start(&app, pages, limit, unattended.unwrap_or(false))).await
 }
 
 #[tauri::command]

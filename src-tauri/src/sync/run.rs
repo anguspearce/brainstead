@@ -225,7 +225,21 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
         if !take || p.s.sync_ignore_chats.contains(&conv.id) {
             continue;
         }
-        let msgs = match fetch::chat_messages(&p.client, &p.sign_in, &conv.id) {
+        // The first time a chat is seen, skip days older than the first-sync cutoff (and mark them
+        // done, so they're never pulled later) — that's where the flood of old history would come
+        // from. A chat already being synced only gets genuinely new days anyway.
+        let first_seen = !st.chats.contains_key(&conv.id);
+        // Read back until the oldest day read needs nothing written: a busy day runs past one page.
+        let most = if p.from.is_some() { fetch::BACKFILL_CHAT_PAGES } else { fetch::CHAT_PAGES };
+        let enough = |msgs: &[fetch::ChatMessage], pages: usize| {
+            let Some(first) = msgs.first() else { return true };
+            let day = fetch::local_day(first.time);
+            let of_day = msgs.iter().take_while(|m| fetch::local_day(m.time) == day);
+            let (count, last) = of_day.fold((0, 0), |(n, _), m| (n + 1, m.time.timestamp_millis()));
+            let d = Day { conv: &conv.id, day: &day, count, last, partial: false, first_seen };
+            read_enough(st, p.from.as_deref(), cutoff, &d, pages)
+        };
+        let (msgs, more) = match fetch::chat_messages(&p.client, &p.sign_in, &conv.id, most, enough) {
             Ok(m) => m,
             Err(e) => {
                 r.problems.push(format!("Couldn't read a chat: {e}"));
@@ -235,25 +249,23 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
         // The chat's partner across the whole thread, so a day where only the user wrote still names
         // the other person (a 1:1 with no topic).
         let partner = fetch::chat_display_name(&msgs, &me);
-        // The first time a chat is seen, skip days older than the first-sync cutoff (and mark them
-        // done, so they're never pulled later) — that's where the flood of old history would come
-        // from. A chat already being synced only gets genuinely new days anyway.
-        let first_seen = !st.chats.contains_key(&conv.id);
+        // With older messages left unread, the oldest day read may be only its end.
+        let cut = more.then(|| msgs.first().map(|m| fetch::local_day(m.time))).flatten();
         for (day, day_msgs) in fetch::by_local_day(&msgs) {
             let count = day_msgs.len();
             let when = day_msgs.last().map(|m| m.time);
-            // A back-fill writes a day the first sync skipped (marked done, but no file).
-            let skipped = st.chat_day_path(&conv.id, &day).is_none();
-            let refill = p.from.as_deref().is_some_and(|f| day.as_str() >= f) && skipped;
-            if st.chat_day_done(&conv.id, &day) && !refill {
-                // Already written: top it up in place if it has gained messages (D-20261025-07). Days
-                // written before top-up tracking adopt their current count once, without a rewrite.
-                if !st.chat_day_counted(&conv.id, &day) {
+            let last = when.map_or(0, |t| t.timestamp_millis());
+            let d = Day { conv: &conv.id, day: &day, count, last, partial: cut.as_deref() == Some(day.as_str()), first_seen };
+            match day_plan(st, p.from.as_deref(), cutoff, &d) {
+                DayPlan::Leave => {}
+                DayPlan::Adopt => {
                     st.set_chat_day_count(&conv.id, &day, count);
-                } else if count > st.chat_day_count(&conv.id, &day) {
-                    // Top up the day's source in place. One that's gone (trashed, the Trash emptied,
-                    // deleted elsewhere) starts a fresh source for the day, so the new messages reach
-                    // the Inbox rather than being lost (D-20261026-05).
+                    st.set_chat_day_last(&conv.id, &day, last);
+                }
+                // Top up the day's source in place (D-20261025-07). One that's gone (trashed, the
+                // Trash emptied, deleted elsewhere) starts a fresh source for the day, so the new
+                // messages reach the Inbox rather than being lost (D-20261026-05).
+                DayPlan::TopUp => {
                     if let Some(path) = st.chat_day_path(&conv.id, &day).map(str::to_string) {
                         if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &p.sign_in.origin, &day, &partner) {
                             let written = if p.vault.join(&path).is_file() {
@@ -264,29 +276,105 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
                             if let Some(path) = written {
                                 st.mark_chat_day(&conv.id, &day, Some(&path));
                                 st.set_chat_day_count(&conv.id, &day, count);
+                                st.set_chat_day_last(&conv.id, &day, last);
                                 r.chats += 1;
                             }
                         }
                     }
                 }
-                continue;
-            }
-            // First time for this day: on a chat's first sync, skip (and mark) days older than the cap;
-            // a back-fill leaves days before its first day as they are.
-            if (first_seen || p.from.is_some()) && cutoff.is_some_and(|c| day.as_str() < c) {
-                if first_seen {
-                    st.mark_chat_day(&conv.id, &day, None);
+                // On a chat's first sync, skip (and mark) days older than the cap; a back-fill leaves
+                // days before its first day as they are.
+                DayPlan::Skip => {
+                    if first_seen {
+                        st.mark_chat_day(&conv.id, &day, None);
+                    }
                 }
-                continue;
-            }
-            if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &p.sign_in.origin, &day, &partner) {
-                if let Some(path) = deliver(p.data, p.vault, &cap, "teams", when, r) {
-                    st.mark_chat_day(&conv.id, &day, Some(&path));
-                    st.set_chat_day_count(&conv.id, &day, count);
-                    r.chats += 1;
+                DayPlan::Write => {
+                    if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &p.sign_in.origin, &day, &partner) {
+                        if let Some(path) = deliver(p.data, p.vault, &cap, "teams", when, r) {
+                            st.mark_chat_day(&conv.id, &day, Some(&path));
+                            st.set_chat_day_count(&conv.id, &day, count);
+                            st.set_chat_day_last(&conv.id, &day, last);
+                            r.chats += 1;
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+/// One local day of a chat, as a pass read it.
+struct Day<'a> {
+    conv: &'a str,
+    day: &'a str,
+    /// How many of its messages were read, and when the last came (milliseconds since 1970).
+    count: usize,
+    last: i64,
+    /// Older messages were left unread and this is the oldest day read, so it may be only its end.
+    partial: bool,
+    /// The chat has never been synced before.
+    first_seen: bool,
+}
+
+/// What a pass does with one day of a chat.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DayPlan {
+    Leave,
+    /// Written before its count or last message was kept: they're noted now, without a rewrite.
+    Adopt,
+    /// Written, and it has gained messages: its source is rewritten in place.
+    TopUp,
+    /// Older than the first-sync cutoff, or than a back-fill's first day: not written.
+    Skip,
+    /// Not written yet: it becomes a source.
+    Write,
+}
+
+/// `from` is a back-fill's first day; `cutoff` is that, or else the first-sync cutoff.
+fn day_plan(st: &state::State, from: Option<&str>, cutoff: Option<&str>, d: &Day) -> DayPlan {
+    // A back-fill writes a day the first sync skipped (marked done, but no file).
+    let skipped = st.chat_day_path(d.conv, d.day).is_none();
+    let refill = from.is_some_and(|f| d.day >= f) && skipped;
+    if st.chat_day_done(d.conv, d.day) && !refill {
+        // Never written (skipped, or from before paths were kept): there's no source to top up.
+        if skipped {
+            return DayPlan::Leave;
+        }
+        // By its last message where that was kept: the count of a day cut short says nothing.
+        let grown = match st.chat_day_last(d.conv, d.day) {
+            Some(was) => d.last > was,
+            None => st.chat_day_counted(d.conv, d.day) && d.count > st.chat_day_count(d.conv, d.day),
+        };
+        return match (grown, d.partial) {
+            // Only the day's end was read: rewriting from it would drop the messages before.
+            (_, true) => DayPlan::Leave,
+            (true, false) => DayPlan::TopUp,
+            (false, false) if st.chat_day_last(d.conv, d.day).is_none() => DayPlan::Adopt,
+            (false, false) => DayPlan::Leave,
+        };
+    }
+    if (d.first_seen || from.is_some()) && cutoff.is_some_and(|c| d.day < c) {
+        return DayPlan::Skip;
+    }
+    DayPlan::Write
+}
+
+/// Whether a chat has been read far enough back: `d` is the oldest day read so far (taken as whole)
+/// and `pages` how many pages that took.
+fn read_enough(st: &state::State, from: Option<&str>, cutoff: Option<&str>, d: &Day, pages: usize) -> bool {
+    // A back-fill reads back to its first day.
+    if let Some(f) = from {
+        return d.day < f;
+    }
+    match day_plan(st, from, cutoff, d) {
+        DayPlan::Leave | DayPlan::Skip => true,
+        DayPlan::TopUp => false,
+        // A chat seen for the first time with no first-sync limit takes its newest page, as before.
+        DayPlan::Write => d.first_seen && cutoff.is_none(),
+        // Written before last messages were kept, and the first page holds as many as were written:
+        // the day may have filled a page and lost its start to a rewrite. One more page settles it.
+        DayPlan::Adopt => !(pages == 1 && st.chat_day_counted(d.conv, d.day) && d.count >= st.chat_day_count(d.conv, d.day)),
     }
 }
 
@@ -398,6 +486,7 @@ fn sync_thread(p: &Pass, conversation_id: &str, st: &mut state::State, r: &mut R
     };
     let count = msgs.len();
     let when = msgs.last().map(|m| m.received);
+    let last = when.map_or(0, |t| t.timestamp_millis());
     // The thread's attachments are gathered only when its source is about to be written, so an
     // unchanged thread costs no attachment calls.
     let capture = |st: &mut state::State, r: &mut Report| {
@@ -431,6 +520,7 @@ fn sync_thread(p: &Pass, conversation_id: &str, st: &mut state::State, r: &mut R
             if let Some(cap) = capture(st, r) {
                 if let Some(path) = deliver(p.data, p.vault, &cap, "outlook", when, r) {
                     st.mark_thread(conversation_id, &path, count);
+                    st.set_thread_last(conversation_id, last);
                     r.mail += 1;
                 }
             }
@@ -438,7 +528,7 @@ fn sync_thread(p: &Pass, conversation_id: &str, st: &mut state::State, r: &mut R
         // Top up the thread in place. One that's gone (trashed, the Trash emptied, deleted elsewhere)
         // starts a fresh source with the whole thread, so the new mail reaches the Inbox rather than
         // being lost (D-20261026-05).
-        Some(path) if count > st.thread_count(conversation_id) => {
+        Some(path) if thread_grown(st, conversation_id, count, last) => {
             if let Some(cap) = capture(st, r) {
                 let written = if p.vault.join(&path).is_file() {
                     rewrite(p.vault, &path, &cap, r).then_some(path)
@@ -447,12 +537,21 @@ fn sync_thread(p: &Pass, conversation_id: &str, st: &mut state::State, r: &mut R
                 };
                 if let Some(path) = written {
                     st.mark_thread(conversation_id, &path, count);
+                    st.set_thread_last(conversation_id, last);
                     r.mail += 1;
                 }
             }
         }
+        // Written before last messages were kept: noted now, without a rewrite.
+        Some(_) if st.thread_last(conversation_id).is_none() => st.set_thread_last(conversation_id, last),
         _ => {}
     }
+}
+
+/// Whether a thread has gained mail since its source was written: more messages than then, or a
+/// later last one (a thread that lost a message and gained another counts the same).
+fn thread_grown(st: &state::State, conversation_id: &str, count: usize, last: i64) -> bool {
+    count > st.thread_count(conversation_id) || st.thread_last(conversation_id).is_some_and(|was| last > was)
 }
 
 fn sync_transcripts(p: &Pass, st: &mut state::State, r: &mut Report) {
@@ -621,6 +720,98 @@ mod tests {
         let week = cutoff_day(7).unwrap();
         assert_eq!(week, (Local::now().date_naive() - Duration::days(6)).format("%Y-%m-%d").to_string());
         assert!(week < one, "a wider window reaches further back");
+    }
+
+    /// A state with one chat ("c1") whose `day` was written holding `count` messages, the last at
+    /// `last` (None: written before last messages were kept).
+    fn written(day: &str, count: usize, last: Option<i64>) -> state::State {
+        let mut st = state::State::default();
+        st.mark_chat_day("c1", day, Some("sources/Teams. Chat. Maya - 2026-10-24.md"));
+        st.set_chat_day_count("c1", day, count);
+        if let Some(l) = last {
+            st.set_chat_day_last("c1", day, l);
+        }
+        st
+    }
+
+    fn day(day: &str, count: usize, last: i64, partial: bool) -> Day<'_> {
+        Day { conv: "c1", day, count, last, partial, first_seen: false }
+    }
+
+    #[test]
+    fn a_day_cut_short_by_the_page_is_never_rewritten() {
+        // 195 messages were written; the day now has 230 and the page holds its last 200.
+        let st = written("2026-10-24", 195, Some(1000));
+        let cut = day("2026-10-24", 200, 2000, true);
+        assert_eq!(day_plan(&st, None, None, &cut), DayPlan::Leave, "rewriting would drop the first 30");
+        // Read whole (the page before it was fetched), it is topped up.
+        assert_eq!(day_plan(&st, None, None, &day("2026-10-24", 230, 2000, false)), DayPlan::TopUp);
+        // So the pass reads on while the oldest day read has grown, and stops when it hasn't.
+        assert!(!read_enough(&st, None, None, &day("2026-10-24", 200, 2000, false), 1));
+        assert!(read_enough(&st, None, None, &day("2026-10-24", 200, 1000, false), 1));
+    }
+
+    #[test]
+    fn a_day_grows_by_its_last_message_not_its_count() {
+        // 230 written; 20 more came, and the page holds only the last 200: fewer than were written.
+        let st = written("2026-10-24", 230, Some(1000));
+        assert!(!read_enough(&st, None, None, &day("2026-10-24", 200, 2000, false), 1), "a later last message: grown");
+        assert_eq!(day_plan(&st, None, None, &day("2026-10-24", 250, 2000, false)), DayPlan::TopUp);
+        assert_eq!(day_plan(&st, None, None, &day("2026-10-24", 230, 1000, false)), DayPlan::Leave);
+    }
+
+    #[test]
+    fn a_day_written_before_last_messages_were_kept_goes_by_its_count_then_adopts() {
+        let st = written("2026-10-24", 5, None);
+        assert_eq!(day_plan(&st, None, None, &day("2026-10-24", 6, 2000, false)), DayPlan::TopUp);
+        assert_eq!(day_plan(&st, None, None, &day("2026-10-24", 5, 2000, false)), DayPlan::Adopt);
+        assert_eq!(day_plan(&st, None, None, &day("2026-10-24", 5, 2000, true)), DayPlan::Leave, "cut short: not adopted");
+        assert!(read_enough(&st, None, None, &day("2026-10-24", 3, 2000, false), 1), "fewer than written: only its end is in the page");
+        // A day that filled the page and stuck there: the first page holds as many as were written,
+        // so one more page is read to see the whole day, and no further on its account.
+        let stuck = written("2026-10-24", 200, None);
+        assert!(!read_enough(&stuck, None, None, &day("2026-10-24", 200, 2000, false), 1));
+        assert!(read_enough(&stuck, None, None, &day("2026-10-24", 200, 2000, false), 2));
+    }
+
+    #[test]
+    fn new_days_are_read_back_to_the_cutoff_or_the_back_fills_first_day() {
+        let st = written("2026-10-20", 5, Some(1000));
+        // A day not written yet: read on, in case it began before this page.
+        assert!(!read_enough(&st, None, None, &day("2026-10-24", 50, 2000, false), 1));
+        assert_eq!(
+            day_plan(&st, None, None, &day("2026-10-24", 50, 2000, true)),
+            DayPlan::Write,
+            "the cap on pages: what was read is kept"
+        );
+        // A chat seen for the first time: back to the first-sync cutoff, or one page with no limit.
+        let new = |d| Day { conv: "c2", first_seen: true, ..day(d, 50, 2000, false) };
+        assert!(!read_enough(&st, None, Some("2026-10-22"), &new("2026-10-24"), 1));
+        assert!(read_enough(&st, None, Some("2026-10-22"), &new("2026-10-21"), 1));
+        assert_eq!(day_plan(&st, None, Some("2026-10-22"), &new("2026-10-21")), DayPlan::Skip);
+        assert!(read_enough(&st, None, None, &new("2026-10-24"), 1));
+        // A back-fill reads back past its first day, whatever is already written on the way.
+        let from = Some("2026-10-18");
+        assert!(!read_enough(&st, from, from, &day("2026-10-20", 5, 1000, false), 1));
+        assert!(read_enough(&st, from, from, &day("2026-10-17", 5, 1000, false), 3));
+        assert_eq!(day_plan(&st, from, from, &day("2026-10-17", 5, 1000, false)), DayPlan::Skip);
+        // A day the first sync skipped (done, no file) is written by a back-fill and otherwise left.
+        let mut skipped = state::State::default();
+        skipped.mark_chat_day("c1", "2026-10-19", None);
+        assert_eq!(day_plan(&skipped, from, from, &day("2026-10-19", 5, 1000, false)), DayPlan::Write);
+        assert_eq!(day_plan(&skipped, None, None, &day("2026-10-19", 5, 1000, false)), DayPlan::Leave);
+    }
+
+    #[test]
+    fn a_thread_grows_by_count_or_by_a_later_last_message() {
+        let mut st = state::State::default();
+        st.mark_thread("conv1", "sources/Email. Thread. Roadmap - 2026-10-24.md", 100);
+        // From before last messages were kept (and stuck at the 100 one page held): the count decides.
+        assert!(thread_grown(&st, "conv1", 130, 2000));
+        assert!(!thread_grown(&st, "conv1", 100, 2000));
+        st.set_thread_last("conv1", 1000);
+        assert!(thread_grown(&st, "conv1", 100, 2000), "one deleted, one new: the same count, a later message");
+        assert!(!thread_grown(&st, "conv1", 99, 1000));
     }
 
     #[test]

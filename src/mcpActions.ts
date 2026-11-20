@@ -1390,6 +1390,16 @@ async function submitChange(a: Args): Promise<string> {
   return o.message;
 }
 
+/** Changes the MCP server checked that belong together (an action moved from one initiative to
+ *  another): made together, or held together when any of them is held. */
+async function submitChanges(a: Args): Promise<string> {
+  const list = Array.isArray(a.changes) ? (a.changes as ChangeSubmit[]) : [];
+  if (!list.length) throw new Error("No change given.");
+  const o = await submitAll(list);
+  told(o.applied ? `changed ${list.length} pages: ${list[0].title}` : `held ${list.length} changes for you in Changes`);
+  return o.message;
+}
+
 /** A meeting note accepted from Changes: the screen's follow-up offered in the app (offerFollowUp,
  *  ingest it and move its transcript to the Trash), and what's next said for the assistant. */
 function followUpOf(note: string, transcript: string): string {
@@ -2097,14 +2107,18 @@ async function movingOver(a: Args): Promise<string> {
 
 // ---- knowledge
 
-async function healthFix(a: Args): Promise<string> {
+/** fix_health: Wiki health's safe fixes, chosen as the screen chooses them and worked out by the
+ *  app as its Fix works them out, but made through Changes, as every change an assistant makes is
+ *  (the screen's own button writes at once, with ⌘Z). One change a page, each made or held on its
+ *  own: the pages don't depend on each other, so one that waits doesn't hold the rest. */
+async function healthFix(a: Args, r: McpRequest): Promise<string> {
   const v = await api.healthReport(true);
-  const r = v.report;
-  if (!r) throw new Error("Wiki health has no report yet; try again in a moment.");
-  const all = safeFixes(r);
+  const report = v.report;
+  if (!report) throw new Error("Wiki health has no report yet; try again in a moment.");
+  const all = safeFixes(report);
   const wanted = Array.isArray(a.items) ? (a.items as unknown[]).map(String) : null;
   const fixes = wanted
-    ? r.checks
+    ? report.checks
         .filter((c) => c.id !== "page-shape")
         .flatMap((c) => c.items.filter((i) => i.safe && wanted.includes(i.text)).map((i) => fixOf(c.id, i)))
     : all;
@@ -2112,9 +2126,31 @@ async function healthFix(a: Args): Promise<string> {
     return wanted
       ? "None of those items has a safe fix. lint lists the issues; the ones marked safe can be fixed here."
       : "Nothing to fix safely.";
-  const said = await api.healthFix(fixes);
-  told(`fixed ${fixes.length} Wiki health issue${fixes.length === 1 ? "" : "s"}`);
-  return `${said} ${keyLabel("⌘Z")} in the app undoes it.`;
+  const plan = await api.healthFixChanges(fixes);
+  let made = 0;
+  const held: string[] = [];
+  const failed: string[] = [];
+  for (const p of plan) {
+    try {
+      const [o] = await api.changesSubmitMany([{ ...sub(a, r, p.page, "edit", p.title, p.instruction), hold: p.hold }]);
+      if (o.applied) made++;
+      else held.push(`${pageName(p.page)} (${o.flags.join(" ") || "a check didn't pass"})`);
+    } catch (e) {
+      failed.push(`${pageName(p.page)}: ${why(e)}`);
+    }
+  }
+  const pages = (n: number) => `${n} page${n === 1 ? "" : "s"}`;
+  // Nothing made or held and something refused is a failure, not "Fixed 0".
+  if (!made && !held.length) throw new Error(`None fixed. Couldn't: ${failed.join("; ")}`);
+  if (made) told(`fixed ${pages(made)} in Wiki health`);
+  else noted(`held ${pages(held.length)} of Wiki health fixes for you in Changes`);
+  return [
+    made ? `Fixed ${pages(made)}, each a change in Changes, where the user can revert it.` : "",
+    held.length ? `Held for the user in Changes, to accept there: ${held.join("; ")}.` : "",
+    failed.length ? `Couldn't: ${failed.join("; ")}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 /** ignore_issue: Wiki health's Ignore, or Show again with show_again. */
@@ -2183,7 +2219,10 @@ async function writeCurrentState(a: Args): Promise<string> {
   return `Started on ${r.total} page${r.total === 1 ? "" : "s"} with ${r.model}; each is a change in Changes. Ask with status for progress.`;
 }
 
-async function fixName(a: Args): Promise<string> {
+/** fix_name: Fix name, planned and ticked as its screen does, but the notes changed through
+ *  Changes, as every change an assistant makes is (the screen's own button writes at once, with
+ *  ⌘Z): one change a file, made or held together. The correction is remembered once they're made. */
+async function fixName(a: Args, r: McpRequest): Promise<string> {
   // Fix name's fields: Written as and Correct spelling.
   const wrong = str(a, "written_as");
   const right = str(a, "correct_spelling");
@@ -2213,8 +2252,8 @@ async function fixName(a: Args): Promise<string> {
     if (!plan.rows.length) return `“${wrong}” isn't in any note.`;
     const unticked = startUnticked(plan.rows, askEach);
     const change = chosenRows(plan.rows, unticked).length;
-    const row = (r: (typeof plan.rows)[number]) =>
-      `- ${r.file}: ${r.count} line${r.count === 1 ? "" : "s"} · ${FIX_ACTION[r.action] ?? r.action}${unticked.has(r.file) ? " · unticked: read it, then give it in files" : ""}${r.inFilename ? " · In the file name: rename it separately" : ""}`;
+    const row = (x: (typeof plan.rows)[number]) =>
+      `- ${x.file}: ${x.count} line${x.count === 1 ? "" : "s"} · ${FIX_ACTION[x.action] ?? x.action}${unticked.has(x.file) ? " · unticked: read it, then give it in files" : ""}${x.inFilename ? " · In the file name: rename it separately" : ""}`;
     return [
       `Fixing “${wrong}” → “${right}” would change ${change} of the ${plan.rows.length} file${plan.rows.length === 1 ? "" : "s"} it's in${unticked.size ? ` (${unticked.size} more to tick one by one: Ask about each file)` : ""}${plan.rightPage ? ` (${right} has a wiki page, which gets “${wrong}” as an alias)` : ""}:`,
       ...plan.rows.slice(0, 40).map(row),
@@ -2228,20 +2267,43 @@ async function fixName(a: Args): Promise<string> {
   const files = Array.isArray(a.files) ? a.files.map(String).filter((f) => f.trim()) : null;
   const can = chosenRows(plan.rows, new Set());
   if (files) {
-    const unknown = files.filter((f) => !can.some((r) => r.file === f));
+    const unknown = files.filter((f) => !can.some((x) => x.file === f));
     if (unknown.length)
       throw new Error(
-        `Not among the files the fix would change: ${unknown.join(", ")}. They are: ${can.map((r) => r.file).join(", ") || "none"}.`,
+        `Not among the files the fix would change: ${unknown.join(", ")}. They are: ${can.map((x) => x.file).join(", ") || "none"}.`,
       );
   }
   // Without files, the ones ticked to start with: with Ask about each file, no note to rewrite.
   const take = files
-    ? chosenRows(plan.rows, new Set(can.map((r) => r.file).filter((f) => !files.includes(f))))
+    ? chosenRows(plan.rows, new Set(can.map((x) => x.file).filter((f) => !files.includes(f))))
     : chosenRows(plan.rows, startUnticked(plan.rows, askEach));
   if (!take.length) return "Nothing to change: no file given.";
-  const said = await api.fixnameApply({ ...req, rightPage: plan.rightPage }, take);
+  const full = { ...req, rightPage: plan.rightPage };
+  // What the screen's Fix would write, as changes: recorded, held by the usual rules, revertable.
+  const changes = await api.fixnameChanges(full, take);
+  const alias = new Set(take.filter((x) => x.action === "alias").map((x) => x.file));
+  const title = (page: string) => (alias.has(page) ? `Add “${wrong}” as an alias of ${right}` : `Fix the name “${wrong}” → “${right}”`);
+  const o = changes.length ? await submitAll(changes.map((c) => sub(a, r, c.page, "edit", title(c.page), c.instruction))) : null;
+  if (o && !o.applied) {
+    noted(`held fixing the name “${wrong}” for you in Changes`);
+    return `${o.message}${remember ? " The correction isn't remembered while they wait." : ""}`;
+  }
+  // The corrections list is the app's own, not a note: remembered once the notes are changed.
+  let remembered = "";
+  if (remember) {
+    try {
+      if (await api.fixnameRemember(full))
+        remembered = ` The correction is remembered for future captures, transcripts and ingests (${keyLabel("⌘Z")} in the app undoes that).`;
+    } catch (e) {
+      remembered = ` The correction couldn't be remembered: ${why(e)}`;
+    }
+  }
+  if (!o && !remembered) throw new Error("Nothing to change.");
   told(`fixed the name “${wrong}” → “${right}”`);
-  return said;
+  if (!o) return `No file needed changing.${remembered}`;
+  const n = o.outs.length;
+  const flagged = o.outs.filter((x) => x.flags.length).map((x) => x.message);
+  return `Fixed “${wrong}” → “${right}” in ${n} file${n === 1 ? "" : "s"}, each a change in Changes, where the user can revert it.${flagged.length ? ` ${flagged.join(" ")}` : ""}${remembered}`;
 }
 
 // ---- the rest
@@ -2467,6 +2529,8 @@ async function status(): Promise<string> {
   return [
     `Vault: ${s.vaultPath ?? "none chosen"}${s.readOnly ? " (read-only: Brainstead won't change it until Settings › Vault › Read-only is off)" : ""}`,
     `Index: ${index}`,
+    // As Settings › Vault warns: the folder can't be watched.
+    v.warning ? `Warning: ${v.warning}` : "",
     // As Settings › Vault shows it.
     disk ? `On disk: ${diskUsageText(n, disk)}` : "",
     // Settings › Permissions' Full Disk Access, where macOS asks for it.
@@ -3078,6 +3142,7 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   "project.move": moveProject,
   "note.from_template": (a, r) => noteFromTemplate(a, r.chat ?? null),
   "change.submit": submitChange,
+  "change.submit_many": submitChanges,
   changes: changesTool,
   "run.start": startRun,
   "note.trash_transcript": trashTranscriptTool,

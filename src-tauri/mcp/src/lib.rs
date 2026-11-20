@@ -31,7 +31,7 @@ const TODO_LIST: &str = "Me. To Do List.md";
 /// so it stays under that; each tool's description says the rest.
 const INSTRUCTIONS: &str = "Brainstead's tools over the user's vault (notes, a wiki in wiki/, sources in sources/), doing what the app's screens do. \
 The list_* tools and the others marked read-only only read; help answers questions about the app itself. \
-Every change to a note (tasks, the Inbox, projects, edit_page, create_note, add_image, rename_note, trash_note) is made at once and recorded in Brainstead's Changes, where the user can revert it. \
+Every change to a note (tasks, the Inbox, projects, edit_page, create_note, add_image, rename_note, trash_note, fix_health, fix_name) is made at once and recorded in Brainstead's Changes, where the user can revert it. \
 A change to Templates/, one that adds or changes code that runs (a script, a Tasks function, a Templater tag) or one that changes a system note's header is always held for the user to accept in the app. \
 Other tools change things at once; each one's description says how it's undone. \
 Change only what the user asked for. While the vault is read-only (app_status says) every change is refused. \
@@ -46,7 +46,9 @@ pub struct Ctx {
     /// The app data folder: `settings.json`, `index.db`, `text/` (what was read from sources) and
     /// `bridge/` (requests to the running app).
     pub data: PathBuf,
-    pub vault: PathBuf,
+    /// The vault, as `settings.json` named it when last read: [`Ctx::vault`] gives it, and each
+    /// tool call reads it again when the file has changed.
+    vault: std::sync::Mutex<VaultAt>,
     /// The Ask chat that started it, and its model, for Changes.
     pub chat: Option<String>,
     pub model: Option<String>,
@@ -65,22 +67,42 @@ pub struct Ctx {
     pub init: std::sync::Mutex<Option<Value>>,
 }
 
+/// The vault, and the `settings.json` it was read from, to tell when the user has opened another.
+#[derive(Debug)]
+struct VaultAt {
+    path: PathBuf,
+    /// The file's modification time and size when it was read.
+    stamp: Option<(std::time::SystemTime, u64)>,
+}
+
+fn settings_stamp(data: &Path) -> Option<(std::time::SystemTime, u64)> {
+    let m = std::fs::metadata(data.join("settings.json")).ok()?;
+    Some((m.modified().ok()?, m.len()))
+}
+
+/// The vault the data folder's `settings.json` names.
+fn vault_in(data: &Path) -> Result<PathBuf, String> {
+    let settings: Value = std::fs::read(data.join("settings.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .ok_or_else(|| format!("No Brainstead settings in {}: open Brainstead and choose the vault first.", data.display()))?;
+    settings
+        .get("vaultPath")
+        .and_then(Value::as_str)
+        .filter(|v| !v.trim().is_empty())
+        .map(PathBuf::from)
+        .ok_or_else(|| "Brainstead has no vault chosen yet.".to_string())
+}
+
 impl Ctx {
     /// From the command line (`--data <dir>`, `--chat <id>`, `--model <id>`), the vault being the one
     /// in the data folder's `settings.json`. `default_data` is the app data folder when no `--data`.
     pub fn from_args(args: &[String], default_data: PathBuf) -> Result<Ctx, String> {
         let opt = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
         let data = opt("--data").map(PathBuf::from).unwrap_or(default_data);
-        let settings: Value = std::fs::read(data.join("settings.json"))
-            .ok()
-            .and_then(|b| serde_json::from_slice(&b).ok())
-            .ok_or_else(|| format!("No Brainstead settings in {}: open Brainstead and choose the vault first.", data.display()))?;
-        let vault = settings
-            .get("vaultPath")
-            .and_then(Value::as_str)
-            .filter(|v| !v.trim().is_empty())
-            .map(PathBuf::from)
-            .ok_or("Brainstead has no vault chosen yet.")?;
+        // The stamp first: a write between the two is read again on the next call.
+        let stamp = settings_stamp(&data);
+        let vault = std::sync::Mutex::new(VaultAt { path: vault_in(&data)?, stamp });
         // Started as the app (`Brainstead --mcp`): the same program opens the app.
         let app = std::env::current_exe().ok().filter(|p| {
             let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
@@ -104,6 +126,28 @@ impl Ctx {
     /// terminal session runs for days.
     pub fn today(&self) -> chrono::NaiveDate {
         self.fixed_today.unwrap_or_else(|| chrono::Local::now().date_naive())
+    }
+
+    /// The vault's folder.
+    pub fn vault(&self) -> PathBuf {
+        self.vault.lock().unwrap().path.clone()
+    }
+
+    /// Follows the vault the user has open. A session outlives a switch of vault in Settings: the
+    /// app then applies changes, by their paths, to the new vault, so text read from the old one
+    /// would be checked against the wrong notes. When `settings.json` has changed since it was
+    /// read, the vault is read from it again (the index is opened afresh for each call, from the
+    /// same data folder). A file that can't be read just now, or names no vault, leaves the vault
+    /// as it was, to be read again on the next call.
+    fn follow_vault(&self) {
+        let stamp = settings_stamp(&self.data);
+        let mut v = self.vault.lock().unwrap();
+        if stamp == v.stamp {
+            return;
+        }
+        if let Ok(path) = vault_in(&self.data) {
+            *v = VaultAt { path, stamp };
+        }
     }
 
     fn index(&self) -> Result<Index, String> {
@@ -713,7 +757,7 @@ pub fn tools() -> Vec<Value> {
             "Teams meeting transcripts in Sources still without a meeting note (needs the app), or with show all every transcript, the done ones saying why (ingested, or linked from a note), as the screen's Show › All does. Each row has the transcript's path and what Brainstead guesses it is: its type, its name or who it was with, and its date, flagged when the date is only the day it was captured; as the screen marks them, the note it would make when that exists already, what to check with the user, and whether a note is being drafted or was drafted from it. Write one up with start_run meeting_note, giving the right date when it's flagged, and another name or date when its note exists.",
             schema(json!({"show": {"type": "string", "enum": ["to_do", "all"], "description": "The screen's Show: to_do (To do, the default) or all (All)."}}), &[])),
         tool("fix_health", "Fix Wiki health issues", Change,
-            "Applies Wiki health's safe fixes, as its Fix safe issues and the Wiki list's safe-fixes line's Fix do (needs the app): missing cross-links, stale updated: dates, unlogged writes' log lines and system notes' lost headers; all of them, or the items named (their text as lint gives it). Undoable. Page shape items are reshape_pages'. Issues that need judgement aren't safe fixes: make those with edit_page.",
+            "Makes Wiki health's safe fixes, the ones its Fix safe issues and the Wiki list's safe-fixes line's Fix make (needs the app): missing cross-links, stale updated: dates, unlogged writes' log lines and system notes' lost headers; all of them, or the items named (their text as lint gives it). Each page fixed is a change in Changes, where the user can revert it, with updated: set to today; putting a system note's header back is always held for the user to accept there. Page shape items are reshape_pages'. Issues that need judgement aren't safe fixes: make those with edit_page.",
             schema(json!({"items": {"type": "array", "items": {"type": "string"}, "description": "Only these issues, by their text as lint gives it; every safe fix when left out."}}), &[])),
         tool("ignore_issue", "Ignore a Wiki health issue", Change,
             "Wiki health's Ignore (needs the app): stops listing an issue that has no fix (its text as lint gives it) until its page changes, or for a claim with no citation until its line changes; only when the user asked, and not for missing pages, duplicates, unused images, sources not yet ingested or page shape, which have buttons of their own (health_issue, start_run ingest, reshape_pages). With all and check (stale-pages or uncited-claims), Ignore all: every issue that check lists, as its Ignore all button does. With show_again, Show again: the ignored issues listed again, of one check (its id) or all. Ignored issues are left out of the app's count and of lint while the app is open.",
@@ -755,7 +799,7 @@ pub fn tools() -> Vec<Value> {
                 "stop": {"type": "boolean", "description": "true stops the run after the page it's on."}
             }), &[])),
         tool("fix_name", "Fix a name everywhere", Change,
-            "Corrects a misspelt name across the notes and wiki, as Fix name does (needs the app); sources are left alone, and so are the files to leave alone; with ask_about_each_file, as Ask about each file, the notes to rewrite start unticked. Without apply it only lists the files the name is in, as the screen does, with what happens to each (Rewrite, Add as alias, Left alone, Guarded: someone else; a name in the file name is renamed separately) and how many will change; with apply true it changes the files (undoable), or with files only those, as ticking files in Fix name does. The correction is remembered for future captures, transcripts and ingests unless remember is false.",
+            "Corrects a misspelt name across the notes and wiki, as Fix name does (needs the app); sources are left alone, and so are the files to leave alone; with ask_about_each_file, as Ask about each file, the notes to rewrite start unticked. Without apply it only lists the files the name is in, as the screen does, with what happens to each (Rewrite, Add as alias, Left alone, Guarded: someone else; a name in the file name is renamed separately) and how many will change; with apply true it changes the files, or with files only those, as ticking files in Fix name does: each file is a change in Changes, where the user can revert it, made together or, when any of them is held (a template, a check that fails in an unattended session), held together. The correction is remembered for future captures, transcripts and ingests once the files are changed, unless remember is false.",
             schema(json!({
                 "written_as": {"type": "string", "description": "Written as: the name as it's misspelt, Lenna."},
                 "correct_spelling": {"type": "string", "description": "Correct spelling: the name as it should be, Lena."},
@@ -923,7 +967,7 @@ pub fn tools() -> Vec<Value> {
             "The vault at a glance (needs the app): notes and wiki pages by type and by tag, most first, and the files the most others link to. Wiki health's side shows the wiki pages' charts and Most linked; the notes' types are the Notes screen's Type filter.",
             schema(json!({}), &[])),
         tool("app_status", "Brainstead's state", Read,
-            "The vault, whether it's read-only (then nothing can be changed until the user switches it off in Settings › Vault), the index as Settings › Vault shows it (its counts, or why it failed), what the vault takes on disk by part (notes, wiki, sources, templates, images, other files; excluded folders apart) and what Brainstead's own data takes outside it, Changes' history among it, Full Disk Access, Brainstead's version, its app data folder and its website, whether the update it was last closed for didn't install (Windows, where the installer then reopens this version), whether Brainstead runs the daily and weekly summaries, whether the previous app's skills are still in the vault (moving_over retires them), and what ⌘Z would undo (needs the app). Then features: which of Quick Look, spelling, grammar, Read aloud, Export PDF, rich copy, Full Disk Access, Open at login and the text in images this system has; the window has no button or setting for the rest, so don't offer them.",
+            "The vault, whether it's read-only (then nothing can be changed until the user switches it off in Settings › Vault), the index as Settings › Vault shows it (its counts, or why it failed, and its warning when the folder can't be watched for changes), what the vault takes on disk by part (notes, wiki, sources, templates, images, other files; excluded folders apart) and what Brainstead's own data takes outside it, Changes' history among it, Full Disk Access, Brainstead's version, its app data folder and its website, whether the update it was last closed for didn't install (Windows, where the installer then reopens this version), whether Brainstead runs the daily and weekly summaries, whether the previous app's skills are still in the vault (moving_over retires them), and what ⌘Z would undo (needs the app). Then features: which of Quick Look, spelling, grammar, Read aloud, Export PDF, rich copy, Full Disk Access, Open at login and the text in images this system has; the window has no button or setting for the rest, so don't offer them.",
             schema(json!({}), &[])),
         tool("list_assistants", "AI assistants found", Read,
             "Settings › AI assistants' Found on this computer, as the pane lists it (needs the app): Claude Code, Codex, Antigravity, Copilot and Ollama (its local models, run through Codex: ollama:<model> ids, for Ask and runs started by hand, never scheduled runs), each with its version, how many models it offers, where it is (Ollama: its server) and its effort (an effort.<cli> setting: settings sets it), or that it isn't installed (with where to read how to install it) or lists no models (then the user runs it in Terminal and signs in; for Ollama, pulls a model that calls tools), or for Ollama that its server isn't running, Codex is missing, or OLLAMA_HOST names another computer (Brainstead uses Ollama only on this computer: localhost, 127.0.0.1 or ::1; Ollama's ids then aren't offered and a run on one stops with that message). look_again looks for them again, as the pane's Look again does, after one is installed or signed in. Then the pane's other groups: Brainstead's tools' command for each assistant found, to use them from Terminal, and Skills Brainstead does now (the vault's skills whose screen Brainstead has).",
@@ -1173,6 +1217,7 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
     if !tools().iter().any(|t| t["name"] == name) {
         return Err(CallError::Unknown(format!("Unknown tool: {name}")));
     }
+    ctx.follow_vault();
     {
         let mut calls = ctx.calls.lock().unwrap();
         let now = std::time::Instant::now();
@@ -1212,6 +1257,8 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
         "compare_docs",
         "restore_from_trash",
         "contradictions",
+        "fix_health",
+        "fix_name",
     ]
     .contains(&name)
     {
@@ -1434,16 +1481,14 @@ fn without(mut obj: Value, keys: &[&str]) -> Value {
     obj
 }
 
-/// How long the server waits for the app to answer one action.
-const ACT_TIMEOUT: std::time::Duration = bridge::ACT_TIMEOUT;
-
 /// Runs an action in the app (src/mcpActions.ts, through core/src/bridge.rs), opening the app
 /// first when it isn't running. A text result is given back as it is, a listing as its text and
 /// data; anything else as JSON.
 fn act(ctx: &Ctx, action: &str, args: Value) -> Result<Out, String> {
     open_app(ctx)?;
     let req = bridge::Request { id: bridge::new_id(), action: action.into(), args, chat: ctx.chat.clone(), model: ctx.model.clone() };
-    let r = bridge::ask(&ctx.data, &req, ACT_TIMEOUT);
+    // Longer for an action that waits on a model, as the app's wait for its window is (core's bridge).
+    let r = bridge::ask(&ctx.data, &req, bridge::act_timeout(&req.action, &req.args));
     if !r.ok {
         return Err(r.error.unwrap_or_else(|| "It didn't work.".into()));
     }
@@ -1629,7 +1674,7 @@ fn rename_note(ctx: &Ctx, a: RenameArgs) -> Result<String, String> {
     if to == rel {
         return Err("That's its name already.".into());
     }
-    if ctx.vault.join(&to).exists() && !to.eq_ignore_ascii_case(&rel) {
+    if ctx.vault().join(&to).exists() && !to.eq_ignore_ascii_case(&rel) {
         return Err(format!("{to} exists already."));
     }
     if a.preview {
@@ -1645,7 +1690,7 @@ fn rename_note(ctx: &Ctx, a: RenameArgs) -> Result<String, String> {
 fn rename_preview(ctx: &Ctx, ix: &Index, rel: &str, to: &str) -> Result<String, String> {
     let linkers = ix.linkers(rel).map_err(|e| e.to_string())?;
     let resolves = |t: &str| ix.resolve(&[t.to_string()]).ok().and_then(|v| v.into_iter().next().flatten()).as_deref() == Some(rel);
-    let plan = brainstead_core::rename::plan(&ctx.vault, rel, to, &linkers, &resolves).map_err(|e| e.to_string())?;
+    let plan = brainstead_core::rename::plan(&ctx.vault(), rel, to, &linkers, &resolves).map_err(|e| e.to_string())?;
     let mut files: Vec<(&str, Vec<&brainstead_core::rename::LinkChange>)> = Vec::new();
     for c in &plan.changes {
         match files.iter_mut().find(|(f, _)| *f == c.path) {
@@ -1696,7 +1741,7 @@ fn image_input(ctx: &Ctx, a: &ImageArgs) -> Result<(Vec<u8>, String), String> {
                 None => PathBuf::from(p),
             };
             let abs = std::fs::canonicalize(&abs).map_err(|e| format!("Couldn't find {p}: {e}"))?;
-            if let Some(rel) = std::fs::canonicalize(&ctx.vault).ok().and_then(|v| abs.strip_prefix(v).ok().map(Path::to_path_buf)) {
+            if let Some(rel) = std::fs::canonicalize(ctx.vault()).ok().and_then(|v| abs.strip_prefix(v).ok().map(Path::to_path_buf)) {
                 let rel = rel.to_string_lossy().replace('\\', "/");
                 return Err(format!("That image is in the vault already, at {rel}: embed it with ![[{rel}]]."));
             }
@@ -1805,12 +1850,12 @@ fn new_note_path(ctx: &Ctx, a: &NoteArgs) -> Result<String, String> {
     let mut folder = a.folder.as_deref().unwrap_or("").trim().trim_matches(paths::SEPARATORS).to_string();
     if !folder.is_empty() {
         // As the file system spells it, so `templates` and `TEMPLA~1` are Templates/.
-        folder = paths::vault_rel(&ctx.vault, &folder)?;
+        folder = paths::vault_rel(&ctx.vault(), &folder)?;
         let first = folder.split('/').next().unwrap_or("");
         if folder.split('/').any(|s| s.starts_with('.')) || proposals::NOT_FOR_NOTES.iter().any(|n| n.eq_ignore_ascii_case(first)) {
             return Err(format!("A note can't go in {folder}/: not in sources/, wiki/ (edit_page makes wiki pages) or Templates/."));
         }
-        if !ctx.vault.join(&folder).is_dir() {
+        if !ctx.vault().join(&folder).is_dir() {
             return Err(format!("There's no folder {folder}/ in the vault."));
         }
     }
@@ -1824,7 +1869,7 @@ fn create_note(ctx: &Ctx, a: NoteArgs) -> Result<String, String> {
         return Err("test_run is the Test run of a template: give template too.".into());
     }
     let rel = new_note_path(ctx, &a)?;
-    if ctx.vault.join(&rel).exists() {
+    if ctx.vault().join(&rel).exists() {
         return Err(format!("{rel} exists already. To change it, use edit_page."));
     }
     let content = a
@@ -1860,7 +1905,7 @@ fn create_template(ctx: &Ctx, a: TemplateArgs) -> Result<String, String> {
         return Err(format!("{name} isn't a name a template can have."));
     }
     let rel = format!("Templates/{name}.md");
-    if ctx.vault.join(&rel).exists() {
+    if ctx.vault().join(&rel).exists() {
         return Err(format!("{rel} exists already. To change it, use edit_page."));
     }
     if a.content.trim().is_empty() {
@@ -1887,7 +1932,7 @@ struct ReasonArgs {
 fn add_example_notes(ctx: &Ctx, a: ReasonArgs) -> Result<String, String> {
     let now = ctx.today().and_time(chrono::Local::now().time());
     let missing: Vec<(String, String)> =
-        brainstead_core::starter::files(now).into_iter().filter(|(rel, _)| !ctx.vault.join(rel).exists()).collect();
+        brainstead_core::starter::files(now).into_iter().filter(|(rel, _)| !ctx.vault().join(rel).exists()).collect();
     if missing.is_empty() {
         return Err("The example notes are all there already: nothing to add.".into());
     }
@@ -2060,12 +2105,12 @@ fn find_page(ctx: &Ctx, ix: &Index, page: &str) -> Result<PageRef, String> {
         // `templates\meeting.md` and `TEMPLA~1/Meeting.md` are `Templates/Meeting.md`.
         let with_ext = if Path::new(&p).extension().is_some() { p.clone() } else { format!("{p}.md") };
         for cand in [&p, &with_ext] {
-            let rel = paths::vault_rel(&ctx.vault, cand)?;
-            if ctx.vault.join(&rel).is_file() {
+            let rel = paths::vault_rel(&ctx.vault(), cand)?;
+            if ctx.vault().join(&rel).is_file() {
                 return Ok(PageRef::Found(rel));
             }
         }
-        return Ok(PageRef::NotThere(paths::vault_rel(&ctx.vault, &with_ext)?));
+        return Ok(PageRef::NotThere(paths::vault_rel(&ctx.vault(), &with_ext)?));
     }
     match ix.resolve(std::slice::from_ref(&p))?.into_iter().next().flatten() {
         Some(rel) => Ok(PageRef::Found(rel)),
@@ -2090,7 +2135,7 @@ fn read_text(ctx: &Ctx, rel: &str) -> Result<String, String> {
     if !is_text(rel) {
         return Err(format!("{rel} isn't a text file: read it with read_section."));
     }
-    std::fs::read(ctx.vault.join(rel)).map(|b| String::from_utf8_lossy(&b).into_owned()).map_err(|e| format!("Couldn't read {rel}: {e}"))
+    std::fs::read(ctx.vault().join(rel)).map(|b| String::from_utf8_lossy(&b).into_owned()).map_err(|e| format!("Couldn't read {rel}: {e}"))
 }
 
 #[derive(Deserialize)]
@@ -2191,7 +2236,7 @@ fn backlinks(ctx: &Ctx, a: BacklinkArgs) -> Result<String, String> {
     let ix = ctx.index()?;
     let rel = existing(ctx, &ix, &a.page)?;
     let Some(mut meta) = ix.doc_meta(&rel)? else { return Err(format!("{rel} isn't in Brainstead's index yet.")) };
-    brainstead_core::read::fill_context(&ctx.vault, &mut meta.backlinks);
+    brainstead_core::read::fill_context(&ctx.vault(), &mut meta.backlinks);
     if meta.backlinks.is_empty() {
         return Ok(format!("Nothing links to {rel}."));
     }
@@ -2240,7 +2285,7 @@ struct InitiativesArgs {
 
 /// Every initiative page, read.
 fn initiatives(ctx: &Ctx) -> Vec<initiatives::Initiative> {
-    let Ok(rd) = std::fs::read_dir(ctx.vault.join(initiatives::FOLDER)) else { return vec![] };
+    let Ok(rd) = std::fs::read_dir(ctx.vault().join(initiatives::FOLDER)) else { return vec![] };
     let mut out: Vec<_> = rd
         .flatten()
         .filter_map(|e| {
@@ -2258,7 +2303,7 @@ fn initiative_page(ctx: &Ctx, name: &str) -> Result<String, String> {
     let given = bare(name).replace('\\', "/");
     let stem = given.strip_prefix(&format!("{}/", initiatives::FOLDER)).unwrap_or(&given).trim_end_matches(".md").to_string();
     let rel = format!("{}/{stem}.md", initiatives::FOLDER);
-    if !stem.is_empty() && !stem.contains('/') && ctx.vault.join(&rel).is_file() {
+    if !stem.is_empty() && !stem.contains('/') && ctx.vault().join(&rel).is_file() {
         return Ok(rel);
     }
     match find_page(ctx, &ctx.index()?, name)? {
@@ -2417,26 +2462,14 @@ fn move_action(ctx: &Ctx, a: &ActionArgs, to: &str) -> Result<String, String> {
         .ok_or_else(|| format!("No action {key} on {}.", filename::stem(&from)))?;
     let (after_from, after_to) = initiatives::move_action(&before_from, &before_to, &action.id)?;
     let (from_name, to_name) = (filename::stem(&from).to_string(), filename::stem(&to).to_string());
+    // One batch, made or held together: sent one by one, a page that changed under the second
+    // would leave the action on both initiatives.
     let title = format!("Action moved from {from_name}");
-    let mut out = vec![send_initiative(
-        ctx,
-        &ix,
-        &to,
-        &before_to,
-        &after_to,
-        Why { title: &title, reason: &a.reason, unattended: a.unattended },
-        vec![],
-    )?];
+    let why = Why { title: &title, reason: &a.reason, unattended: a.unattended };
+    let mut batch = vec![initiative_change(ctx, &ix, &to, &before_to, &after_to, why, vec![])?.0];
     let title = format!("Action moved to {to_name}");
-    out.push(send_initiative(
-        ctx,
-        &ix,
-        &from,
-        &before_from,
-        &after_from,
-        Why { title: &title, reason: &a.reason, unattended: a.unattended },
-        vec![],
-    )?);
+    let why = Why { title: &title, reason: &a.reason, unattended: a.unattended };
+    batch.push(initiative_change(ctx, &ix, &from, &before_from, &after_from, why, vec![])?.0);
     // Its task's link, pointed at the new page.
     let note = action.task.as_deref().and_then(|t| {
         let name = t.trim().trim_start_matches("[[").trim_end_matches("]]").split(['|', '#']).next()?.trim().to_string();
@@ -2445,7 +2478,7 @@ fn move_action(ctx: &Ctx, a: &ActionArgs, to: &str) -> Result<String, String> {
     if let Some(note) = note {
         let text = read_text(ctx, &note)?;
         if let Some(new) = initiatives::relink_task(&text, &from_name, &to_name, &action.id) {
-            let c = change(
+            batch.push(change(
                 ctx,
                 &note,
                 Kind::Edit,
@@ -2453,11 +2486,10 @@ fn move_action(ctx: &Ctx, a: &ActionArgs, to: &str) -> Result<String, String> {
                 &a.reason,
                 a.unattended,
                 changes::from_texts(Some(&text), &new),
-            );
-            out.push(send(ctx, c, vec![])?);
+            ));
         }
     }
-    Ok(out.join("\n"))
+    Ok(act(ctx, "change.submit_many", json!({ "changes": batch }))?.text)
 }
 
 /// A quote as the page writes it: its source with the anchor after `#`.
@@ -2477,8 +2509,17 @@ struct Why<'a> {
     unattended: bool,
 }
 
-/// Sends an initiative page's new text as a change, its quotes checked as edit_page's are.
-fn send_initiative(ctx: &Ctx, ix: &Index, rel: &str, before: &str, after: &str, why: Why, quotes: Vec<QuoteArg>) -> Result<String, String> {
+/// An initiative page's new text as a change, its quotes checked as edit_page's are, with what to
+/// say about them.
+fn initiative_change(
+    ctx: &Ctx,
+    ix: &Index,
+    rel: &str,
+    before: &str,
+    after: &str,
+    why: Why,
+    quotes: Vec<QuoteArg>,
+) -> Result<(Value, Vec<String>), String> {
     let after = proposals::bump_updated(before, after, &ctx.today().to_string());
     if after == before.replace("\r\n", "\n") {
         return Err("That changes nothing on the page: it's already so.".into());
@@ -2488,7 +2529,13 @@ fn send_initiative(ctx: &Ctx, ix: &Index, rel: &str, before: &str, after: &str, 
     let problems = proposals::mark_quotes(&mut quotes, |s| source_text(ctx, ix, s))?;
     let mut c = change(ctx, rel, Kind::Edit, why.title, why.reason, why.unattended, changes::from_texts(Some(before), &after));
     c["quotes"] = serde_json::to_value(&quotes).unwrap_or_default();
-    send(ctx, c, problems.iter().map(|p| format!("Note: {p}")).collect())
+    Ok((c, problems.iter().map(|p| format!("Note: {p}")).collect()))
+}
+
+/// Sends an initiative page's new text as a change.
+fn send_initiative(ctx: &Ctx, ix: &Index, rel: &str, before: &str, after: &str, why: Why, quotes: Vec<QuoteArg>) -> Result<String, String> {
+    let (c, notes) = initiative_change(ctx, ix, rel, before, after, why, quotes)?;
+    send(ctx, c, notes)
 }
 
 fn set_action(ctx: &Ctx, a: ActionArgs) -> Result<String, String> {
@@ -2568,7 +2615,7 @@ fn facts(ctx: &Ctx, a: FactsArgs) -> Result<String, String> {
         None => None,
     };
     let files: Vec<_> =
-        brainstead_core::claims::all(&ctx.vault).into_iter().filter(|f| page.as_ref().is_none_or(|p| *p == f.page)).collect();
+        brainstead_core::claims::all(&ctx.vault()).into_iter().filter(|f| page.as_ref().is_none_or(|p| *p == f.page)).collect();
     let mut out = String::new();
     for f in &files {
         let found = brainstead_core::claims::facts(f, a.subject.as_deref(), a.attribute.as_deref());
@@ -2610,7 +2657,7 @@ fn summary(ctx: &Ctx, a: SummaryArgs) -> Result<String, CallError> {
         "brief" => ReviewKind::Brief,
         k => return Err(CallError::Tool(format!("kind is daily, weekly or brief, not {k}."))),
     };
-    let read = |p: &str| std::fs::read_to_string(ctx.vault.join(p)).ok();
+    let read = |p: &str| std::fs::read_to_string(ctx.vault().join(p)).ok();
     if kind == ReviewKind::Brief {
         let found = match a.day.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
             None => {
@@ -2670,9 +2717,9 @@ fn pending_sources(ctx: &Ctx, a: PendingArgs) -> Result<String, String> {
     let files = ix.list(Some("source"))?;
     let paths: Vec<String> = files.into_iter().map(|f| f.path).collect();
     let ingested = ix.ingested(&paths)?;
-    let mut report = lint::run(&ctx.vault, ctx.today(), &Default::default());
+    let mut report = lint::run(&ctx.vault(), ctx.today(), &Default::default());
     // A source an ingest has read as it is now isn't Changed, as the Sources screen has it.
-    lint::without_read_sources(&mut report, &ctx.vault, &lint::read_at(&ctx.data));
+    lint::without_read_sources(&mut report, &ctx.vault(), &lint::read_at(&ctx.data));
     let changed: std::collections::HashSet<String> =
         report.check("changed-sources").map(|c| c.items.iter().filter_map(|i| i.page.clone()).collect()).unwrap_or_default();
     let rows: Vec<(String, &str)> = paths
@@ -2738,7 +2785,7 @@ fn page_shape_tool(ctx: &Ctx, page: Option<&str>, paging: &Paging) -> Result<Str
             return Ok(format!("{rel} isn't a wiki entity or concept page: only those have the page shape."));
         }
         let text = read_text(ctx, &rel)?;
-        let files = pageshape::vault_files(&ctx.vault);
+        let files = pageshape::vault_files(&ctx.vault());
         let (r, _) = pageshape::one(&rel, &text, &pageshape::Sources::from_paths(files.iter().map(String::as_str)));
         if r.in_shape {
             return Ok(format!("{rel} is in the page shape ({} Timeline entries).", r.report.entries));
@@ -2772,7 +2819,7 @@ fn page_shape_tool(ctx: &Ctx, page: Option<&str>, paging: &Paging) -> Result<Str
         out.extend(rp.notes.iter().map(|n| format!("Note: {n}")));
         return Ok(out.join("\n"));
     }
-    let all = pageshape::survey(&ctx.vault);
+    let all = pageshape::survey(&ctx.vault());
     let out_of: Vec<_> = all.iter().map(|x| &x.0).filter(|r| !r.in_shape).collect();
     if out_of.is_empty() {
         return Ok(format!("All {} wiki entity and concept pages are in the page shape.", all.len()));
@@ -2808,8 +2855,8 @@ fn lint_tool(ctx: &Ctx, a: LintArgs) -> Result<String, String> {
         Some(p) => Some(existing(ctx, &ctx.index()?, p)?),
         None => None,
     };
-    let mut r = lint::run(&ctx.vault, ctx.today(), &Default::default());
-    lint::without_read_sources(&mut r, &ctx.vault, &lint::read_at(&ctx.data));
+    let mut r = lint::run(&ctx.vault(), ctx.today(), &Default::default());
+    lint::without_read_sources(&mut r, &ctx.vault(), &lint::read_at(&ctx.data));
     let mut out = String::new();
     for c in &r.checks {
         let items: Vec<&lint::Item> =
@@ -2918,7 +2965,7 @@ fn edit_page(ctx: &Ctx, a: ProposeArgs) -> Result<String, String> {
         a.quotes.into_iter().map(|q| Quote { source: q.source, anchor: q.anchor, text: q.text, checked: None, path: None }).collect();
     let problems = proposals::mark_quotes(&mut quotes, |s| source_text(ctx, &ix, s))?;
     let resolves =
-        |t: &str| ix.resolve(&[t.to_string()]).ok().and_then(|v| v.into_iter().next().flatten()).is_some() || ctx.vault.join(t).exists();
+        |t: &str| ix.resolve(&[t.to_string()]).ok().and_then(|v| v.into_iter().next().flatten()).is_some() || ctx.vault().join(t).exists();
     let ghosts = proposals::new_ghost_links(before.as_deref().unwrap_or(""), &after, resolves);
     let warnings: Vec<String> = ghosts.iter().map(|g| format!("[[{g}]] goes to no page")).collect();
     let (kind, instruction) = match &before {

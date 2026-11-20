@@ -122,19 +122,90 @@ pub fn parse_conversations(body: &Value) -> Vec<Conv> {
         .unwrap_or_default()
 }
 
-/// How many messages [`chat_messages`] reads: one page. In a quiet chat that can be as many days,
-/// so the sync state remembers more days than this per chat (`state::DAYS_CAP`).
+/// How many messages a page of a chat holds. A pass that needs no more reads one page, and in a
+/// quiet chat that can be as many days, so the sync state remembers more days than this per chat
+/// (`state::DAYS_CAP`).
 pub const CHAT_PAGE: usize = 200;
+/// The most pages of one chat a pass reads, however much is still to write.
+pub const CHAT_PAGES: usize = 10;
+/// The most pages of one chat a back-fill reads: it goes back to its first day.
+pub const BACKFILL_CHAT_PAGES: usize = 50;
 
-/// A conversation's recent messages, oldest first. One page (enough for a day of a normal chat).
-pub fn chat_messages(client: &Client, s: &SignIn, conv_id: &str) -> Result<Vec<ChatMessage>, String> {
+/// One page of a conversation's messages, oldest first, and chatsvc's link to the page before it
+/// when there is one.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ChatPage {
+    pub messages: Vec<ChatMessage>,
+    pub older: Option<String>,
+}
+
+pub fn parse_page(body: &Value) -> ChatPage {
+    // An empty page ends the chat, whatever link comes with it.
+    let any = body["messages"].as_array().is_some_and(|a| !a.is_empty());
+    let older = body["_metadata"]["backwardLink"].as_str().filter(|l| any && !l.is_empty()).map(str::to_string);
+    ChatPage { messages: parse_messages(body), older }
+}
+
+/// A conversation's recent messages, oldest first, and whether older ones were left unread (the
+/// oldest day may then be only its end). The newest page always; then the pages before it, at most
+/// `most` in all, until `enough` (given the messages so far and how many pages they took) says the
+/// oldest day read needs no more. A page that can't be read ends the reading there.
+pub fn chat_messages(
+    client: &Client,
+    s: &SignIn,
+    conv_id: &str,
+    most: usize,
+    enough: impl FnMut(&[ChatMessage], usize) -> bool,
+) -> Result<(Vec<ChatMessage>, bool), String> {
+    let base = s.chat_service.trim_end_matches('/');
     let url = format!(
-        "{}/v1/users/ME/conversations/{}/messages?view=msnp24Equivalent|supportsMessageProperties&pageSize={CHAT_PAGE}",
-        s.chat_service.trim_end_matches('/'),
+        "{base}/v1/users/ME/conversations/{}/messages?view=msnp24Equivalent|supportsMessageProperties&pageSize={CHAT_PAGE}",
         urlencode(conv_id)
     );
-    let body = api::get_chatsvc(client, &url)?;
-    Ok(parse_messages(&body))
+    let first = parse_page(&api::get_chatsvc(client, &url)?);
+    let older = |link: &str| {
+        // The link is followed with the sign-in's tokens, so only on the chat service itself.
+        if !link.strip_prefix(base).is_some_and(|rest| rest.starts_with('/')) {
+            crate::applog!("sync: a chat's earlier page is somewhere else; left unread");
+            return None;
+        }
+        match api::get_chatsvc(client, link) {
+            Ok(body) => Some(parse_page(&body)),
+            Err(e) => {
+                crate::applog!("sync: a chat's earlier page wasn't given ({e}); left unread");
+                None
+            }
+        }
+    };
+    Ok(page_back(first, most, older, enough))
+}
+
+/// [`chat_messages`] over any source of pages: `older` reads the page a link leads to, or None when
+/// it can't.
+pub fn page_back(
+    first: ChatPage,
+    most: usize,
+    mut older: impl FnMut(&str) -> Option<ChatPage>,
+    mut enough: impl FnMut(&[ChatMessage], usize) -> bool,
+) -> (Vec<ChatMessage>, bool) {
+    let mut msgs = first.messages;
+    let mut link = first.older;
+    let mut pages = 1;
+    while let Some(l) = link.take() {
+        if pages >= most || enough(&msgs, pages) {
+            return (msgs, true);
+        }
+        let Some(page) = older(&l) else { return (msgs, true) };
+        pages += 1;
+        // Pages can overlap by a message: each is kept once.
+        let have: std::collections::HashSet<&str> = msgs.iter().map(|m| m.id.as_str()).collect();
+        let mut all: Vec<ChatMessage> = page.messages.into_iter().filter(|m| !have.contains(m.id.as_str())).collect();
+        all.append(&mut msgs);
+        all.sort_by_key(|m| m.time);
+        msgs = all;
+        link = page.older;
+    }
+    (msgs, false)
 }
 
 pub fn parse_messages(body: &Value) -> Vec<ChatMessage> {
@@ -328,24 +399,47 @@ pub fn inbox_all(client: &Client, most: usize) -> Result<Vec<Mail>, String> {
 /// The ConversationIndex as an extended property (PidTagConversationIndex), for the reply tree.
 const INDEX_EXPAND: &str = "&$expand=SingleValueExtendedProperties($filter=PropertyId%20eq%20'Binary%200x0071')";
 
+/// The most pages of one mail thread that are read (each of the `top` messages asked for).
+const THREAD_PAGES: usize = 10;
+
 /// Every message of one conversation across all folders (so a thread includes the user's own sent
 /// replies), oldest first, each with its ConversationIndex when Outlook gives it (asked again
-/// without it when it won't, so the thread still comes, in date order).
+/// without it when it won't, so the thread still comes, in date order). `top` is the page size: a
+/// longer thread is read page by page, [`THREAD_PAGES`] at most.
 pub fn conversation(client: &Client, conversation_id: &str, top: usize) -> Result<Vec<Mail>, String> {
     // Filter by ConversationId only — combining it with $orderby makes Outlook reject the query as an
     // "InefficientFilter", so we sort by received time ourselves below.
     let filter = format!("ConversationId eq '{}'", conversation_id.replace('\'', "''"));
     let url = format!("https://outlook.office.com/api/v2.0/me/messages?$filter={}&$top={top}&$select={MAIL_SELECT}", urlencode(&filter));
-    let body = match api::get_json(client, Service::Outlook, &format!("{url}{INDEX_EXPAND}")) {
-        Ok(b) => b,
+    let get = |u: &str| api::get_json(client, Service::Outlook, u);
+    let pages = match paged(&format!("{url}{INDEX_EXPAND}"), THREAD_PAGES, get) {
+        Ok(p) => p,
         Err(e) => {
             crate::applog!("sync: a thread's reply tree wasn't given ({e}); reading it in date order");
-            api::get_json(client, Service::Outlook, &url)?
+            paged(&url, THREAD_PAGES, get)?
         }
     };
-    let mut msgs = parse_mail(&body);
+    let mut msgs: Vec<Mail> = pages.iter().flat_map(parse_mail).collect();
     msgs.sort_by_key(|m| m.received);
     Ok(msgs)
+}
+
+/// The pages of an Outlook listing from `url` on, following each page's `@odata.nextLink`, `most`
+/// pages at most. `get` reads one page.
+fn paged(url: &str, most: usize, mut get: impl FnMut(&str) -> Result<Value, String>) -> Result<Vec<Value>, String> {
+    let mut url = url.to_string();
+    let mut out = Vec::new();
+    loop {
+        let body = get(&url)?;
+        // The link is followed with the mail token, so only back to Outlook.
+        let next = body["@odata.nextLink"].as_str().filter(|n| n.starts_with("https://outlook.office.com/")).map(str::to_string);
+        out.push(body);
+        match next {
+            Some(n) if out.len() < most => url = n,
+            _ => break,
+        }
+    }
+    Ok(out)
 }
 
 /// The user's mail address, from the mail sign-in's claims, lower-cased; empty when it doesn't say.
@@ -873,12 +967,16 @@ pub fn my_name(s: &SignIn) -> String {
     s.tokens.values().find_map(|t| auth::claims(&t.token)["name"].as_str().map(str::to_string)).unwrap_or_default()
 }
 
+/// The local calendar day (`YYYY-MM-DD`) a message came on.
+pub fn local_day(t: DateTime<Utc>) -> String {
+    t.with_timezone(&Local).format("%Y-%m-%d").to_string()
+}
+
 /// Groups messages by their local calendar day (`YYYY-MM-DD`).
 pub fn by_local_day(msgs: &[ChatMessage]) -> std::collections::BTreeMap<String, Vec<ChatMessage>> {
     let mut map: std::collections::BTreeMap<String, Vec<ChatMessage>> = std::collections::BTreeMap::new();
     for m in msgs {
-        let day = m.time.with_timezone(&Local).format("%Y-%m-%d").to_string();
-        map.entry(day).or_default().push(m.clone());
+        map.entry(local_day(m.time)).or_default().push(m.clone());
     }
     map
 }
@@ -954,6 +1052,88 @@ mod tests {
             }
             _ => panic!("expected a Teams capture"),
         }
+    }
+
+    fn chat_page(ids: std::ops::Range<i64>, older: Option<&str>) -> ChatPage {
+        let start: DateTime<Utc> = "2026-10-01T00:00:00Z".parse().unwrap();
+        let messages = ids
+            .map(|i| ChatMessage {
+                id: i.to_string(),
+                sender: "Maya".into(),
+                body: format!("message {i}"),
+                time: start + chrono::Duration::minutes(i),
+                files: vec![],
+            })
+            .collect();
+        ChatPage { messages, older: older.map(str::to_string) }
+    }
+
+    #[test]
+    fn a_chat_is_read_back_page_by_page_until_enough() {
+        // Three pages, newest first: 40..60, then 20..41 (one message again), then 0..20.
+        let older = |link: &str| match link {
+            "p2" => Some(chat_page(20..41, Some("p3"))),
+            "p3" => Some(chat_page(0..20, None)),
+            _ => None,
+        };
+        let ids = |m: &[ChatMessage]| m.iter().map(|m| m.id.parse::<i64>().unwrap()).collect::<Vec<_>>();
+
+        // Never enough: the whole chat, oldest first, the repeated message once, nothing left unread.
+        let (all, more) = page_back(chat_page(40..60, Some("p2")), 10, older, |_, _| false);
+        assert_eq!(ids(&all), (0..60).collect::<Vec<_>>());
+        assert!(!more);
+
+        // Enough after the second page: the third is left, and the caller is told.
+        let mut asked = Vec::new();
+        let (some, more) = page_back(chat_page(40..60, Some("p2")), 10, older, |m, pages| {
+            asked.push((m.len(), pages));
+            pages == 2
+        });
+        assert_eq!(ids(&some), (20..60).collect::<Vec<_>>());
+        assert!(more);
+        assert_eq!(asked, [(20, 1), (40, 2)]);
+
+        // The cap on pages stops it too, as does a page that can't be read.
+        assert_eq!(page_back(chat_page(40..60, Some("p2")), 2, older, |_, _| false).0.len(), 40);
+        assert!(page_back(chat_page(40..60, Some("p2")), 1, older, |_, _| false).1);
+        let (kept, more) = page_back(chat_page(40..60, Some("gone")), 10, older, |_, _| false);
+        assert_eq!((kept.len(), more), (20, true));
+
+        // One page with nothing before it: all there is.
+        assert_eq!(page_back(chat_page(0..5, None), 10, older, |_, _| false), (chat_page(0..5, None).messages, false));
+    }
+
+    #[test]
+    fn a_chat_pages_link_to_the_one_before_is_read() {
+        let msg = json!({"id": "1", "messagetype": "Text", "content": "hi", "imdisplayname": "Maya", "originalarrivaltime": "2026-10-24T09:00:00.000Z"});
+        let link = "https://chat.example/v1/users/ME/conversations/c/messages?syncState=abc";
+        let page = parse_page(&json!({"messages": [msg], "_metadata": {"backwardLink": link}}));
+        assert_eq!((page.messages.len(), page.older.as_deref()), (1, Some(link)));
+        assert_eq!(parse_page(&json!({"messages": [msg], "_metadata": {}})).older, None);
+        // An empty page is the chat's start, link or no link.
+        assert_eq!(parse_page(&json!({"messages": [], "_metadata": {"backwardLink": link}})).older, None);
+    }
+
+    #[test]
+    fn a_long_mail_thread_is_read_page_by_page() {
+        let first = "https://outlook.office.com/api/v2.0/me/messages?$top=2";
+        let next = "https://outlook.office.com/api/v2.0/me/messages?$top=2&$skip=2";
+        let mut asked = Vec::new();
+        let mut get = |u: &str| {
+            asked.push(u.to_string());
+            Ok(match u {
+                u if u == first => json!({"value": [{"Id": "1"}, {"Id": "2"}], "@odata.nextLink": next}),
+                u if u == next => json!({"value": [{"Id": "3"}]}),
+                _ => return Err("not a page".to_string()),
+            })
+        };
+        let pages = paged(first, 10, &mut get).unwrap();
+        assert_eq!(pages.iter().map(|p| p["value"].as_array().unwrap().len()).sum::<usize>(), 3);
+        // The cap on pages holds, and a link that leaves Outlook isn't followed.
+        assert_eq!(paged(first, 1, &mut get).unwrap().len(), 1);
+        let mut away = |_: &str| Ok(json!({"value": [], "@odata.nextLink": "https://elsewhere.example/more"}));
+        assert_eq!(paged(first, 10, &mut away).unwrap().len(), 1);
+        assert_eq!(asked, [first, next, first]);
     }
 
     #[test]

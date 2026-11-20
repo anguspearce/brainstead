@@ -68,7 +68,7 @@ A page that needs you says why: a heading whose year it can't tell, two summing-
 **Pages with no Current state** lists pages with a Timeline but no Current state; they aren't counted as needing a decision. **Write 5** has the assistant's cheap model write one for five pages, so you can check them in [Changes](app:review) first; **Write all** does the rest. It uses only the page's opening text and newest Timeline entries, and leaves alone a page with nothing current to say. Each page is one change, with **Revert all** for the run. **Stop** ends the run after the pages in progress.
 
 ## Fix with Ask
-**Fix with Ask** starts a chat asking the assistant to fix the issues that need judgement. Its edits are listed in [Changes](app:review) with Revert; safe fixes are made at once and `⌘Z` undoes them. The button is greyed out when nothing needs a decision.
+**Fix with Ask** starts a chat asking the assistant to fix the issues that need judgement. Its edits, and any safe fixes it makes, are listed in [Changes](app:review) with Revert. The button is greyed out when nothing needs a decision.
 
 ## Side cards and contradictions
 On the right, **Wiki pages by type** and **Wiki pages by tag** are pie charts; click a slice or row to open the [Wiki](app:wiki) filtered to it. **Most linked** lists the notes and wiki pages the most others link to; click one to open it. Sources changed since they were cited are under **More checks**. The **Contradictions** tab at the top has the report of wiki pages that disagree.

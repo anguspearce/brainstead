@@ -165,9 +165,17 @@ pub fn forget() -> Result<(), String> {
     platform::secret_delete(ACCOUNT)
 }
 
+/// Runs `f` as the only one changing the stored sign-in: the Teams host, the Outlook host and the
+/// app each read it, change their part and store it, and two doing so at once (both hand over as
+/// Chrome starts) would drop each other's fresh tokens. Every load-change-store goes through here;
+/// `f` must not call it again.
+pub fn changing<T>(f: impl FnOnce() -> T) -> T {
+    crate::nativehost::locked_by(&platform::data_dir(), "sign-in.lock", f)
+}
+
 /// Forgets Teams' sign-in (Teams' Sign out), keeping the mail one Outlook handed over.
 pub fn forget_teams() -> Result<(), String> {
-    match load() {
+    changing(|| match load() {
         Some(s) => match s.tokens.get(Service::Outlook.key()).cloned() {
             Some(mail) => {
                 let mut kept = SignIn { origin: s.origin, tenant: s.tenant, handed_over: s.handed_over, ..SignIn::default() };
@@ -177,19 +185,19 @@ pub fn forget_teams() -> Result<(), String> {
             None => forget(),
         },
         None => Ok(()),
-    }
+    })
 }
 
 /// Forgets only the mail sign-in (Outlook's Sign out), keeping Teams'.
 pub fn forget_mail() -> Result<(), String> {
-    match load() {
+    changing(|| match load() {
         Some(mut s) => {
             s.tokens.remove(Service::Outlook.key());
             s.rejected.remove(Service::Outlook.key());
             store(&s)
         }
         None => Ok(()),
-    }
+    })
 }
 
 /// What Settings shows. Signed in means we currently hold at least one unexpired token from a
@@ -319,11 +327,13 @@ fn fingerprint(token: &str) -> String {
 /// Microsoft turned `svc`'s token down (a 401): drops it and remembers it, so the sync says to sign
 /// in again rather than retrying it, until a different token for `svc` is handed over.
 pub fn reject(svc: Service) {
-    let Some(mut s) = load() else { return };
-    if let Some(t) = s.tokens.remove(svc.key()) {
-        s.rejected.insert(svc.key().to_string(), fingerprint(&t.token));
-        let _ = store(&s);
-    }
+    changing(|| {
+        let Some(mut s) = load() else { return };
+        if let Some(t) = s.tokens.remove(svc.key()) {
+            s.rejected.insert(svc.key().to_string(), fingerprint(&t.token));
+            let _ = store(&s);
+        }
+    })
 }
 
 /// A handed-over sign-in with what the earlier one had rejected applied: a service handed the same

@@ -263,6 +263,8 @@ export interface VaultStatus {
   state: "none" | "indexing" | "ready" | "error";
   vaultPath: string | null;
   error: string | null;
+  /** Something wrong that leaves the vault usable: the folder can't be watched for changes. */
+  warning?: string | null;
   stats: IndexStats;
 }
 
@@ -1145,6 +1147,8 @@ export interface ChangeSubmit {
   flags?: string[];
   origin: ChangeOrigin;
   model?: string | null;
+  /** Held whatever the checks say, and why: only the user accepts it. */
+  hold?: string | null;
 }
 
 export interface ChangeOutcome {
@@ -1289,6 +1293,11 @@ export const api = {
   updateSkip: () => invoke<void>("update_skip"),
   fixnamePlan: (req: FixNameRequest) => invoke<{ rightPage: string | null; rows: FixNameRow[] }>("fixname_plan", { req }),
   fixnameApply: (req: FixNameRequest, rows: FixNameRow[]) => invoke<string>("fixname_apply", { req, rows }),
+  /** What fixnameApply would write to the ticked notes, not written: an assistant's fix goes through Changes. */
+  fixnameChanges: (req: FixNameRequest, rows: FixNameRow[]) =>
+    invoke<{ page: string; instruction: Instruction }[]>("fixname_changes", { req, rows }),
+  /** Remembers the correction alone; false when it's remembered already. */
+  fixnameRemember: (req: FixNameRequest) => invoke<boolean>("fixname_remember", { req }),
   /** Changes, newest first; with page, only that page's. */
   changesList: (page?: string) => invoke<ChangeRow[]>("changes_list", { page: page ?? null }),
   changeGet: (id: string) => invoke<ChangeView>("change_get", { id }),
@@ -1319,6 +1328,9 @@ export const api = {
   changeForEditing: (id: string) => invoke<string>("change_for_editing", { id }),
   healthReport: (fresh = false) => invoke<HealthView>("health_report", { fresh }),
   healthFix: (fixes: HealthFix[]) => invoke<string>("health_fix", { fixes }),
+  /** What healthFix would write, not written, one change a page: an assistant's fixes go through Changes. */
+  healthFixChanges: (fixes: HealthFix[]) =>
+    invoke<{ page: string; title: string; instruction: Instruction; hold: string | null }[]>("health_fix_changes", { fixes }),
   /** Reshape pages: every page that can be reshaped by itself, or those named. */
   healthReshape: (pages: string[] | null, unattended = false) =>
     invoke<{ run: string; applied: number; failed: string[]; left: number }>("health_reshape", { pages, unattended }),
@@ -1553,6 +1565,8 @@ export const api = {
   initiativeActionLine: (lineText: string, edit: ActionEdit) => invoke<string>("initiative_action_line", { lineText, edit }),
   /** The Inbox's Task: a task at the end of the To Do list's To Do, nothing more to set; ⌘Z undoes it. */
   todoAddTask: (text: string) => invoke<Edited>("todo_add_task", { text }),
+  /** The Inbox's Task for a To Do list task: its line leaves Other and `text` joins To Do, in one write. */
+  inboxTaskToTodo: (line: number, lineText: string, text: string) => invoke<Edited>("inbox_task_to_todo", { line, lineText, text }),
   /** The initiatives: [name, path, status], A to Z. */
   initiativesList: () => invoke<[string, string, string][]>("initiatives_list"),
   /** Moves an action, whole, to another initiative (its task's link follows); ⌘Z undoes it. Says what it did. */

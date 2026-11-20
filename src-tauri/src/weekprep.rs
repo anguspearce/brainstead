@@ -263,7 +263,7 @@ fn ensure(app: &AppHandle, week: &str, trigger: &str, unattended: bool) -> Resul
 /// An accepted link suggestion: the note with the words linked, made as an agent change (in
 /// Changes, revertable), or held there for the user. Returns what became of it.
 #[tauri::command]
-pub fn weekprep_link(
+pub async fn weekprep_link(
     app: AppHandle,
     week: String,
     path: String,
@@ -271,23 +271,27 @@ pub fn weekprep_link(
     target: String,
     unattended: Option<bool>,
 ) -> Result<crate::changes::Outcome, String> {
-    let abs = app.state::<VaultService>().resolve_path(&path)?;
+    crate::blocking(move || link(&app, &week, &path, &phrase, &target, unattended.unwrap_or(false))).await
+}
+
+fn link(app: &AppHandle, week: &str, path: &str, phrase: &str, target: &str, unattended: bool) -> Result<crate::changes::Outcome, String> {
+    let abs = app.state::<VaultService>().resolve_path(path)?;
     let before = std::fs::read_to_string(&abs).map_err(|_| format!("{path} isn't there any more."))?;
-    let after = prep::with_link(&before, &phrase, &target).ok_or_else(|| format!("“{phrase}” isn't in {path} any more."))?;
-    let title = format!("Link {target} in {}", brainstead_core::filename::stem(&path));
+    let after = prep::with_link(&before, phrase, target).ok_or_else(|| format!("“{phrase}” isn't in {path} any more."))?;
+    let title = format!("Link {target} in {}", brainstead_core::filename::stem(path));
     // An assistant nobody is watching: held when a check fails.
-    let trigger = unattended.unwrap_or(false).then(|| "scheduled".to_string());
+    let trigger = unattended.then(|| "scheduled".to_string());
     let origin = Origin { kind: "review".into(), label: Some(format!("Weekly review {week}")), trigger, ..Default::default() };
     let mut s = crate::changes::Submit::new(
-        &path,
+        path,
         Kind::Edit,
         &title,
         "Suggested while preparing the weekly review.",
         origin,
         brainstead_core::changes::from_texts(Some(&before), &after),
     );
-    s.model = Some(model(&app, false));
-    crate::changes::submit(&app, s).map_err(|e| e.message().to_string())
+    s.model = Some(model(app, false));
+    crate::changes::submit(app, s).map_err(|e| e.message().to_string())
 }
 
 /// Checks every minute whether the preparation is due; runs nothing unless Brainstead runs the

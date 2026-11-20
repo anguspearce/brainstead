@@ -121,7 +121,8 @@ struct Staged {
 
 /// Changes that belong together (an Inbox item clarified: a task added to a project and taken out
 /// of the To Do list), each worked out on the page as the ones before it leave it. Held together
-/// when any of them is held, else applied one after another. Each is recorded in Changes.
+/// when any of them is held, else applied one after another, all or none (`all_or_none`). Each is
+/// recorded in Changes.
 pub fn submit_many(app: &AppHandle, list: Vec<Submit>) -> Res<Vec<Outcome>> {
     if list.is_empty() {
         return Err(invalid("No change given."));
@@ -181,19 +182,55 @@ pub fn submit_many(app: &AppHandle, list: Vec<Submit>) -> Res<Vec<Outcome>> {
     }
     let held = staged.iter().any(|x| x.why.is_some() || (x.scheduled && !x.c.flags.is_empty()));
     let together = staged.len() > 1;
+    if !held {
+        return all_or_none(
+            staged,
+            |x| apply(app, &root, x.c, None),
+            |o| match revert_one(app, &o.id) {
+                Ok(r) if r.ok => Ok(()),
+                Ok(r) => Err(format!("{} ({})", o.page, r.message)),
+                Err(e) => Err(format!("{} ({})", o.page, e.message())),
+            },
+        );
+    }
     staged
         .into_iter()
         .map(|mut x| {
-            if held {
-                if together && x.why.is_none() && x.c.flags.is_empty() {
-                    x.c.flags.push("Held with the rest of this change, which belongs with it.".into());
-                }
-                hold(app, x.c, x.why, x.current.as_deref())
-            } else {
-                apply(app, &root, x.c, None)
+            if together && x.why.is_none() && x.c.flags.is_empty() {
+                x.c.flags.push("Held with the rest of this change, which belongs with it.".into());
             }
+            hold(app, x.c, x.why, x.current.as_deref())
         })
         .collect()
+}
+
+/// Makes each of a batch in turn. When one can't be made (its page changed under it), the ones
+/// already made are undone, newest first, so changes that belong together are never left half
+/// made: a task filed in a project and still in the To Do list, to be filed again on a retry. The
+/// error then says nothing was changed, or exactly which changes stand because undoing them
+/// failed too.
+fn all_or_none<T, O>(items: Vec<T>, mut make: impl FnMut(T) -> Res<O>, mut undo: impl FnMut(&O) -> Result<(), String>) -> Res<Vec<O>> {
+    let mut made = Vec::new();
+    for x in items {
+        match make(x) {
+            Ok(o) => made.push(o),
+            // The first of them: nothing to undo, and the error as it is.
+            Err(e) if made.is_empty() => return Err(e),
+            Err(e) => {
+                let stand: Vec<String> = made.iter().rev().filter_map(|o| undo(o).err()).collect();
+                return Err(invalid(if stand.is_empty() {
+                    format!("{} Nothing was changed: the changes made with it were undone.", e.message())
+                } else {
+                    format!(
+                        "{} The changes made with it were undone, except these, which stand (revert them in Changes): {}",
+                        e.message(),
+                        stand.join("; ")
+                    )
+                }));
+            }
+        }
+    }
+    Ok(made)
 }
 
 /// The change's page, and a rename's new path, as the file system spells them
@@ -419,6 +456,8 @@ fn log_line(c: &Change) -> Option<String> {
             return None
         }
         "lint" => reviews::log_entry("lint-fix", "Wiki health", Some(&c.title), now),
+        // A line added to the log itself (Wiki health logging unlogged writes) is its own entry.
+        _ if c.page == "log.md" => return None,
         _ => reviews::log_entry(
             if c.kind == Kind::New { "create" } else { "update" },
             brainstead_core::filename::stem(&c.page),
@@ -854,6 +893,19 @@ fn only(todo: Vec<Change>, ids: &Option<Vec<String>>) -> Vec<Change> {
     }
 }
 
+/// Decides on each change in turn, carrying on past one that can't be: how many were done, and
+/// the ones that weren't with why.
+fn each(todo: Vec<Change>, mut decide: impl FnMut(&Change) -> Res<()>) -> Many {
+    let mut m = Many { done: 0, failed: vec![] };
+    for c in todo {
+        match decide(&c) {
+            Ok(()) => m.done += 1,
+            Err(e) => m.failed.push(format!("{}: {}", c.title, e.message())),
+        }
+    }
+    m
+}
+
 /// Accepts every held change in a run (`group`), or every held change when None; only those in
 /// `ids` when given.
 #[tauri::command]
@@ -863,15 +915,7 @@ pub async fn changes_accept_all(app: AppHandle, group: Option<String>, assistant
             Some(g) => held_in(g),
             None => store().list().into_iter().rev().filter(|c| c.status == Status::Held).collect(),
         };
-        let todo = only(todo, &ids);
-        let mut m = Many { done: 0, failed: vec![] };
-        for c in todo {
-            match accept_one(&app, &c.id, assistant == Some(true)) {
-                Ok(_) => m.done += 1,
-                Err(e) => m.failed.push(format!("{}: {}", c.title, e.message())),
-            }
-        }
-        Ok(m)
+        Ok(each(only(todo, &ids), |c| accept_one(&app, &c.id, assistant == Some(true)).map(|_| ())))
     })
     .await
 }
@@ -883,13 +927,7 @@ pub async fn changes_reject_all(app: AppHandle, group: Option<String>, ids: Opti
             Some(g) => held_in(g),
             None => store().list().into_iter().filter(|c| c.status == Status::Held).collect(),
         };
-        let todo = only(todo, &ids);
-        let mut m = Many { done: 0, failed: vec![] };
-        for c in todo {
-            reject_one(&app, &c.id)?;
-            m.done += 1;
-        }
-        Ok(m)
+        Ok(each(only(todo, &ids), |c| reject_one(&app, &c.id)))
     })
     .await
 }
@@ -1076,6 +1114,52 @@ mod tests {
         assert_eq!(meeting_transcript(&edit), None);
         let other = Change::new("x.md", Kind::New, "t", "", Origin::default(), None, changes::from_texts(None, "x\n"));
         assert_eq!(meeting_transcript(&other), None);
+    }
+
+    #[test]
+    fn a_batch_that_fails_part_way_is_undone() {
+        // The second of three can't be made: the first is undone, the third never tried.
+        let undone = std::cell::RefCell::new(Vec::new());
+        let make = |n: u32| if n == 2 { Err(invalid("Orbit App changed since it was read.")) } else { Ok(n) };
+        let e = all_or_none(vec![1, 2, 3], make, |o| {
+            undone.borrow_mut().push(*o);
+            Ok(())
+        })
+        .unwrap_err();
+        assert_eq!(*undone.borrow(), [1]);
+        assert_eq!(e.message(), "Orbit App changed since it was read. Nothing was changed: the changes made with it were undone.");
+        // Undone newest first; one that can't be undone is named as standing.
+        let order = std::cell::RefCell::new(Vec::new());
+        let make = |n: u32| if n == 3 { Err(invalid("No.")) } else { Ok(n) };
+        let e = all_or_none(vec![1, 2, 3], make, |o| {
+            order.borrow_mut().push(*o);
+            if *o == 1 {
+                Err("Me. To Do List (edited since)".to_string())
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap_err();
+        assert_eq!(*order.borrow(), [2, 1]);
+        assert!(e.message().ends_with("which stand (revert them in Changes): Me. To Do List (edited since)"), "{}", e.message());
+        // The first failing leaves nothing to undo, and all made is all given back.
+        let none = all_or_none(vec![2], |_: u32| Err::<u32, _>(invalid("No.")), |_| panic!("nothing was made"));
+        assert_eq!(none.unwrap_err().message(), "No.");
+        assert_eq!(all_or_none(vec![1, 2], Ok::<u32, EditError>, |_| Ok(())).unwrap(), [1, 2]);
+    }
+
+    #[test]
+    fn deciding_on_many_carries_on_past_one_that_cant_be() {
+        let c = |title: &str| Change::new("x.md", Kind::Edit, title, "", Origin::default(), None, changes::from_texts(Some("a\n"), "b\n"));
+        let m = each(vec![c("One"), c("Two"), c("Three")], |c| {
+            if c.title == "Two" {
+                Err(invalid("That change isn't waiting any more."))
+            } else {
+                Ok(())
+            }
+        });
+        assert_eq!(m.done, 2);
+        assert_eq!(m.failed, ["Two: That change isn't waiting any more."]);
     }
 
     /// A change to `page` carrying `u`, as `submit` records it.

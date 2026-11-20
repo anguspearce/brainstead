@@ -40,6 +40,7 @@ In short, an assistant can do whatever the screens do. The help tool, and the in
 - create projects, change their status, area and **Done looks like**, rename an area on all its projects, and put areas and projects in order;
 - edit any page, make notes (from your templates too) and wiki pages, rename, and move notes to or from the Trash;
 - add an image to `images/` (from a file or its bytes) for a note it writes to embed, as pasting one does; Revert moves it to Brainstead's Trash;
+- make Wiki health's safe fixes (each page a change, with `updated:` set to today; a system note's header put back is held for you) and [Fix name](wiki.md#meeting-notes-and-the-other-tools) (each file a change, made or held together; the correction is remembered once they're made);
 - add the example notes, save a Doc check or start its register, save a comparison, save a Contradictions report, and use Wiki health's **Reshape pages** and **Link to…**.
 
 A quote not found in its source is flagged, once.
@@ -54,7 +55,7 @@ An assistant can list, reject or revert changes when you ask. It accepts a held 
 - accept or skip Find tasks and projects' suggestions (each made as a change in Changes);
 - save an Ask chat to the vault;
 - bookmarks, saved searches, adding files to Sources, restoring from the Trash;
-- Wiki health's safe fixes and its issue buttons, and [Fix name](wiki.md#meeting-notes-and-the-other-tools).
+- Wiki health's issue buttons.
 
 **At once, with no ⌘Z, only when you ask:**
 

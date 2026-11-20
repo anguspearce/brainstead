@@ -34,7 +34,7 @@ They work on [Today](app:today), [Projects](app:projects) and the [Weekly review
 **Update…** in a task's ⋯ menu takes a line saying what has happened ("Maya has replied", "moved to next Friday"). An assistant applies it in the background, in an Ask chat of its own called **Update: …**, with Brainstead's own tools: it marks things done or dropped, changes a date, owner or wording, adds a follow-up (a waiting-for when someone else has the next step) and notes what happened on the project's or initiative's page. Change only what the update means is the rule it works to; when it can't tell, it changes nothing and says what it needs. While it works it's in the sidebar's Running line; when it ends a message says what it changed, with **Open** for its chat. Every change is in [Changes](help:review) with **Revert**, made at once as anything you start is.
 
 ## Tick, defer and undo
-Tick a task to mark it done; it gets a done date (`✅ 2026-10-03`). Untick it to remove it. ⌘Z undoes up to five task changes, even after a restart, as long as the line hasn't changed since.
+Tick a task to mark it done; it gets a done date (`✅ 2026-10-03`). Untick it to remove it. ⌘Z undoes up to five task changes, even after a restart, as long as the line hasn't changed since. A deleted task goes back between the two lines it sat between; if they're no longer next to each other, it isn't put back.
 
 Click a chip on a row to change that field: the due or defer date, priority, a context, the effort or the project. Each opens a small picker with its quick choices:
 
