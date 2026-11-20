@@ -21,7 +21,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 vi.mock("@tauri-apps/api/webviewWindow", () => ({ getCurrentWebviewWindow: () => ({ setZoom: vi.fn(async () => {}) }) }));
 
 import type { InboxItem, ReviewRun, TaskRow } from "./api";
-import { findTask, Listing, runAction, summaryRunLine, taskLineOut } from "./mcpActions";
+import { findTask, Listing, renewArgs, runAction, summaryRunLine, taskLineOut } from "./mcpActions";
 import { settings } from "./store";
 import { focusMode, startFocus } from "./focus";
 import { nav } from "./nav";
@@ -3137,5 +3137,15 @@ describe("MCP actions", () => {
 
   it("refuses an action it doesn't know", async () => {
     await expect(run("nope")).rejects.toThrow(/doesn't know the action/);
+  });
+});
+
+describe("renamed values", () => {
+  it("takes the old names for a release", () => {
+    expect(renewArgs("inbox.clarify", { becomes: "task", item: "task:1" })).toEqual({ becomes: "todo", item: "task:1" });
+    expect(renewArgs("inbox.capture", { kind: "thought" }).kind).toBe("scratchpad");
+    expect(renewArgs("open", { screen: "knowledge_health" }).screen).toBe("wiki_health");
+    expect(renewArgs("open", { screen: "inbox" }).screen).toBe("inbox");
+    expect(renewArgs("task.create", { kind: "thought" }).kind).toBe("thought");
   });
 });

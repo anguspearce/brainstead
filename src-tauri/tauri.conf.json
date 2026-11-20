@@ -16,7 +16,7 @@
         "title": "Brainstead",
         "width": 1320,
         "height": 840,
-        "minWidth": 1040,
+        "minWidth": 800,
         "minHeight": 640,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,

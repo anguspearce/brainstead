@@ -1097,7 +1097,6 @@ export function TaskList({
                   )}
                 </div>
               </div>
-              {rowAction?.(t)}
               <button
                 type="button"
                 className="ibtn tadd"
@@ -1110,6 +1109,8 @@ export function TaskList({
               >
                 <Icon name="plus" size={14} />
               </button>
+              {/* Beside ⋯, not after the + that shows only on hover. */}
+              {rowAction?.(t)}
               <button
                 type="button"
                 className="ibtn tmore"

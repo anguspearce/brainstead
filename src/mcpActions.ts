@@ -1005,6 +1005,7 @@ export async function clarifyChanges(
  *  the caller to say: the MCP server's clarify, and the weekly review's suggestions. `unattended`:
  *  nobody is watching, so an ingest it starts runs as a scheduled one. */
 export async function clarifyItem(i: InboxItem, a: Args, unattended = false): Promise<string> {
+  a = renewArgs("inbox.clarify", a);
   const becomes = str(a, "becomes");
   const text = str(a, "text") ?? (i.kind === "capture" ? `Follow up on [[${i.text}]]` : i.text.trim());
   const proj = str(a, "project") ? await projectPath(str(a, "project")!) : null;
@@ -3111,11 +3112,31 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   },
 };
 
+/** Values renamed with the screens they name (D-20261119-03, -07; D-20261120-01), still taken for a release so an
+ *  assistant's older prompt keeps working: action → argument → old value → new value. */
+export const OLD_VALUES: Record<string, Record<string, Record<string, string>>> = {
+  "inbox.clarify": { becomes: { task: "todo" } },
+  "inbox.capture": { kind: { thought: "scratchpad" } },
+  open: { screen: { knowledge_health: "wiki_health" } },
+};
+
+/** `a` with any old value `OLD_VALUES` lists for `action` turned into its new name. */
+export function renewArgs(action: string, a: Args): Args {
+  const olds = OLD_VALUES[action];
+  if (!olds) return a;
+  const out = { ...a };
+  for (const [k, map] of Object.entries(olds)) {
+    const v = typeof out[k] === "string" ? (out[k] as string).trim() : undefined;
+    if (v && map[v]) out[k] = map[v];
+  }
+  return out;
+}
+
 /** Runs one request; what it gives back goes to the server as is (a string is shown as text). */
 export async function runAction(r: McpRequest): Promise<unknown> {
   const f = ACTIONS[r.action];
   if (!f) throw new Error(`Brainstead doesn't know the action ${r.action}.`);
-  return f(r.args ?? {}, r);
+  return f(renewArgs(r.action, r.args ?? {}), r);
 }
 
 /** Why it failed, as one line for the assistant. */

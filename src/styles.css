@@ -24,7 +24,7 @@
   --accent-ink: #174fb3;
   --accent-soft: #e8f0fd;
   --on-accent: #fff;
-  --ring: #a9c4f5;
+  --ring: #3a6bc0;
   --select: color-mix(in srgb, var(--accent) 22%, transparent); /* selected text */
   --amber: #9a5600;
   --amber-soft: #fbf0df;
@@ -4561,7 +4561,7 @@ button.rnhead.quiet {
   --accent-ink: #174fb3;
   --accent-soft: #e8f0fd;
   --on-accent: #fff;
-  --ring: #a9c4f5;
+  --ring: #3a6bc0;
   --doc-heading: #143a5e;
   --doc-accent: #2e75b6;
   --doc-ink: #212730;
@@ -10677,7 +10677,7 @@ html.tray-view body {
 }
 
 /* Narrow top bars. The bar's controls condense in two bands of its content width (container top,
-   set on .top), so the bar fits a 1000px window and the 1040px minimum with the widest sidebar, on
+   set on .top), so the bar fits a 1000px window and a 1040px one with the widest sidebar (the minimum is 800px, with the rail), on
    Windows too, where the window's buttons take 156px of it. Tight (800px and under): a segmented
    control's details (.segd, the counts) go, and words with a tight form (.sq-t) take it. Narrow
    (680px and under): a segmented control becomes its drop-down twin (.segsel, drawn by Seg in a bar),

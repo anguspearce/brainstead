@@ -63,10 +63,10 @@ export function GuideOfferHost() {
           </label>
           <span className="grow" />
           <button type="button" className="btn lg" title="Close this and carry on" onClick={() => close(false)}>
-            Not Now
+            Not now
           </button>
           <button type="button" className="btn lg pri" autoFocus title="Open the first guide in the help" onClick={() => close(true)}>
-            Open Getting Started
+            Open Getting started
           </button>
         </div>
       </div>

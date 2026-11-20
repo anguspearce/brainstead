@@ -13,7 +13,8 @@ const ON = "",
 export function plainText(md: string): string {
   return (
     md
-      // Templater code, and a block cut off before its end.
+      // Templater code, a block whose start the snippet cut off, and one cut off before its end.
+      .replace(/^(?:(?!<%)[\s\S])*?-?%>/, "")
       .replace(/<%[\s\S]*?%>/g, "")
       .replace(/<%[\s\S]*$/, "")
       // Inline fields: [effort:: 3] and (due:: 2026-10-01).

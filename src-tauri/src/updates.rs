@@ -10,8 +10,8 @@
 //! When: 20 seconds after launch, then once a day while the app runs (the last check's time is
 //! kept, so restarting doesn't check again), and whenever the user picks Check for Updates….
 //! An update found in the background waits until the main window is next focused, so the offer
-//! never pops up over another app. It offers Install and Restart, Later (asked again at the next
-//! day's check) or Skip This Version. Release builds only, on a system releases carry a package
+//! never pops up over another app. It offers Install and restart, Later (asked again at the next
+//! day's check) or Skip this version. Release builds only, on a system releases carry a package
 //! for (`platform::release_updates`: macOS and Windows). Installing restarts the app by the
 //! same road as ⌘Q (`crate::restart_for_update`), so unsaved edits are asked about first.
 //!
@@ -45,9 +45,9 @@ const FIRST_CHECK: Duration = Duration::from_secs(20);
 const EVERY: Duration = Duration::from_secs(24 * 60 * 60);
 const TICK: Duration = Duration::from_secs(60 * 60);
 
-const INSTALL: &str = "Install and Restart";
+const INSTALL: &str = "Install and restart";
 const LATER: &str = "Later";
-const SKIP: &str = "Skip This Version";
+const SKIP: &str = "Skip this version";
 
 /// Why an update can't be installed right now ("A backup is running."), or None when it can.
 pub type Busy = fn(&AppHandle) -> Option<String>;
@@ -57,7 +57,7 @@ pub struct Updates {
     pending: Mutex<Option<Update>>,
     /// On the window, waiting for an answer.
     offered: Mutex<Option<Update>>,
-    /// Windows: downloaded for Install and Restart, waiting for the window to deal with unsaved
+    /// Windows: downloaded for Install and restart, waiting for the window to deal with unsaved
     /// edits (`install_downloaded`).
     downloaded: Mutex<Option<(Update, Vec<u8>)>>,
     /// An offer is up or an update is installing: no second offer meanwhile.
@@ -316,7 +316,7 @@ pub fn update_failed(app: AppHandle) -> Option<Message> {
     app.try_state::<Updates>()?.failed.lock().unwrap().clone()
 }
 
-/// Install and Restart, from the window's dialog.
+/// Install and restart, from the window's dialog.
 #[tauri::command]
 pub async fn update_install(app: AppHandle) {
     let Some(state) = app.try_state::<Updates>() else { return };
@@ -333,7 +333,7 @@ pub fn update_later(app: AppHandle) {
     state.asking.store(false, Ordering::SeqCst);
 }
 
-/// Skip This Version: not offered again by the background checks.
+/// Skip this version: not offered again by the background checks.
 #[tauri::command]
 pub fn update_skip(app: AppHandle) {
     let Some(state) = app.try_state::<Updates>() else { return };
@@ -415,7 +415,7 @@ async fn install(app: &AppHandle, update: Update) {
     }
 }
 
-/// Windows: runs the installer of the update downloaded for Install and Restart, after what
+/// Windows: runs the installer of the update downloaded for Install and restart, after what
 /// quitting does (`crate::before_quit`), since it closes the app without a quit and opens the new
 /// version when it's done. Called by app_restart once the window has dealt with unsaved edits.
 /// False when nothing is waiting (always on macOS, where the update is in place before the restart).

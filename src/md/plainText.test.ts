@@ -24,6 +24,10 @@ describe("plainText", () => {
   it("drops Templater code", () => {
     expect(plainText('Date: <% tp.date.now("YYYY-MM-DD") %> done')).toBe("Date: done");
   });
+  it("drops Templater code the snippet cut in half", () => {
+    expect(plainText('tp.file.title, "") -%>\n# Weekly plan <% tp.date.now(')).toBe("Weekly plan");
+    expect(plainText('"") -%>')).toBe("");
+  });
   it("leaves snake_case and maths alone", () => {
     expect(plainText("set max_retry_count to 2 * 3 * 4")).toBe("set max_retry_count to 2 * 3 * 4");
   });

@@ -378,12 +378,13 @@ export function FileList<T extends FileSummary>({
 /** A search hit's passage, with the matched words marked. */
 export function Snippet({ hit }: { hit?: SearchHit }) {
   if (!hit?.snippet.length) return null;
+  const segs = dropLeadingHeading(plainSegments(hit.snippet), hit.heading ? plainText(hit.heading) : "");
+  // A passage that was all code (a template's Templater tags) shows nothing rather than its leftovers.
+  if (!segs.some((s) => s.text.trim())) return null;
   return (
     <div className="snip">
       {hit.heading && <span className="snh">{plainText(hit.heading)} · </span>}
-      {dropLeadingHeading(plainSegments(hit.snippet), hit.heading ? plainText(hit.heading) : "").map((s, i) =>
-        s.hit ? <mark key={i}>{iconizeEmoji(s.text)}</mark> : <span key={i}>{iconizeEmoji(s.text)}</span>,
-      )}
+      {segs.map((s, i) => (s.hit ? <mark key={i}>{iconizeEmoji(s.text)}</mark> : <span key={i}>{iconizeEmoji(s.text)}</span>))}
     </div>
   );
 }

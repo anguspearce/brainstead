@@ -14,7 +14,7 @@ import { api, Settings } from "./api";
 import { settings, Store, useStore } from "./store";
 
 /** A window this many CSS px wide or narrower is narrow: the narrow scenes (1000 px) and a
- *  minimum-width window (1040 px) at 100%, and the usual 1320 px window from 120% up. */
+ *  1040 px window at 100% (the minimum is 800 px, D-20261120-01), and the usual 1320 px window from 120% up. */
 export const RAIL_BELOW = 1100;
 
 const query = `(max-width: ${RAIL_BELOW}px)`;

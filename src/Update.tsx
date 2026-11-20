@@ -108,7 +108,7 @@ function UpdateOfferDialog({ offer, progress }: { offer: UpdateOffer; progress: 
         ) : (
           <div className="row">
             <button type="button" className="btn lg" title="Don't offer this version again" onClick={answer(api.updateSkip)}>
-              Skip This Version
+              Skip this version
             </button>
             <span className="grow" />
             <button type="button" className="btn lg" title="Ask again at the next day's check" onClick={later}>
@@ -125,7 +125,7 @@ function UpdateOfferDialog({ offer, progress }: { offer: UpdateOffer; progress: 
                 void api.updateInstall().catch(() => {});
               }}
             >
-              Install and Restart
+              Install and restart
             </button>
           </div>
         )}
