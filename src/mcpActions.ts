@@ -1559,13 +1559,24 @@ async function changesTool(a: Args): Promise<string | Listing> {
     throw new Error(
       "Nothing held can be accepted in a session nobody is watching: the user accepts held changes on Brainstead's Changes screen.",
     );
-  // A run's changes, only those query finds when given, as Accept all, Reject all and Revert all do
-  // with Changes' search on.
+  // A run's changes, only those query, type and date leave when given, as Accept all, Reject all
+  // and Revert all do with Changes' search, type chip or day on (the screen's own changeShown).
   const inRun = async (group: string, status: ChangeRow["status"]) => {
     const q = (str(a, "query") ?? "").trim();
-    const todo = runChanges(await api.changesList(), group, status, q);
-    if (q && !todo.length) throw new Error(`No ${status} change in that run matches “${q}”.`);
-    return { todo, ids: q ? todo.map((c) => c.id) : undefined };
+    const every = await api.changesList();
+    // A type as the log names it or as All's chip says it, as list_changes takes it.
+    const want = str(a, "type")?.toLowerCase();
+    const types = typesIn(every, []);
+    const type = want ? types.find((x) => x.toLowerCase() === want || actionLabel(x).toLowerCase() === want) : undefined;
+    if (want && !type) throw new Error(`No “${want}” changes. The types: ${types.join(", ") || "none"}.`);
+    const f: AllFilter = { type: type ?? null, day: str(a, "date") ?? null, q };
+    const narrowed = !!(f.q || f.type || f.day);
+    const todo = runChanges(every, group, status).filter((c) => changeShown(c, f));
+    if (narrowed && !todo.length) {
+      const by = [q && `“${q}”`, type && `type ${type}`, f.day && `the day ${f.day}`].filter(Boolean).join(", ");
+      throw new Error(`No ${status} change in that run matches ${by}.`);
+    }
+    return { todo, ids: narrowed ? todo.map((c) => c.id) : undefined };
   };
   if (action === "accept_run" || action === "reject_run") {
     const group = str(a, "group");

@@ -609,6 +609,21 @@ describe("MCP actions", () => {
     await run("changes", { action: "revert_run", group: "daily-check-1", query: "orbit" });
     expect(calls.find(([c]) => c === "changes_revert_all")![1]).toEqual({ group: "daily-check-1", ids: ["c"] });
     await expect(run("changes", { action: "reject_run", group: "daily-check-1", query: "maya" })).rejects.toThrow(/No held change/);
+    // A type and a day narrow a run too, as All's chip and day do on the screen.
+    const made = (id: string, kind: string, created: string) => ({ ...row(id, id, "applied"), kind, created });
+    answers.changes_list = () => [
+      made("n1", "new", "2026-10-02T09:00:00"),
+      made("e1", "edit", "2026-10-02T09:05:00"),
+      made("n2", "new", "2026-10-03T09:00:00"),
+    ];
+    calls.length = 0;
+    await run("changes", { action: "revert_run", group: "daily-check-1", type: "create" });
+    expect(calls.find(([c]) => c === "changes_revert_all")![1]).toEqual({ group: "daily-check-1", ids: ["n1", "n2"] });
+    calls.length = 0;
+    await run("changes", { action: "revert_run", group: "daily-check-1", type: "Created", date: "2026-10-03" });
+    expect(calls.find(([c]) => c === "changes_revert_all")![1]).toEqual({ group: "daily-check-1", ids: ["n2"] });
+    await expect(run("changes", { action: "revert_run", group: "daily-check-1", date: "2026-10-09" })).rejects.toThrow(/No applied change/);
+    await expect(run("changes", { action: "revert_run", group: "daily-check-1", type: "summary" })).rejects.toThrow(/The types/);
   });
 
   it("reads and sets how long Changes keeps its history", async () => {
