@@ -10945,6 +10945,11 @@ html.tray-view body {
   display: flex;
   flex-direction: column;
   gap: 2px;
+
+  /* Its rows hang from a rule under the Vault row's icon, indented, so it's clear they're its. */
+  margin: 2px 0 2px 16px;
+  padding-left: 6px;
+  border-left: 1px solid var(--line2);
 }
 
 /* The sidebar as an icon rail (src/sidebarRail.ts, D-20261119-12): on a narrow window, or when
@@ -11032,8 +11037,9 @@ html[data-platform="macos"] .shell {
   background: var(--line);
 }
 
-/* The Vault fold opens in place: its rows under it, set in by a rule. */
+/* The Vault fold opens in place: its rows under it, on a band (the rail has no room to indent). */
 .side.rail .foot .foldkids {
+  border-left: 0;
   margin: 0 2px;
   padding: 2px 0;
   border-radius: 8px;
