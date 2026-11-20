@@ -164,7 +164,7 @@ export function TrashScreen() {
                 l,
                 `${LABEL[l]}s`,
                 `Only the ${LABEL[l].toLowerCase()}s in the Trash`,
-                ` · ${count(l)}`,
+                ` ${count(l)}`,
               ]),
           ]}
         />

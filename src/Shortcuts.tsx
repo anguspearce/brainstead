@@ -6,6 +6,7 @@
 // src/help/keyboard.md). ⌘K's "Keyboard shortcuts", Help › Keyboard Shortcuts and the help drawer
 // open it; `?` opens the help drawer.
 
+import type { ReactNode } from "react";
 import { Icon } from "./icons";
 import { Dialog } from "./ui";
 import { settings, Store, useStore } from "./store";
@@ -21,6 +22,22 @@ export const fmtAccel = accelLabel;
  *  as it's set. */
 export const SECTIONS = (capture: string): [string, [string, string][]][] =>
   KEYS.map(([title, rows]) => [title, rows.map(([k, what]): [string, string] => [keyLabel(k.replace("⌃⌥Space", capture)), what])]);
+
+/** A key's description as the help writes it, without its markdown showing: `keys` as keys,
+ *  **bold** bold, and a [link](app:…) as its words (the help drawer is where it opens). */
+export function inline(text: string): ReactNode[] {
+  return text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/).map((part, i) => {
+    if (part.startsWith("`") && part.endsWith("`") && part.length > 2)
+      return (
+        <span key={i} className="kbd">
+          {keyLabel(part.slice(1, -1))}
+        </span>
+      );
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) return <b key={i}>{part.slice(2, -2)}</b>;
+    const link = part.match(/^\[([^\]]+)\]\([^)]+\)$/);
+    return link ? link[1] : part;
+  });
+}
 
 export function ShortcutsHost() {
   const open = useStore(shortcutsOpen);
@@ -56,7 +73,7 @@ export function ShortcutsHost() {
                         </span>
                       ))}
                     </dt>
-                    <dd>{what}</dd>
+                    <dd>{inline(what)}</dd>
                   </div>
                 ))}
               </dl>

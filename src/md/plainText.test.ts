@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { describe, expect, it } from "vitest";
-import { plainSegments, plainText } from "./plainText";
+import { dropLeadingHeading, plainSegments, plainText } from "./plainText";
 
 describe("plainText", () => {
   it("drops emphasis and keeps the words", () => {
@@ -44,5 +44,20 @@ describe("plainSegments", () => {
       { text: "Source", hit: true },
       { text: ": Orbit", hit: false },
     ]);
+  });
+});
+
+describe("dropLeadingHeading", () => {
+  const seg = (...xs: [string, boolean][]) => xs.map(([text, hit]) => ({ text, hit }));
+  it("drops the heading's words from the passage's start, hits and all", () => {
+    expect(dropLeadingHeading(seg(["Launch", true], [" prep Book the room", false]), "Launch prep")).toEqual(seg(["Book the room", false]));
+    expect(dropLeadingHeading(seg(["Still open - Lena's plan", false]), "Daily summary 2026-11-19 › Still open")).toEqual(
+      seg(["Lena's plan", false]),
+    );
+  });
+  it("keeps a passage that only starts like the heading, or is nothing but it", () => {
+    expect(dropLeadingHeading(seg(["Statusline is set", false]), "Status")).toEqual(seg(["Statusline is set", false]));
+    expect(dropLeadingHeading(seg(["Status", false]), "Status")).toEqual(seg(["Status", false]));
+    expect(dropLeadingHeading(seg(["Other words", false]), "Status")).toEqual(seg(["Other words", false]));
   });
 });

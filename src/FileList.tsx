@@ -7,7 +7,7 @@
 // menu.
 
 import { iconizeEmoji } from "./md/fieldEmoji";
-import { plainSegments, plainText } from "./md/plainText";
+import { dropLeadingHeading, plainSegments, plainText } from "./md/plainText";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { api, FileSummary, Layer, SearchHit } from "./api";
 import { FileMenu, useFileMenu } from "./FileMenu";
@@ -381,7 +381,7 @@ export function Snippet({ hit }: { hit?: SearchHit }) {
   return (
     <div className="snip">
       {hit.heading && <span className="snh">{plainText(hit.heading)} · </span>}
-      {plainSegments(hit.snippet).map((s, i) =>
+      {dropLeadingHeading(plainSegments(hit.snippet), hit.heading ? plainText(hit.heading) : "").map((s, i) =>
         s.hit ? <mark key={i}>{iconizeEmoji(s.text)}</mark> : <span key={i}>{iconizeEmoji(s.text)}</span>,
       )}
     </div>

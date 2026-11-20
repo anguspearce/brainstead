@@ -69,7 +69,7 @@ describe("Trash", () => {
     render(<TrashScreen />);
     expect(await screen.findByText("Meeting. Old - 2026-09-24")).toBeTruthy();
     expect(screen.getByText("wiki/entities/")).toBeTruthy();
-    fireEvent.click(screen.getByRole("radio", { name: "Wikis · 1" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Wikis 1" }));
     expect(screen.queryByText("Meeting. Old - 2026-09-24")).toBeNull();
     fireEvent.click(screen.getByRole("radio", { name: "All" }));
     fireEvent.click(screen.getAllByRole("button", { name: "Restore" })[0]);
