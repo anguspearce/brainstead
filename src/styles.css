@@ -25,6 +25,7 @@
   --accent-soft: #e8f0fd;
   --on-accent: #fff;
   --ring: #a9c4f5;
+  --select: color-mix(in srgb, var(--accent) 22%, transparent); /* selected text */
   --amber: #9a5600;
   --amber-soft: #fbf0df;
   --hl-red: #f6d6d2;
@@ -109,6 +110,7 @@
     --accent-soft: #1b2535;
     --on-accent: #fff;
     --ring: #3a6bc0;
+    --select: color-mix(in srgb, var(--accent) 40%, transparent);
     --amber: #d9a24e;
     --amber-soft: #2f2618;
     --hl-red: #49211f;
@@ -163,6 +165,7 @@
   --accent-soft: #1b2535;
   --on-accent: #fff;
   --ring: #3a6bc0;
+  --select: color-mix(in srgb, var(--accent) 40%, transparent);
   --amber: #d9a24e;
   --amber-soft: #2f2618;
   --hl-red: #49211f;
@@ -216,6 +219,15 @@ input {
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 1px;
+}
+
+/* Selected text and the caret take the app's blue, as the editor's do, rather than the system's. */
+::selection {
+  background: var(--select);
+}
+input,
+textarea {
+  caret-color: var(--accent);
 }
 
 /* shell */
@@ -1918,6 +1930,14 @@ html[data-platform]:not([data-platform="macos"]) .top.focusbar {
 .docgrid.focus {
   padding: 12px 10% 120px;
 }
+
+/* Centred at a reading measure (about 75 characters a line), growing with the text size, rather
+   than the window's width less its margins. */
+.docgrid.focus .doc {
+  width: 100%;
+  max-width: calc((var(--read-size, 15px) + 2px) * 42);
+  margin-inline: auto;
+}
 .docgrid.focus .prose,
 .docgrid.focus .editor .cm-content {
   font-size: calc(var(--read-size, 15px) + 2px);
@@ -3291,6 +3311,12 @@ button.rrow.rlink:hover {
   padding: 4px 0;
 }
 
+/* The footer's ghost button (More in Activity, Open note) keeps its hover padding but puts its words
+   on the card's left edge, where the rows' icons start. */
+.rcard .rfoot .btn.ghost {
+  margin-left: -9px;
+}
+
 /* Today's daily and weekly summary cards: the band folds and opens the block. */
 .sumhead {
   width: 100%;
@@ -3392,6 +3418,11 @@ button.rrow.rlink:hover {
   field-sizing: content;
   max-height: 160px;
   min-height: 24px;
+}
+
+/* Empty, it's as tall as its hint, which wraps on a narrow column: no scroll bar for that. */
+.capture textarea:placeholder-shown {
+  overflow: hidden;
 }
 .capture.compact textarea {
   font-size: var(--fs-md);
@@ -3779,6 +3810,18 @@ button.rnhead {
 .rnhead svg:first-child {
   color: var(--accent);
 }
+
+/* Nothing to update: a plain line, not a heading that looks like it opens something. */
+button.rnhead.quiet {
+  cursor: default;
+  color: var(--ink2);
+}
+.rnhead.quiet b {
+  font-weight: 400;
+}
+.rnhead.quiet svg:first-child {
+  color: var(--ink3);
+}
 .rnfiles {
   max-height: 280px;
   overflow: auto;
@@ -4009,7 +4052,7 @@ button.rnhead {
 }
 .editor .cm-selectionBackground,
 .editor .cm-focused .cm-selectionBackground {
-  background: var(--accent-soft) !important;
+  background: var(--select) !important;
 }
 .editor .cm-selectionMatch {
   background: var(--hover);
@@ -4560,6 +4603,7 @@ button.rnhead {
   --accent-soft: #1b2535;
   --on-accent: #fff;
   --ring: #3a6bc0;
+  --select: color-mix(in srgb, var(--accent) 40%, transparent);
   --doc-heading: #9fc4ea;
   --doc-accent: #6aa9e0;
   --doc-ink: #e6e9ee;
@@ -8441,6 +8485,9 @@ select.sel {
   display: block;
   overflow-wrap: anywhere;
 }
+.mpick .mdate {
+  white-space: nowrap;
+}
 .mtext {
   overflow-y: auto;
   padding: 20px 28px;
@@ -8551,7 +8598,7 @@ select.sel {
   display: grid;
   grid-template-columns: 120px minmax(0, 1fr);
   gap: 10px;
-  align-items: center;
+  align-items: baseline;
   font-size: var(--fs-sm);
 }
 .krow dt {
@@ -9728,6 +9775,16 @@ button.hc {
   }
 }
 
+/* Busy without the sweep: a still, half-strength bar across the track says it's working. */
+@media (prefers-reduced-motion: reduce) {
+  .jprog .bar.busy i,
+  .tray-progress i.indef {
+    width: 100% !important;
+    opacity: 0.5;
+    animation: none !important;
+  }
+}
+
 /* A button whose document is gone: the wrapper carries the tooltip (src/docButton.tsx). */
 .gonewrap {
   display: inline-flex;
@@ -10593,6 +10650,12 @@ html.tray-view body {
 /* A button with its menu beside it (Sources' Meeting note ▾). */
 .splitbtn {
   display: inline-flex;
+}
+
+/* Sources' rows are one line each beside a 28px action button: centre them, so the words sit level
+   with the button's rather than at its top. */
+.body.sources .frow {
+  align-items: center;
 }
 .splitbtn > .btn:first-child {
   border-top-right-radius: 0;

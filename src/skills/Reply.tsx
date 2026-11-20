@@ -256,7 +256,8 @@ export function ReplyScreen() {
               <div className="rthreadmd">
                 <Markdown content={text} path={chosen} root={root} />
               </div>
-              <button type="button" className="btn sm ghost" title={`Open the captured thread, ${chosen}`} onClick={() => openDoc(chosen)}>
+              <button type="button" className="btn sm" title={`Open the captured thread, ${chosen}`} onClick={() => openDoc(chosen)}>
+                <Icon name="source" size={12} />
                 Open the capture
               </button>
             </div>

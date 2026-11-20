@@ -145,7 +145,6 @@ export function ProjectsScreen() {
     <main className="main">
       <TopBar
         title="Projects"
-        sub={projects ? `${counts.get("active")} active · ${counts.get("on-hold")} on hold · ${counts.get("someday")} someday` : undefined}
         ask={
           open
             ? { about: `the project ${askQuote(open.name)}`, prompt: `About ${askLink(open.path)}: ` }
