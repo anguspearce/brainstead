@@ -26,6 +26,7 @@ import { applyPlatform, blockBrowserKeys } from "./platform";
 import { applyInterfaceSize } from "./interfaceSize";
 import { applyLook, startSystemAccent } from "./accent";
 import { showScrollbarsWhileScrolling } from "./scrollbars";
+import { guardSelectingClicks } from "./textSelect";
 
 // WebKit's own right-click menu offers Reload, which throws away the app's state. Keep it only
 // where it's useful — in text fields and on selected text — and leave custom menus to their owners.
@@ -41,6 +42,7 @@ async function start() {
   applyPlatform();
   blockBrowserKeys();
   showScrollbarsWhileScrolling();
+  guardSelectingClicks();
   const [s, sceneJson] = await Promise.all([api.settingsRead(), api.scene().catch(() => null), loadFeatures(), startSystemAccent()]);
   settings.loadFrom(s);
   applyLook(s);

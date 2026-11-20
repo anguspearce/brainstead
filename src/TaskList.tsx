@@ -1051,6 +1051,12 @@ export function TaskList({
                 onSelect ? (selected === k && onDeselect ? onDeselect() : onSelect(t)) : keys && setCursor(cursor === k ? null : k)
               }
               onContextMenu={(e) => {
+                // Text selected in the row keeps the system menu, for Copy.
+                const sel = window.getSelection();
+                if (sel?.toString() && sel.anchorNode && e.currentTarget.contains(sel.anchorNode)) {
+                  e.stopPropagation();
+                  return;
+                }
                 // The task's menu only, not also the note's around it (a task query or Dataview in a note).
                 e.preventDefault();
                 e.stopPropagation();

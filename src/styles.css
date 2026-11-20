@@ -216,6 +216,27 @@ input {
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* What people may want to copy is selectable, though the chrome around it isn't: a task's
+   line, an Inbox item, an answer in Ask, a quote, a change's title. A click that ends selecting
+   text in a row doesn't also click the row (src/textSelect.ts). */
+.selectable,
+.trow .tt,
+.irow .tt,
+.qrow .tt,
+.tdetail .kv dd,
+.isugg-what,
+.isugg-text,
+.isugg-why,
+.cclaim,
+.qquote,
+.suggrow .t,
+.syncrow .t,
+.help-text,
+.toast {
+  -webkit-user-select: text;
+  user-select: text;
+}
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 1px;

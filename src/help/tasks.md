@@ -17,6 +17,8 @@ Each list on the left shows its count:
 - **Someday / maybe**: tasks tagged `#someday-maybe`.
 - **Done this week** and **Done last week**: ticked tasks by done date, weeks starting on Monday.
 
+To copy a task's words, drag across them (or double-click a word) and press `⌘C`, or right-click the selection and choose Copy. Selecting doesn't choose the row. The same works for Inbox items, answers in Ask, quotes and the other text you'd want to copy.
+
 In Next actions, Follow-ups, Waiting for and Someday / maybe, drag rows by their grip to set your own order (not while grouped). The order is saved at the end of each line as `^rank-1024`, and the list is renumbered when it needs room. Tasks a search or filter hides at the time keep their places next to the tasks they followed. An assistant moves a task the same way.
 
 ## Use the keys
