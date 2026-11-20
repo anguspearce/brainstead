@@ -221,7 +221,14 @@ export class CMEditor implements Editor {
           ...searchKeymap.filter((k) => k.key !== "Mod-f"),
         ]),
         EditorView.lineWrapping,
-        EditorView.contentAttributes.of({ spellcheck: "false", autocorrect: "off", autocapitalize: "off", "aria-label": "Note text" }),
+        // Writing Tools stay on in a note, off in the rest of the app (index.html).
+        EditorView.contentAttributes.of({
+          spellcheck: "false",
+          autocorrect: "off",
+          autocapitalize: "off",
+          writingsuggestions: "true",
+          "aria-label": "Note text",
+        }),
         sameLineBreaks,
         taskHint,
         spelling,
