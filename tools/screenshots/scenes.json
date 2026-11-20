@@ -46,6 +46,14 @@
     }
   },
   {
+    "name": "tasks-grouped-folded",
+    "screen": "tasks",
+    "view": {
+      "tasks:group": "project",
+      "tasks:folded:project": [""]
+    }
+  },
+  {
     "name": "today",
     "screen": "today",
     "docs": true

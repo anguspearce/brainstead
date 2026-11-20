@@ -53,6 +53,8 @@ To change a task's words in any list, point at it and click the pencil after the
 ## Group, filter and save lists
 **Group by** in the top bar (**None**, **Project**, **Context** or **Due**) groups the list, with a band and count per group; in a narrow window it's a drop-down menu instead. Grouped lists can't be dragged.
 
+Click a group's band to fold its tasks away; the band and its count stay, and what's folded is remembered for each grouping. **Collapse all** in the top bar folds every group showing, and becomes **Expand all** once they're all folded. A folded group stays folded while you search or filter; its count says how many of its tasks match.
+
 **Search tasks** narrows every list to tasks with all the words you type, in their text, note, heading, project, tags or context. The counts on the left follow, and `Esc` clears it. Context chips (**All**, `@calls`, `@office`…) show one context; click the chip again, or **All**, to show all. The effort menu shows tasks of 15 minutes, 30 minutes or an hour or less.
 
 **Save this list…** keeps a context, effort and grouping under a name, under Saved on the left. Its x forgets it; the tasks stay. An assistant can use the same search, grouping and filters.

@@ -6693,8 +6693,9 @@ select.sel {
   color: var(--amber);
 }
 
-/* An area's band folds its projects away; its pencil renames the area. */
-.pband .pfold {
+/* An area's band folds its projects away; its pencil renames the area. A group's band in Tasks
+   folds its tasks the same way. */
+.tb-band .pfold {
   display: flex;
   gap: 7px;
   align-items: center;
@@ -6707,7 +6708,7 @@ select.sel {
   letter-spacing: inherit;
   cursor: pointer;
 }
-.pband .pfold:hover {
+.tb-band .pfold:hover {
   color: var(--ink);
 }
 .pband .pin {
