@@ -130,6 +130,11 @@ pub(crate) fn run_lint(app: &AppHandle) -> Option<Report> {
     let root = app.state::<VaultService>().root()?;
     let dismissed: HashSet<String> = kept().dismissed.into_iter().collect();
     let mut r = lint::run_read(&root, today(), &dismissed, &crate::gtd::sources_read());
+    lint::without_read_sources(&mut r, &root, &lint::read_at(&crate::platform::data_dir()));
+    let refresh = app.state::<AppState>().settings.lock().unwrap().ui.get("refreshStale").and_then(|v| v.as_bool()).unwrap_or(false);
+    if refresh {
+        hold_waiting(&mut r, &root, &crate::daily_check::refreshed());
+    }
     // Claims with no citation, from the contradiction check's cached claims (none until it runs).
     r.checks.push(crate::contradict::uncited_check(&root));
     // Finished with `health.json` as it is once the checks are done, not as it was when they
@@ -140,6 +145,25 @@ pub(crate) fn run_lint(app: &AppHandle) -> Option<Report> {
     });
     let _ = app.emit("health-changed", Counts { decisions: r.needs_decision(), total: r.total() });
     Some(r)
+}
+
+/// With the daily check ingesting changed sources again, a synced thread that's grown since it was
+/// cited is the daily check's to catch up, not a Health issue: it moves to `waiting` (still Changed
+/// in Sources) until the daily check has tried it at the version it is now (`tried`, path →
+/// version), when it's listed again if the pages are still behind (D-20261120-08).
+fn hold_waiting(r: &mut Report, root: &Path, tried: &std::collections::BTreeMap<String, String>) {
+    let Some(c) = r.checks.iter_mut().find(|c| c.id == "changed-sources") else { return };
+    let mut waiting = Vec::new();
+    c.items.retain(|i| {
+        let Some(p) = i.page.as_deref().filter(|p| lint::is_synced_thread(p)) else { return true };
+        let now = std::fs::read(root.join(p)).ok().map(|b| brainstead_core::write::version(&b));
+        if now.is_some() && tried.get(p) == now.as_ref() {
+            return true;
+        }
+        waiting.push(p.to_string());
+        false
+    });
+    r.waiting = waiting;
 }
 
 /// A run's report finished with what `health.json` keeps (`k`), and that brought up to date: the
@@ -734,12 +758,45 @@ mod tests {
     }
 
     #[test]
+    fn a_grown_thread_waits_for_the_daily_check_and_comes_back_if_it_stays_behind() {
+        let t = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(t.path().join("sources")).unwrap();
+        let (thread, doc) = ("sources/Email. Thread. Launch - 2026-11-19.md", "sources/Orbit App brief.md");
+        std::fs::write(t.path().join(thread), "Maya: thanks\n").unwrap();
+        std::fs::write(t.path().join(doc), "Brief\n").unwrap();
+        let item = |p: &str| lint::Item { text: p.into(), page: Some(p.into()), ..Default::default() };
+        let report = || Report {
+            checks: vec![lint::Check {
+                id: "changed-sources",
+                title: "Changed",
+                classic: false,
+                ignored: 0,
+                items: vec![item(thread), item(doc)],
+            }],
+            wiki_pages: 0,
+            sources: 2,
+            ms: 0,
+            waiting: Vec::new(),
+        };
+        let listed = |r: &Report| r.checks[0].items.iter().filter_map(|i| i.page.clone()).collect::<Vec<_>>();
+        // Not tried yet: the thread waits, the document is listed.
+        let mut r = report();
+        hold_waiting(&mut r, t.path(), &BTreeMap::new());
+        assert_eq!((listed(&r), r.waiting.clone()), (vec![doc.to_string()], vec![thread.to_string()]));
+        // Tried at this version and still behind: listed again.
+        let v = write::version(&std::fs::read(t.path().join(thread)).unwrap());
+        let mut r = report();
+        hold_waiting(&mut r, t.path(), &BTreeMap::from([(thread.to_string(), v)]));
+        assert_eq!((listed(&r).len(), r.waiting.len()), (2, 0));
+    }
+
+    #[test]
     fn an_ignore_made_while_the_checks_run_is_kept() {
         let t = tempfile::tempdir().unwrap();
         let (root, path) = (t.path(), t.path().join("health.json"));
         let items = (0..20).map(|n| lint::Item { text: format!("Page {n}"), ..Default::default() }).collect();
         let check = lint::Check { id: "orphans", title: "Orphans", classic: false, ignored: 0, items };
-        let report = Report { checks: vec![check], wiki_pages: 0, sources: 0, ms: 0 };
+        let report = Report { checks: vec![check], wiki_pages: 0, sources: 0, ms: 0, waiting: Vec::new() };
         // A run has its report when an Ignore is saved: finishing it keeps the ignore and leaves the
         // issue out.
         let mut r = report.clone();

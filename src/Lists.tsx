@@ -728,7 +728,11 @@ export function SourcesScreen() {
   useEffect(startKnowledge, []);
   const h = useStore(health);
   const changed = useMemo(
-    () => new Set((h?.report?.checks.find((c) => c.id === "changed-sources")?.items ?? []).map((i) => i.page ?? "")),
+    () =>
+      new Set([
+        ...(h?.report?.checks.find((c) => c.id === "changed-sources")?.items ?? []).map((i) => i.page ?? ""),
+        ...(h?.report?.waiting ?? []),
+      ]),
     [h],
   );
   const [status, setStatus] = useViewState<"all" | "new" | "changed" | "ingested">("sources:status", "all");

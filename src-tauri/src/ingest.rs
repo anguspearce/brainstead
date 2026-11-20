@@ -157,6 +157,10 @@ pub struct Run {
     /// A chat day it found nothing in, moved to the Trash (a change with Revert).
     #[serde(default)]
     pub trashed: bool,
+    /// The source's versions it read: as it was, and as its name fixes left it. Once it's done,
+    /// the source isn't changed since it was cited while it's still one of them (D-20261120-08).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub read_versions: Vec<String>,
 }
 
 fn ingest_kind() -> String {
@@ -485,6 +489,7 @@ fn queue_ingests(app: &AppHandle, paths: Vec<String>, actions: &[bool], trigger:
             logged: false,
             planned: 0,
             trashed: false,
+            read_versions: Vec::new(),
         };
         runs.push(r);
     }
@@ -526,6 +531,9 @@ fn run(app: &AppHandle, r: &mut Run) {
             // Read in full, its actions taken: out of the Inbox (D-20261118-09).
             if r.kind == "ingest" || r.kind == "actions" {
                 crate::gtd::ingested(&r.source);
+                if let Err(e) = brainstead_core::lint::note_read_at(&crate::platform::data_dir(), &r.source, &r.read_versions) {
+                    crate::applog!("ingest: couldn't note the version of {} read: {e}", r.source);
+                }
                 trash_if_quiet(app, r);
             }
         }
@@ -656,6 +664,10 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
             Ok((Source { rel: r.source.clone(), text: SourceText::Parts(x) }, d))
         }
     })?;
+    r.read_versions = match &source.text {
+        SourceText::Text(t) => vec![brainstead_core::write::version(t.as_bytes())],
+        _ => std::fs::read(&abs).map(|b| vec![brainstead_core::write::version(&b)]).unwrap_or_default(),
+    };
     if stopped(r) {
         return Err("Stopped.".into());
     }
@@ -695,6 +707,7 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
         if o.applied {
             on_disk = None;
         }
+        r.read_versions.push(brainstead_core::write::version(fixed.as_bytes()));
         source.text = SourceText::Text(fixed);
         let done = if o.applied { "made" } else { "held in Changes" };
         Ok(((), format!("{} {done} ({what})", plural(changes.len(), "correction"))))
@@ -1022,6 +1035,7 @@ pub fn meeting_draft(app: AppHandle, items: Vec<(String, NoteSpec)>, unattended:
             logged: false,
             planned: 0,
             trashed: false,
+            read_versions: Vec::new(),
         };
         runs.push(r);
     }
@@ -1121,6 +1135,7 @@ mod tests {
             logged: false,
             planned: 0,
             trashed: false,
+            read_versions: Vec::new(),
         }
     }
 

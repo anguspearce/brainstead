@@ -1179,6 +1179,9 @@ export interface LintReport {
   wikiPages: number;
   sources: number;
   ms: number;
+  /** Synced threads changed since they were cited that the daily check will ingest again:
+   *  Changed in Sources, not a Health issue until it has tried (D-20261120-08). */
+  waiting?: string[];
 }
 
 export interface HealthView {

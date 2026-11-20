@@ -2655,7 +2655,9 @@ fn pending_sources(ctx: &Ctx, a: PendingArgs) -> Result<String, String> {
     let files = ix.list(Some("source"))?;
     let paths: Vec<String> = files.into_iter().map(|f| f.path).collect();
     let ingested = ix.ingested(&paths)?;
-    let report = lint::run(&ctx.vault, ctx.today, &Default::default());
+    let mut report = lint::run(&ctx.vault, ctx.today, &Default::default());
+    // A source an ingest has read as it is now isn't Changed, as the Sources screen has it.
+    lint::without_read_sources(&mut report, &ctx.vault, &lint::read_at(&ctx.data));
     let changed: std::collections::HashSet<String> =
         report.check("changed-sources").map(|c| c.items.iter().filter_map(|i| i.page.clone()).collect()).unwrap_or_default();
     let rows: Vec<(String, &str)> = paths
@@ -2791,7 +2793,8 @@ fn lint_tool(ctx: &Ctx, a: LintArgs) -> Result<String, String> {
         Some(p) => Some(existing(ctx, &ctx.index()?, p)?),
         None => None,
     };
-    let r = lint::run(&ctx.vault, ctx.today, &Default::default());
+    let mut r = lint::run(&ctx.vault, ctx.today, &Default::default());
+    lint::without_read_sources(&mut r, &ctx.vault, &lint::read_at(&ctx.data));
     let mut out = String::new();
     for c in &r.checks {
         let items: Vec<&lint::Item> =

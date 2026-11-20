@@ -19,7 +19,7 @@ Nothing can be added while Read-only is on in [Settings › Vault](app:settings/
 Sources is the library: every source, whatever its status. The new ones waiting to be dealt with are in the [Inbox](app:inbox) under **Captures**, where you ingest each or keep it in Sources; Today's **To process** counts them there. Each source has a status:
 
 - **New**: no wiki page cites it. It's grey: the Inbox's **Captures** is where it waits for you.
-- **Changed**, in amber: it changed after the pages citing it were written, so ingest it again or check them.
+- **Changed**, in amber: it changed after the pages citing it were written, and no ingest has read it since, so ingest it again or check them. A synced email thread or chat that's grown is Changed until the daily check ingests it again, when that's switched on.
 - **Ingested**.
 
 Filter with **All**, **New**, **Changed** and **Ingested** above the list. **Search sources** searches their text and names with the same rules as [Search](help:search). Kind says what each file is; Folder says which folder under `sources/` it's in (hover for the full path). On the right, the count of sources shown and what they take on disk.

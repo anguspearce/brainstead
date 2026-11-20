@@ -216,6 +216,11 @@ pub struct Report {
     pub sources: usize,
     /// How long the checks took.
     pub ms: u64,
+    /// Synced threads changed since they were cited that the daily check will ingest again
+    /// (Also refresh pages whose sources changed): Changed in Sources, but not a Health issue
+    /// until that ingest has had its go (D-20261120-08). Left empty here; the app fills it.
+    #[serde(default)]
+    pub waiting: Vec<String>,
 }
 
 impl Report {
@@ -609,7 +614,47 @@ fn run_with(root: &Path, today: NaiveDate, dismissed: &HashSet<String>, zone: Zo
         wiki_pages: wiki.len(),
         sources: files.iter().filter(|f| f.rel.starts_with("sources/")).count(),
         ms: t0.elapsed().as_millis() as u64,
+        waiting: Vec::new(),
     }
+}
+
+/// The versions of each source an ingest has read (`sources-read-at.json` in the app data
+/// folder, path → versions): the file as read, and as the ingest's name fixes left it.
+pub fn read_at_file(data: &Path) -> PathBuf {
+    data.join("sources-read-at.json")
+}
+
+pub fn read_at(data: &Path) -> BTreeMap<String, Vec<String>> {
+    std::fs::read(read_at_file(data)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+}
+
+/// Notes that an ingest has read `path` at these versions, replacing what it read before.
+pub fn note_read_at(data: &Path, path: &str, versions: &[String]) -> std::io::Result<()> {
+    let mut all = read_at(data);
+    all.insert(path.to_string(), versions.to_vec());
+    let json = serde_json::to_vec(&all).map_err(std::io::Error::other)?;
+    crate::write::write_atomic(&read_at_file(data), &json, false).map_err(|e| std::io::Error::other(e.to_string()))
+}
+
+/// A source an ingest has read as it is now isn't changed since it was cited, even when the
+/// ingest found nothing to add to the pages citing it, so their dates didn't move
+/// (D-20261120-08). Drops those from the changed-sources check.
+pub fn without_read_sources(r: &mut Report, root: &Path, read: &BTreeMap<String, Vec<String>>) {
+    let Some(c) = r.checks.iter_mut().find(|c| c.id == "changed-sources") else { return };
+    c.items.retain(|i| {
+        let Some(p) = i.page.as_deref() else { return true };
+        let Some(seen) = read.get(p) else { return true };
+        match std::fs::read(root.join(p)) {
+            Ok(b) => !seen.contains(&crate::write::version(&b)),
+            Err(_) => true,
+        }
+    });
+}
+
+/// A source the sync tops up as its conversation grows: an email thread, a Teams or Slack chat.
+pub fn is_synced_thread(rel: &str) -> bool {
+    let n = name_of(rel);
+    ["Email. Thread. ", "Teams. Chat. ", "Slack. Chat. "].iter().any(|p| n.starts_with(p))
 }
 
 /// Files directly in `sources/` that no wiki page's `sources:` names: check 7 alone, without
@@ -926,6 +971,37 @@ mod tests {
     }
 
     #[test]
+    fn a_source_read_as_it_is_now_is_not_changed_since_cited() {
+        let t = tempfile::tempdir().unwrap();
+        let data = tempfile::tempdir().unwrap();
+        let src = t.path().join("sources/Email. Thread. Launch - 2026-11-19.md");
+        let page = t.path().join("wiki/entities/Orbit App.md");
+        std::fs::create_dir_all(src.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(page.parent().unwrap()).unwrap();
+        std::fs::write(&page, "---\nsources:\n  - \"[[Email. Thread. Launch - 2026-11-19]]\"\n---\n# Orbit App\n").unwrap();
+        fixture::set_mtime(&page, "2026-11-19 09:00");
+        std::fs::write(&src, "Maya: launch is on the 14th\n").unwrap();
+        fixture::set_mtime(&src, "2026-11-19 10:00");
+        let changed = || {
+            let mut r = run_in(t.path(), today(), &HashSet::new(), fixture::zone());
+            without_read_sources(&mut r, t.path(), &read_at(data.path()));
+            r.check("changed-sources").unwrap().items.len()
+        };
+        assert_eq!(changed(), 1);
+        // An ingest read it as it is, and changed no page: no longer changed.
+        let v = crate::write::version(&std::fs::read(&src).unwrap());
+        note_read_at(data.path(), "sources/Email. Thread. Launch - 2026-11-19.md", &[v]).unwrap();
+        assert_eq!(changed(), 0);
+        // A new message after that read: changed again.
+        std::fs::write(&src, "Maya: launch is on the 14th\nLena: thanks\n").unwrap();
+        fixture::set_mtime(&src, "2026-11-19 11:00");
+        assert_eq!(changed(), 1);
+        assert!(is_synced_thread("sources/Email. Thread. Launch - 2026-11-19.md"));
+        assert!(is_synced_thread("sources/Teams. Chat. Maya - 2026-11-19.md"));
+        assert!(!is_synced_thread("sources/Orbit App brief.md"));
+    }
+
+    #[test]
     fn matches_lint_wiki_py() {
         let t = tempfile::tempdir().unwrap();
         let root = vault(t.path());
@@ -1023,6 +1099,7 @@ mod tests {
             }],
             wiki_pages: 2,
             sources: 0,
+            waiting: Vec::new(),
             ms: 0,
         };
         let mut ignored = BTreeMap::from([
@@ -1054,7 +1131,7 @@ mod tests {
                 ..Default::default()
             }],
         };
-        let report = |checks: Vec<Check>| Report { checks, wiki_pages: 1, sources: 0, ms: 0 };
+        let report = |checks: Vec<Check>| Report { checks, wiki_pages: 1, sources: 0, ms: 0, waiting: Vec::new() };
         let mut ignored = BTreeMap::from([(ignore_key("uncited-claims", "wiki/Orbit App.md: Launch is on 14 November"), "v1".to_string())]);
         let page = |t: &'static str| move |_: &str| Some(t.to_string());
         // The page changed elsewhere: still ignored.

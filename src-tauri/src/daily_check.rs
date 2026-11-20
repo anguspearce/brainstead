@@ -96,6 +96,11 @@ fn path() -> std::path::PathBuf {
     crate::platform::data_dir().join("daily-check.json")
 }
 
+/// The changed sources the daily check has ingested again, by path, with the version that was.
+pub fn refreshed() -> std::collections::BTreeMap<String, String> {
+    load().refreshed
+}
+
 fn load() -> State {
     std::fs::read(path()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
 }
@@ -245,8 +250,14 @@ fn run(app: &AppHandle, trigger: Option<&str>) {
     let refresh = app.state::<AppState>().settings.lock().unwrap().ui.get("refreshStale").and_then(|v| v.as_bool()).unwrap_or(false);
     if refresh && !stopped() {
         step("refresh");
+        // Health's changed sources and the synced threads it leaves to this step.
         let changed: Vec<String> = crate::knowledge::run_lint(app)
-            .map(|r| r.checks.into_iter().filter(|c| c.id == "changed-sources").flat_map(|c| c.items).filter_map(|i| i.page).collect())
+            .map(|r| {
+                let mut v: Vec<String> =
+                    r.checks.into_iter().filter(|c| c.id == "changed-sources").flat_map(|c| c.items).filter_map(|i| i.page).collect();
+                v.extend(r.waiting);
+                v
+            })
             .unwrap_or_default();
         let root = app.state::<VaultService>().root();
         let mut tried = load().refreshed;
