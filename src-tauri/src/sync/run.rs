@@ -124,6 +124,7 @@ fn run_inner(data: &Path, from: Option<NaiveDate>) -> Report {
         s: &s,
         cutoff: cutoff_day(s.sync_initial_days),
         from: from.map(|d| d.format("%Y-%m-%d").to_string()),
+        regather: false,
     };
 
     // Teams (chats, transcripts) and Outlook (mail) each on its own switch and its own tab's sign-in.
@@ -147,15 +148,18 @@ fn run_inner(data: &Path, from: Option<NaiveDate>) -> Report {
 
 /// Everything one sync pass's steps share: the HTTP client, the sign-in, where to write, the
 /// settings and the first-sync cutoff.
-struct Pass<'a> {
-    client: reqwest::blocking::Client,
-    sign_in: SignIn,
-    data: &'a Path,
-    vault: &'a Path,
-    s: &'a settings::Settings,
-    cutoff: Option<String>,
+pub(super) struct Pass<'a> {
+    pub(super) client: reqwest::blocking::Client,
+    pub(super) sign_in: SignIn,
+    pub(super) data: &'a Path,
+    pub(super) vault: &'a Path,
+    pub(super) s: &'a settings::Settings,
+    pub(super) cutoff: Option<String>,
     /// A back-fill's first day (`YYYY-MM-DD`), see [`run_from`].
-    from: Option<String>,
+    pub(super) from: Option<String>,
+    /// An on-demand pull (`pull.rs`), which was asked for what it reads: a source that has gone from
+    /// the vault is written again though nothing new came.
+    pub(super) regather: bool,
 }
 
 /// The earliest local day the first sync keeps (`YYYY-MM-DD`), from the "load N days on first sync"
@@ -213,94 +217,159 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
     let me = fetch::my_name(&p.sign_in);
     // A back-fill starts every chat at its first day; otherwise a chat seen for the first time starts
     // at the first-sync cutoff.
-    let cutoff = p.from.as_deref().or(p.cutoff.as_deref());
+    let days = Days {
+        from: p.from.as_deref(),
+        cutoff: p.from.as_deref().or(p.cutoff.as_deref()),
+        most: if p.from.is_some() { fetch::BACKFILL_CHAT_PAGES } else { fetch::CHAT_PAGES },
+        covers: &|_, _| true,
+    };
     for conv in convs {
-        // 1:1 and group chats always; channels only when opted in; meeting chats are left to the
-        // transcript flow; anything else is skipped.
-        let take = match conv.kind {
-            ConvKind::OneOnOne | ConvKind::Group => true,
-            ConvKind::Channel => p.s.sync_channels.iter().any(|c| c == &conv.id),
-            ConvKind::Meeting | ConvKind::Other => false,
-        };
-        if !take || p.s.sync_ignore_chats.contains(&conv.id) {
+        if !chat_taken(&conv, p.s) || p.s.sync_ignore_chats.contains(&conv.id) {
             continue;
         }
-        // The first time a chat is seen, skip days older than the first-sync cutoff (and mark them
-        // done, so they're never pulled later) — that's where the flood of old history would come
-        // from. A chat already being synced only gets genuinely new days anyway.
-        let first_seen = !st.chats.contains_key(&conv.id);
-        // Read back until the oldest day read needs nothing written: a busy day runs past one page.
-        let most = if p.from.is_some() { fetch::BACKFILL_CHAT_PAGES } else { fetch::CHAT_PAGES };
-        let enough = |msgs: &[fetch::ChatMessage], pages: usize| {
-            let Some(first) = msgs.first() else { return true };
-            let day = fetch::local_day(first.time);
-            let of_day = msgs.iter().take_while(|m| fetch::local_day(m.time) == day);
-            let (count, last) = of_day.fold((0, 0), |(n, _), m| (n + 1, m.time.timestamp_millis()));
-            let d = Day { conv: &conv.id, day: &day, count, last, partial: false, first_seen };
-            read_enough(st, p.from.as_deref(), cutoff, &d, pages)
-        };
-        let (msgs, more) = match fetch::chat_messages(&p.client, &p.sign_in, &conv.id, most, enough) {
-            Ok(m) => m,
-            Err(e) => {
-                r.problems.push(format!("Couldn't read a chat: {e}"));
-                continue;
+        sync_chat(p, &conv, &me, &days, st, r);
+    }
+}
+
+/// Whether a conversation is one the sync reads: 1:1 and group chats always; channels only when
+/// opted in; meeting chats are left to the transcript flow; anything else is skipped.
+pub(super) fn chat_taken(conv: &fetch::Conv, s: &settings::Settings) -> bool {
+    match conv.kind {
+        ConvKind::OneOnOne | ConvKind::Group => true,
+        ConvKind::Channel => s.sync_channels.iter().any(|c| c == &conv.id),
+        ConvKind::Meeting | ConvKind::Other => false,
+    }
+}
+
+/// How far back a chat is read and which of its days are taken.
+pub(super) struct Days<'a> {
+    /// A back-fill's first day, or an on-demand pull's: the chat is read back to it, and a day from
+    /// it on that was skipped before is written.
+    pub(super) from: Option<&'a str>,
+    /// That, or else the first-sync cutoff.
+    pub(super) cutoff: Option<&'a str>,
+    /// The most pages read.
+    pub(super) most: usize,
+    /// Given a day and its messages: a day this is false for is left exactly as it is (a pull takes
+    /// only the days asked for that match its topic).
+    pub(super) covers: &'a dyn Fn(&str, &[fetch::ChatMessage]) -> bool,
+}
+
+/// What reading one chat came to, for an on-demand pull to hand back.
+#[derive(Default)]
+pub(super) struct ChatRead {
+    /// The chat's partner (see `fetch::chat_display_name`).
+    pub(super) partner: String,
+    /// The days taken that have a source.
+    pub(super) days: Vec<DaySource>,
+}
+
+pub(super) struct DaySource {
+    pub(super) day: String,
+    pub(super) path: String,
+    /// Written as a new source just now, rather than there already (topped up or left).
+    pub(super) fresh: bool,
+}
+
+/// Reads one chat and writes or tops up its days: the sync pass's step for a chat, and an on-demand
+/// pull's, so the two read and decide alike.
+pub(super) fn sync_chat(p: &Pass, conv: &fetch::Conv, me: &str, days: &Days, st: &mut state::State, r: &mut Report) -> ChatRead {
+    // The first time a chat is seen, skip days older than the first-sync cutoff (and mark them
+    // done, so they're never pulled later) — that's where the flood of old history would come
+    // from. A chat already being synced only gets genuinely new days anyway.
+    let first_seen = !st.chats.contains_key(&conv.id);
+    // Read back until the oldest day read needs nothing written: a busy day runs past one page.
+    let enough = |msgs: &[fetch::ChatMessage], pages: usize| {
+        let Some(first) = msgs.first() else { return true };
+        let day = fetch::local_day(first.time);
+        let of_day = msgs.iter().take_while(|m| fetch::local_day(m.time) == day);
+        let (count, last) = of_day.fold((0, 0), |(n, _), m| (n + 1, m.time.timestamp_millis()));
+        let d = Day { conv: &conv.id, day: &day, count, last, partial: false, first_seen };
+        read_enough(st, days.from, days.cutoff, &d, pages)
+    };
+    let (msgs, more) = match fetch::chat_messages(&p.client, &p.sign_in, &conv.id, days.most, enough) {
+        Ok(m) => m,
+        Err(e) => {
+            r.problems.push(format!("Couldn't read a chat: {e}"));
+            return ChatRead::default();
+        }
+    };
+    // The chat's partner across the whole thread, so a day where only the user wrote still names
+    // the other person (a 1:1 with no topic).
+    let partner = fetch::chat_display_name(&msgs, me);
+    // With older messages left unread, the oldest day read may be only its end.
+    let cut = more.then(|| msgs.first().map(|m| fetch::local_day(m.time))).flatten();
+    let mut sources = Vec::new();
+    for (day, day_msgs) in fetch::by_local_day(&msgs) {
+        if !(days.covers)(&day, &day_msgs) {
+            continue;
+        }
+        let count = day_msgs.len();
+        let when = day_msgs.last().map(|m| m.time);
+        let last = when.map_or(0, |t| t.timestamp_millis());
+        let d = Day { conv: &conv.id, day: &day, count, last, partial: cut.as_deref() == Some(day.as_str()), first_seen };
+        let gone = p.regather && st.chat_day_path(&conv.id, &day).is_some_and(|path| !p.vault.join(path).is_file());
+        let mut fresh = false;
+        match regathered(day_plan(st, days.from, days.cutoff, &d), gone) {
+            DayPlan::Leave => {}
+            DayPlan::Adopt => {
+                st.set_chat_day_count(&conv.id, &day, count);
+                st.set_chat_day_last(&conv.id, &day, last);
             }
-        };
-        // The chat's partner across the whole thread, so a day where only the user wrote still names
-        // the other person (a 1:1 with no topic).
-        let partner = fetch::chat_display_name(&msgs, &me);
-        // With older messages left unread, the oldest day read may be only its end.
-        let cut = more.then(|| msgs.first().map(|m| fetch::local_day(m.time))).flatten();
-        for (day, day_msgs) in fetch::by_local_day(&msgs) {
-            let count = day_msgs.len();
-            let when = day_msgs.last().map(|m| m.time);
-            let last = when.map_or(0, |t| t.timestamp_millis());
-            let d = Day { conv: &conv.id, day: &day, count, last, partial: cut.as_deref() == Some(day.as_str()), first_seen };
-            match day_plan(st, p.from.as_deref(), cutoff, &d) {
-                DayPlan::Leave => {}
-                DayPlan::Adopt => {
-                    st.set_chat_day_count(&conv.id, &day, count);
-                    st.set_chat_day_last(&conv.id, &day, last);
-                }
-                // Top up the day's source in place (D-20261025-07). One that's gone (trashed, the
-                // Trash emptied, deleted elsewhere) starts a fresh source for the day, so the new
-                // messages reach the Inbox rather than being lost (D-20261026-05).
-                DayPlan::TopUp => {
-                    if let Some(path) = st.chat_day_path(&conv.id, &day).map(str::to_string) {
-                        if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &p.sign_in.origin, &day, &partner) {
-                            let written = if p.vault.join(&path).is_file() {
-                                rewrite(p.vault, &path, &cap, r).then_some(path)
-                            } else {
-                                deliver(p.data, p.vault, &cap, "teams", when, r)
-                            };
-                            if let Some(path) = written {
-                                st.mark_chat_day(&conv.id, &day, Some(&path));
-                                st.set_chat_day_count(&conv.id, &day, count);
-                                st.set_chat_day_last(&conv.id, &day, last);
-                                r.chats += 1;
-                            }
-                        }
-                    }
-                }
-                // On a chat's first sync, skip (and mark) days older than the cap; a back-fill leaves
-                // days before its first day as they are.
-                DayPlan::Skip => {
-                    if first_seen {
-                        st.mark_chat_day(&conv.id, &day, None);
-                    }
-                }
-                DayPlan::Write => {
-                    if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &p.sign_in.origin, &day, &partner) {
-                        if let Some(path) = deliver(p.data, p.vault, &cap, "teams", when, r) {
+            // Top up the day's source in place (D-20261025-07). One that's gone (trashed, the
+            // Trash emptied, deleted elsewhere) starts a fresh source for the day, so the new
+            // messages reach the Inbox rather than being lost (D-20261026-05).
+            DayPlan::TopUp => {
+                if let Some(path) = st.chat_day_path(&conv.id, &day).map(str::to_string) {
+                    if let Some(cap) = fetch::chat_capture(conv, &day_msgs, me, &p.sign_in.origin, &day, &partner) {
+                        let there = p.vault.join(&path).is_file();
+                        let written = if there {
+                            rewrite(p.vault, &path, &cap, r).then_some(path)
+                        } else {
+                            deliver(p.data, p.vault, &cap, "teams", when, r)
+                        };
+                        if let Some(path) = written {
                             st.mark_chat_day(&conv.id, &day, Some(&path));
                             st.set_chat_day_count(&conv.id, &day, count);
                             st.set_chat_day_last(&conv.id, &day, last);
                             r.chats += 1;
+                            fresh = !there;
                         }
                     }
                 }
             }
+            // On a chat's first sync, skip (and mark) days older than the cap; a back-fill leaves
+            // days before its first day as they are.
+            DayPlan::Skip => {
+                if first_seen {
+                    st.mark_chat_day(&conv.id, &day, None);
+                }
+            }
+            DayPlan::Write => {
+                if let Some(cap) = fetch::chat_capture(conv, &day_msgs, me, &p.sign_in.origin, &day, &partner) {
+                    if let Some(path) = deliver(p.data, p.vault, &cap, "teams", when, r) {
+                        st.mark_chat_day(&conv.id, &day, Some(&path));
+                        st.set_chat_day_count(&conv.id, &day, count);
+                        st.set_chat_day_last(&conv.id, &day, last);
+                        r.chats += 1;
+                        fresh = true;
+                    }
+                }
+            }
         }
+        if let Some(path) = st.chat_day_path(&conv.id, &day) {
+            sources.push(DaySource { day, path: path.to_string(), fresh });
+        }
+    }
+    ChatRead { partner, days: sources }
+}
+
+/// An on-demand pull's day whose source has gone from the vault (`gone`): it was asked for, so it is
+/// written again though nothing new came. A day that has grown is written again as it is.
+fn regathered(plan: DayPlan, gone: bool) -> DayPlan {
+    match plan {
+        DayPlan::Leave | DayPlan::Adopt if gone => DayPlan::Write,
+        plan => plan,
     }
 }
 
@@ -476,7 +545,8 @@ fn sync_sent(p: &Pass, st: &mut state::State, r: &mut Report) {
 
 /// Writes or tops up one email thread's source. Fetches the whole conversation (incl. the user's own
 /// replies), writes a new thread source the first time, and rewrites it in place when it has grown.
-fn sync_thread(p: &Pass, conversation_id: &str, st: &mut state::State, r: &mut Report) {
+/// The sync pass's step for a thread, and an on-demand pull's.
+pub(super) fn sync_thread(p: &Pass, conversation_id: &str, st: &mut state::State, r: &mut Report) {
     let msgs = match fetch::conversation(&p.client, conversation_id, 100) {
         Ok(m) => m,
         Err(e) => {
@@ -528,7 +598,8 @@ fn sync_thread(p: &Pass, conversation_id: &str, st: &mut state::State, r: &mut R
         // Top up the thread in place. One that's gone (trashed, the Trash emptied, deleted elsewhere)
         // starts a fresh source with the whole thread, so the new mail reaches the Inbox rather than
         // being lost (D-20261026-05).
-        Some(path) if thread_grown(st, conversation_id, count, last) => {
+        // An on-demand pull was asked for the thread, so one that's gone is written again too.
+        Some(path) if thread_grown(st, conversation_id, count, last) || (p.regather && !p.vault.join(&path).is_file()) => {
             if let Some(cap) = capture(st, r) {
                 let written = if p.vault.join(&path).is_file() {
                     rewrite(p.vault, &path, &cap, r).then_some(path)
@@ -800,6 +871,31 @@ mod tests {
         skipped.mark_chat_day("c1", "2026-10-19", None);
         assert_eq!(day_plan(&skipped, from, from, &day("2026-10-19", 5, 1000, false)), DayPlan::Write);
         assert_eq!(day_plan(&skipped, None, None, &day("2026-10-19", 5, 1000, false)), DayPlan::Leave);
+    }
+
+    #[test]
+    fn a_pull_writes_a_day_again_when_its_source_has_gone() {
+        // Nothing new came, so a pass leaves the day; a pull was asked for it and its file is gone.
+        let st = written("2026-10-24", 5, Some(1000));
+        let plan = day_plan(&st, None, None, &day("2026-10-24", 5, 1000, false));
+        assert_eq!(plan, DayPlan::Leave);
+        assert_eq!(regathered(plan, true), DayPlan::Write);
+        assert_eq!(regathered(plan, false), DayPlan::Leave, "still in the vault: handed back as it is");
+        assert_eq!(regathered(DayPlan::Adopt, true), DayPlan::Write);
+        // Grown or new, it is written anyway; a day out of range stays out.
+        assert_eq!(regathered(DayPlan::TopUp, true), DayPlan::TopUp);
+        assert_eq!(regathered(DayPlan::Skip, true), DayPlan::Skip);
+        // A pull reads back to the first day asked for, as a back-fill does, so a day it writes is
+        // whole; a day it covers that the first sync skipped is written.
+        let from = Some("2026-10-22");
+        assert!(!read_enough(&st, from, from, &day("2026-10-24", 200, 2000, false), 1), "the day may have begun a page earlier");
+        assert!(read_enough(&st, from, from, &day("2026-10-21", 3, 500, false), 2));
+        let mut skipped = state::State::default();
+        skipped.mark_chat_day("c1", "2026-10-23", None);
+        assert_eq!(day_plan(&skipped, from, from, &day("2026-10-23", 5, 1000, false)), DayPlan::Write);
+        // One already written that has grown is topped up, unless only its end was read.
+        assert_eq!(day_plan(&st, from, from, &day("2026-10-24", 8, 2000, false)), DayPlan::TopUp);
+        assert_eq!(day_plan(&st, from, from, &day("2026-10-24", 8, 2000, true)), DayPlan::Leave);
     }
 
     #[test]

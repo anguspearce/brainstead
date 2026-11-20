@@ -24,6 +24,9 @@ pub struct Status {
     pub error: Option<String>,
     /// Something wrong that leaves the vault usable ("ready"): the folder can't be watched.
     pub warning: Option<String>,
+    /// Notes a crash left halfway through a change of case, by vault-relative path
+    /// (`.rename-<pid>` files): hidden from the index, so Settings › Vault names them.
+    pub half_renamed: Vec<String>,
     pub stats: IndexStats,
 }
 
@@ -34,8 +37,40 @@ const UNWATCHED: &str = "Changes made in other apps aren't showing: the folder c
 const REWATCH_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// The status once the vault is indexed. One that can't be watched is still ready, with a warning.
-fn ready_status(vault_path: String, stats: IndexStats, watched: bool) -> Status {
-    Status { state: "ready", vault_path: Some(vault_path), error: None, warning: (!watched).then(|| UNWATCHED.to_string()), stats }
+fn ready_status(vault_path: String, stats: IndexStats, watched: bool, half_renamed: Vec<String>) -> Status {
+    Status {
+        state: "ready",
+        vault_path: Some(vault_path),
+        error: None,
+        warning: (!watched).then(|| UNWATCHED.to_string()),
+        half_renamed,
+        stats,
+    }
+}
+
+/// The `.rename-<pid>` files in a vault, by vault-relative path, sorted: what
+/// `brainstead_core::write::sweep_leftovers` returns, found without deleting anything, for a
+/// read-only vault. The name rule is that function's; a test keeps the two in step.
+fn half_renamed(root: &std::path::Path) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut dirs = vec![root.to_path_buf()];
+    while let Some(dir) = dirs.pop() {
+        for e in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+            // The entry's own type: a link to a folder isn't followed, as the sweep doesn't.
+            let Ok(kind) = e.file_type() else { continue };
+            if kind.is_dir() {
+                dirs.push(e.path());
+            } else if kind.is_file() {
+                let name = e.file_name();
+                let pid = name.to_string_lossy().strip_prefix(".rename-").map(str::to_owned);
+                if pid.is_some_and(|pid| !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit())) {
+                    found.extend(brainstead_core::vault::rel_of(root, &e.path()));
+                }
+            }
+        }
+    }
+    found.sort();
+    found
 }
 
 /// The parts of an open vault the watcher keeps current.
@@ -54,6 +89,8 @@ struct Open {
     assets: Arc<Mutex<Option<Arc<brainstead_core::assets::Assets>>>>,
     /// What every file in the vault folder takes, kept current by the watcher.
     usage: Arc<Mutex<brainstead_core::usage::Usage>>,
+    /// Notes left halfway through a rename, found as the vault opened (`Status::half_renamed`).
+    half_renamed: Vec<String>,
     _watcher: Option<brainstead_core::watch::Watcher>,
 }
 
@@ -135,10 +172,11 @@ impl VaultService {
                         let stats = crate::lock(&o.index).stats().unwrap_or_default();
                         let (index, vault) = (o.index.clone(), o.vault.clone());
                         let unwatched = o._watcher.is_none().then(|| o.kept());
+                        let left = o.half_renamed.clone();
                         if *crate::lock(&svc.generation) == gen {
                             *crate::lock(&svc.open) = Some(o);
                         }
-                        svc.set_status(&app, gen, ready_status(path, stats, unwatched.is_none()));
+                        svc.set_status(&app, gen, ready_status(path, stats, unwatched.is_none(), left));
                         if let Some(kept) = unwatched {
                             rewatch(&app, gen, kept);
                         }
@@ -250,16 +288,20 @@ fn open(app: &AppHandle, path: &str, excluded: Vec<String>, rebuild: bool, curre
     if let Err(e) = ix.prune_text(&text_dir()) {
         crate::applog!("text cache: {e}");
     }
-    if !crate::lock(&app.state::<crate::AppState>().settings).read_only {
-        for left in brainstead_core::write::sweep_leftovers(std::path::Path::new(path)) {
-            crate::applog!("a note was left halfway through a rename: {left} (rename it back by hand)");
-        }
+    // A read-only vault is only looked at: nothing in it is deleted.
+    let half_renamed = if crate::lock(&app.state::<crate::AppState>().settings).read_only {
+        half_renamed(&root)
+    } else {
+        brainstead_core::write::sweep_leftovers(&root)
+    };
+    for left in &half_renamed {
+        crate::applog!("a note was left halfway through a rename: {left} (rename it back by hand)");
     }
     ix.set_text_cache(text_cache());
     let index = Arc::new(Mutex::new(ix));
     let assets: Arc<Mutex<Option<Arc<brainstead_core::assets::Assets>>>> = Default::default();
     let usage = Arc::new(Mutex::new(brainstead_core::usage::Usage::scan(&vault)));
-    let open = Open { vault, index, assets, usage, _watcher: None };
+    let open = Open { vault, index, assets, usage, half_renamed, _watcher: None };
     // A watcher that can't start leaves the vault open, with a warning; `start` keeps trying.
     let watcher = start_watch(app, &open.kept()).map_err(|e| crate::applog!("vault watcher: {e}")).ok();
     Ok(Open { _watcher: watcher, ..open })
@@ -392,8 +434,13 @@ fn changed(app: &AppHandle, index: &Arc<Mutex<Index>>, ch: Changes) {
     crate::actiontasks::vault_changed(app, &ch.changed);
     let svc = app.state::<VaultService>();
     let stats = crate::lock(index).stats().unwrap_or_default();
+    let root = svc.root();
     let mut s = crate::lock(&svc.status);
     s.stats = stats;
+    // One the user has named again is no longer listed.
+    if let Some(root) = root {
+        s.half_renamed.retain(|rel| root.join(rel).is_file());
+    }
     emit_status(app, &s);
 }
 
@@ -428,10 +475,37 @@ mod tests {
     /// A vault whose folder can't be watched is still ready, with a warning to show.
     #[test]
     fn an_unwatched_vault_is_ready_with_a_warning() {
-        let s = ready_status("/vault".into(), IndexStats::default(), false);
+        let s = ready_status("/vault".into(), IndexStats::default(), false, vec![]);
         assert_eq!((s.state, s.warning.as_deref()), ("ready", Some(UNWATCHED)));
-        let s = ready_status("/vault".into(), IndexStats::default(), true);
+        let s = ready_status("/vault".into(), IndexStats::default(), true, vec!["wiki/.rename-4242".into()]);
         assert_eq!((s.state, s.warning), ("ready", None));
+        // What a crash left halfway through a rename is carried for Settings › Vault to name.
+        assert_eq!(s.half_renamed, vec!["wiki/.rename-4242".to_string()]);
+    }
+
+    /// A read-only vault's half-renamed notes are found by the sweep's own name rule, and
+    /// nothing in it is deleted: not even this app's old temporary files.
+    #[test]
+    fn half_renamed_notes_are_found_without_deleting_anything() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path();
+        std::fs::create_dir_all(r.join("wiki/entities")).unwrap();
+        let all = [
+            ".brainstead-4243-0.tmp",
+            ".rename-7",
+            ".rename-notes",
+            ".rename-",
+            "wiki/entities/.rename-4242",
+            "wiki/entities/Orbit App.md",
+        ];
+        for f in all {
+            std::fs::write(r.join(f), "x").unwrap();
+        }
+        let found = half_renamed(r);
+        assert_eq!(found, vec![".rename-7".to_string(), "wiki/entities/.rename-4242".to_string()]);
+        assert!(all.iter().all(|f| r.join(f).is_file()));
+        // The same files the sweep reports in a vault that may be written to.
+        assert_eq!(found, brainstead_core::write::sweep_leftovers(r));
     }
 
     /// When the watcher missed changes, the whole vault is read again: a note written without a

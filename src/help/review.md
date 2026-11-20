@@ -27,7 +27,7 @@ The checks:
 Three kinds of change are always held, whoever started them:
 - a change to a template in `Templates/`, however the assistant spells its path (on Windows, in any case, with `\` or by the folder's short name)
 - a change to a system note's header (the "This is a system note" callout)
-- a change that adds code that runs when a note is shown (a `dataviewjs` block, inline `$=`, a Tasks `by function` line or Templater's `<% %>`)
+- a change that adds code that runs when a note is shown, or changes code that's there (a `dataviewjs` block, inline `$=`, a Tasks `by function` line or Templater's `<% %>`)
 
 Renames and moves to the Trash are made at once, unless they touch a template (the note is one, the rename puts it in `Templates/`, or links it updates are in one): then they're held. An assistant's restore from the Trash is made at once too, unless it puts the file in `Templates/` or the note has code that runs. Revert renames the note back, restores it, or moves a restored one back to the Trash. An image an assistant adds to `images/`, for a note to embed, is made at once and shown here; Revert moves it to Brainstead's Trash.
 
@@ -45,7 +45,7 @@ On the right is the change as a diff under its section, with any flags above it.
 ## The vault's log
 `log.md` is the vault's own record of what Brainstead changed: ingests, assistants' changes, Wiki health fixes, the daily and weekly summaries, the weekly review, name fixes and the daily check's catalogue update. Your own edits, captures and dropped files aren't logged. Other markdown editors and assistants in a terminal can write to it too.
 
-A change writes its line when it's made, so in **All** that line isn't listed again: you see the change, with its diff and **Revert**. The lines that are listed are those Changes doesn't hold: older than its history, made on another computer, in another editor or in a terminal, and Brainstead's own writes that aren't changes, such as the weekly review, **Fix name** and safe fixes. Each says its day and time, its type and **log.md**; click its title to open the page it names, or hover for what it says.
+A change writes its line when it's made, so in **All** that line isn't listed again: you see the change, with its diff and **Revert**. The lines that are listed are those Changes doesn't hold: older than its history, made on another computer, in another editor or in a terminal, and Brainstead's own writes that aren't changes, such as the weekly review, and **Fix name** and safe fixes made on their own screens. Each says its day and time, its type and **log.md**; click its title to open the page it names, or hover for what it says.
 
 In **All**, the chips under the search keep one type, such as **Ingested**, or **Summary** for a daily or weekly summary; **All types** shows every type. A day picked on [Activity](app:activity) (**Changes that day**) shows as a chip of its own; click it to show every day again.
 
@@ -64,7 +64,7 @@ Held changes are at the top, under **Held for you**, by run, each with why it wa
 - **Reject** (`R`) turns it down and leaves the page as it is.
 - **Edit before accepting** opens the page with the change as an unsaved draft; click **Restore**, edit, then save. If the page already has unsaved edits, save or discard them first. Revert still works after you save.
 
-**Accept all** and **Reject all** (after asking) do every held change in a run, or with a search, a type or a day on only those that are shown; `⌘↩` accepts the run you're on. A meeting note accepted this way gets its follow-up offer; one that couldn't be made stays held. The keys do nothing while a dialog is open or you're typing.
+**Accept all** and **Reject all** (after asking) do every held change in a run, or with a search, a type or a day on only those that are shown; `⌘↩` accepts the run you're on. A meeting note accepted this way gets its follow-up offer; one that couldn't be made stays held. Reject all carries on past a change that can't be rejected and says which. The keys do nothing while a dialog is open or you're typing.
 
 A held change keeps what the assistant asked for (a section's new text, a find and replace, a task to add), not a copy of the page, so it still applies after other edits. A held change shows one status: why it was held, and, if what it changes is gone, that it can't be made as it stands. Then there's no Accept: **Edit the page** opens it to make the change yourself, or **Reject** it. **What it asked for** shows the words it would have changed, before and after.
 

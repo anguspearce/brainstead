@@ -5,13 +5,17 @@
 //! On-demand pull (the `pull_teams_outlook` MCP tool): an assistant asks for the chats, mail and
 //! meeting transcripts about some topic over the last few days, and this gathers them into the vault
 //! and hands back the source paths to read. It reuses what the sync already pulled — an item already
-//! in the vault is vended, not fetched again — and pulls only what's missing (D-20261025-04). Reads
-//! only, like the rest of the sync; macOS and Windows (wherever there is a secret store).
+//! in the vault is vended, not fetched again — and pulls only what's missing (D-20261025-04). Chats
+//! and mail threads go through the sync pass's own steps (`run::sync_chat`, `run::sync_thread`), so a
+//! chat is read back page by page to the first day asked for and a source that has gained messages
+//! is topped up. Reads only, like the rest of the sync; macOS and Windows (wherever there is a
+//! secret store).
 
 use chrono::{Duration, Local, Utc};
 use serde::Serialize;
 
-use super::fetch::{self, ConvKind};
+use super::fetch;
+use super::run::{self, Pass};
 use super::{auth, state};
 use crate::{nativehost, settings};
 
@@ -85,7 +89,9 @@ pub fn pull(data: &std::path::Path, query: &str, days: u32, kinds: Kinds) -> Out
         return out;
     };
     let vault = std::path::Path::new(vault);
-    let client = super::client();
+    // What the sync pass's own steps take, so a chat or a thread is read and written here as there.
+    // No first-sync cutoff: the days asked for decide.
+    let p = Pass { client: super::client(), sign_in, data, vault, s: &s, cutoff: None, from: None, regather: true };
     // Waits for a sync pass that's running, and keeps one from starting, so neither saves over the
     // other's progress.
     let _changing = state::lock();
@@ -96,13 +102,13 @@ pub fn pull(data: &std::path::Path, query: &str, days: u32, kinds: Kinds) -> Out
     let cutoff_day = since.with_timezone(&Local).format("%Y-%m-%d").to_string();
 
     if kinds.chats {
-        pull_chats(&client, &sign_in, vault, data, &s, &mut st, &terms, &cutoff_day, &mut out);
+        pull_chats(&p, &mut st, &terms, &cutoff_day, &mut out);
     }
     if kinds.mail {
-        pull_mail(&client, vault, data, query, &terms, since, s.sync_mail_attachments, &mut st, &mut out);
+        pull_mail(&p, query, &terms, since, &mut st, &mut out);
     }
     if kinds.transcripts {
-        pull_transcripts(&client, &sign_in, vault, data, &terms, since, now, &mut st, &mut out);
+        pull_transcripts(&p.client, &p.sign_in, vault, data, &terms, since, now, &mut st, &mut out);
     }
 
     if let Err(e) = state::save(data, &st) {
@@ -136,102 +142,65 @@ fn deliver(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn pull_chats(
-    client: &reqwest::blocking::Client,
-    sign_in: &auth::SignIn,
-    vault: &std::path::Path,
-    data: &std::path::Path,
-    s: &settings::Settings,
-    st: &mut state::State,
-    terms: &[String],
-    cutoff_day: &str,
-    out: &mut Outcome,
-) {
-    let convs = match fetch::conversations(client, sign_in) {
+/// Whether a pull takes this day of a chat: one of the days asked for, about the topic (the chat's
+/// name, or any message that day).
+fn covered(topic: &str, day: &str, msgs: &[fetch::ChatMessage], cutoff_day: &str, terms: &[String]) -> bool {
+    if day < cutoff_day {
+        return false;
+    }
+    let text = format!("{topic}\n{}", msgs.iter().map(|m| m.body.as_str()).collect::<Vec<_>>().join("\n"));
+    matches(&text, terms)
+}
+
+/// Each chat is read and written by the sync pass's own step (`run::sync_chat`): back, page by page,
+/// to the first day asked for, so a day is written whole, and one already written is topped up when
+/// it has grown.
+fn pull_chats(p: &Pass, st: &mut state::State, terms: &[String], cutoff_day: &str, out: &mut Outcome) {
+    let convs = match fetch::conversations(&p.client, &p.sign_in) {
         Ok(c) => c,
         Err(e) => {
             out.problems.push(format!("Couldn't list chats: {e}"));
             return;
         }
     };
-    let me = fetch::my_name(sign_in);
+    let me = fetch::my_name(&p.sign_in);
     for conv in convs {
-        let take = match conv.kind {
-            ConvKind::OneOnOne | ConvKind::Group => true,
-            ConvKind::Channel => s.sync_channels.iter().any(|c| c == &conv.id),
-            ConvKind::Meeting | ConvKind::Other => false,
-        };
-        if !take {
+        if !run::chat_taken(&conv, p.s) {
             continue;
         }
-        // The newest page only: a pull looks at what's recent.
-        let msgs = match fetch::chat_messages(client, sign_in, &conv.id, 1, |_, _| true) {
-            Ok((m, _)) => m,
-            Err(e) => {
-                out.problems.push(format!("Couldn't read a chat: {e}"));
-                continue;
-            }
-        };
-        let partner = fetch::chat_display_name(&msgs, &me);
+        let covers = |day: &str, msgs: &[fetch::ChatMessage]| covered(&conv.topic, day, msgs, cutoff_day, terms);
+        // Read as far back as a back-fill would go, should the days asked for hold that much.
+        let days = run::Days { from: Some(cutoff_day), cutoff: Some(cutoff_day), most: fetch::BACKFILL_CHAT_PAGES, covers: &covers };
+        let mut r = run::Report::default();
+        let read = run::sync_chat(p, &conv, &me, &days, st, &mut r);
+        out.problems.append(&mut r.problems);
         // What to call this chat in the result: its topic, else the partner, else a generic name.
         let label = if !conv.topic.is_empty() {
             conv.topic.clone()
-        } else if !partner.is_empty() {
-            partner.clone()
+        } else if !read.partner.is_empty() {
+            read.partner.clone()
         } else {
             "Teams chat".to_string()
         };
-        for (day, day_msgs) in fetch::by_local_day(&msgs) {
-            if day.as_str() < cutoff_day {
-                continue;
-            }
-            // Does this day of this chat match the topic? (the chat's name, or any message in it)
-            let text = format!("{}\n{}", conv.topic, day_msgs.iter().map(|m| m.body.as_str()).collect::<Vec<_>>().join("\n"));
-            if !matches(&text, terms) {
-                continue;
-            }
-            if st.chat_day_done(&conv.id, &day) && still_there(vault, st.chat_day_path(&conv.id, &day)) {
-                out.items.push(Item {
-                    kind: "chat".into(),
-                    title: label.clone(),
-                    date: day.clone(),
-                    path: st.chat_day_path(&conv.id, &day).unwrap_or("").to_string(),
-                    already_had: true,
-                });
-                continue;
-            }
-            if let Some(cap) = fetch::chat_capture(&conv, &day_msgs, &me, &sign_in.origin, &day, &partner) {
-                let when = day_msgs.last().map(|m| m.time);
-                if let Some(path) = deliver(data, vault, &cap, "teams", when, out) {
-                    st.mark_chat_day(&conv.id, &day, Some(&path));
-                    // As the sync pass does, so messages that come later are topped up.
-                    st.set_chat_day_count(&conv.id, &day, day_msgs.len());
-                    if let Some(t) = when {
-                        st.set_chat_day_last(&conv.id, &day, t.timestamp_millis());
-                    }
-                    out.items.push(Item { kind: "chat".into(), title: label.clone(), date: day, path, already_had: false });
-                }
+        for d in read.days {
+            // A source that couldn't be written again isn't handed back.
+            if d.fresh || still_there(p.vault, Some(&d.path)) {
+                out.items.push(Item { kind: "chat".into(), title: label.clone(), date: d.day, path: d.path, already_had: !d.fresh });
             }
         }
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn pull_mail(
-    client: &reqwest::blocking::Client,
-    vault: &std::path::Path,
-    data: &std::path::Path,
-    query: &str,
-    terms: &[String],
-    since: chrono::DateTime<Utc>,
-    attachments: bool,
-    st: &mut state::State,
-    out: &mut Outcome,
-) {
+/// Whether the mailbox lists a message later than the last one in the thread's source (None: the
+/// source is from before last messages were kept, and is handed back as it is).
+fn newer_than_source(last: Option<i64>, received: chrono::DateTime<Utc>) -> bool {
+    last.is_some_and(|was| received.timestamp_millis() > was)
+}
+
+fn pull_mail(p: &Pass, query: &str, terms: &[String], since: chrono::DateTime<Utc>, st: &mut state::State, out: &mut Outcome) {
     // With a topic, search the mailbox for it; without, take the recent Inbox. Mail is grouped one
     // source per thread, so matching messages flag their conversation, then each thread is gathered.
-    let mail = if query.trim().is_empty() { fetch::inbox(client, 60) } else { fetch::search_mail(client, query, 60) };
+    let mail = if query.trim().is_empty() { fetch::inbox(&p.client, 60) } else { fetch::search_mail(&p.client, query, 60) };
     let mail = match mail {
         Ok(m) => m,
         Err(e) => {
@@ -248,39 +217,23 @@ fn pull_mail(
         if query.trim().is_empty() && !matches(&format!("{} {}", m.subject, m.from), terms) {
             continue;
         }
-        // Already captured and still present → vend it; otherwise gather the whole conversation.
-        if let Some(path) = st.thread_path(&m.conversation_id).filter(|p| still_there(vault, Some(p))).map(str::to_string) {
-            let date = m.received.with_timezone(&Local).format("%Y-%m-%d").to_string();
-            out.items.push(Item { kind: "email".into(), title: m.subject, date, path, already_had: true });
+        // Already captured, still present and holding this message → vend it, without a fetch.
+        let had = st.thread_path(&m.conversation_id).filter(|path| still_there(p.vault, Some(path))).map(str::to_string);
+        if had.is_none() || newer_than_source(st.thread_last(&m.conversation_id), m.received) {
+            // Otherwise the sync pass's own step (`run::sync_thread`): the whole conversation, page
+            // by page, written new or topped up in place.
+            let mut r = run::Report::default();
+            run::sync_thread(p, &m.conversation_id, st, &mut r);
+            out.problems.append(&mut r.problems);
+        }
+        let Some(path) = st.thread_path(&m.conversation_id).filter(|path| still_there(p.vault, Some(path))).map(str::to_string) else {
             continue;
-        }
-        let thread = match fetch::conversation(client, &m.conversation_id, 100) {
-            Ok(t) => t,
-            Err(e) => {
-                out.problems.push(format!("Couldn't read a mail thread: {e}"));
-                continue;
-            }
         };
-        let files = if attachments {
-            super::attachments::for_thread(&super::attachments::Target { data, vault, since: None }, &thread, st, &mut out.problems)
-        } else {
-            Vec::new()
-        };
-        if let Some(h) = fetch::thread_header(&thread) {
-            st.mark_header(&m.conversation_id, &h);
-        }
-        let continues = fetch::replies_into(&thread).and_then(|h| st.continued(&m.conversation_id, &h));
-        let Some(cap) = fetch::thread_capture(&thread, &files, continues) else { continue };
-        let when = thread.last().map(|x| x.received);
-        let title = thread.last().map(|x| x.subject.clone()).unwrap_or(m.subject);
-        let date = when.unwrap_or(m.received).with_timezone(&Local).format("%Y-%m-%d").to_string();
-        if let Some(path) = deliver(data, vault, &cap, "outlook", when, out) {
-            st.mark_thread(&m.conversation_id, &path, thread.len());
-            if let Some(t) = when {
-                st.set_thread_last(&m.conversation_id, t.timestamp_millis());
-            }
-            out.items.push(Item { kind: "email".into(), title, date, path, already_had: false });
-        }
+        let already_had = had.as_deref() == Some(path.as_str());
+        // A thread just read is dated by its last message.
+        let last = st.thread_last(&m.conversation_id).filter(|_| !already_had).and_then(chrono::DateTime::from_timestamp_millis);
+        let date = last.unwrap_or(m.received).with_timezone(&Local).format("%Y-%m-%d").to_string();
+        out.items.push(Item { kind: "email".into(), title: m.subject, date, path, already_had });
     }
 }
 
@@ -339,5 +292,27 @@ mod tests {
         assert!(matches("notes about the FIT program rollout", &t));
         assert!(!matches("the program is on track", &t), "missing 'fit'");
         assert!(matches("anything", &terms("")), "no terms matches all");
+    }
+
+    #[test]
+    fn a_day_is_taken_when_asked_for_and_about_the_topic() {
+        let said = |body: &str| {
+            vec![fetch::ChatMessage { id: "1".into(), sender: "Maya".into(), body: body.into(), time: Utc::now(), files: vec![] }]
+        };
+        let t = terms("orbit");
+        assert!(covered("", "2026-10-24", &said("The Orbit App launch moved"), "2026-10-22", &t));
+        assert!(covered("Orbit App", "2026-10-22", &said("See you at ten"), "2026-10-22", &t), "the chat's name counts");
+        assert!(!covered("", "2026-10-24", &said("See you at ten"), "2026-10-22", &t));
+        assert!(!covered("Orbit App", "2026-10-21", &said("Orbit"), "2026-10-22", &t), "before the days asked for");
+        assert!(covered("", "2026-10-24", &said("anything"), "2026-10-22", &terms("")));
+    }
+
+    #[test]
+    fn a_thread_is_read_again_only_for_a_message_its_source_lacks() {
+        let at = |ms| chrono::DateTime::from_timestamp_millis(ms).unwrap();
+        assert!(newer_than_source(Some(1000), at(2000)));
+        assert!(!newer_than_source(Some(1000), at(1000)));
+        assert!(!newer_than_source(Some(1000), at(500)), "an earlier message of the thread");
+        assert!(!newer_than_source(None, at(2000)), "from before last messages were kept");
     }
 }

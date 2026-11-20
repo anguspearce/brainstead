@@ -23,7 +23,7 @@ Newest deletions come first. Each row shows the layer, name, the folder it **Was
 ## Put files back
 **Restore** on a row puts the file back where it was. To restore several, tick them (the header box ticks all) and click **Restore** above the list.
 
-If another file now has the old path, the row says so; **Restore as…** restores to a path you type.
+If another file now has the old path, the row says so; **Restore as…** restores to a path you type. A restore never replaces a file: if one turns up at that path meanwhile, the restore is refused and asks for another name.
 
 An assistant's restores are listed in [Changes](app:review) with **Revert**; one into `Templates/`, or of a note with code that runs, waits there for you to accept.
 

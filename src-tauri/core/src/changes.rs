@@ -309,7 +309,7 @@ pub struct Change {
     #[serde(default)]
     pub flags: Vec<String>,
     /// Why only the user can accept it, in the app (decided 2026-10-05, D-20261005-09): it changes a
-    /// template, adds code that runs, or a job the user set holds its changes. An assistant can
+    /// template, adds or changes code that runs, or a job the user set holds its changes. An assistant can
     /// accept a held change only when this is None.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub for_user: Option<String>,
@@ -433,7 +433,7 @@ pub fn checks(f: &Facts) -> Vec<String> {
 }
 
 /// Why a change must wait for the user whoever started it: it changes a template (whose code runs
-/// when it's used) or adds code that runs when the note is drawn (a dataviewjs block, inline `$=`,
+/// when it's used) or adds or changes code that runs when the note is drawn (a dataviewjs block, inline `$=`,
 /// a Tasks `by function` line, Templater's `<% %>`). Scripts run with the app's full access, and an
 /// assistant's text may carry what a captured source told it to write.
 pub fn needs_the_user(page: &str, before: Option<&str>, after: &str) -> Option<String> {
@@ -460,7 +460,7 @@ pub fn needs_the_user(page: &str, before: Option<&str>, after: &str) -> Option<S
         }
         _ => true,
     });
-    new.then(|| "It adds code that runs when the note is shown (a script or a function).".into())
+    new.then(|| "It adds or changes code that runs when the note is shown (a script or a function).".into())
 }
 
 /// Templater's tags: `<% … %>`, `<%* … %>`, with `-` or `_` to trim around them.

@@ -16,7 +16,7 @@ To change it, click the shortcut under Quick capture in [Settings › General](a
 The box captures a **Task** (for the To Do list) or a **Scratchpad note**; `Tab` or a click below the box switches.
 
 - A task is one line. It goes on the To Do list as `- [ ] your text`, at the top of the `#### Other` section.
-- A Scratchpad note can run to several lines (`⇧↩` for a new line). It goes to the Scratchpad as a block headed with the date and time, such as `## 2026-10-03 14:30`, newest first.
+- A Scratchpad note can run to several lines (`⇧↩` for a new line). It goes to the Scratchpad as a block headed with the date and time, such as `## 2026-10-03 14:30`, newest first. A line that starts with `#` or `##` is kept as text, written `\#`, so the note stays one block; code blocks are left alone.
 
 Both then wait in the [Inbox](app:inbox) to be clarified. Press `↩` to save, or `Esc` to close without saving.
 

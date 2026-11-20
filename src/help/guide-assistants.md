@@ -17,7 +17,7 @@ In [Settings › AI assistants](app:settings/assistants), **New chats use** sets
 Brainstead's tools are an MCP server, the standard way to add tools to an assistant. In [Settings › AI assistants](app:settings/assistants), **Brainstead's tools** shows the command for each assistant found; click **Copy** and run it once in Terminal. Ask's chats have the tools already. The assistant can then search, read and change the vault as the screens do.
 
 ## Know what an assistant can change
-An assistant never edits a file itself: it asks the app, which makes each change with the screens' checks and lists it in [Changes](app:review) with Revert. A change to a template, a system note's header or one adding code that runs is always held for you. **Empty the Trash** and **Delete forever** stay with you. [Assistants and Brainstead's tools](help:assistants) has the full list.
+An assistant never edits a file itself: it asks the app, which makes each change with the screens' checks and lists it in [Changes](app:review) with Revert. A change to a template, a system note's header or one adding or changing code that runs is always held for you. **Empty the Trash** and **Delete forever** stay with you. [Assistants and Brainstead's tools](help:assistants) has the full list.
 
 ## Give Brainstead Full Disk Access
 If your vault is in a cloud-synced folder, open [Settings › Permissions](app:settings/permissions) and click **Open System Settings**. Turn Brainstead on under Full Disk Access, so it and its assistants can read the vault without asking at every turn.

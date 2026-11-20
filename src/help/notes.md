@@ -31,7 +31,7 @@ Right-click a row for its menu:
 - **Move to the Trash** (the vault's `.trash` folder), with Undo. See [Trash](app:trash).
 
 ## Make a new note
-Click **New note**, or press `⌘N` anywhere. Choose **Blank note** and give it a type, title and date, or pick a template: it shows a summary of its questions, with **Show code** for its code. The filename is `Type. Title - YYYY-MM-DD.md`, and the dialog says whether it's free. Press `⌘↩` or click **Create**.
+Click **New note**, or press `⌘N` anywhere. Choose **Blank note** and give it a type, title and date, or pick a template: it shows a summary of its questions, with **Show code** for its code. The filename is `Type. Title - YYYY-MM-DD.md`, and the dialog says whether it's free. A name never starts with a dot, which would hide the file: ".NET migration" becomes "NET migration". Press `⌘↩` or click **Create**.
 
 ## Spot unsaved drafts
 A note with an unsaved draft shows an amber **Draft** chip by its title.

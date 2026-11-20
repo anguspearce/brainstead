@@ -23,6 +23,6 @@ Press a key, or click the choice:
 - `⌫` **Remove**: drop the bookmark. The button shows on a bookmark whose note is missing, but the key works on any.
 - `↩` **Accept**: do what was suggested. On a bookmark whose note is missing, `↩` removes it.
 
-Every choice but Keep takes the line out of `Me. Bookmarks.md`. Press `⌘Z` to undo. **Open** opens the note.
+Every choice but Keep takes the line out of `Me. Bookmarks.md`. Press `⌘Z` to undo. **Open** opens the note. The keys do nothing while a dialog is open or you're typing, and a held key counts once.
 
 An assistant can ask for suggestions too, and changes nothing until you decide. Then it does what the button does (its Make a task captures the task to the Inbox). It can remove a bookmark whose note is gone, and bookmarks only a note that exists.

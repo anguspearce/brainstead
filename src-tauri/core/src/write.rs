@@ -144,16 +144,32 @@ pub fn rename(from: &Path, to: &Path) -> std::io::Result<()> {
 /// check and the move are one step, so two renames to one name, or sync dropping a file there
 /// meanwhile, never overwrite a note. Tried again while another program has the file open, as
 /// `rename` is.
+///
+/// What remains a check and then a rename, where a file arriving in between is replaced: a folder
+/// on a volume with no exclusive rename (some network shares, FAT and exFAT on macOS; anywhere but
+/// macOS and Windows), and a file on such a volume when it has no hard links either.
 pub fn rename_new(from: &Path, to: &Path) -> std::io::Result<()> {
     retry_held(|| rename_no_replace(from, to), held_open, std::thread::sleep)
 }
 
-/// Where the volume can't do it in one step: a check, then a rename.
+/// Where the volume can't do it in one step: a check, then a rename. Windows always can.
+#[cfg(any(not(windows), test))]
 fn checked_rename(from: &Path, to: &Path) -> std::io::Result<()> {
     if fs::symlink_metadata(to).is_ok() {
         return Err(std::io::ErrorKind::AlreadyExists.into());
     }
     fs::rename(from, to)
+}
+
+/// A hard link fails when the name is taken, so linking then unlinking is a move that can't replace.
+/// Files only: a folder can't be hard-linked. If the old name can't be removed the new one is, so
+/// the file isn't left under both.
+#[cfg(not(windows))]
+fn link_then_unlink(from: &Path, to: &Path) -> std::io::Result<()> {
+    fs::hard_link(from, to)?;
+    fs::remove_file(from).inspect_err(|_| {
+        let _ = fs::remove_file(to);
+    })
 }
 
 #[cfg(target_os = "macos")]
@@ -166,39 +182,80 @@ fn rename_no_replace(from: &Path, to: &Path) -> std::io::Result<()> {
         return Ok(());
     }
     let e = std::io::Error::last_os_error();
-    // Some volumes (network shares, FAT) have no exclusive rename.
-    if e.raw_os_error() == Some(libc::ENOTSUP) {
+    if e.raw_os_error() != Some(libc::ENOTSUP) {
+        return Err(e);
+    }
+    // Some volumes (network shares, FAT) have no exclusive rename. A hard link is still one step
+    // there, for a file; a folder gets the check and the rename.
+    if fs::symlink_metadata(from).is_ok_and(|m| m.is_dir()) {
         return checked_rename(from, to);
     }
-    Err(e)
+    match link_then_unlink(from, to) {
+        // No hard links on this volume either.
+        Err(e) if matches!(e.raw_os_error(), Some(libc::EPERM | libc::ENOTSUP | libc::EOPNOTSUPP)) => checked_rename(from, to),
+        r => r,
+    }
 }
 
 #[cfg(windows)]
 fn rename_no_replace(from: &Path, to: &Path) -> std::io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
     let wide = |p: &Path| p.as_os_str().encode_wide().chain([0]).collect::<Vec<u16>>();
-    let (a, b) = (wide(from), wide(to));
-    // No flags, so not MOVEFILE_REPLACE_EXISTING: a file at `to` fails the move.
-    // SAFETY: both are NUL-terminated strings that outlive the call.
-    if unsafe { windows_sys::Win32::Storage::FileSystem::MoveFileExW(a.as_ptr(), b.as_ptr(), 0) } != 0 {
-        return Ok(());
+    let mv = |from: &Path, to: &Path| {
+        let (a, b) = (wide(from), wide(to));
+        // No flags, so not MOVEFILE_REPLACE_EXISTING: a file at `to` fails the move.
+        // SAFETY: both are NUL-terminated strings that outlive the call.
+        if unsafe { windows_sys::Win32::Storage::FileSystem::MoveFileExW(a.as_ptr(), b.as_ptr(), 0) } != 0 {
+            return Ok(());
+        }
+        Err(std::io::Error::last_os_error())
+    };
+    match mv(from, to) {
+        // ERROR_PATH_NOT_FOUND, ERROR_FILENAME_EXCED_RANGE: a path too long for this call as it
+        // stands. Its extended-length form is taken, and the move is still one step.
+        Err(e) if matches!(e.raw_os_error(), Some(3 | 206)) => mv(&extended(from)?, &extended(to)?),
+        r => r,
     }
-    let e = std::io::Error::last_os_error();
-    // ERROR_PATH_NOT_FOUND, ERROR_FILENAME_EXCED_RANGE: a path too long for this call, which
-    // `fs::rename` can still take.
-    if matches!(e.raw_os_error(), Some(3 | 206)) {
-        return checked_rename(from, to);
-    }
-    Err(e)
 }
 
-/// A hard link fails when the name is taken, so linking then unlinking is a move that can't replace.
+/// A path in its extended-length form, which has no 260-character limit: `\\?\C:\…` for `C:\…`
+/// and `\\?\UNC\server\share\…` for `\\server\share\…`. Made absolute first, since that form is
+/// taken literally (no `/`, `.` or `..`).
+#[cfg(windows)]
+fn extended(p: &Path) -> std::io::Result<std::path::PathBuf> {
+    use std::path::{Component, Prefix};
+    let abs = std::path::absolute(p)?;
+    let mut parts = abs.components();
+    let mut out = match parts.next() {
+        Some(Component::Prefix(pre)) => match pre.kind() {
+            Prefix::Disk(_) => {
+                let mut s = std::ffi::OsString::from(r"\\?\");
+                s.push(pre.as_os_str());
+                s
+            }
+            Prefix::UNC(server, share) => {
+                let mut s = std::ffi::OsString::from(r"\\?\UNC\");
+                s.push(server);
+                s.push(r"\");
+                s.push(share);
+                s
+            }
+            // Already in that form, or a device path.
+            _ => return Ok(abs),
+        },
+        _ => return Ok(abs),
+    };
+    // What's left starts at the root: `\dir\file`.
+    out.push(parts.as_path());
+    Ok(out.into())
+}
+
 #[cfg(not(any(target_os = "macos", windows)))]
 fn rename_no_replace(from: &Path, to: &Path) -> std::io::Result<()> {
-    match fs::hard_link(from, to) {
-        Ok(()) => fs::remove_file(from),
+    match link_then_unlink(from, to) {
         Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Err(e),
         Err(_) => checked_rename(from, to),
+        r => r,
     }
 }
 
@@ -1554,6 +1611,31 @@ mod tests {
         assert_eq!(fs::read_to_string(&c).unwrap(), "a");
         assert_eq!(checked_rename(&c, &b).unwrap_err().kind(), std::io::ErrorKind::AlreadyExists);
         assert!(same_file(&b, &b) && !same_file(&b, &c) && !same_file(&b, &a));
+        // The step for a volume with no exclusive rename: a hard link, then the old name removed.
+        #[cfg(not(windows))]
+        {
+            assert_eq!(link_then_unlink(&c, &b).unwrap_err().kind(), std::io::ErrorKind::AlreadyExists);
+            assert_eq!((fs::read_to_string(&c).unwrap(), fs::read_to_string(&b).unwrap()), ("a".into(), "b".into()));
+            let e = d.path().join("E.md");
+            link_then_unlink(&c, &e).unwrap();
+            assert!(!c.exists());
+            assert_eq!(fs::read_to_string(&e).unwrap(), "a");
+            // A name taken by a folder, or by a link that leads nowhere, is taken too.
+            let (dir, dangling) = (d.path().join("Folder"), d.path().join("Dangling.md"));
+            fs::create_dir(&dir).unwrap();
+            std::os::unix::fs::symlink(d.path().join("nowhere"), &dangling).unwrap();
+            assert_eq!(link_then_unlink(&e, &dir).unwrap_err().kind(), std::io::ErrorKind::AlreadyExists);
+            assert_eq!(link_then_unlink(&e, &dangling).unwrap_err().kind(), std::io::ErrorKind::AlreadyExists);
+            assert_eq!(fs::read_to_string(&e).unwrap(), "a");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_long_path_is_given_in_its_extended_length_form() {
+        assert_eq!(extended(Path::new(r"C:\Vault\wiki/Orbit App.md")).unwrap(), Path::new(r"\\?\C:\Vault\wiki\Orbit App.md"));
+        assert_eq!(extended(Path::new(r"\\acme\notes\Vault\..\A.md")).unwrap(), Path::new(r"\\?\UNC\acme\notes\A.md"));
+        assert_eq!(extended(Path::new(r"\\?\C:\Vault\A.md")).unwrap(), Path::new(r"\\?\C:\Vault\A.md"));
     }
 
     #[cfg(target_os = "macos")]

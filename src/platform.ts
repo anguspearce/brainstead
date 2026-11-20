@@ -180,3 +180,13 @@ export function accelLabel(spec: string): string {
     })
     .join("+");
 }
+
+/** What Settings › Vault and app_status say of a note a crash left halfway through a rename
+ *  (`rel`, its vault-relative path): its file and folder, and what to do. One rule for both. */
+export function halfRenamedText(rel: string): string {
+  const at = rel.lastIndexOf("/");
+  const where = at < 0 ? "the vault's top folder" : rel.slice(0, at);
+  // A name starting with a dot is hidden in Finder; Explorer shows it.
+  const hidden = isMac ? " It's a hidden file: ⇧⌘. shows it in Finder." : "";
+  return `A note was left halfway through a rename: ${rel.slice(at + 1)} in ${where}. Rename it back to the note's name (a note's ends .md).${hidden}`;
+}

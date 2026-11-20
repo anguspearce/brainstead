@@ -48,6 +48,7 @@ interface Choice {
 
 const BECOMES: Record<string, string> = {
   next: "a next action",
+  todo: "a task on the To Do list",
   waiting: "waiting for",
   someday: "someday / maybe",
   done: "done",

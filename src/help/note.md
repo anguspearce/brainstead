@@ -76,7 +76,7 @@ Some pages add buttons before these: a wiki page has **Refresh from sources**; a
 Text size sets document text from 12 to 24 px for every note. `⌘=` and `⌘-` change it and `⌘0` resets it to 15 px. It's separate from the whole window's [Interface size](help:settings-general) (`⇧⌘=` `⇧⌘-` `⇧⌘0`), which scales this text too.
 
 ## Rename, copy, export and more
-Rename edits the type, title and date, and shows the new filename and every link it will change; click **Rename & update links**. The note stays in its folder, and a message offers **Undo** (or press `⌘Z`).
+Rename edits the type, title and date, and shows the new filename and every link it will change; click **Rename & update links**. The note stays in its folder, and a message offers **Undo** (or press `⌘Z`). Links that spell part of the note's path, such as `[[entities/Orbit App]]` or `[[../entities/Orbit App]]`, change too. A rename never replaces a file: if one already has the new name, it's refused.
 
 **Export PDF…** (`⌘P`) saves a light PDF in the note's look, images included, with the title and page numbers in the footer. **Copy rich text** pastes formatted into email or a document. **Move to the Trash** is on the ⋯ menu and the Note menu, with Undo.
 

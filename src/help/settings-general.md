@@ -35,9 +35,11 @@ What the two together do is in [The menu bar](help:menubar).
 ## Notifications
 **Notifications** says when Brainstead notifies you:
 
-- **Only when it needs me** (the default): an ingest or summary that failed, a capture that was refused, a capture you clicked in a browser extension, the sync's sign-in gone stale or signed out (once, until it's fixed and goes again), and a settings file that had to be put back.
+- **Only when it needs me** (the default): an ingest or summary that failed, a capture that was refused, a capture you clicked in a browser extension, the sync's sign-in gone stale or signed out (once, until it's fixed and goes again), and a settings file that had to be put back or couldn't be read.
 - **All**: those, and every synced chat, email thread or Slack conversation, every ingest done, each summary written and the daily check.
 - **Off**: none.
+
+If Brainstead can't read its settings file when it starts (another program is holding it), it starts with the defaults and says so. No setting is saved until it can read the file, so nothing in it is lost: a change you make meanwhile is refused with the reason, and once the file can be read your own settings come back in its place.
 
 Teams, Outlook and Slack already tell you about new messages, so by default Brainstead doesn't repeat them. What the sync brought in and what each ingest did is always in [Activity › Sync & ingest](help:activity). An assistant can change this with the `settings` tool (`notifications`: `needs_me`, `all` or `off`).
 ## Change the quick capture shortcut

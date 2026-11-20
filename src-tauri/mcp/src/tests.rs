@@ -1050,6 +1050,27 @@ fn the_re_audits_tools_and_arguments_go_to_the_app() {
     assert_eq!(props("start_run")["type"]["enum"], json!(["Meeting", "1-1", "Workshop", "Interview"]));
 }
 
+/// clarify_inbox takes every choice the Inbox's buttons offer (tests/fixtures/inbox-choices.json,
+/// which the screen's choices are checked against), To Do among them, under the same names.
+/// Meeting note, Reply, Ask and Move are other tools'.
+#[test]
+fn clarify_inbox_takes_every_choice_the_inbox_offers() {
+    let tool = tools().into_iter().find(|t| t["name"] == "clarify_inbox").unwrap();
+    let becomes: Vec<String> = serde_json::from_value(tool["inputSchema"]["properties"]["becomes"]["enum"].clone()).unwrap();
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/inbox-choices.json");
+    let table: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let mut offered: Vec<&str> =
+        table["kinds"].as_array().unwrap().iter().flat_map(|k| k["choices"].as_array().unwrap()).filter_map(Value::as_str).collect();
+    offered.retain(|c| !["meeting", "reply", "ask", "move"].contains(c));
+    assert!(offered.contains(&"todo"));
+    for c in &offered {
+        assert!(becomes.iter().any(|b| b == c), "clarify_inbox becomes {c}");
+    }
+    for b in &becomes {
+        assert!(offered.contains(&b.as_str()), "the Inbox offers {b}");
+    }
+}
+
 #[test]
 fn a_notes_own_look_goes_to_the_app_with_its_action() {
     let f = fixture();

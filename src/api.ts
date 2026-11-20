@@ -265,6 +265,8 @@ export interface VaultStatus {
   error: string | null;
   /** Something wrong that leaves the vault usable: the folder can't be watched for changes. */
   warning?: string | null;
+  /** Notes a crash left halfway through a rename, by vault-relative path (hidden `.rename-…` files). */
+  halfRenamed?: string[];
   stats: IndexStats;
 }
 

@@ -74,6 +74,7 @@ import {
   doneNow,
   inboxChoices,
   inboxKey,
+  makeTask,
   newReferenceNote,
   settleInboxItem,
   suggestKind,
@@ -181,7 +182,7 @@ import { actionLabel } from "./activityModel";
 import { allTimeline, AllFilter, changeShown, entryShown, logOnly, typesIn } from "./changesLog";
 import { FEED_FILTERS, FeedFilter, FeedRow, groupLine, syncFeed, syncLine } from "./syncActivity";
 import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from "./taskGroups";
-import { captureDefault, isMac, keyLabel, terminalApp, vaultFile } from "./platform";
+import { captureDefault, halfRenamedText, isMac, keyLabel, terminalApp, vaultFile } from "./platform";
 
 const TODO_LIST = "Me. To Do List.md";
 /** The To Do list's heading for a task with nothing more to set (brainstead_core::inbox::TODO_TASKS). */
@@ -1025,6 +1026,11 @@ export async function clarifyItem(i: InboxItem, a: Args, unattended = false): Pr
       await settleInboxItem(i, taskLine({ ...fields, tag: "someday-maybe" }), proj);
       said = "someday / maybe";
       break;
+    case "todo":
+      // The Inbox's To Do itself (makeTask): on the To Do list's To Do as it is, an action's link and due date with it.
+      await makeTask(i, str(a, "text") ?? (i.kind === "action" ? actionTaskText(i) : text));
+      said = "a task on the To Do list";
+      break;
     case "project": {
       const name = str(a, "project_name") ?? text;
       const made = await api.projectCreate(name, "active", str(a, "area") ?? null, str(a, "done_looks_like") ?? null);
@@ -1067,7 +1073,7 @@ export async function clarifyItem(i: InboxItem, a: Args, unattended = false): Pr
       said = "deleted";
       break;
     default:
-      throw new Error("becomes is next, waiting, someday, project, done, reference, ingest or delete.");
+      throw new Error("becomes is next, todo, waiting, someday, project, done, reference, ingest or delete.");
   }
   return said;
 }
@@ -2531,6 +2537,8 @@ async function status(): Promise<string> {
     `Index: ${index}`,
     // As Settings › Vault warns: the folder can't be watched.
     v.warning ? `Warning: ${v.warning}` : "",
+    // As Settings › Vault lists them: notes a crash left halfway through a rename.
+    ...(v.halfRenamed ?? []).map((rel) => `Warning: ${halfRenamedText(rel)}`),
     // As Settings › Vault shows it.
     disk ? `On disk: ${diskUsageText(n, disk)}` : "",
     // Settings › Permissions' Full Disk Access, where macOS asks for it.

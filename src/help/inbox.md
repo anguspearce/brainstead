@@ -31,7 +31,7 @@ Click an item, or move with `J` and `K` (or `↑` and `↓`), to open it. The ch
 - `F` **File as reference**: adds the text as a bullet at the end of a note, or makes a new note.
 - `⌫` **Delete**.
 
-After each choice the next item opens, and a toast offers Undo.
+After each choice the next item opens, and a toast offers Undo. If an item can't be taken out of the Inbox, the task just made for it is taken back, so trying again doesn't make it twice.
 
 The keys ignore typing that wasn't meant for the Inbox: a key in the second and a half after Brainstead comes back to the front, and keys pressed in quick succession, as when a password goes to the wrong window. Press the key again on its own.
 

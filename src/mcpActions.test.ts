@@ -21,7 +21,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 vi.mock("@tauri-apps/api/webviewWindow", () => ({ getCurrentWebviewWindow: () => ({ setZoom: vi.fn(async () => {}) }) }));
 
 import type { InboxItem, ReviewRun, TaskRow } from "./api";
-import { findTask, Listing, renewArgs, runAction, summaryRunLine, taskLineOut } from "./mcpActions";
+import { clarifyItem, findTask, Listing, renewArgs, runAction, summaryRunLine, taskLineOut } from "./mcpActions";
 import { settings } from "./store";
 import { focusMode, startFocus } from "./focus";
 import { nav } from "./nav";
@@ -261,6 +261,20 @@ describe("MCP actions", () => {
       page: "Project. Orbit App launch.md",
       instruction: { op: "add_task", line: "- [ ] ring the venue [[Project. Orbit App launch]] #waiting-for", heading: "Waiting for" },
     });
+    // To Do, as the Inbox's: at the end of the To Do list's To Do as it is, and out of the Inbox, as one change.
+    calls.length = 0;
+    expect(await run("inbox.clarify", { item: "thought:5", becomes: "todo" })).toContain("Clarified as a task on the To Do list.");
+    expect(submitted().map((c) => [c.page, c.instruction])).toEqual([
+      ["Me. Scratchpad.md", { op: "lines", at: 4, old: ["### 2026-10-02 09:00", "Ask Lena about the beta"], new: [] }],
+      ["Me. To Do List.md", { op: "add_task", line: "- [ ] Ask Lena about the beta", heading: "To Do" }],
+    ]);
+    // A capture's task is made, then the capture is marked done.
+    calls.length = 0;
+    await run("inbox.clarify", { item: "capture:sources/Email. Thread. Hi - 2026-10-02.md", becomes: "todo" });
+    expect(submitted().map((c) => c.instruction)).toEqual([
+      { op: "add_task", line: "- [ ] Follow up on [[Email. Thread. Hi - 2026-10-02]]", heading: "To Do" },
+    ]);
+    expect(calls.map(([c]) => c)).toEqual(["inbox_list", "changes_submit_many", "inbox_capture_done"]);
     // A capture: trashed through Changes, and not marked done, so restored it's back in the Inbox.
     calls.length = 0;
     await run("inbox.clarify", { item: "capture:sources/Email. Thread. Hi - 2026-10-02.md", becomes: "delete" });
@@ -289,6 +303,37 @@ describe("MCP actions", () => {
     await expect(run("inbox.clarify", { item: "task:34", becomes: "next", project: "Acme rollout" })).rejects.toThrow(
       /isn't an active project/,
     );
+  });
+
+  it("accepts a weekly suggestion's To Do with the Inbox's own To Do", async () => {
+    const thought: InboxItem = {
+      kind: "thought",
+      path: "Me. Scratchpad.md",
+      line: 4,
+      text: "Ask Lena about the beta",
+      lineText: "### 2026-10-02 09:00",
+      stamp: "2026-10-02 09:00",
+      block: "### 2026-10-02 09:00\nAsk Lena about the beta\n",
+    };
+    const task: InboxItem = {
+      kind: "task",
+      path: "Me. To Do List.md",
+      line: 33,
+      text: "ring the venue",
+      lineText: "- [ ] ring the venue",
+      stamp: null,
+    };
+    answers.todo_add_task = () => ({ line: 0, lineText: "", undo: "Added" });
+    // makeTask's writes: the task at the end of To Do, then the thought out of the Inbox.
+    expect(await clarifyItem(thought, { becomes: "todo" })).toBe("a task on the To Do list");
+    expect(calls).toEqual([
+      ["todo_add_task", { text: "Ask Lena about the beta" }],
+      ["inbox_remove_thought", { line: 4, text: "### 2026-10-02 09:00\nAsk Lena about the beta\n" }],
+    ]);
+    // A task on the To Do list's Other moves in one write, with the text given.
+    calls.length = 0;
+    await clarifyItem(task, { becomes: "todo", text: "Ring the venue" });
+    expect(calls).toEqual([["inbox_task_to_todo", { line: 33, lineText: "- [ ] ring the venue", text: "Ring the venue" }]]);
   });
 
   it("clarifies an initiative's action: the task made and the action marked, or done or dropped", async () => {
@@ -2160,6 +2205,12 @@ describe("MCP actions", () => {
         "Brainstead 1.0.2 (abc123); its app data folder: /data/Brainstead; its website: https://brainstead.davies.co.za/",
       );
       expect(out).not.toContain("didn't install");
+      // A note a crash left halfway through a rename, as Settings › Vault names it.
+      expect(out).not.toContain("halfway through a rename");
+      answers.vault_status = () => ({ state: "ready", stats, halfRenamed: ["wiki/entities/.rename-4242", ".rename-7"] });
+      const left = (await run("status")) as string;
+      expect(left).toContain("Warning: A note was left halfway through a rename: .rename-4242 in wiki/entities. Rename it back");
+      expect(left).toContain("Warning: A note was left halfway through a rename: .rename-7 in the vault's top folder.");
       answers.vault_status = () => ({ state: "error", error: "The index file is damaged.", stats });
       expect(await run("status")).toContain("Index: Index failed: The index file is damaged.");
       // An update that didn't install, as the update dialog said at this start.

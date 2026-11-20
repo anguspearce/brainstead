@@ -19,7 +19,7 @@ Pick the assistant and model before the first message. New chats start with the 
 Ollama runs on this computer only. Brainstead uses `OLLAMA_HOST` only when it names `localhost`, `127.0.0.1` or `::1` (any port, http or https); for anything else the Ollama row under **Found on this computer** says why, lists no models and offers no **How to install**, and a chat or run on an Ollama model stops with that message instead of starting Codex. Run this way, Codex contacts only the Ollama server on this computer: it runs from a Codex folder of Brainstead's (`codex-ollama` in Brainstead's data folder) that holds no ChatGPT sign-in, with its plugins, apps, analytics and metrics off, so nothing reaches OpenAI even while Codex is signed in for its own chats. An Ollama chat's sessions are kept in that folder. A model Brainstead offers is already pulled, so nothing is downloaded for it. Ollama is for Ask and runs you start by hand (**Run now**, a terminal session): a scheduled run (the daily check, the scheduled summaries, a terminal call marked unattended, including one that starts Find tasks and projects or the weekly review's preparation) on an Ollama model goes on **New chats use** instead, or Claude Code's Sonnet when that is an Ollama model too, at the job's effort where that assistant offers it, and the log says so.
 
 - An empty chat offers example questions and Brainstead's skills to click, or says **No assistant found** and what to install.
-- Keys: ↩ sends, ⇧↩ adds a line, ↑ and ↓ recall earlier messages, Esc (or **Stop**) stops an answer.
+- Keys: ↩ sends, ⇧↩ adds a line, ↑ and ↓ recall earlier messages, Esc (or **Stop**) stops an answer, unless the Esc is closing the help drawer, a dialog or a menu.
 - Messages sent while it answers queue up; a cross takes one out.
 - A dot on a tab marks an answer you haven't seen; the sidebar's Ask count (in bold) counts them. An answer that arrives while the window is closed (a scheduled summary, say) stays unseen until the window is back, even on the tab it was left on. With Claude Code, a meter shows how full the chat's context is.
 - `/` lists workflows. Brainstead's `/wiki` answers from the vault with citations, with any assistant. The vault's own Claude Code skills are listed too.
@@ -45,7 +45,7 @@ In short, an assistant can do whatever the screens do. The help tool, and the in
 
 A quote not found in its source is flagged, once.
 
-**Held for you to accept:** a change to a template (including a new template, or renaming or trashing one), however the assistant spells the path (Brainstead goes by the file's own name, so on Windows `templates\meeting.md` or the folder's short name `TEMPLA~1` is still `Templates/Meeting.md`), a change to a [system note's header](notes.md#system-notes), and one that adds or changes code that runs. In a session nobody is watching, a change that fails a check is held too, and so is one from a run it starts that fails a check.
+**Held for you to accept:** a change to a template (including a new template, or renaming or trashing one), however the assistant spells the path (Brainstead goes by the file's own name, so on Windows `templates\meeting.md` or the folder's short name `TEMPLA~1` is still `Templates/Meeting.md`), a change to a [system note's header](notes.md#system-notes), and one that adds or changes code that runs. In a session nobody is watching, a change that fails a check is held too, and so is one from a run it starts that fails a check. Once a session has said nobody is watching, that holds for all of it.
 
 An assistant can list, reject or revert changes when you ask. It accepts a held change only in a session you're in, and only one held because a check failed. The rest are yours to accept on the Changes screen.
 
@@ -67,7 +67,7 @@ An assistant can list, reject or revert changes when you ask. It accepts a held 
 
 **What it can read:** search, any page or section, backlinks, facts, tasks, the Inbox, projects, the summaries, the Weekly review, Changes, runs, transcripts, the Trash, Activity, Sources, Wiki health's report, provenance, contradictions, the graph, Ask's chats, settings, Glance's counts, whether the app is running, and the in-app help. Each read is its own tool, marked read-only, so you can let an assistant read without asking you.
 
-Long lists come a page at a time and say how many there are. Nothing changes while the vault is read-only.
+Long lists come a page at a time and say how many there are. Nothing changes while the vault is read-only. A tool that waits on a model is given up to ten minutes. A request Brainstead didn't answer in time isn't carried out later.
 
 ## Sessions outside the app
 

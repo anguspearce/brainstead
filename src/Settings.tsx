@@ -49,7 +49,7 @@ import { useDiskUsage, vaultBytes, vaultParts } from "./diskUsage";
 import { sayTest, speechSettingsChanged, voices } from "./speech/player";
 import { SpeedSlider, VoiceSelect } from "./speech/ReadAloud";
 import { DocButton, useIsGone } from "./docButton";
-import { accelLabel, captureDefault, fileManager, hasSync, isMac, isWindows, keyLabel, terminalApp } from "./platform";
+import { accelLabel, captureDefault, fileManager, halfRenamedText, hasSync, isMac, isWindows, keyLabel, terminalApp } from "./platform";
 import { useFeatures } from "./features";
 import { usePanes } from "./PaneResizer";
 import { PANES as PANE_SPECS, RESIZE_LOCKS, ResizeType, resetPaneWidths, resizeLocked, setResizeLock } from "./panes";
@@ -898,6 +898,21 @@ function Vault() {
           <span>{st.warning}</span>
         </div>
       )}
+      {(st.halfRenamed ?? []).map((rel) => (
+        <div key={rel} className="doc-banner warn" role="status">
+          <Icon name="info" size={14} />
+          <span>{halfRenamedText(rel)}</span>
+          <span className="sp" />
+          <button
+            type="button"
+            className="btn sm"
+            title={`Show this file's folder in ${fileManager}`}
+            onClick={() => void api.reveal(rel).catch(() => {})}
+          >
+            {isMac ? "Reveal in Finder" : `Show in ${fileManager}`}
+          </button>
+        </div>
+      ))}
       <div className="card">
         <div className="srow">
           <Icon

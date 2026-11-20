@@ -50,7 +50,7 @@ Some changes are always held for you to accept:
 - a change to a system note's header (the "This is a system note" callout);
 - a change that adds code that runs when a note is shown, or changes code that's there.
 
-An assistant in a session nobody is watching, such as a loop, says so. Its changes that fail a check are then held for you instead of made, and so are those of the runs it starts. See [Changes](help:review) for the checks.
+An assistant in a session nobody is watching, such as a loop, says so. Once it has, that holds for the rest of the session. Its changes that fail a check are then held for you instead of made, and so are those of the runs it starts. See [Changes](help:review) for the checks.
 
 An assistant can list changes, revert one when you ask, and reject a held one. It can accept a held change only while you're there, and only one held because a check failed. The others are yours to accept on the Changes screen. An assistant nobody is watching can't accept anything, start the Weekly review over or retire the other app's skills and scripts.
 
@@ -81,5 +81,6 @@ Some things stay with you: what you're typing and haven't saved, **Edit before a
 
 ## Limits
 - An assistant can make up to 120 tool calls a minute.
+- A tool that waits on a model (a doc check, a comparison, a drafted reply, the Inbox's or Triage's suggestions) is given up to ten minutes; the others under three. If Brainstead doesn't answer in time, the assistant is told whether nothing was done, and a request nobody is waiting for any more is never carried out later.
 - Long lists come a page at a time, each saying how many there are.
 - Antigravity takes no outside tools in the mode Ask runs it, so it reads with its own tools only.
