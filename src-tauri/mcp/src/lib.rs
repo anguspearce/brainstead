@@ -768,13 +768,14 @@ pub fn tools() -> Vec<Value> {
                 "path": {"type": "string", "description": "The note it points at, from list_bookmarks."}
             }), &["target", "path"])}}), &["items"])),
         tool("draft_reply", "Draft a reply", Run,
-            "Drafts a reply to an email thread in sources/ (thread) or to pasted text, as the Draft reply screen does (needs the app). It says how fully the draft answers the thread. With current and change, it revises that reply as asked, as the screen's Ask for a change box does, keeping the rest of it. Nothing is sent and nothing in the vault changes: give the draft to the user.",
+            "Drafts a reply to an email thread in sources/ (thread) or to pasted text, as the Draft reply screen does (needs the app). It says how fully the draft answers the thread. With current and change, it revises that reply as asked, as the screen's Ask for a change box does, keeping the rest of it. With place (and thread), it's the screen's Put in Outlook or Put in Teams instead, for the reply the user is happy with: an email's reply becomes a reply-all draft on the thread in Outlook, a synced Teams chat's is typed into the chat's message box by the Teams extension, and the link opens in the browser; the user sends it there. Only when the user asks for it, and refused in an unattended session. Nothing is ever sent and nothing in the vault changes.",
             schema(json!({
                 "thread": {"type": "string", "description": "The email thread's path in sources/."},
                 "text": {"type": "string", "description": "Instead of thread: the message to reply to, pasted."},
                 "tone": {"type": "string", "enum": ["brief", "warm", "formal"], "description": "The screen's Tone: brief (as short as it can be while still answering, the default), warm (friendly and personal) or formal (courteous and complete, for someone senior or outside the team)."},
                 "current": {"type": "string", "description": "To revise: the reply as it stands, with any edits the user made."},
-                "change": {"type": "string", "description": "To revise: what to change, as the user asked (shorter, mention the date…)."}
+                "change": {"type": "string", "description": "To revise: what to change, as the user asked (shorter, mention the date…)."},
+                "place": {"type": "string", "description": "Put in Outlook / Put in Teams: the reply to leave, unsent, on the thread (needs thread)."}
             }), &[])),
         tool("doc_check", "Check a document", Run,
             "Checks a document, as Doc check does (needs the app): against the version in force of a governing document in the canonical docs register, or against the feedback the user gave on its last version. The findings come in the screen's words, as Copy findings gives them (Conflict, Not covered, Superseded term, Beyond scope, Agrees; the version In force and those not used). Without document it gives the register, each version's key and status (In force, Draft, Superseded), so you can pick governing_document from it; with start_register and no register yet, it's Start the register (Me. Canonical Docs.md, with its empty table). save is Save as note: the findings as a new note, Doc check. <name> - YYYY-MM-DD. Those two are recorded in Changes, where the user can revert them; otherwise nothing in the vault changes. Against the version in force, it first looks at the two documents' openings and stops there, checking nothing and saving nothing, when they aren't about the same thing. A finished check is kept, as the screen keeps it: while neither document has changed it's given again (saying when it was made) rather than run again, unless fresh.",
@@ -1357,6 +1358,9 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
             }
             act("triage.suggest", obj)
         }
+        "draft_reply" if unwatched && obj.get("place").is_some() => Err(CallError::Tool(
+            "Putting a reply in Outlook or Teams is only for when the user is there and asks for it, not in an unattended session.".into(),
+        )),
         "draft_reply" => act("reply.draft", obj),
         "compare_docs" => act("compare.run", obj),
         "doc_check" => {

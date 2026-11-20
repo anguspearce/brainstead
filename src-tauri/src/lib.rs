@@ -1030,6 +1030,7 @@ pub fn run() {
             sync::sync_cached_meetings,
             sync::sync_list_channels,
             sync::sync_pull,
+            sync::reply_place,
             bookmarks,
             smart_lists,
             asset_find,

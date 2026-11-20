@@ -91,6 +91,19 @@ pub fn reveal(path: &Path) -> Result<(), String> {
     }
 }
 
+pub fn open_in_chrome(url: &str) -> Result<(), String> {
+    let chrome = Command::new("/usr/bin/open").args(["-b", "com.google.Chrome", url]).status().map(|s| s.success()).unwrap_or(false);
+    if chrome {
+        return Ok(());
+    }
+    let st = Command::new("/usr/bin/open").arg(url).status().map_err(|e| e.to_string())?;
+    if st.success() {
+        Ok(())
+    } else {
+        Err("The browser didn't open the link.".into())
+    }
+}
+
 /// Opening (not just looking up) a file only Full Disk Access unlocks. TCC's own database is there
 /// on every Mac; Safari's bookmarks are the usual fallback.
 pub fn full_disk_access() -> Option<bool> {

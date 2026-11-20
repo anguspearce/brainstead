@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { groupSkills, skillGroup } from "../Ask";
 import { findingsMarkdown } from "./DocCheck";
-import { isThread } from "./Reply";
+import { isThread, replyTo } from "./Reply";
 
 describe("skill screens", () => {
   it("groups the / picker", () => {
@@ -64,5 +64,16 @@ describe("skill screens", () => {
     expect(md).toContain("Not used: Acme Operating Model v2.2 (Superseded).");
     expect(md).toContain("## Conflict (material): Funding");
     expect(md).toContain("## Agrees\n\n- Pod size");
+  });
+});
+
+describe("Put in Outlook / Put in Teams", () => {
+  it("goes where the thread came from, and only for a captured email or chat", () => {
+    expect(replyTo("sources/Email. Thread. Re Orbit App launch date - 2026-10-02.md")).toBe("Outlook");
+    expect(replyTo("sources/Mail/Email. Steerco minutes - 2026-10-02.md")).toBe("Outlook");
+    expect(replyTo("sources/Teams. Chat. Launch crew - 2026-10-02.md")).toBe("Teams");
+    expect(replyTo("sources/Teams. Transcript. Steerco - 2026-10-02.md")).toBeNull();
+    expect(replyTo("sources/Roadmap.md")).toBeNull();
+    expect(replyTo(null)).toBeNull();
   });
 });

@@ -340,6 +340,12 @@ pub fn reveal(path: &Path) -> Result<(), String> {
     imp::reveal(path)
 }
 
+/// Opens a web link in the browser the capture extensions run in: Chrome when it's there (a Teams
+/// reply is typed in by the Teams extension, D-20261120-05), else the default browser.
+pub fn open_in_chrome(url: &str) -> Result<(), String> {
+    imp::open_in_chrome(url)
+}
+
 /// Whether Brainstead has Full Disk Access: Some(false) when a protected file can't be opened,
 /// None when there was nothing to test against. Always Some(true) where there's no such thing.
 pub fn full_disk_access() -> Option<bool> {

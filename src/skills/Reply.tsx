@@ -4,7 +4,8 @@
 
 // Draft reply (the vault's `draft-reply` skill, §4): a captured Outlook or Teams thread (or a pasted
 // one), whether it answered what was asked, and a plain-text reply grounded in the vault, in a
-// tone you pick, to copy into Outlook or Teams. Brainstead never sends anything.
+// tone you pick, to put in Outlook or Teams unsent (D-20261120-05) or copy. Brainstead never sends
+// anything.
 
 import { keepInSources, StillInInbox, useInInbox } from "../StillInInbox";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -43,6 +44,16 @@ export function threadLabel(f: Pick<FileSummary, "title" | "date" | "path">): st
   const kind = /^sources\/(?:.+\/)?Teams\. /.test(f.path) ? "Teams: " : "";
   return `${kind}${subject}${f.date ? ` · ${fmtShortDate(f.date)}` : ""}`;
 }
+
+/** Where a captured thread's reply can be put, unsent: Outlook for an email, Teams for a chat. */
+export const replyTo = (path: string | null): "Outlook" | "Teams" | null =>
+  !path ? null : /^sources\/(?:.+\/)?Email\. /.test(path) ? "Outlook" : /^sources\/(?:.+\/)?Teams\. Chat\. /.test(path) ? "Teams" : null;
+
+/** What Put in Outlook or Put in Teams says once it's done. */
+export const placedText = (to: "outlook" | "teams") =>
+  to === "outlook"
+    ? "The reply is a draft in Outlook, opening now: check it and press Send there"
+    : "Teams is opening the chat with the reply in its message box: check it and press Send. It's on the clipboard too";
 
 /** Whether the draft answered the thread, as the verdict above it says (an assistant's draft_reply too). */
 export const ANSWERED: Record<string, [string, string]> = {
@@ -184,6 +195,22 @@ export function ReplyScreen() {
       new ClipboardItem({ "text/html": new Blob([html], { type: "text/html" }), "text/plain": new Blob([draft], { type: "text/plain" }) }),
     ]);
     offerOut("Reply copied as rich text");
+  };
+  // Put in Outlook / Put in Teams: the reply where it's sent from, unsent. For Teams it's also
+  // copied, in case the extension can't type it in.
+  const to = replyTo(chosen);
+  const [placing, setPlacing] = useState(false);
+  const putIn = async () => {
+    if (!chosen || !to || placing) return;
+    setPlacing(true);
+    try {
+      if (to === "Teams") await navigator.clipboard.writeText(draft).catch(() => {});
+      offerOut(placedText((await api.replyPlace(chosen, draft)).to));
+    } catch (e) {
+      toast(String(e), undefined, "bad");
+    } finally {
+      setPlacing(false);
+    }
   };
   const addTask = async () => {
     if (!r?.task) return;
@@ -374,9 +401,25 @@ export function ReplyScreen() {
               )}
               {r.grounded.length > 0 && <p className="faint small">Drew on {r.grounded.join(", ")}.</p>}
               <div className="row rbtns">
+                {to && (
+                  <button
+                    type="button"
+                    className="btn pri"
+                    disabled={placing || !draft.trim()}
+                    title={
+                      to === "Outlook"
+                        ? "Save the reply as a reply-all draft on this email in Outlook, then open it there to check and send. Nothing is sent"
+                        : "Open this chat in Teams with the reply typed into its message box, to check and send there (the Teams extension types it in). Nothing is sent"
+                    }
+                    onClick={() => void putIn()}
+                  >
+                    <Icon name={to === "Outlook" ? "mail" : "chat"} size={14} />
+                    {placing ? "Putting it there…" : `Put in ${to}`}
+                  </button>
+                )}
                 <button
                   type="button"
-                  className="btn pri"
+                  className={to ? "btn" : "btn pri"}
                   title="Copy the reply as plain text, to paste into Outlook or Teams"
                   onClick={() => void copy()}
                 >
@@ -403,7 +446,10 @@ export function ReplyScreen() {
                   </button>
                 )}
               </div>
-              <p className="faint small">Paste into Outlook or Teams: Brainstead never sends anything.</p>
+              <p className="faint small">
+                {to ? `Put in ${to} leaves it there unsent; or paste it yourself.` : "Paste into Outlook or Teams."} Brainstead never sends
+                anything.
+              </p>
               {chosen && <StillInInbox key={chosen} path={chosen} />}
             </>
           )}

@@ -1148,3 +1148,12 @@ fn initiatives_are_listed_made_and_changed_through_the_app() {
     assert!(made(&f, &c).contains("## Decisions\n\n- 2026-09-18 — Staff first, customers in Q1 ^d-"));
     assert!(refused(&f.ctx, "add_decision", json!({"initiative": rel, "text": "x", "date": "18 Sep"})).contains("YYYY-MM-DD"));
 }
+
+/// Put in Outlook / Put in Teams leaves a reply where the user sends it from: only while they're there.
+#[test]
+fn placing_a_reply_is_refused_unattended() {
+    let f = fixture();
+    let t =
+        refused(&f.ctx, "draft_reply", json!({"thread": "sources/Email. Thread. Launch.md", "place": "Yes, Friday.", "unattended": true}));
+    assert!(t.contains("unattended"), "{t}");
+}

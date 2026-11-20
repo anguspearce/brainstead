@@ -139,6 +139,27 @@ pub fn reveal(path: &Path) -> Result<(), String> {
     tauri_plugin_opener::reveal_item_in_dir(path).map_err(|e| e.to_string())
 }
 
+#[cfg(windows)]
+pub fn open_in_chrome(url: &str) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    // CREATE_NO_WINDOW: no console flashes up. `start` finds Chrome through App Paths.
+    let chrome = std::process::Command::new("cmd")
+        .args(["/C", "start", "", "chrome", url])
+        .creation_flags(0x0800_0000)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if chrome {
+        return Ok(());
+    }
+    tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
+#[cfg(not(windows))]
+pub fn open_in_chrome(url: &str) -> Result<(), String> {
+    tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
 pub fn full_disk_access() -> Option<bool> {
     Some(true)
 }

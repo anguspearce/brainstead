@@ -11,6 +11,10 @@ A chat's `<date>` is the day it was captured. A transcript's is the meeting's da
 
 From there, Ingest on the Sources screen folds it into the wiki.
 
+## Put in Teams (Draft reply)
+
+Brainstead's Draft reply has **Put in Teams** for a chat the sync brought in. Brainstead keeps the reply under a one-time key and opens the chat's link in Chrome with `brainstead-reply=<key>` on it. `background.js` sees that link start to load, collects the reply for the key from Brainstead's helper (`reply-draft`, which the helper answers once, for ten minutes, and only to this extension), and once the tab has loaded runs `reply-fill.js`'s `fill` in it. That waits for the chat's message box and pastes the reply in. **It never sends**: the reply waits in the box for you to check and press Send. A box that already has something typed in it is left alone. When the reply can't go in, the toolbar icon shows `!` and its tooltip says why. Brainstead copied the reply too, so you can paste it instead. Needs 1.2.0 or later.
+
 ## Why this exists
 
 Microsoft Graph isn't available, so this extension runs in your already signed-in Teams tab and hands the visible conversation to Brainstead on click: no continuous scraping, no second login, no API.

@@ -6,7 +6,8 @@
 //! and writes them into `sources/` through the same path the capture extensions use, so the Inbox
 //! and "Ingest new sources as they arrive" work unchanged (D-20261025-01, D-20261025-02). The
 //! sign-in is handed over by the Teams extension while a Teams tab is open (`auth`); macOS and Windows
-//! now. Everything the sync reads is the user's own, and it only ever reads.
+//! now. Everything the sync reads is the user's own, and it only ever reads. Draft reply's Put in
+//! Outlook and Put in Teams (`reply`) leave a reply there unsent; nothing here ever sends.
 
 pub mod api;
 pub mod attachments;
@@ -15,6 +16,7 @@ pub mod fetch;
 pub mod html;
 pub mod log;
 pub mod pull;
+pub mod reply;
 pub mod run;
 pub mod skips;
 pub mod slack;
@@ -114,6 +116,23 @@ pub async fn sync_pull(query: Option<String>, days: Option<u32>, kinds: Option<V
     })
     .await
     .unwrap_or_default()
+}
+
+/// Draft reply's Put in Outlook / Put in Teams (D-20261120-05): the reply, unsent, as an Outlook
+/// draft on the thread or typed into the Teams chat's box by the Teams extension, and the link
+/// opened in the browser. Never sends.
+#[tauri::command]
+pub async fn reply_place(path: String, text: String) -> Result<reply::Placed, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let data = platform::data_dir();
+        let s = crate::settings::load(&data.join("settings.json"));
+        let vault = s.vault_path.as_deref().filter(|p| !p.trim().is_empty()).ok_or("No vault is open.")?;
+        let placed = reply::place(&data, std::path::Path::new(vault), &path, &text, chrono::Utc::now().timestamp())?;
+        platform::open_in_chrome(&placed.url)?;
+        Ok(placed)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// A channel the user can choose to sync (Settings): its id and name.

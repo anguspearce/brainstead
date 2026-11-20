@@ -1236,6 +1236,9 @@ export const api = {
   /** With `current` and `change`, revises that reply as asked rather than drafting afresh. */
   draftReply: (thread: string | null, text: string | null, tone: string, current: string | null = null, change: string | null = null) =>
     invoke<Reply>("draft_reply", { thread, text, tone, current, change }),
+  /** Draft reply's Put in Outlook / Put in Teams: the reply, unsent, as an Outlook draft on the thread
+   *  or typed into the Teams chat's box by the Teams extension; the link is opened in the browser. */
+  replyPlace: (path: string, text: string) => invoke<{ to: "outlook" | "teams"; url: string }>("reply_place", { path, text }),
   canonicalRegister: () => invoke<CanonicalRegister>("canonical_register"),
   docCheck: (candidate: string, doc: string, mode: CheckMode) => invoke<CheckResult>("doc_check", { candidate, doc, mode }),
   /** Starts a check in the background; its steps and result come as onDocCheckChanged. */

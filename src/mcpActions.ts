@@ -176,7 +176,7 @@ import { passageText, PASSAGES_SHOWN } from "./Provenance";
 import { meetingProgress, offerFollowUp, runMatches } from "./Ingest";
 import { findingsMarkdown, findingsNote, governingDocs, REGISTER, REGISTER_STUB, STATUS as REGISTER_STATUS } from "./skills/DocCheck";
 import { LABEL as TRIAGE } from "./skills/Triage";
-import { ANSWERED, replyTask } from "./skills/Reply";
+import { ANSWERED, placedText, replyTask, replyTo } from "./skills/Reply";
 import { actionLabel } from "./activityModel";
 import { allTimeline, AllFilter, changeShown, entryShown, logOnly, typesIn } from "./changesLog";
 import { FEED_FILTERS, FeedFilter, FeedRow, groupLine, syncFeed, syncLine } from "./syncActivity";
@@ -2982,6 +2982,16 @@ async function triageSuggest(a: Args): Promise<string> {
 /** Draft a reply, as its screen shows the result: whether it answered the thread and each point,
  *  the draft, what's left to fill in, what it drew on, and its Add task. */
 async function draftReply(a: Args): Promise<string> {
+  // The screen's Put in Outlook / Put in Teams: the reply, unsent, where the user sends it from.
+  if (has(a, "place")) {
+    const place = str(a, "place");
+    if (!place) throw new Error("place is the reply to put there, as the user is happy with it.");
+    const thread = str(a, "thread");
+    if (!thread) throw new Error("place needs thread: the captured email or Teams chat the reply is to.");
+    if (!replyTo(thread))
+      throw new Error("Only a captured email or Teams chat can have its reply put there; give the user the reply to paste.");
+    return `${placedText((await api.replyPlace(thread, place)).to)}. Nothing was sent.`;
+  }
   // The screen's Tone: Brief (the default), Warm or Formal.
   const tone = str(a, "tone") ?? "brief";
   if (!["brief", "warm", "formal"].includes(tone)) throw new Error("tone is brief, warm or formal (brief when left out).");

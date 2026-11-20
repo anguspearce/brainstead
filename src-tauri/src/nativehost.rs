@@ -140,6 +140,15 @@ fn handle(data: &Path, origin: &str, v: Value) -> Value {
             Err(message) => json!({"ok": false, "message": message}),
         };
     }
+    // The Teams extension collects a reply Draft reply left for it, to type into the chat's box
+    // (D-20261120-05). Only the Teams extension: it's the one that types it in.
+    if v.get("type").and_then(Value::as_str) == Some("reply-draft") {
+        if ext != "teams" {
+            return json!({"ok": false, "message": "Only the Teams extension types in a reply."});
+        }
+        let key = v.get("key").and_then(Value::as_str).unwrap_or("");
+        return crate::sync::reply::take_teams(data, key, chrono::Utc::now().timestamp());
+    }
     let c: Capture = match serde_json::from_value(v) {
         Ok(c) => c,
         Err(e) => return json!({"ok": false, "message": format!("Brainstead doesn't know this capture: {e}")}),
