@@ -583,8 +583,8 @@ export function InboxScreen() {
           {raw === null && <p className="faint pad">Loading…</p>}
           {raw && !items.length && (
             <p className="faint pad">
-              Nothing to clarify. Thoughts captured to the Scratchpad, tasks under Other on the To Do list, and emails and Teams chats
-              captured from the browser land here.
+              Nothing to clarify. Notes captured to the Scratchpad, tasks under Other on the To Do list, and emails and Teams chats captured
+              from the browser land here.
             </p>
           )}
           {SOURCES.map((g) => {

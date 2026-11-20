@@ -47,7 +47,7 @@ A quote not found in its source is flagged, once.
 
 **Held for you to accept:** a change to a template (including a new template, or renaming or trashing one), however the assistant spells the path (Brainstead goes by the file's own name, so on Windows `templates\meeting.md` or the folder's short name `TEMPLA~1` is still `Templates/Meeting.md`), a change to a [system note's header](notes.md#system-notes), and one that adds or changes code that runs. In a session nobody is watching, a change that fails a check is held too, and so is one from a run it starts that fails a check. Once a session has said nobody is watching, that holds for all of it.
 
-An assistant can list, reject or revert changes when you ask. It accepts a held change only in a session you're in, and only one held because a check failed. The rest are yours to accept on the Changes screen.
+An assistant can list, reject or revert changes when you ask. It can do so for a whole run, or for only the run's changes a search, a type or a day leaves. It accepts a held change only in a session you're in, and only one held because a check failed. The rest are yours to accept on the Changes screen.
 
 **At once, undoable with ⌘Z** (the app says an assistant made the change):
 
@@ -61,6 +61,8 @@ An assistant can list, reject or revert changes when you ask. It accepts a held 
 
 - the Weekly review's **Start over** (what it changed in the vault stays) and Moving over's ticks and **Retire them** (the previous app's skills and scripts go to the Trash). Neither works in a session nobody is watching;
 - going through the Weekly review, marking contradictions resolved or ignored, Wiki health's **Ignore**, **Ignore all** and **Show again**;
+- putting a drafted reply in Outlook or Teams, unsent, and applying an **Update…** to an Inbox item, a task or a project (neither in a session nobody is watching);
+- the sync: its switches, **Sync now**, **Fetch again**, channels and skip lists, and pulling a topic's chats, mail and transcripts into Sources;
 - Ask's chats (rename, pin, set a chat's effort, move to the Trash), Tasks' saved lists, a note's own look, and settings (all but the vault, Read-only and the folders left out);
 - how long Changes keeps its history, **Rebuild index**, and your tools that start Claude Code sessions;
 - runs, with their progress and **Stop**: an ingest, the daily or weekly summary, the weekly review's preparation, the daily check, Find tasks and projects, a contradictions check, a meeting note from a transcript, **Write Current state**, bookmark triage, a drafted reply (revised when you ask for a change), a doc check and a comparison of two documents. What a run changes is listed in Changes, with Revert.

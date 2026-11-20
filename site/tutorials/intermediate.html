@@ -61,6 +61,8 @@
       <a href="../#gtd">Tasks</a>
       <a href="../#notes">Notes</a>
       <a href="../#wiki">Wiki</a>
+      <a href="../#ask">Ask</a>
+      <a href="../#more">More</a>
       <a href="./" aria-current="page">Tutorials</a>
     </nav>
     <a class="btn btn-sm" href="../#download">Download</a>
@@ -70,10 +72,10 @@
 <main id="top">
 
   <section class="t-hero">
-    <p class="eyebrow rise"><a href="./">Tutorials</a> › Intermediate</p>
-    <h1 class="rise">Run your week<br><span class="grad">without the worry.</span></h1>
+    <h1 class="rise">Run your week<br><span class="accent">without the worry.</span></h1>
     <p class="lede rise">Several projects, a full Inbox and people waiting on you. Set up a system you can trust, so nothing slips through.</p>
     <ul class="meta rise">
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20v-4M12 20v-9M19 20V5"/></svg>Intermediate</li>
       <li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>About an hour</li>
       <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>8 steps</li>
       <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>After <a href="beginner.html">Your first hour</a></li>
@@ -91,7 +93,7 @@
 
   <section class="brief">
     <div class="brief-card reveal">
-      <p class="eyebrow">The story so far</p>
+      <h2>The story so far</h2>
       <p>Sam said yes: the team moves to 12 Mill Lane in four weeks. But the move isn't the only thing on your plate. Sam also wants <b>a team away day</b> in January, you're trying to <b>book a summer holiday</b>, and you meet Lena from facilities every week.</p>
       <p>Things are starting to land in your Inbox faster than you can deal with them. This tutorial follows <b>Getting Things Done</b>: catch everything, decide what each thing is, keep it where you'll see it at the right moment, and look over it all once a week.</p>
       <ul class="makes">
@@ -158,8 +160,9 @@
               <li><kbd>N</kbd> a <b>next action</b>: pick its project or context, and save.</li>
               <li><kbd>P</kbd> a <b>new project</b>, when it needs more than one step.</li>
               <li><kbd>W</kbd> <b>waiting for</b> someone else.</li>
-              <li><kbd>2</kbd> <b>done now</b>: if it takes under two minutes, just do it.</li>
-              <li><kbd>S</kbd> <b>someday / maybe</b>, <kbd>R</kbd> <b>file it</b> in a note, or <kbd data-win="Backspace">⌫</kbd> <b>delete</b> it.</li>
+              <li><kbd>T</kbd> straight onto your <b>To Do</b> list, with nothing to fill in.</li>
+              <li><kbd>D</kbd> <b>done now</b>: if it takes under two minutes, just do it.</li>
+              <li><kbd>S</kbd> <b>someday / maybe</b>, <kbd>F</kbd> <b>file it</b> in a note, or <kbd data-win="Backspace">⌫</kbd> <b>delete</b> it.</li>
             </ul>
           </li>
           <li>For <i>Order monitors for the quiet room</i>, press <kbd>N</kbd>, choose the <b>Office move</b> project and the <b>@computer</b> context, and save. It moves into the project.</li>
@@ -203,14 +206,14 @@
         <h2>Due, defer and waiting.</h2>
         <p class="why">Not every task has a deadline, and some can't start yet. Brainstead keeps them apart, so your lists only show what you can act on today.</p>
         <ol class="do">
-          <li>On Tasks, <b>right-click</b> a task (or click its <b>⋯</b>) to open its menu.</li>
-          <li><b>Set due date</b> is for real deadlines: the day it <i>must</i> be done. Use it sparingly, so a due date means something.</li>
+          <li>On Tasks, the line under each task shows its due date, context, effort and project. <b>Click one</b> to change it, or point at the task and click its <b>+</b> to add one it hasn't got.</li>
+          <li><b>Due date</b> is for real deadlines: the day it <i>must</i> be done. Use it sparingly, so a due date means something.</li>
           <li><b>Defer until</b> hides a task until a day you choose. <i>Label the desks at Mill Lane</i> can't happen until you have the keys, so defer it to the day you get them. It disappears from Next actions and comes back on Today that morning.</li>
-          <li><b>Waiting for someone</b> moves a task onto the <b>Waiting for</b> list: Lena's seating plan, Theo's fibre date. Look at that list before you chase anyone.</li>
+          <li><b>Right-click</b> a task (or click its <b>⋯</b>) for its menu. <b>Waiting for someone</b> moves it onto the <b>Waiting for</b> list: Lena's seating plan, Theo's fibre date. Look at that list before you chase anyone.</li>
         </ol>
         <figure class="shot reveal">
-          <div class="window"><img src="../img/tut2-task-menu-light.webp" alt="A task's menu: due date, defer until, context, effort, project and priority" width="1400" height="875" loading="lazy"></div>
-          <figcaption>Everything about a task, one right-click away.</figcaption>
+          <div class="window"><img src="../img/tut2-task-menu-light.webp" alt="A task's menu: Update, Rename, Mark in progress, Waiting for someone, Cancel task, More, Open and Delete task" width="1400" height="875" loading="lazy"></div>
+          <figcaption>A task's menu, one right-click away. <b>More…</b> has every date and detail in one place.</figcaption>
         </figure>
         <div class="tip">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/></svg>
@@ -224,7 +227,7 @@
         <h2>Keep track of people.</h2>
         <p class="why">You meet Lena every week. Brainstead can remember what you agreed last time, and what you still owe each other, so every catch-up starts where the last one ended.</p>
         <ol class="do">
-          <li>Press <kbd data-win="Ctrl+N">⌘N</kbd>, choose the <b>1-1</b> template and pick <b>Lena</b>. (The example template lists Maya, Lena and Theo; open it under <b>Templates</b> to put in your own people.)</li>
+          <li>Press <kbd data-win="Ctrl+N">⌘N</kbd>, choose the <b>1-1</b> template and pick <b>Lena</b>. (The example template lists Maya, Lena and Theo; open it in <b>Templates</b>, under <b>Vault</b> at the foot of the sidebar, to put in your own people.)</li>
           <li>Write her update and yours under the headings.</li>
           <li>Anything to follow up goes under <b>Follow-ups</b>, as a task tagged with her name:
             <div class="type"><span class="k">- [ ]</span> Book the lift at Mill Lane for moving day <span class="t">#followup/Lena</span></div>
@@ -310,7 +313,7 @@ path includes Office move
         </figure>
         <div class="tip">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-          <p><b>Another day suits you better?</b> Change the review's day and time in <b>Settings › Automations</b>.</p>
+          <p><b>Another day suits you better?</b> Change the review's day and time on its start page, or in <b>Settings › Automations</b>.</p>
         </div>
       </section>
 

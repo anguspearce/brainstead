@@ -16,14 +16,14 @@ Today (⌘1) is what needs you now:
 - `@context` chips to show one context.
 - A capture box, the same as Quick capture.
 - **To process**, the one list of what needs you: the Inbox to clarify (sources waiting to be ingested among it), changes held for you, bookmarks to triage, Wiki health to decide, and the weekly review on its day. Each row's count is the one its screen shows, as the sidebar and the menu-bar window count, and its button names what you do: **Clarify**, **Decide**, **Triage**, **Start**.
-- The latest **Weekly summary** and **Daily summary**.
+- The latest **Daily brief**, **Weekly summary** and **Daily summary**, and, with the sync on, your **Upcoming meetings**.
 - **Continue where you left off**.
 
 A waiting-for row shows how many days it has waited. **Draft nudge** drafts a follow-up with Ask to copy into Outlook or Teams; nothing is sent.
 
 ## Quick capture
 
-Press ⌃⌥Space in any app (change it in Settings › General).
+Press ⌃⌥Space in any app (Ctrl+Shift+Space on Windows; change it in Settings › General).
 
 - Type a task and press ↩. It goes on the To Do list under Other.
 - Press Tab for a **Scratchpad note**. It goes to the Scratchpad under a date and time heading.
@@ -35,7 +35,7 @@ Both kinds wait in the Inbox.
 
 <a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/inbox-dark.png"><img alt="The Inbox: captures, Scratchpad notes and tasks to clarify, one open with its choices" src="images/inbox-light.png"></picture></a>
 
-The Inbox (⌘2) lists what you've captured but not decided: first the **Actions** on your [initiatives](wiki.md#initiatives) that are yours, and those you delegated that are past their due date or, with no due date, were handed over more than a week ago (Next action or Waiting for makes the task, with the action's due date, and marks the action so it leaves the Inbox; Done and Drop mark it done or dropped, and Move to… (`M`) moves it to another initiative; the task links the action, so ticking it marks the action done), then emails and Teams chats from the browser extensions, sources added to `sources/` and not yet ingested, Scratchpad thoughts, and tasks under Other on the To Do list. Pick one (`J` and `K` move) and choose what it becomes. A suggestion from the AI shows first, and `↩` accepts it; the choices are in two lists, **It needs doing** and **It doesn't need doing**:
+The Inbox (⌘2) lists what you've captured but not decided: first the **Actions** on your [initiatives](wiki.md#initiatives) that are yours, and those you delegated that are past their due date or, with no due date, were handed over more than a week ago (Next action or Waiting for makes the task, with the action's due date, and marks the action so it leaves the Inbox; Done and Drop mark it done or dropped, and Move to… (`M`) moves it to another initiative; the task links the action, so ticking it marks the action done), then emails and Teams chats from the browser extensions, sources added to `sources/` and not yet ingested, Scratchpad notes, and tasks under Other on the To Do list. Pick one (`J` and `K` move) and choose what it becomes. A suggestion from the AI shows first, and `↩` accepts it; the choices are in two lists, **It needs doing** and **It doesn't need doing**:
 
 | Key | Choice |
 |---|---|
@@ -50,6 +50,8 @@ The Inbox (⌘2) lists what you've captured but not decided: first the **Actions
 | `⌫` | Delete |
 
 The keys ignore typing that wasn't meant for the Inbox: a key in the second and a half after Brainstead comes back to the front, and keys pressed in quick succession, as when a password goes to the wrong window. Press the key again on its own.
+
+Under the items, a **Bookmarks** band lists the bookmarks to triage; click one to open Triage on it.
 
 Tick several items (a section's header box ticks them all) to act on them together: make meeting notes, ingest, put them on the To Do list, keep in Sources, mark done, move to Someday / maybe or delete. One that fails doesn't stop the rest: it stays ticked and the message says why. Next action, Waiting for and New project stay one at a time.
 
@@ -101,7 +103,7 @@ The weekly review walks you through GTD's three phases, Get clear, Get current a
 
 On a Monday or Tuesday it covers the week just ended, otherwise this week. The scheduled weekly summary is separate, and reads your review note.
 
-With an AI assistant set up, each step shows suggestions from your week, such as a task to add from a meeting, or one to tick, defer or reword. Each has **Accept**, **Edit** (where there are words to change) and **Skip**, as suggestions do elsewhere; **Suggest again** prepares a fresh set. Nothing changes until you click, and each one can be undone. Assistants use `weekly_review`, `weekly_suggestion` and `weekly_step`.
+With an AI assistant set up, each step shows suggestions from your week, such as a task to add from a meeting, one to tick, defer, reword, mark waiting for or move to Someday / maybe, or what an Inbox item should become. Each has **Accept**, **Edit** (where there are words to change) and **Skip**, as suggestions do elsewhere; **Suggest again** prepares a fresh set. Nothing changes until you click, and each one can be undone. What an assistant accepts for you is made as a change in Changes, with Revert, and held there when a check fails; an Inbox item it clarifies follows the Inbox's own rules. Assistants use `weekly_review`, `weekly_suggestion` and `weekly_step`.
 
 ## How tasks are written
 

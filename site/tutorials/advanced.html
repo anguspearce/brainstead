@@ -61,6 +61,8 @@
       <a href="../#gtd">Tasks</a>
       <a href="../#notes">Notes</a>
       <a href="../#wiki">Wiki</a>
+      <a href="../#ask">Ask</a>
+      <a href="../#more">More</a>
       <a href="./" aria-current="page">Tutorials</a>
     </nav>
     <a class="btn btn-sm" href="../#download">Download</a>
@@ -70,10 +72,10 @@
 <main id="top">
 
   <section class="t-hero">
-    <p class="eyebrow rise"><a href="./">Tutorials</a> › Advanced</p>
-    <h1 class="rise">Your own wiki.<br><span class="grad">Written for you.</span></h1>
+    <h1 class="rise">Your own wiki.<br><span class="accent">Written for you.</span></h1>
     <p class="lede rise">Let an AI assistant read your documents, emails and meetings, and turn them into a wiki you can check, question and trust.</p>
     <ul class="meta rise">
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20v-4M12 20v-9M19 20V5"/></svg>Advanced</li>
       <li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>About an hour</li>
       <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"/></svg>8 steps</li>
       <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>After <a href="intermediate.html">Run your week</a></li>
@@ -91,7 +93,7 @@
 
   <section class="brief">
     <div class="brief-card reveal">
-      <p class="eyebrow">The story so far</p>
+      <h2>The story so far</h2>
       <p>The move is four weeks away and the paperwork is piling up: the landlord's <b>lease terms</b>, the <b>removal firm's quote</b>, an <b>email from Theo</b> about the internet connection, and a <b>Teams meeting</b> where everyone gave an update.</p>
       <p>The answers you need are in there somewhere. In this tutorial an AI assistant reads it all and keeps a <b>wiki</b>: a page for the new office, one for the removal firm, one for moving day. Every fact on those pages is quoted from where it came from, so you can always check.</p>
       <ul class="makes">
@@ -175,7 +177,7 @@
         </figure>
         <div class="tip">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6M20 20v-6h-6M5.6 15A8 8 0 0 0 19 17.7M18.4 9A8 8 0 0 0 5 6.3"/></svg>
-          <p><b>Sources change.</b> When the landlord sends new terms, replace the file and click <b>Refresh from sources</b> at the top of the page. Or let the daily check do it for you: switch it on in <b>Settings › AI assistants</b>, under Ingest.</p>
+          <p><b>Sources change.</b> When the landlord sends new terms, replace the file and click <b>Refresh from sources</b> at the top of the page. Or let the daily check do it for you: turn on <b>Daily check</b> in <b>Settings › Automations</b>, and <b>Also refresh pages whose sources changed</b> in <b>Settings › AI assistants</b>, under Ingest.</p>
         </div>
       </section>
 
@@ -185,10 +187,10 @@
         <h2>Check its work.</h2>
         <p class="why">AI can be wrong, so Brainstead makes everything it does easy to check and easy to undo.</p>
         <ol class="do">
-          <li>On the 12 Mill Lane page, click a citation number. The lease opens with that passage marked. On the right, <b>Cited in the wiki</b> lists every page that quotes it.</li>
+          <li>On the 12 Mill Lane page, click a citation number. The lease opens with that passage marked. On the right, <b>Cited by 2 pages</b> lists every page that quotes it, and the passages.</li>
           <li>Open <b>Changes</b> at the foot of the sidebar. Each ingest is listed with every change it made: the new text in green, and under <b>What it rests on</b>, each quote marked <b>Found in the source</b>.</li>
           <li>Don't like a change? Click <b>Revert</b>. <b>Revert all</b> undoes a whole ingest. Both keep any edits you've made since.</li>
-          <li>Changes that need your decision wait under <b>Held for you</b>: a quote that couldn't be found, or a change to a template.</li>
+          <li>Changes that need your decision wait at the top, under <b>Held for you</b>, and on their own on the <b>Held</b> tab: a quote that couldn't be found, or a change to a template.</li>
         </ol>
         <div class="pair">
           <figure class="shot reveal">
@@ -202,7 +204,7 @@
         </div>
         <div class="tip">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/></svg>
-          <p><b>Keep it healthy.</b> <b>Wiki health</b> checks the wiki every time it changes: broken links, missing pages, facts without a source, and pages that disagree with each other. The fixes with one right answer take one click.</p>
+          <p><b>Keep it healthy.</b> <b>Wiki health</b>, under <b>Vault</b> at the foot of the sidebar, checks the wiki every time it changes: broken links, missing pages, facts without a source, and pages that disagree with each other. The fixes with one right answer take one click.</p>
         </div>
       </section>
 
@@ -236,7 +238,7 @@
         <p class="why">This morning's check-in was on Teams, with a transcript. Rather than write it up, let the assistant turn it into a meeting note from your own template, and add what was said to the wiki.</p>
         <ol class="do">
           <li>Capture the transcript with the Teams extension from the meeting's recap, or drop the transcript file onto Sources.</li>
-          <li>Open <b>Tools › Meeting notes</b> in the sidebar and choose the transcript.</li>
+          <li>Open <b>Meeting notes</b>, under <b>Assistant</b> in the sidebar, and choose the transcript.</li>
           <li>Check <b>The note</b> card: Brainstead has worked out the type, name and date. Change anything marked "check".</li>
           <li>Click <b>Make and ingest the note</b>. The note is written from your Meeting template, with its actions as tasks, then read into the wiki.</li>
         </ol>
@@ -252,11 +254,11 @@
         <h2>Draft a reply.</h2>
         <p class="why">Theo asked three questions. The assistant can draft the answer from what your vault already knows, and tell you what it couldn't answer.</p>
         <ol class="do">
-          <li>In the Inbox, open Theo's email and press <kbd>D</kbd>, or choose <b>Tools › Draft reply</b> and pick the thread.</li>
+          <li>In the Inbox, open Theo's email and press <kbd>D</kbd>, or open <b>Draft reply</b>, under <b>Assistant</b> in the sidebar, and pick the thread.</li>
           <li>Choose a tone, <b>Brief</b>, <b>Warm</b> or <b>Formal</b>, and click <b>Draft</b>.</li>
           <li>Read the verdict under the email: which questions are answered. <b>To fill in</b> lists what's left for you, such as who meets the engineer.</li>
           <li>Edit the reply, or ask for a change: <i>shorter</i>, or <i>say Lena will meet him</i>.</li>
-          <li>Click <b>Put in Outlook</b> and the reply waits as a draft on the email, ready for you to check and send (or <b>Copy reply</b> to paste it yourself). Brainstead never sends anything itself. <b>Add task</b> catches the follow-up the reply commits you to.</li>
+          <li>With Outlook still open in your browser, click <b>Put in Outlook</b> and the reply waits as a draft on the email, ready for you to check and send (or <b>Copy reply</b> to paste it yourself). Brainstead never sends anything itself. <b>Add task</b> catches the follow-up the reply commits you to.</li>
         </ol>
         <figure class="shot reveal">
           <div class="window"><img src="../img/tut3-reply-light.webp" alt="Draft reply: Theo's email on the left, the drafted reply on the right, with what's left to fill in" width="1400" height="875" loading="lazy"></div>

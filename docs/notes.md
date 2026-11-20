@@ -62,7 +62,7 @@ Inside a `<% %>` tag the editor suggests `tp` functions with their arguments, `m
 
 <a href="images/index.md#notes"><picture><source media="(prefers-color-scheme: dark)" srcset="images/template-caret-dark.png"><img alt="A 1-1 template in Edit: inside a tag, the editor suggests tp.file's functions with their arguments, and explains the one chosen, with a link to its docs" src="images/template-caret-light.png"></picture></a>
 
-Templates are the files in `Templates/`, written in Templater's syntax: prompts and pick lists, dates, file names, properties, includes and your own scripts in `Templates/scripts`. Its questions are asked in the New note dialog. **Test run** shows what it would make without writing anything.
+Templates are the files in `Templates/` (listed on **Templates**, under **Vault** at the foot of the sidebar), written in Templater's syntax: prompts and pick lists, dates, file names, properties, includes and your own scripts in `Templates/scripts`. Its questions are asked in the New note dialog. **Test run** shows what it would make without writing anything.
 
 A new vault comes with example templates: Meeting, Daily note (date offsets and an include), 1-1 (a pick list and a `#followup` task), Project, Weekly plan (a loop and a user script) and Reading note (properties and a move to a folder). **Settings › Vault › Add the example notes** adds any that are missing.
 
@@ -87,4 +87,4 @@ Other apps can still change these files.
 
 ## The Trash
 
-Moving a note to the Trash puts it in the vault's `.trash` folder, with Undo. Trashing a transcript first points its links at its meeting note, when it has one. A capture restored from the Trash goes back to the Inbox. The Trash screen lists and searches what's there, puts files back where they were, and deletes them for good. **Quick Look** (`Space`) previews a file on a Mac; on Windows the same button opens it in its own app.
+Moving a note to the Trash puts it in the vault's `.trash` folder, with Undo. Trashing a transcript first points its links at its meeting note, when it has one. A capture restored from the Trash goes back to the Inbox. The Trash screen, under **Vault** at the foot of the sidebar, lists and searches what's there, puts files back where they were, and deletes them for good. **Quick Look** (`Space`) previews a file on a Mac; on Windows the same button opens it in its own app.
