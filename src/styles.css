@@ -247,6 +247,13 @@ input {
 ::selection {
   background: var(--select);
 }
+
+/* Every box's hint is the quiet ink, not the browser's grey, which is too pale to read on the light
+   surfaces. */
+::placeholder {
+  color: var(--ink3);
+  opacity: 1;
+}
 input,
 textarea {
   caret-color: var(--accent);
@@ -2373,8 +2380,7 @@ a.wl .embedmark {
 
   margin: 0 0 14px;
   padding: 8px 14px;
-  border: 1px solid color-mix(in srgb, var(--c) 22%, transparent);
-  border-left: 3px solid var(--c);
+  border: 1px solid color-mix(in srgb, var(--c) 32%, transparent); /* no bar down one side: the tint, icon and title say what it is */
   border-radius: 10px;
   background: var(--c-soft);
 }
@@ -2836,8 +2842,16 @@ html[data-platform="windows"] .scrim.mfull {
   position: relative;
   cursor: default;
 }
-.trow + .trow {
-  box-shadow: 0 -1px 0 var(--line);
+
+/* The line between rows is drawn straight across, not as the row's shadow, which would bend round
+   its corners. */
+.trow + .trow::before {
+  content: "";
+  position: absolute;
+  inset: -1px 0 auto;
+  height: 1px;
+  background: var(--line);
+  pointer-events: none;
 }
 .trow:hover {
   background: var(--hover);
@@ -2849,12 +2863,19 @@ html[data-platform="windows"] .scrim.mfull {
 /* The keyboard's row in a list with no selection of its own (Today), shown while the list has the keyboard. */
 .tlist.keys:focus-within .trow.kcur {
   background: var(--accent-soft);
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: inset 0 0 0 1px var(--ring);
 }
 .tlist.keys:focus-visible:has(.trow.sel, .trow.kcur) {
   outline: none;
 }
 .tlist.keys:focus-visible .trow.sel {
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+/* A rounded row is ringed all the way round; the Tasks table's square rows keep a bar at the left
+   edge of the list, where a stripe down one side doesn't bend round a corner. */
+.tlist.table.keys:focus-within .trow.kcur,
+.tlist.table.keys:focus-visible .trow.sel {
   box-shadow: inset 3px 0 0 var(--accent);
 }
 .loadfail {
@@ -3014,6 +3035,12 @@ html[data-platform="windows"] .scrim.mfull {
   border-top: 1px solid var(--line);
   border-radius: 0;
 }
+
+/* A project's lists that can't be dragged (Waiting for, Someday) keep the room of the grip the Next
+   actions above them have, so every tick box on the page is in one column. */
+.pmain .tcard .trow > .cb:first-child {
+  margin-left: 12px;
+}
 .mlabel {
   display: flex;
   align-items: center;
@@ -3063,8 +3090,8 @@ html[data-platform="windows"] .scrim.mfull {
   padding: 9px 16px 9px 12px;
   border-radius: 0;
 }
-.tlist.table .trow + .trow {
-  box-shadow: none;
+.tlist.table .trow + .trow::before {
+  content: none;
 }
 .tlist.table .trow.sel {
   box-shadow: inset 3px 0 0 var(--accent);
@@ -3094,10 +3121,17 @@ html[data-platform="windows"] .scrim.mfull {
 }
 
 /* A task row's words, renamed in place: a pencil on hover or the selected row, then a box. */
+.trow .tt:has(.trename) {
+  padding-right: 10px;
+}
 .trow .trename {
   width: 20px;
   height: 20px;
   margin-left: 4px;
+
+  /* It takes no room of its own, so a title that just fits doesn't push it onto a line by itself:
+     it sits in the little .tt keeps for it and the gap before the row's buttons. */
+  margin-right: -24px;
   vertical-align: -4px;
   color: var(--ink3);
   opacity: 0;
@@ -5695,9 +5729,6 @@ button.rnhead.quiet {
   color: var(--ink);
   font: var(--fs-base) var(--sans);
 }
-.dpick-in::placeholder {
-  color: var(--ink3);
-}
 .dpick-preview {
   font-size: var(--fs-sm);
   color: var(--ink2);
@@ -7153,7 +7184,7 @@ select.sel {
   display: grid;
   grid-template-columns: 120px minmax(0, 1fr);
   gap: 6px 14px;
-  align-items: center;
+  align-items: baseline; /* a value on two lines keeps its label beside the first */
 }
 .pval {
   text-align: left;
@@ -7174,7 +7205,7 @@ select.sel {
   text-align: left;
   border-radius: 6px;
   margin: -2px -6px;
-  padding: 2px 6px;
+  padding: 2px 28px 2px 6px; /* room on the right for its pencil */
   cursor: text;
 }
 .phead .pname:hover {
@@ -7202,6 +7233,16 @@ select.sel {
 }
 .phead .pname .pedit {
   vertical-align: 0;
+  margin-right: -22px;
+}
+
+/* The pencils sit in room their buttons keep for them, so words that just fit don't leave one on a
+   line of its own. */
+.phead .pval {
+  padding-right: 24px;
+}
+.phead .pval .pedit {
+  margin-right: -18px;
 }
 .phead .pval:hover .pedit,
 .phead .pname:hover .pedit {
@@ -8699,7 +8740,7 @@ select.sel {
   color: var(--ink);
 }
 .mdetails {
-  margin: 20px 20px 0;
+  margin: 20px 14px 0; /* the sides of the runs below it (.runs), so the pane has one left edge */
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -8892,6 +8933,15 @@ select.sel {
   border-radius: 10px;
   background: var(--surface);
   font-size: var(--fs-base);
+}
+
+/* A thread ends each message with a rule; the last one would rule off nothing. */
+.icapture hr:last-child {
+  display: none;
+}
+.icapture .prose > :last-child,
+.icapture .prose > :has(+ hr:last-child) {
+  margin-bottom: 0;
 }
 .icopen {
   align-self: flex-start;

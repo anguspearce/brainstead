@@ -88,7 +88,7 @@ const modCol = <T extends FileSummary>(table: ListTable): Column<T> => ({
   key: "mtime",
   ...listColumn(`${table}.mtime`),
   value: (r) => r.mtime,
-  render: (r) => <span className="faint">{fmtDay(r.mtime)}</span>,
+  render: (r) => <span className="faint ell">{fmtDay(r.mtime)}</span>,
 });
 const sizeCol = <T extends FileSummary>(table: Exclude<ListTable, "wiki">): Column<T> => ({
   key: "size",
