@@ -56,6 +56,11 @@ async function start() {
   if (new URLSearchParams(location.search).get("view") === "capture") {
     document.documentElement.classList.add("capture-view");
     document.getElementById("splash")?.remove();
+    // A reply you sent (even one archived with its thread) topped up its thread's source: ingested
+    // again, unattended, so what it settles reaches the initiatives (D-20261120-06).
+    void api.onSyncReplied((paths) => {
+      if (settings.get().ingestOnArrival && paths.length) ingest(paths, true);
+    });
     root.render(
       <React.StrictMode>
         <CaptureWindow />

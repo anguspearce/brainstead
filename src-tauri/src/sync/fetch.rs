@@ -344,6 +344,56 @@ pub fn conversation(client: &Client, conversation_id: &str, top: usize) -> Resul
     Ok(msgs)
 }
 
+/// The user's mail address, from the mail sign-in's claims, lower-cased; empty when it doesn't say.
+pub fn my_address(s: &SignIn) -> String {
+    let t = s.tokens.get(Service::Outlook.key()).map(|t| t.token.as_str()).unwrap_or("");
+    let c = auth::claims(t);
+    ["upn", "preferred_username", "unique_name", "email"]
+        .iter()
+        .find_map(|k| c[*k].as_str().filter(|v| v.contains('@')))
+        .unwrap_or("")
+        .to_lowercase()
+}
+
+/// The conversations of the mail the user sent since `since`, in any folder (Sent Items, or archived
+/// with the rest of the thread), newest first, deduped, at most `most` messages looked at. `me` is
+/// the user's address ([`my_address`]); empty takes every message sent in the window, which only
+/// costs more threads read again.
+pub fn sent_since(client: &Client, since: DateTime<Utc>, me: &str, most: usize) -> Result<Vec<String>, String> {
+    let filter = format!("SentDateTime ge {} and IsDraft eq false", since.format("%Y-%m-%dT%H:%M:%SZ"));
+    let mut url = format!(
+        "https://outlook.office.com/api/v2.0/me/messages?$filter={}&$orderby=SentDateTime%20desc&$top=100&$select=ConversationId,From,SentDateTime",
+        urlencode(&filter)
+    );
+    let mut out: Vec<String> = Vec::new();
+    let mut looked = 0;
+    loop {
+        let body = api::get_json(client, Service::Outlook, &url)?;
+        out.extend(sent_by(&body, me).into_iter().filter(|c| !out.contains(c)).collect::<Vec<_>>());
+        looked += body["value"].as_array().map_or(0, Vec::len);
+        match body["@odata.nextLink"].as_str() {
+            Some(next) if looked < most => url = next.to_string(),
+            _ => break,
+        }
+    }
+    Ok(out)
+}
+
+/// The conversation ids of the messages in a page that `me` sent (all of them when `me` is empty),
+/// in order, deduped.
+pub fn sent_by(body: &Value, me: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for m in body["value"].as_array().into_iter().flatten() {
+        let from = m["From"]["EmailAddress"]["Address"].as_str().unwrap_or("").to_lowercase();
+        let conv = m["ConversationId"].as_str().unwrap_or("");
+        if conv.is_empty() || (!me.is_empty() && from != me) || out.iter().any(|c| c == conv) {
+            continue;
+        }
+        out.push(conv.to_string());
+    }
+    out
+}
+
 /// Inbox and folders searched for `query` (Outlook REST `$search`, by relevance), newest handling
 /// left to the caller. Used by the on-demand pull.
 pub fn search_mail(client: &Client, query: &str, top: usize) -> Result<Vec<Mail>, String> {
@@ -1161,5 +1211,36 @@ mod branch_tests {
         assert_eq!(branched(&forked), vec![(0, None), (1, None), (2, None)]);
         let (_, text) = brainstead_core::webcapture::render(&thread_capture(&line, &[], None).unwrap(), Utc::now(), "2026-10-02");
         assert!(!text.contains("Branch") && text.contains("\n## Maya — "), "{text}");
+    }
+}
+
+#[cfg(test)]
+mod sent_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn keeps_the_threads_of_mail_the_user_sent() {
+        let page = json!({"value": [
+            {"ConversationId": "c1", "From": {"EmailAddress": {"Address": "Lena@Acme.example"}}},
+            {"ConversationId": "c2", "From": {"EmailAddress": {"Address": "maya@acme.example"}}},
+            {"ConversationId": "c1", "From": {"EmailAddress": {"Address": "lena@acme.example"}}},
+            {"ConversationId": "c3", "From": {"EmailAddress": {"Address": "lena@acme.example"}}},
+            {"ConversationId": "", "From": {"EmailAddress": {"Address": "lena@acme.example"}}}
+        ]});
+        assert_eq!(sent_by(&page, "lena@acme.example"), vec!["c1", "c3"]);
+        // Not knowing the user's address takes every thread in the window.
+        assert_eq!(sent_by(&page, ""), vec!["c1", "c2", "c3"]);
+    }
+
+    #[test]
+    fn reads_the_users_address_from_the_mail_sign_in() {
+        use base64::Engine;
+        let enc = |v: &Value| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(serde_json::to_vec(v).unwrap());
+        let jwt = format!("{}.{}.sig", enc(&json!({"alg": "RS256"})), enc(&json!({"upn": "Lena@Acme.example", "name": "Lena"})));
+        let mut s = SignIn::default();
+        s.tokens.insert(Service::Outlook.key().into(), auth::Token { token: jwt, expires: 0 });
+        assert_eq!(my_address(&s), "lena@acme.example");
+        assert_eq!(my_address(&SignIn::default()), "");
     }
 }

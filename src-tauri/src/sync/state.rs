@@ -59,6 +59,10 @@ pub struct State {
     /// downloaded once however often its thread is rewritten.
     #[serde(default)]
     pub attachment_paths: BTreeMap<String, String>,
+    /// When the mail the user sent was last looked at (RFC 3339), so each pass reads only what's
+    /// new since (D-20261120-06). None before the first look.
+    #[serde(default)]
+    pub sent_checked: Option<String>,
 }
 
 /// An attachment's key: its thread, its message's received time and its name. Outlook's message and

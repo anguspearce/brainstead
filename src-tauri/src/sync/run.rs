@@ -8,7 +8,7 @@
 //! what-counts-as-new follow D-20261025-02. Everything fails soft: one call failing is reported and
 //! the pass carries on, so a changed Microsoft endpoint never breaks capture.
 
-use chrono::{Duration, Local, NaiveDate, Timelike, Utc};
+use chrono::{DateTime, Duration, Local, NaiveDate, Timelike, Utc};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -45,6 +45,10 @@ pub struct Report {
     /// Those of them topped up in place rather than written new.
     #[serde(default)]
     pub topped_up: Vec<String>,
+    /// Threads topped up with a reply the user sent (D-20261120-06): ingested again on arrival, so
+    /// what the reply settles reaches the initiatives.
+    #[serde(default)]
+    pub replied: Vec<String>,
     /// Sync is off, or another pass was running: nothing to log.
     #[serde(skip)]
     pub idle: bool,
@@ -126,6 +130,7 @@ fn run_inner(data: &Path, from: Option<NaiveDate>) -> Report {
     }
     if s.mail_on() {
         sync_mail(&p, &mut st, &mut r);
+        sync_sent(&p, &mut st, &mut r);
     }
     if s.sync_enabled {
         sync_transcripts(&p, &mut st, &mut r);
@@ -323,6 +328,59 @@ fn sync_mail(p: &Pass, st: &mut state::State, r: &mut Report) {
     }
 }
 
+/// How far back the first look at the user's sent mail goes.
+const SENT_FIRST_DAYS: i64 = 3;
+/// At most this many sent-window messages are looked at in a pass.
+const SENT_MOST: usize = 500;
+
+/// The user's own replies (D-20261120-06): a thread only comes up in [`sync_mail`] when the Inbox has
+/// a new message for it, so a reply sent and then archived with the thread would never reach its
+/// source. Each pass reads the mail sent since the last, in every folder, and tops up each thread
+/// Brainstead already has a source for; one it tops up is ingested again on arrival
+/// ([`Report::replied`]). Mail the user starts afresh is left out.
+fn sync_sent(p: &Pass, st: &mut state::State, r: &mut Report) {
+    if p.from.is_some() {
+        return;
+    }
+    let now = Utc::now();
+    // A little overlap, for mail that took a moment to show as sent.
+    let since = st
+        .sent_checked
+        .as_deref()
+        .and_then(|t| DateTime::parse_from_rfc3339(t).ok())
+        .map(|t| t.with_timezone(&Utc) - Duration::minutes(30))
+        .unwrap_or(now - Duration::days(SENT_FIRST_DAYS));
+    let convs = match fetch::sent_since(&p.client, since, &fetch::my_address(&p.sign_in), SENT_MOST) {
+        Ok(c) => c,
+        Err(e) => {
+            r.problems.push(format!("Couldn't read the mail you sent: {e}"));
+            return;
+        }
+    };
+    for conv in convs {
+        let Some(path) = st.thread_path(&conv).map(str::to_string) else { continue };
+        // Topped up already this pass (a new Inbox message came too): the reply is in it.
+        if r.topped_up.contains(&path) {
+            if !r.replied.contains(&path) {
+                r.replied.push(path);
+            }
+            continue;
+        }
+        // Only a thread topped up in place: one written afresh (its source had gone) arrives as a
+        // capture, ingested on arrival as any is.
+        let before = r.topped_up.len();
+        sync_thread(p, &conv, st, r);
+        if r.topped_up.len() > before {
+            if let Some(path) = r.topped_up.last().cloned() {
+                if !r.replied.contains(&path) {
+                    r.replied.push(path);
+                }
+            }
+        }
+    }
+    st.sent_checked = Some(now.to_rfc3339());
+}
+
 /// Writes or tops up one email thread's source. Fetches the whole conversation (incl. the user's own
 /// replies), writes a new thread source the first time, and rewrites it in place when it has grown.
 fn sync_thread(p: &Pass, conversation_id: &str, st: &mut state::State, r: &mut Report) {
@@ -479,7 +537,8 @@ pub fn watch(app: tauri::AppHandle) {
             std::thread::sleep(std::time::Duration::from_secs(20));
             let mut told = String::new();
             loop {
-                let _ = run_once(&data);
+                let report = run_once(&data);
+                tell_replied(&app, &report);
                 // A sign-in that has just gone stale or been turned down needs the user: told once,
                 // and again only after it has come back and gone again.
                 let s = settings::load(&data.join("settings.json"));
@@ -492,6 +551,15 @@ pub fn watch(app: tauri::AppHandle) {
             }
         })
         .expect("can start a thread");
+}
+
+/// Tells the window which threads a pass topped up with the user's own reply (`sync-replied`), for
+/// it to ingest them again when new sources are ingested as they arrive (D-20261120-06).
+pub fn tell_replied(app: &tauri::AppHandle, r: &Report) {
+    use tauri::Emitter;
+    if !r.replied.is_empty() {
+        let _ = app.emit("sync-replied", &r.replied);
+    }
 }
 
 /// What's wrong with the Teams and Outlook sign-in, for the services switched on, in words; empty

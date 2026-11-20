@@ -455,6 +455,8 @@ export interface SyncReport {
   paths: string[];
   /** Those of them topped up in place rather than written new. */
   toppedUp?: string[];
+  /** Email threads topped up with a reply you sent, in any folder (D-20261120-06). */
+  replied?: string[];
 }
 
 /** One sync pass, or a run of the same blocked or failing one (src-tauri/src/sync/log.rs). */
@@ -1492,6 +1494,8 @@ export const api = {
     }>("capture_status"),
   captureReveal: (which: "outlook-capture" | "teams-capture" | "slack-capture") => invoke<void>("capture_reveal", { which }),
   onCapture: (f: (c: Captured) => void): Promise<UnlistenFn> => listen<Captured>("capture", (e) => f(e.payload)),
+  /** A sync pass topped up these email threads with a reply you sent (src-tauri/src/sync/run.rs). */
+  onSyncReplied: (f: (paths: string[]) => void): Promise<UnlistenFn> => listen<string[]>("sync-replied", (e) => f(e.payload)),
   // Teams and Outlook sync (src-tauri/src/sync/). macOS only.
   syncSignInState: () => invoke<SyncSignIn>("sync_sign_in_state"),
   syncSignOut: () => invoke<void>("sync_sign_out"),
