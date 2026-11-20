@@ -2146,7 +2146,7 @@ describe("MCP actions", () => {
       expect(await run("settings")).toMatch(/wiki\.tags \(Wiki › the Tags column, 48 to 480, usually 200\)/);
       // Named in the screens' own words: a column by the heading its table draws.
       expect(await run("settings")).toContain("trash.folder (Trash › the Was in column, 80 to 480, usually 220)");
-      expect(await run("settings")).toContain("sources.ingested (Sources › the Status column, 48 to 480, usually 88)");
+      expect(await run("settings")).toContain("sources.ingested (Sources › the Status column, 48 to 480, usually 100)");
       expect(await run("settings", { action: "set", key: "paneWidths.notes.type", value: 72 })).toBe(
         "Settings › General › Appearance › Pane widths › notes.type is now 72 px.",
       );

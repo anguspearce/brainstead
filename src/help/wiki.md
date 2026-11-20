@@ -81,4 +81,4 @@ Each change is an ordinary edit to the page. While it is unsaved, a banner offer
 Changes from ingest, Ask and Wiki health apply at once and are listed in [Changes](app:review), where you can revert them. Some are held there for you instead: a scheduled run's change that fails a check, and any change to a template, to a system note's header, or that adds code that runs.
 
 ## Resize the panes
-Drag the line between the tags and the list to resize them, and a column heading's left edge to resize that column (**Tags** included); **Title** takes the rest, and a double-click puts either back ([pane widths](help:settings-general)).
+Drag the line between the tags and the list to resize them, and a column heading's left edge to resize that column (**Tags** included); **Title** takes the rest, and a double-click puts either back ([pane widths](help:settings-general)). In a window narrower than about 940 pixels the list leaves out **Tags** (the tags beside it still filter) and **Sources**; widen the window to see them.

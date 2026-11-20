@@ -10773,6 +10773,11 @@ html.tray-view body {
 }
 
 @container main (width <= 868px) {
+  /* Near the 800px minimum window Sources' runs take their narrowest width, so the table's action
+     buttons fit (the lists drop their least-needed columns too: tightWindow in src/Lists.tsx). */
+  .body.sources {
+    --pane-side: 260px;
+  }
   .igroups {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -5,7 +5,7 @@
 // The Library lists: Notes (type filters), Wiki (tag tree), Sources (ingested or pending) and
 // Templates.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { api, FileSummary, Layer, LintItem, LintReport, SourceRow, WikiMeta } from "./api";
 import { filedPage } from "./Ask";
 import { Column, FileList, fmtDay, Grouping, Snippet } from "./FileList";
@@ -99,6 +99,25 @@ const sizeCol = <T extends FileSummary>(table: Exclude<ListTable, "wiki">): Colu
 });
 
 /** The type chips: the five commonest types, then Other for untyped notes and the rest. */
+
+/** A window near the 800px minimum (CSS px, so Interface size counts): the lists leave out the
+ *  columns they can best spare, Wiki's Tags (its side column filters by them) and Sources count,
+ *  and Sources' Folder, Modified and Size, so the rest fit without scrolling sideways
+ *  (D-20261120-02). */
+const TIGHT = "(max-width: 940px)";
+const tightMedia = typeof window !== "undefined" && window.matchMedia ? window.matchMedia(TIGHT) : null;
+function useTightWindow(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      tightMedia?.addEventListener?.("change", cb);
+      return () => tightMedia?.removeEventListener?.("change", cb);
+    },
+    () => !!tightMedia?.matches,
+  );
+}
+/** `cols` without the keys a tight window leaves out. */
+const spare = <T,>(cols: Column<T>[], tight: boolean, keys: string[]) => (tight ? cols.filter((c) => !keys.includes(c.key)) : cols);
+
 export function typeChips(rows: FileSummary[], selected: string | null): [string, number][] {
   const counts = new Map<string, number>();
   for (const r of rows) if (r.type) counts.set(r.type, (counts.get(r.type) ?? 0) + 1);
@@ -369,6 +388,7 @@ export function WikiScreen() {
     const named = new Set(chips.filter(([t]) => t !== "other").map(([t]) => t));
     return byTag.filter((r) => (type === "other" ? !r.type || !named.has(r.type) : r.type === type));
   }, [byTag, type, chips]);
+  const tight = useTightWindow();
   const columns: Column<FileSummary>[] = [
     {
       key: "title",
@@ -429,6 +449,7 @@ export function WikiScreen() {
     },
     modCol("wiki"),
   ];
+  const fit = spare(columns, tight, ["tags", "sources"]);
   return (
     <main className="main">
       <TopBar
@@ -476,7 +497,7 @@ export function WikiScreen() {
         </nav>
         <FileList
           rows={shown}
-          columns={columns}
+          columns={fit}
           layers={["wiki"]}
           noun={["wiki page", "wiki pages"]}
           table="wiki"
@@ -720,6 +741,7 @@ export function SourcesScreen() {
     .filter((r) => ingestable(r.path) && sourceStatus(r, changed) !== "ingested" && !isTranscriptPath(r.path))
     .map((r) => r.path);
   const dropping = useDropToSources();
+  const tight = useTightWindow();
   const columns: Column<SourceRow>[] = [
     titleCol(),
     // A pill as Notes and Wiki show a type, after the title.
@@ -763,6 +785,9 @@ export function SourcesScreen() {
     modCol("sources"),
     sizeCol("sources"),
   ];
+  const fit = spare(columns, tight, ["path", "mtime", "size"]);
+  // Without its Modified column the list still starts newest first, as it does with it.
+  const fitRows = useMemo(() => (tight && shown ? [...shown].sort((a, b) => b.mtime - a.mtime) : shown), [tight, shown]);
   return (
     <main className="main">
       <TopBar title="Sources" ask={{ about: "your sources", prompt: "About my sources: " }}>
@@ -793,8 +818,8 @@ export function SourcesScreen() {
       <div className="body sources" {...panes.root}>
         {panes.resizers}
         <FileList
-          rows={shown}
-          columns={columns}
+          rows={fitRows}
+          columns={fit}
           layers={["source"]}
           noun={["source", "sources"]}
           table="sources"

@@ -138,7 +138,7 @@ export const PANES = {
   "wiki.tags": listCol("tags", "Tags", 200),
   "wiki.mtime": listCol("mtime", "Modified", 110),
   "sources.kind": listCol("kind", "Kind", 64),
-  "sources.ingested": listCol("ingested", "Status", 88),
+  "sources.ingested": listCol("ingested", "Status", 100),
   "sources.path": listCol("path", "Folder", 90),
   "sources.mtime": listCol("mtime", "Modified", 110),
   "sources.size": listCol("size", "Size", 76),

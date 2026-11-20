@@ -68,4 +68,4 @@ Beside the preview, the provenance card, **Cited by N pages**, says when the sou
 A source's top bar has **Ask**, which starts a chat about it. A captured thread has **Draft a reply**, and other documents have **Doc check**. On the Sources list, **Meeting notes** opens [Meeting notes](app:meeting).
 
 ## Resize the panes
-Drag the line between the list and the ingest runs to resize them, and a column heading's left edge to resize that column; **Title** takes the rest, and a double-click puts either back ([pane widths](help:settings-general)).
+Drag the line between the list and the ingest runs to resize them, and a column heading's left edge to resize that column; **Title** takes the rest, and a double-click puts either back ([pane widths](help:settings-general)). In a window narrower than about 940 pixels the list leaves out **Folder**, **Modified** and **Size** (newest stays first) so its buttons fit; widen the window to see them.
