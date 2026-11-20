@@ -161,6 +161,10 @@ pub struct Run {
     /// the source isn't changed since it was cited while it's still one of them (D-20261120-08).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub read_versions: Vec<String>,
+    /// A synced thread's messages it read (`core_ingest::message_keys`), noted once it's done so
+    /// the next ingest marks the new ones (D-20261120-09).
+    #[serde(skip)]
+    pub read_messages: Option<Vec<String>>,
 }
 
 fn ingest_kind() -> String {
@@ -490,6 +494,7 @@ fn queue_ingests(app: &AppHandle, paths: Vec<String>, actions: &[bool], trigger:
             planned: 0,
             trashed: false,
             read_versions: Vec::new(),
+            read_messages: None,
         };
         runs.push(r);
     }
@@ -533,6 +538,11 @@ fn run(app: &AppHandle, r: &mut Run) {
                 crate::gtd::ingested(&r.source);
                 if let Err(e) = brainstead_core::lint::note_read_at(&crate::platform::data_dir(), &r.source, &r.read_versions) {
                     crate::applog!("ingest: couldn't note the version of {} read: {e}", r.source);
+                }
+                if let Some(keys) = &r.read_messages {
+                    if let Err(e) = core_ingest::note_read_messages(&crate::platform::data_dir(), &r.source, keys) {
+                        crate::applog!("ingest: couldn't note the messages of {} read: {e}", r.source);
+                    }
                 }
                 trash_if_quiet(app, r);
             }
@@ -739,10 +749,22 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
     // 4. The model, told the user's initiatives so it can take the source's actions into them.
     let model = r.model.clone();
     let tracking = core_ingest::Tracking::read(&root, owner(app));
+    // A synced thread read before: its new messages are marked, the earlier ones cut down.
+    let seen = match &source.text {
+        SourceText::Text(t) if brainstead_core::lint::is_synced_thread(&r.source) => {
+            r.read_messages = Some(core_ingest::message_keys(t));
+            core_ingest::read_messages(&crate::platform::data_dir(), &r.source)
+        }
+        _ => None,
+    };
+    let since = seen.as_ref().and_then(|seen| match &source.text {
+        SourceText::Text(t) => core_ingest::since_seen(t, seen),
+        _ => None,
+    });
     let answer = step(app, r, 3, |r| {
         let today = chrono::Local::now().format("%A %-d %B %Y").to_string();
         let catalogue = if actions_only { String::new() } else { brainstead_core::catalogue::render(&root) };
-        let mut prompt = core_ingest::prompt(&source, &pages, &catalogue, &today, &tracking);
+        let mut prompt = core_ingest::prompt_since(&source, &pages, &catalogue, &today, &tracking, seen.as_ref());
         if actions_only {
             prompt.push_str(core_ingest::ACTIONS_ONLY);
         }
@@ -764,7 +786,8 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
         let n = a.pages.len() + usize::from(a.summary.is_some());
         let found = a.actions.len() + a.decisions.len();
         let also = if found > 0 { format!(", {}", plural(found, "action or decision")) } else { String::new() };
-        Ok((a, format!("{} drafted{also}", plural(n, "page change"))))
+        let from = since.as_ref().map_or(String::new(), |s| format!(", from {} new since the last ingest", plural(s.new, "message")));
+        Ok((a, format!("{} drafted{also}{from}", plural(n, "page change"))))
     })?;
     if stopped(r) {
         return Err("Stopped.".into());
@@ -1036,6 +1059,7 @@ pub fn meeting_draft(app: AppHandle, items: Vec<(String, NoteSpec)>, unattended:
             planned: 0,
             trashed: false,
             read_versions: Vec::new(),
+            read_messages: None,
         };
         runs.push(r);
     }
@@ -1136,6 +1160,7 @@ mod tests {
             planned: 0,
             trashed: false,
             read_versions: Vec::new(),
+            read_messages: None,
         }
     }
 

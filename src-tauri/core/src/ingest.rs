@@ -378,8 +378,25 @@ pub const ACTIONS_ONLY: &str = "\n# Actions and decisions only\n\nThis source is
 /// and every wiki page by name and description (`catalogue`, `catalogue::render`), for a source
 /// that doesn't name what it's about.
 pub fn prompt(src: &Source, pages: &[(String, String)], catalogue: &str, today: &str, tracking: &Tracking) -> String {
+    prompt_since(src, pages, catalogue, today, tracking, None)
+}
+
+/// [`prompt`] for a source read before: `seen` holds the [`message_keys`] of the messages that
+/// read had, so the ones new since are marked and the earlier ones cut down (D-20261120-09).
+pub fn prompt_since(
+    src: &Source,
+    pages: &[(String, String)],
+    catalogue: &str,
+    today: &str,
+    tracking: &Tracking,
+    seen: Option<&std::collections::HashSet<String>>,
+) -> String {
     let mut out = format!("{}\n\nToday is {today}.\n\n# The source: {}\n\nLink it as [[{}]].\n\n", WORKFLOW.trim(), src.rel, src.link());
-    out.push_str(&cut(&src.body(), SOURCE_CHARS));
+    let since = seen.and_then(|seen| since_seen(&src.body(), seen));
+    out.push_str(&cut(since.as_ref().map_or(&src.body(), |s| &s.text), SOURCE_CHARS));
+    if since.is_some() {
+        out.push_str(READ_BEFORE);
+    }
     out.push_str("\n\n# Wiki pages the source mentions\n\n");
     if pages.is_empty() {
         out.push_str("None yet.\n");
@@ -401,6 +418,117 @@ pub fn prompt(src: &Source, pages: &[(String, String)], catalogue: &str, today: 
         out.push_str("\nThis source is a day of a chat: give no summary page.\n");
     }
     out
+}
+
+/// Told to the model when the source's new messages are marked ([`since_seen`]).
+pub const READ_BEFORE: &str = "\n\n# Read before\n\nThis source was ingested before and has grown since. Each message new since then starts with the line `[New since the last ingest]`. The other messages are there for context only: the wiki has them already, and some are left out. Take only what the new messages add. Don't restate what the earlier messages said, and leave a page alone when the new messages add nothing to it. Quote the source word for word, never that line or a left-out note.\n";
+
+/// The line before each message new since a source was last read.
+pub const NEW_MARK: &str = "[New since the last ingest]";
+
+/// How much of the earlier messages is kept, as context, beside the new ones.
+const EARLIER_CHARS: usize = 20_000;
+
+/// A synced thread's parts: the header, then each message, split at its `---` lines.
+fn message_parts(text: &str) -> Vec<String> {
+    let mut parts = vec![String::new()];
+    for line in text.split_inclusive('\n') {
+        if line.trim_end() == "---" {
+            parts.push(String::new());
+        } else {
+            parts.last_mut().unwrap().push_str(line);
+        }
+    }
+    parts
+}
+
+fn message_key(part: &str) -> String {
+    crate::write::version(part.trim().as_bytes())[..16].to_string()
+}
+
+/// The keys of a thread's messages (not its header, which changes with each capture), to tell
+/// next time which are new.
+pub fn message_keys(text: &str) -> Vec<String> {
+    message_parts(text).iter().skip(1).filter(|p| !p.trim().is_empty()).map(|p| message_key(p)).collect()
+}
+
+/// A source shown with its new messages marked.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SinceSeen {
+    pub text: String,
+    pub new: usize,
+    pub left_out: usize,
+}
+
+/// `text` with each message not in `seen` marked as new, and the earlier messages farthest
+/// back left out past [`EARLIER_CHARS`]. None when none was read before or none is new: then the
+/// whole source is read as usual.
+pub fn since_seen(text: &str, seen: &std::collections::HashSet<String>) -> Option<SinceSeen> {
+    let parts = message_parts(text);
+    let msgs: Vec<(&str, bool)> =
+        parts.iter().skip(1).filter(|p| !p.trim().is_empty()).map(|p| (p.as_str(), !seen.contains(&message_key(p)))).collect();
+    let new = msgs.iter().filter(|m| m.1).count();
+    if new == 0 || new == msgs.len() {
+        return None;
+    }
+    // The earlier messages kept: the nearest the end first, within the budget.
+    let mut keep = vec![true; msgs.len()];
+    let mut room = EARLIER_CHARS;
+    for i in (0..msgs.len()).rev().filter(|&i| !msgs[i].1) {
+        let n = msgs[i].0.chars().count();
+        if n <= room {
+            room -= n;
+        } else {
+            room = 0;
+            keep[i] = false;
+        }
+    }
+    let mut out = parts[0].clone();
+    let mut left_out = 0;
+    let mut gap = 0;
+    for (i, (m, is_new)) in msgs.iter().enumerate() {
+        if !keep[i] {
+            gap += 1;
+            continue;
+        }
+        if gap > 0 {
+            out.push_str(&format!("---\n\n[{gap} earlier message{} left out: read before]\n\n", if gap == 1 { "" } else { "s" }));
+            left_out += gap;
+            gap = 0;
+        }
+        out.push_str("---\n");
+        if *is_new {
+            out.push_str(&format!("\n{NEW_MARK}\n"));
+        }
+        out.push_str(m);
+    }
+    if gap > 0 {
+        out.push_str(&format!("---\n\n[{gap} earlier message{} left out: read before]\n", if gap == 1 { "" } else { "s" }));
+        left_out += gap;
+    }
+    Some(SinceSeen { text: out, new, left_out })
+}
+
+/// The messages of each synced thread an ingest has read (`sources-read-messages.json` in the
+/// app data folder, path → [`message_keys`]).
+pub fn read_messages_file(data: &std::path::Path) -> std::path::PathBuf {
+    data.join("sources-read-messages.json")
+}
+
+pub fn read_messages(data: &std::path::Path, rel: &str) -> Option<std::collections::HashSet<String>> {
+    let all: std::collections::BTreeMap<String, Vec<String>> =
+        std::fs::read(read_messages_file(data)).ok().and_then(|b| serde_json::from_slice(&b).ok())?;
+    all.get(rel).map(|v| v.iter().cloned().collect())
+}
+
+/// Notes the messages an ingest of `rel` read, replacing what it read before.
+pub fn note_read_messages(data: &std::path::Path, rel: &str, keys: &[String]) -> std::io::Result<()> {
+    let f = read_messages_file(data);
+    let mut all: std::collections::BTreeMap<String, Vec<String>> =
+        std::fs::read(&f).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+    all.insert(rel.to_string(), keys.to_vec());
+    let json = serde_json::to_vec(&all).map_err(std::io::Error::other)?;
+    crate::write::write_atomic(&f, &json, false).map_err(|e| std::io::Error::other(e.to_string()))
 }
 
 /// One page change ready to become a proposal.
@@ -915,6 +1043,32 @@ pub fn plan_tracking(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_grown_thread_marks_its_new_messages_and_cuts_the_earlier_ones() {
+        let msg = |who: &str, body: &str| format!("## {who} — 2026-11-19 09:00\n\n{body}\n\n---\n\n");
+        let head = |at: &str| format!("# Launch\n\n**Captured:** {at}\n\n---\n\n");
+        let before = format!("{}{}{}", head("09:00"), msg("Maya", "Launch is on the 14th."), msg("Lena", "Agreed."));
+        let seen: std::collections::HashSet<String> = super::message_keys(&before).into_iter().collect();
+        // Nothing new (only the header's capture time moved): read as usual.
+        let same = format!("{}{}{}", head("10:00"), msg("Maya", "Launch is on the 14th."), msg("Lena", "Agreed."));
+        assert_eq!(super::since_seen(&same, &seen), None);
+        // A reply: only it is marked.
+        let grown = format!("{same}{}", msg("Sam", "Can we move it to the 21st?"));
+        let s = super::since_seen(&grown, &seen).unwrap();
+        assert_eq!((s.new, s.left_out), (1, 0));
+        assert_eq!(s.text.matches(super::NEW_MARK).count(), 1);
+        assert!(s.text.contains(&format!("{}\n\n## Sam", super::NEW_MARK)));
+        assert!(s.text.contains("Launch is on the 14th.") && s.text.starts_with("# Launch"));
+        // A long history: the earliest messages are left out, the latest kept beside the new one.
+        let long: String = (0..60).map(|i| msg("Maya", &format!("Update {i}: {}", "x".repeat(500)))).collect();
+        let seen: std::collections::HashSet<String> = super::message_keys(&format!("{}{long}", head("09:00"))).into_iter().collect();
+        let s = super::since_seen(&format!("{}{long}{}", head("10:00"), msg("Sam", "Done.")), &seen).unwrap();
+        assert!(s.left_out > 0 && s.text.contains("earlier messages left out") && s.text.contains("Update 59"));
+        assert!(!s.text.contains("Update 0:"));
+        // Nothing read before: None.
+        assert_eq!(super::since_seen(&grown, &Default::default()), None);
+    }
+
     use super::*;
     use crate::extract::Part;
 
