@@ -714,6 +714,16 @@ html[data-platform="windows"] .top {
   font-weight: 600;
   color: var(--ink2);
 }
+
+/* Changes' held group: amber, as what waits for a decision is everywhere (D-20261119-11), so it reads
+   apart from the Already made band and the feed under it. */
+.tb-group.held {
+  background: var(--amber-soft);
+}
+.tb-group.held > .tb-band {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
 .tb-group + .tb-group .tb-band {
   margin-top: 12px;
 }

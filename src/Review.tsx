@@ -234,6 +234,7 @@ export function ReviewScreen() {
     [isAll, rows, lines, f],
   );
   const shownItems = timeline.slice(0, RUNS_SHOWN * more);
+  const madeCount = useMemo(() => (rows ?? []).filter((c) => c.status !== "held").length, [rows]);
   const shownRuns = useMemo(() => shownItems.flatMap((x) => (x.kind === "run" ? [x.run] : [])), [shownItems]);
   // Each log line that names a file links to it, as Activity's log did.
   const [paths, setPaths] = useState<Map<string, string | null>>(new Map());
@@ -534,6 +535,17 @@ export function ReviewScreen() {
                   {openRun === g.group && g.rows.map((c) => <Row key={c.id} c={c} sel={cur?.id === c.id} onSel={() => pick(c.id)} />)}
                 </div>
               ))}
+            </div>
+          )}
+          {/* All: what's already made gets its own band, so the held changes above visibly end where it starts. */}
+          {isAll && timeline.length > 0 && (
+            <div className="tb-group made" role="rowgroup">
+              <TableBand
+                icon="check"
+                label="Already made"
+                n={madeCount}
+                tip={`${plural(madeCount, "change")} already made${lines.length ? `, and the log's other lines` : ""}, newest first`}
+              />
             </div>
           )}
           {shownItems.map((x) => {

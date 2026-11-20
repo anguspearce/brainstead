@@ -9,7 +9,7 @@ Every change assistants and Brainstead's runs make to the vault is listed here w
 
 Two tabs at the top pick what's listed:
 - **Held** lists only the changes held for you, with their count. Today's **Decide** and the menu-bar window open it.
-- **All**, where Changes opens, lists the held changes first and then everything else, newest first: every change, and the lines of the vault's `log.md` that aren't one of them, as **The vault's log** below explains.
+- **All**, where Changes opens, lists the held changes first, under the amber **Held for you** band, and then, under **Already made**, everything else, newest first: every change, and the lines of the vault's `log.md` that aren't one of them, as **The vault's log** below explains.
 
 ## What's made at once, and what's held
 A change you started is made at once: something you asked for in Ask or a terminal session, or a run you started by hand (Ingest, **Run now**, **Draft the note**, a Wiki health fix, **File this answer**, a bookmark made into a wiki page, a link from the weekly review). If a check fails, it's still made, but flagged.
