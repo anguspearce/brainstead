@@ -89,8 +89,18 @@ impl VaultService {
             .name("vault-open".into())
             .spawn(move || {
                 let svc = app.state::<VaultService>();
-                let opened = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| open(&app, &path, excluded, rebuild)))
-                    .unwrap_or_else(|p| Err(format!("Indexing the vault stopped on an error: {}", panic_text(&p))));
+                // One open at a time: a Rebuild index during the first index waits for it rather
+                // than syncing the same index.db beside it. One superseded while it waited (or
+                // before it touches the index) stops there; its status is ignored below.
+                let current = || *crate::lock(&svc.generation) == gen;
+                let opened = {
+                    let _one = crate::lock(&OPENING);
+                    if !current() {
+                        return;
+                    }
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| open(&app, &path, excluded, rebuild, &current)))
+                        .unwrap_or_else(|p| Err(format!("Indexing the vault stopped on an error: {}", panic_text(&p))))
+                };
                 match opened {
                     Ok(o) => {
                         let stats = crate::lock(&o.index).stats().unwrap_or_default();
@@ -167,7 +177,10 @@ impl VaultService {
     }
 }
 
-fn open(app: &AppHandle, path: &str, excluded: Vec<String>, rebuild: bool) -> Result<Open, String> {
+/// Held by the "vault-open" thread across [`open`], so two never index at once.
+static OPENING: Mutex<()> = Mutex::new(());
+
+fn open(app: &AppHandle, path: &str, excluded: Vec<String>, rebuild: bool, current: &dyn Fn() -> bool) -> Result<Open, String> {
     let root = PathBuf::from(path);
     // Reading the folder is what Full Disk Access (or the folder's own permission) allows.
     std::fs::read_dir(&root).map_err(|e| match e.kind() {
@@ -189,6 +202,10 @@ fn open(app: &AppHandle, path: &str, excluded: Vec<String>, rebuild: bool) -> Re
     // takes a while, and the vault would wait for it. What's kept by content hash is used now.
     ix.set_text_cache(brainstead_core::extract::TextCache::new(text_dir(), Some(crate::platform::pdf_text)));
     let root_s = root.to_string_lossy().to_string();
+    // A newer open is waiting: the index is left to it.
+    if !current() {
+        return Err("Another open took over.".into());
+    }
     if rebuild || ix.meta("vault_root")?.as_deref() != Some(root_s.as_str()) {
         ix.clear()?;
         ix.set_meta("vault_root", &root_s)?;

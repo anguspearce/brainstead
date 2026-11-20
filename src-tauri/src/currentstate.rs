@@ -123,7 +123,10 @@ pub fn start(app: &AppHandle, pages: Option<Vec<String>>, limit: Option<usize>, 
                         break;
                     }
                     let Some(page) = queue.lock().unwrap().pop() else { break };
-                    let got = one(&app, &root, &page, &run, &model, w, unattended);
+                    // A panic on one page fails that page: the worker goes on, and the run ends.
+                    let got =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| one(&app, &root, &page, &run, &model, w, unattended)))
+                            .unwrap_or_else(|_| Err("something went wrong; Brainstead's log has the details".into()));
                     let mut l = last.lock().unwrap();
                     match got {
                         Ok(true) => l.written += 1,

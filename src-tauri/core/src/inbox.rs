@@ -279,6 +279,21 @@ mod tests {
         assert_eq!(o.iter().map(|i| i.text.as_str()).collect::<Vec<_>>(), ["one", "two"]);
     }
 
+    #[test]
+    fn a_thought_with_headings_in_it_stays_one_block() {
+        let said = "Plan\n## Next steps\n# Later\n### Detail\n```\n## code\n```\nend";
+        let (src, block) = write::with_thought("# Me. Scratchpad\n\n## 2026-10-01 09:00\n\nold\n", said, "2026-10-02 10:00");
+        let kept = "Plan\n\\## Next steps\n\\# Later\n### Detail\n```\n## code\n```\nend";
+        assert_eq!(block, format!("## 2026-10-02 10:00\n\n{kept}\n\n"));
+        let t = thoughts(&src);
+        assert_eq!(t.len(), 2);
+        assert_eq!(t[0].text, kept);
+        // Clarifying it takes the whole of it away.
+        let (_d, p) = temp(&src);
+        remove_block(&p, t[0].line, t[0].block.as_deref().unwrap()).unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), "# Me. Scratchpad\n\n## 2026-10-01 09:00\n\nold\n");
+    }
+
     fn temp(text: &str) -> (tempfile::TempDir, PathBuf) {
         let d = tempfile::tempdir().unwrap();
         let p = d.path().join(SCRATCHPAD);

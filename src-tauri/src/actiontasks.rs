@@ -77,17 +77,34 @@ pub fn follow(app: &AppHandle) {
             let text = notes.entry(note.clone()).or_insert_with(|| std::fs::read_to_string(root.join(&note)).ok());
             let Some(now) = text.as_deref().and_then(|t| initiatives::task_state(t, &a.id)) else { continue };
             let key = format!("{}#{}", page.path, a.id);
-            let last = seen.insert(key, now);
-            moved |= last != Some(now);
+            let last = seen.get(&key).copied();
+            let mut failed = false;
             if let Some(status) = initiatives::follow_task(a.status, last, now) {
                 if let Err(e) = set_status(app, &root, &page.path, &a.id, status, &note) {
                     crate::applog!("action tasks: {} {}: {e}", page.path, a.id);
+                    failed = true;
                 }
             }
+            let keep = to_remember(last, now, failed);
+            moved |= keep != last;
+            match keep {
+                Some(k) => seen.insert(key, k),
+                None => seen.remove(&key),
+            };
         }
     }
     if moved {
         save(&seen);
+    }
+}
+
+/// The task state to remember after a pass: the new one, unless the action's change failed (the
+/// page was being written by an ingest), when the last one is kept so the next pass tries again.
+fn to_remember<T>(last: Option<T>, now: T, failed: bool) -> Option<T> {
+    if failed {
+        last
+    } else {
+        Some(now)
     }
 }
 
@@ -117,4 +134,19 @@ fn set_status(app: &AppHandle, root: &Path, page: &str, id: &str, status: initia
     let origin = Origin { kind: "tasks".into(), label: Some("Its task".into()), ..Default::default() };
     let s = crate::changes::Submit::new(page, Kind::Edit, title, &why, origin, brainstead_core::changes::from_texts(Some(&before), &after));
     crate::changes::submit(app, s).map(|_| ()).map_err(|e| e.message().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_change_that_failed_is_tried_again_at_the_next_pass() {
+        // Made, or not needed: the new state is the one to compare the next pass with.
+        assert_eq!(to_remember(Some("open"), "done", false), Some("done"));
+        assert_eq!(to_remember(None, "open", false), Some("open"));
+        // Failed: the last one stays, so the task still reads as just ticked next time.
+        assert_eq!(to_remember(Some("open"), "done", true), Some("open"));
+        assert_eq!(to_remember(None, "done", true), None);
+    }
 }

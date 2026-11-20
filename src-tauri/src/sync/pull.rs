@@ -86,6 +86,9 @@ pub fn pull(data: &std::path::Path, query: &str, days: u32, kinds: Kinds) -> Out
     };
     let vault = std::path::Path::new(vault);
     let client = super::client();
+    // Waits for a sync pass that's running, and keeps one from starting, so neither saves over the
+    // other's progress.
+    let _changing = state::lock();
     let mut st = state::load(data);
     let terms = terms(query);
     let now = Utc::now();
@@ -201,6 +204,8 @@ fn pull_chats(
                 let when = day_msgs.last().map(|m| m.time);
                 if let Some(path) = deliver(data, vault, &cap, "teams", when, out) {
                     st.mark_chat_day(&conv.id, &day, Some(&path));
+                    // As the sync pass does, so messages that come later are topped up.
+                    st.set_chat_day_count(&conv.id, &day, day_msgs.len());
                     out.items.push(Item { kind: "chat".into(), title: label.clone(), date: day, path, already_had: false });
                 }
             }
@@ -292,7 +297,9 @@ fn pull_transcripts(
         }
     };
     for ev in events {
-        let Some(id) = ev.thread_id.clone() else { continue };
+        let Some(thread) = ev.thread_id.as_deref() else { continue };
+        // Keyed as the sync pass keys it, per sitting.
+        let id = state::transcript_key(thread, ev.start);
         if ev.end > now || !matches(&format!("{} {}", ev.subject, ev.organizer), terms) {
             continue;
         }

@@ -111,6 +111,8 @@ fn run_inner(data: &Path, from: Option<NaiveDate>) -> Report {
     };
 
     let vault = Path::new(vault);
+    // Held to the save below: an on-demand pull changes the same state.
+    let _changing = state::lock();
     let mut st = state::load(data);
     // The first-sync history limit (Settings): a day/message older than this is skipped so a big
     // mailbox or long chat history can't flood the Inbox. 0 means no limit.
@@ -298,7 +300,7 @@ fn sync_mail(p: &Pass, st: &mut state::State, r: &mut Report) {
     };
     // A back-fill reads the whole Inbox, but takes only the threads with a message since its first
     // day: a thread left in the Inbox for months stays out.
-    let first_run = !st.initialized && p.from.is_none();
+    let first_run = st.mail_first_run() && p.from.is_none();
     let cutoff = p.cutoff.as_deref();
     // The conversations with a fresh Inbox message this pass (deduped, newest first already). Mail is
     // grouped one source per thread (D-20261025-07): an Inbox message flags its thread for syncing.
@@ -326,6 +328,9 @@ fn sync_mail(p: &Pass, st: &mut state::State, r: &mut Report) {
         }
         sync_thread(p, &m.conversation_id, st, r);
     }
+    // Only here, once the Inbox was read: a pass with mail off, or one that couldn't read it,
+    // leaves mail's first run still to come.
+    st.mail_initialized = true;
 }
 
 /// How far back the first look at the user's sent mail goes.
@@ -463,7 +468,7 @@ fn sync_transcripts(p: &Pass, st: &mut state::State, r: &mut Report) {
         let Some(thread) = ev.thread_id.clone() else { continue };
         // A recurring meeting's whole series shares one thread id; key the state per occurrence (thread
         // id + the occurrence's local day) so each sitting is captured once and none shadows another.
-        let id = format!("{thread}#{}", ev.start.with_timezone(&Local).date_naive());
+        let id = state::transcript_key(&thread, ev.start);
         if ev.end > now || st.transcript_done(&id) {
             continue; // not finished yet, or already done
         }

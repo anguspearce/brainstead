@@ -495,7 +495,8 @@ describe("MCP actions", () => {
     // As an assistant: the app accepts only a change held for a failed check.
     expect(calls.find(([c]) => c === "change_accept")![1]).toEqual({ id: "c2", assistant: true });
     answers.change_revert = () => ({ ok: false, message: "Its lines have been edited since.", before: "old" });
-    expect(await run("changes", { action: "revert", id: "c1" })).toMatch(/edited since/);
+    // A revert that couldn't be made is an error, not a result that reads as done.
+    await expect(run("changes", { action: "revert", id: "c1" })).rejects.toThrow(/edited since/);
     answers.changes_accept_all = () => ({ done: 2, failed: [] });
     expect(await run("changes", { action: "accept_run", group: "daily-check-1" })).toBe("Accepted 2.");
     expect(calls.find(([c]) => c === "changes_accept_all")![1]).toEqual({ group: "daily-check-1", assistant: true, ids: null });
@@ -535,7 +536,9 @@ describe("MCP actions", () => {
     followUp.set([]);
     accepted = false;
     answers.changes_accept_all = () => ({ done: 0, failed: ["Meeting: the page changed"] });
-    expect(await run("changes", { action: "accept_run", group: "meeting-1" })).toBe("Accepted 0. Couldn't: Meeting: the page changed");
+    await expect(run("changes", { action: "accept_run", group: "meeting-1" })).rejects.toThrow(
+      "None accepted. Couldn't: Meeting: the page changed",
+    );
     expect(followUp.get()).toEqual([]);
   });
 

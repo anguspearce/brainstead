@@ -104,15 +104,27 @@ fn edit_done(file: &Path, f: impl FnOnce(&mut Vec<String>) -> bool) -> Result<()
     Ok(())
 }
 
-/// Marks `path` clarified, newest first, keeping the last 1000.
+/// Marks `path` clarified, newest first.
 fn mark_done(file: &Path, path: &str) -> Result<(), EditError> {
     edit_done(file, |done| {
         if !done.iter().any(|p| p == path) {
             done.insert(0, path.to_string());
-            done.truncate(1000);
+            cap_done(done);
         }
         true
     })
+}
+
+/// Keeps every source and the newest 1000 of the rest. A source stays for good: this list is all
+/// that keeps one read but cited by no page out of the Inbox, however long ago it was clarified.
+fn cap_done(done: &mut Vec<String>) {
+    let mut others = 0;
+    done.retain(|p| {
+        p.starts_with("sources/") || {
+            others += 1;
+            others <= 1000
+        }
+    });
 }
 
 /// A capture is in the Inbox while its file is there, no wiki page cites it, and it hasn't been
@@ -613,6 +625,17 @@ pub async fn initiative_action_move(app: AppHandle, path: String, line: usize, l
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_clarified_source_is_never_dropped_from_the_list() {
+        let mut done: Vec<String> = (0..1200).map(|n| format!("sources/Email. Acme {n}.md")).collect();
+        done.extend((0..1100).map(|n| format!("Inbox/{n}.md")));
+        cap_done(&mut done);
+        assert_eq!(done.iter().filter(|p| p.starts_with("sources/")).count(), 1200);
+        let others: Vec<_> = done.iter().filter(|p| !p.starts_with("sources/")).collect();
+        assert_eq!(others.len(), 1000);
+        assert_eq!((others[0].as_str(), others[999].as_str()), ("Inbox/0.md", "Inbox/999.md"));
+    }
 
     #[test]
     fn marking_done_and_forgetting_at_once_lose_neither() {

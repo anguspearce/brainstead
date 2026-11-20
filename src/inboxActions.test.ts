@@ -13,6 +13,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 
 import type { InboxItem } from "./api";
 import {
+  withReference,
   actionTaskText,
   choiceGroups,
   doneNow,
@@ -180,5 +181,15 @@ describe("a choice for several ticked items", () => {
     expect(eachSaid("Kept in Sources", 2, ["Plan: the file changed since it was read"])).toBe(
       "2 done, 1 failed: Plan: the file changed since it was read",
     );
+  });
+});
+
+describe("filing as reference", () => {
+  it("adds the bullet after a blank line and leaves the note's own ending alone", () => {
+    expect(withReference("# Note\n", "A fact")).toBe("# Note\n\n- A fact\n");
+    expect(withReference("# Note", "A fact")).toBe("# Note\n\n- A fact\n");
+    expect(withReference("# Note\n\n\n", "two\nlines")).toBe("# Note\n\n\n- two lines\n");
+    expect(withReference("# Note\r\n", "A fact")).toBe("# Note\r\n\r\n- A fact\r\n");
+    expect(withReference("", "A fact")).toBe("- A fact\n");
   });
 });

@@ -31,7 +31,7 @@ fn fixture() -> Fixture {
     ix.sync(&brainstead_core::vault::Vault::new(vault.clone(), vec![])).unwrap();
     drop(ix);
     let ctx = Ctx::from_args(&["--chat".into(), "chat-1".into(), "--model".into(), "claude:sonnet".into()], data).unwrap();
-    let ctx = Ctx { today: chrono::NaiveDate::from_ymd_opt(2026, 10, 2).unwrap(), ..ctx };
+    let ctx = Ctx { fixed_today: chrono::NaiveDate::from_ymd_opt(2026, 10, 2), ..ctx };
     Fixture { _tmp: tmp, ctx }
 }
 
@@ -236,7 +236,7 @@ fn create_template_is_a_new_file_in_templates() {
 #[test]
 fn example_notes_are_added_as_new_notes_only_where_missing() {
     let f = fixture();
-    let now = f.ctx.today.and_time(chrono::Local::now().time());
+    let now = f.ctx.today().and_time(chrono::Local::now().time());
     let all = brainstead_core::starter::files(now);
     // Every example note there but Start here: only that one is sent, as a new note.
     for (rel, text) in &all {
@@ -330,6 +330,14 @@ fn edit_page_sends_a_checked_change() {
         json!({"page": "Orbit App", "title": "x", "edits": [{"find": "Soft launch to staff", "replace": "Staff soft launch"}], "unattended": true}),
     );
     assert_eq!(c["origin"]["trigger"], "scheduled");
+    // And so is every change after it in the session, with or without the flag, so one that fails
+    // a check is held rather than made.
+    let (_, c) = submitted(
+        &f,
+        "edit_page",
+        json!({"page": "Orbit App", "title": "x", "edits": [{"find": "Soft launch to staff", "replace": "Staff soft launch"}]}),
+    );
+    assert_eq!(c["origin"]["trigger"], "scheduled");
 }
 
 #[test]
@@ -417,6 +425,10 @@ fn needs_an_index() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::write(tmp.path().join("settings.json"), r#"{"vaultPath": "/nowhere"}"#).unwrap();
     let ctx = Ctx::from_args(&[], tmp.path().to_path_buf()).unwrap();
+    // Today is read from the clock on each call, not fixed when the server starts.
+    assert!(ctx.fixed_today.is_none());
+    let before = chrono::Local::now().date_naive();
+    assert!((before..=chrono::Local::now().date_naive()).contains(&ctx.today()));
     assert!(refused(&ctx, "search", json!({"query": "x"})).contains("open Brainstead"));
     assert!(Ctx::from_args(&["--data".into(), tmp.path().join("none").to_string_lossy().into_owned()], PathBuf::new()).is_err());
 }
@@ -582,6 +594,15 @@ fn renames_trash_and_deletes_are_sent() {
     assert_eq!(c["instruction"], json!({"op": "delete_line", "line": line, "at": n}));
     assert!(!made(&f, &c).contains("Walk through the Dashboard"));
     assert!(refused(&f.ctx, "delete_task", json!({"task": "Me. To Do List.md:1", "text": "no such task"})).contains("no task"));
+    // Text with no words in it (only a tag, or nothing) fits any task, so it never goes looking: a
+    // note's only task isn't taken for a line that isn't one. The line itself is still taken.
+    std::fs::write(f.ctx.vault.join("Idea. Single.md"), "# Single\n\n- [ ] Call Maya #followup\n").unwrap();
+    let t = refused(&f.ctx, "delete_task", json!({"task": "Idea. Single.md:1", "text": "#followup"}));
+    assert!(t.contains("no task at Idea. Single.md:1 reading “#followup”"), "{t}");
+    let t = refused(&f.ctx, "delete_task", json!({"task": "Idea. Single.md:1", "text": ""}));
+    assert!(t.contains("no task at Idea. Single.md:1 any more"), "{t}");
+    let (_, c) = submitted(&f, "delete_task", json!({"task": "Idea. Single.md:3", "text": ""}));
+    assert_eq!(c["instruction"], json!({"op": "delete_line", "line": "- [ ] Call Maya #followup", "at": 2}));
 }
 
 /// The page each tool sends for `spelling`, which names Templates/Meeting.md: edit_page,
@@ -690,12 +711,13 @@ fn the_weekly_review_goes_to_the_app() {
 fn task_inbox_and_project_edits_carry_the_session() {
     let f = fixture();
     for (tool_name, action, args) in [
-        ("edit_task", "task.edit", json!({"task": "Me. To Do List.md:12", "text": "Call Sam", "done": true, "unattended": true})),
         ("move_task", "task.move", json!({"task": "Me. To Do List.md:12", "text": "Call Sam", "after": "Me. To Do List.md:13"})),
         ("clarify_inbox", "inbox.clarify", json!({"item": "task:14", "becomes": "next"})),
         ("create_project", "project.create", json!({"name": "Orbit App beta"})),
         ("update_project", "project.update", json!({"project": "Orbit App launch", "status": "completed"})),
         ("rename_area", "project.rename_area", json!({"area": "Work", "to": "Acme"})),
+        // Said unattended, which holds for the calls after it, so these come last.
+        ("edit_task", "task.edit", json!({"task": "Me. To Do List.md:12", "text": "Call Sam", "done": true, "unattended": true})),
         // A restore and a saved contradictions report are changes too, held unattended when a check fails.
         ("restore_from_trash", "trash", json!({"id": "abc-123456", "unattended": true})),
         ("contradictions", "contradictions", json!({"action": "save", "unattended": true})),
@@ -709,6 +731,12 @@ fn task_inbox_and_project_edits_carry_the_session() {
         let unattended = args.get("unattended").is_some();
         assert_eq!(req.args["origin"]["trigger"].as_str() == Some("scheduled"), unattended, "{tool_name}");
     }
+    // Said once, it holds: a later call without it is still scheduled, and the app is told so.
+    let app = fake_app(f.ctx.data.clone(), |_| bridge::Reply { ok: true, result: json!("Done."), error: None });
+    ok(&f.ctx, "move_task", json!({"task": "Me. To Do List.md:12", "text": "Call Sam", "after": "Me. To Do List.md:13"}));
+    let req = app.join().unwrap();
+    assert_eq!(req.args["origin"]["trigger"], "scheduled");
+    assert_eq!(req.args["unattended"], true);
 }
 
 #[test]

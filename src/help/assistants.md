@@ -46,7 +46,7 @@ Some changes are always held for you to accept:
 
 - a change to a template, including a new template, or renaming or trashing one;
 - a change to a system note's header (the "This is a system note" callout);
-- a change that adds code that runs when a note is shown.
+- a change that adds code that runs when a note is shown, or changes code that's there.
 
 An assistant in a session nobody is watching, such as a loop, says so. Its changes that fail a check are then held for you instead of made, and so are those of the runs it starts. See [Changes](help:review) for the checks.
 

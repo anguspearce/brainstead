@@ -1228,8 +1228,13 @@ pub fn with_topic(page: &str, heading: &str, content: &str) -> Result<String, St
         Kind::Topical => {}
         _ => return Err(format!("“{h}” isn't a topical section: use current_state or entry for it.")),
     }
-    if parse(page).sections.iter().any(|s| name(s.heading) == name(h)) {
-        return crate::proposals::patched(page, &crate::proposals::Patch::Section { section: h.to_string(), content: content.to_string() });
+    // The page's own heading goes to the patch, which matches it as written: `## Risks:` is
+    // found by "Risks" here, and must be replaced, not joined by a second `## Risks`.
+    if let Some(s) = parse(page).sections.iter().find(|s| name(s.heading) == name(h)) {
+        return crate::proposals::patched(
+            page,
+            &crate::proposals::Patch::Section { section: s.heading.to_string(), content: content.to_string() },
+        );
     }
     Ok(insert_sections(page, &format!("## {h}\n\n{}\n", content.trim()), &[Kind::Timeline, Kind::Closing]))
 }
@@ -1658,6 +1663,9 @@ mod tests {
         let new = with_topic(&page, "Architecture", "Built on Hub 2.").unwrap();
         assert!(new.contains("## Architecture\n\nBuilt on Hub 2.\n\n## Timeline"));
         assert!(with_topic(&page, "See also", "x").is_err() && with_topic(&page, "2 Oct 2026 — x", "x").is_err());
+        // A heading with a trailing colon is the same section: replaced, not added again.
+        let new = with_topic("# Orbit App\n\n## Risks:\n\n- Old.\n\n## Timeline\n", "Risks", "- Pen test.").unwrap();
+        assert_eq!(new, "# Orbit App\n\n## Risks:\n\n- Pen test.\n\n## Timeline\n");
         let new = with_current_state_text(&page, "Launch on 5 December.").unwrap();
         assert!(new.contains("## Current state\n\nLaunch on 5 December.\n\n## Architecture"));
         let (bare, _) = reshape(&fixture("dated-only"), &is_source);

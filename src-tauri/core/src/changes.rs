@@ -447,7 +447,20 @@ pub fn needs_the_user(page: &str, before: Option<&str>, after: &str) -> Option<S
             return Some("It changes the note's system-note header, which other parts of Brainstead rely on.".into());
         }
     }
-    (runnable(after) > before.map_or(0, runnable)).then(|| "It adds code that runs when the note is shown (a script or a function).".into())
+    // Code the note didn't have, counted piece by piece: rewriting a script is adding one, and so
+    // is a second copy of one that's there.
+    let mut had: std::collections::HashMap<String, usize> = Default::default();
+    for s in before.map(runnable_snippets).unwrap_or_default() {
+        *had.entry(s).or_default() += 1;
+    }
+    let new = runnable_snippets(after).into_iter().any(|s| match had.get_mut(&s) {
+        Some(n) if *n > 0 => {
+            *n -= 1;
+            false
+        }
+        _ => true,
+    });
+    new.then(|| "It adds code that runs when the note is shown (a script or a function).".into())
 }
 
 /// Templater's tags: `<% … %>`, `<%* … %>`, with `-` or `_` to trim around them.
@@ -457,8 +470,20 @@ static TEMPLATER: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|
 /// function` lines inside a Tasks query block, and Templater tags. The same words in prose aren't
 /// code.
 pub fn runnable(text: &str) -> usize {
+    runnable_snippets(text).len()
+}
+
+/// The pieces of runnable code themselves, each as written: a dataviewjs block's body, an inline
+/// `$=` query, a `by function` line, a Templater tag.
+pub fn runnable_snippets(text: &str) -> Vec<String> {
     let text = text.replace("\r\n", "\n");
-    let mut n = text.matches("`$=").count() + TEMPLATER.find_iter(&text).count();
+    let inline = text.match_indices("`$=").map(|(i, _)| {
+        let rest = &text[i + 1..];
+        rest[..rest.find(['`', '\n']).unwrap_or(rest.len())].to_string()
+    });
+    let mut out: Vec<String> = inline.chain(TEMPLATER.find_iter(&text).map(|m| m.as_str().to_string())).collect();
+    // The dataviewjs block being read: its lines so far.
+    let mut script: Option<String> = None;
     // The fence open (its marker and info), as code blocks are read.
     let mut fence: Option<(String, String)> = None;
     for line in text.lines() {
@@ -466,23 +491,32 @@ pub fn runnable(text: &str) -> usize {
         let mark: String = t.chars().take_while(|c| *c == '`' || *c == '~').collect();
         let is_fence = mark.len() >= 3 && mark.chars().all(|c| c == mark.chars().next().unwrap_or('`'));
         match &fence {
-            Some((open, _)) if is_fence && mark.starts_with(open.as_str()) && t[mark.len()..].trim().is_empty() => fence = None,
+            Some((open, _)) if is_fence && mark.starts_with(open.as_str()) && t[mark.len()..].trim().is_empty() => {
+                out.extend(script.take());
+                fence = None;
+            }
             Some((_, info)) => {
                 if info == "tasks" && t.to_lowercase().contains("by function") {
-                    n += 1;
+                    out.push(t.trim_end().to_string());
+                }
+                if let Some(s) = &mut script {
+                    s.push_str(line);
+                    s.push('\n');
                 }
             }
             None if is_fence => {
                 let info = t[mark.len()..].split_whitespace().next().unwrap_or("").to_lowercase();
                 if info == "dataviewjs" {
-                    n += 1;
+                    script = Some(String::new());
                 }
                 fence = Some((mark, info));
             }
             None => {}
         }
     }
-    n
+    // A block never closed runs to the end of the note.
+    out.extend(script);
+    out
 }
 
 /// Why a rename or a move to the Trash must wait for the user (D-20261005-11): the note is a
@@ -1077,6 +1111,27 @@ mod tests {
         assert!(needs_the_user("Notes.md", Some("a"), "```js\nsort by function x\n```\n").is_none());
         assert!(needs_the_user("Notes.md", Some("a"), "```tasks\nnot done\nsort by function task.urgency\n```\n").is_some());
         assert!(needs_the_user("Notes.md", Some("a"), "<%* tR += 1 %>").is_some());
+        // Code that's there and unchanged isn't held, wherever the change around it is.
+        let script = "# A\n\n```dataviewjs\ndv.paragraph(1)\n```\n";
+        assert!(needs_the_user("Notes.md", Some(script), &script.replace("# A", "# B")).is_none());
+        assert_eq!(runnable(script), 1);
+    }
+
+    #[test]
+    fn rewritten_code_waits_for_the_user() {
+        let script = "# A\n\n```dataviewjs\ndv.paragraph(1)\n```\n";
+        assert!(
+            needs_the_user("Notes.md", Some(script), &script.replace("dv.paragraph(1)", "dv.paragraph(2)")).is_some(),
+            "a block's body"
+        );
+        assert!(needs_the_user("Notes.md", Some(script), &format!("{script}{script}")).is_some(), "a second copy");
+        assert!(needs_the_user("Notes.md", Some("x `$= 1`"), "x `$= 2`").is_some(), "an inline query");
+        assert!(needs_the_user("Notes.md", Some("<% tp.date.now() %>"), "<% tp.file.title %>").is_some(), "a Templater tag");
+        let tasks = "```tasks\nnot done\nsort by function task.urgency\n```\n";
+        assert!(needs_the_user("Notes.md", Some(tasks), &tasks.replace("task.urgency", "task.due")).is_some(), "a Tasks function");
+        assert!(needs_the_user("Notes.md", Some(tasks), &tasks.replace("not done", "done")).is_none(), "the query around it");
+        // Taking code out adds none.
+        assert!(needs_the_user("Notes.md", Some(script), "# A\n").is_none());
     }
 
     #[test]

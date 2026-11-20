@@ -624,7 +624,17 @@ pub fn capture_thought(path: &Path, text: &str, stamp: &str) -> Result<String> {
 pub fn with_thought(src: &str, text: &str, stamp: &str) -> (String, String) {
     let eol = split_lines(src).1.new_line();
     let at = pinned_header_len(src);
-    let block = format!("## {stamp}{eol}{eol}{}{eol}{eol}", text.trim().replace("\r\n", "\n").replace('\n', eol));
+    let text = text.trim().replace("\r\n", "\n");
+    // A level 1 or 2 heading in the thought would end its block there (inbox.rs), so the rest
+    // would be left behind when it's clarified: its `#` is escaped, and it stays as text.
+    let body: Vec<String> = crate::markdown::lines(&text, 0)
+        .iter()
+        .map(|l| match crate::markdown::heading(l.text) {
+            Some((n, _)) if n <= 2 && !l.code => l.text.replacen('#', "\\#", 1),
+            _ => l.text.to_string(),
+        })
+        .collect();
+    let block = format!("## {stamp}{eol}{eol}{}{eol}{eol}", body.join(eol));
     (format!("{}{block}{}", &src[..at], &src[at..]), block)
 }
 

@@ -48,7 +48,8 @@ function splitInline(s: string): string[] {
     if (q) {
       cur += c;
       if (c === q) q = null;
-    } else if (c === '"' || c === "'") {
+    } else if ((c === '"' || c === "'") && cur.trim() === "") {
+      // A quote opens a value only at its start: the apostrophe in O'Brien is a letter.
       q = c;
       cur += c;
     } else if (c === "[") {

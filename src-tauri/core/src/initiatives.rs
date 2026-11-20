@@ -195,7 +195,9 @@ fn section_items<'a>(page: &'a str, heading: &str) -> Option<(usize, usize, Vec<
         if l.start >= end {
             break;
         }
-        let after = (l.start + l.text.len() + 1).min(page.len());
+        // The line's real end: its text, a `\r` if the page has them, then the `\n`.
+        let rest = &page[l.start + l.text.len()..];
+        let after = page.len() - rest.trim_start_matches('\r').strip_prefix('\n').unwrap_or(rest).len();
         if l.code {
             open = false;
             continue;
@@ -549,6 +551,8 @@ pub fn with_action(page: &str, edit: &ActionEdit, seed: &str) -> Result<(String,
                 &extra,
                 &id,
             );
+            // The item keeps its own list marker (`*`, `+`).
+            let head = format!("{}{}", &it.text[..it.text.len() - it.head.len()], &head[2..]);
             let quotes = new_quote_lines(&a.quotes, &edit.quotes)?;
             let head_end = it.head.as_ptr() as usize - page.as_ptr() as usize + it.head.len();
             let mut out = format!("{}{head}{}", &page[..it.start], &page[head_end..it.end]);
@@ -717,7 +721,13 @@ pub fn move_action(from: &str, to: &str, key: &str) -> Result<(String, String), 
         block.push('\n');
     }
     let new_from = format!("{}{}", &from[..it.start], &from[it.end..]);
-    let new_to = insert_in_section(to, "Actions", &block, None)?;
+    // The block takes the line endings of the page it goes to.
+    let block = block.replace("\r\n", "\n");
+    let new_to = if to.contains("\r\n") {
+        insert_in_section(&to.replace("\r\n", "\n"), "Actions", &block, None)?.replace('\n', "\r\n")
+    } else {
+        insert_in_section(to, "Actions", &block, None)?
+    };
     Ok((new_from, new_to))
 }
 
@@ -871,7 +881,7 @@ mod tests {
         let done = ActionEdit { status: Some(Status::Done), ..Default::default() };
         assert!(with_action_line(line, &done).unwrap().contains("[status:: done]"));
         // Found by its words when it has no id.
-        assert_eq!(with_action_line("* Ring Acme [owner:: me]", &done).unwrap(), "- Ring Acme [owner:: me] [status:: done]");
+        assert_eq!(with_action_line("* Ring Acme [owner:: me]", &done).unwrap(), "* Ring Acme [owner:: me] [status:: done]");
         let quoted = ActionEdit { quotes: vec![Quote { text: "x".into(), source: "y".into() }], ..Default::default() };
         assert!(with_action_line(line, &quoted).is_err());
     }
@@ -1001,5 +1011,36 @@ mod tests {
             "- [ ] Book it [[Orbit launch#^a-2222|Orbit launch]]\n"
         );
         assert!(relink_task(note, "Unfiled", "Hiring", "a-1").is_none());
+    }
+
+    #[test]
+    fn moving_an_action_keeps_each_page_s_line_endings() {
+        let crlf = |s: &str| s.replace('\n', "\r\n");
+        let lone = |s: &str| s.replace("\r\n", "").contains('\n');
+        let to = "## Actions\n\n- Keep me [owner:: me] [status:: open] ^a-9999\n\n## Decisions\n";
+        // The first action has a quote under it, the last is the section's last line.
+        for key in ["a-1111", "a-3333"] {
+            let (a, b) = move_action(&crlf(PAGE), &crlf(to), key).unwrap();
+            let (a_lf, b_lf) = move_action(PAGE, to, key).unwrap();
+            assert_eq!((a.as_str(), b.as_str()), (crlf(&a_lf).as_str(), crlf(&b_lf).as_str()));
+            assert!(!lone(&a) && !lone(&b));
+        }
+        // Between pages that differ, and into a section with nothing in it yet.
+        let (_, lf) = move_action(&crlf(PAGE), to, "a-1111").unwrap();
+        assert!(!lf.contains('\r'), "{lf:?}");
+        let (_, empty) = move_action(PAGE, &crlf("# Other\n\n## Actions\n\n## Decisions\n"), "a-1111").unwrap();
+        assert!(empty.contains("^a-1111") && !lone(&empty), "{empty:?}");
+    }
+
+    #[test]
+    fn changing_an_action_keeps_its_list_marker() {
+        let page = PAGE.replace("- Book the legal review", "*  Book the legal review");
+        let edit = ActionEdit { id: Some("a-2222".into()), status: Some(Status::Done), ..Default::default() };
+        let (out, _) = with_action(&page, &edit, "").unwrap();
+        assert!(out.contains("\n*  Book the legal review [delegated:: Lena] [status:: done] ^a-2222\n"), "{out}");
+        assert_eq!(
+            with_action_line("* Book review [delegated:: Lena] [status:: open]", &edit).unwrap(),
+            "* Book review [delegated:: Lena] [status:: done]"
+        );
     }
 }

@@ -118,8 +118,10 @@ export class EditSession {
   }
 
   async discardDraft() {
+    // Once the note was edited the draft on disk is those edits, not the one on offer: it stays.
+    const onDisk = this.heldDraft || !this.dirty;
     this.heldDraft = false;
-    await this.io.draftDiscard(this.path).catch(() => {});
+    if (onDisk) await this.io.draftDiscard(this.path).catch(() => {});
     if (this.view.notice?.kind === "draft") this.set({ notice: null });
   }
 
@@ -128,6 +130,10 @@ export class EditSession {
     this.text = text;
     if (this.view.dirty !== this.dirty) this.set({ dirty: this.dirty });
     clearTimeout(this.timer);
+    // New edits while an older draft is on offer: they are the unsaved work now, and take the
+    // draft's place on disk, or leaving ("Keep as draft"), a crash or a quit would lose them. The
+    // older draft stays on offer in the banner until the note is closed.
+    if (this.heldDraft && this.dirty) this.heldDraft = false;
     if (this.heldDraft || this.detached) return;
     if (this.dirty) this.timer = setTimeout(() => void this.writeDraft(), this.draftDelay);
     else void this.io.draftDiscard(this.path).catch(() => {});

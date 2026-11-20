@@ -158,15 +158,16 @@ export function revert(c: ChangeRow) {
 /** The run whose held changes are being accepted now, if any: Accept all and ⌘↩ wait for it. */
 export const acceptingRun = new Store<string | null>(null);
 
-/** Accepts every held change in a run (only those the search `q` shows, when there is one), one
- *  run at a time; each meeting note it made gets its follow-up offer. */
-export function acceptRun(group: string, rows: ChangeRow[], q = "") {
+/** Accepts every held change in a run, one run at a time; each meeting note it made gets its
+ *  follow-up offer. `shown` is the changes the screen shows: when its search, type or day has
+ *  `narrowed` them, only the run's shown ones are accepted. */
+export function acceptRun(group: string, shown: ChangeRow[], narrowed = false) {
   if (acceptingRun.get()) return Promise.resolve();
   acceptingRun.set(group);
-  const todo = runChanges(rows, group, "held", q);
+  const todo = runChanges(shown, group, "held");
   const meetings = todo.filter((c) => c.origin.kind === "meeting" && c.origin.chat);
   return api
-    .changesAcceptAll(group, false, q ? todo.map((c) => c.id) : undefined)
+    .changesAcceptAll(group, false, narrowed ? todo.map((c) => c.id) : undefined)
     .then(async (m) => {
       if (m.failed.length) toast(`Accepted ${m.done}; ${m.failed.length} couldn't be made: ${m.failed[0]}`, undefined, "bad");
       else toast(`Accepted ${plural(m.done, "change")}`, undefined, "ok");
@@ -301,10 +302,11 @@ export function ReviewScreen() {
   const readOnly = useStore(settings).readOnly;
   const [confirm, setConfirm] = useState<{ group: string; label: string; n: number; revert?: boolean } | null>(null);
   const accepting = useStore(acceptingRun);
-  // With a search on, a run's Reject all and Revert all act only on the changes it shows, as their
-  // confirmations count (Accept all too).
+  // With a search, a type or a day on, a run's Reject all and Revert all act only on the changes it
+  // shows, as their confirmations count (Accept all too).
+  const narrowed = !!(f.q || f.type || f.day);
   const runIds = (group: string, status: ChangeRow["status"]) =>
-    dq ? runChanges(all ?? [], group, status, dq).map((c) => c.id) : undefined;
+    narrowed ? runChanges(rows ?? [], group, status).map((c) => c.id) : undefined;
   const rejectRun = (group: string) =>
     api
       .changesRejectAll(group, runIds(group, "held"))
@@ -515,7 +517,7 @@ export function ReviewScreen() {
                         type="button"
                         className="btn sm"
                         disabled={readOnly || !!accepting}
-                        onClick={() => void acceptRun(g.group, all ?? [], dq)}
+                        onClick={() => void acceptRun(g.group, rows ?? [], narrowed)}
                       >
                         {accepting === g.group ? "Accepting…" : "Accept all"}
                       </button>
@@ -614,7 +616,7 @@ export function ReviewScreen() {
           )}
         </div>
         {cur ? (
-          <Detail key={cur.id} row={cur} q={dq} onMove={move} />
+          <Detail key={cur.id} row={cur} shown={rows ?? []} narrowed={narrowed} onMove={move} />
         ) : order.length ? (
           <div className="iopen">
             <p className="faint">Select a change to see what it did.</p>
@@ -759,7 +761,18 @@ function Row({ c, sel, gone, onSel }: { c: ChangeRow; sel: boolean; gone?: boole
   );
 }
 
-function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: number) => void }) {
+function Detail({
+  row,
+  shown,
+  narrowed,
+  onMove,
+}: {
+  row: ChangeRow;
+  /** The changes the list shows, and whether a search, type or day narrowed them (⌘↩ accepts those). */
+  shown: ChangeRow[];
+  narrowed: boolean;
+  onMove: (d: number) => void;
+}) {
   const [v, setV] = useState<ChangeView | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tries, setTries] = useState(0);
@@ -767,7 +780,6 @@ function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: num
   const readOnly = useStore(settings).readOnly;
   const accepting = useStore(acceptingRun);
   const pending = useStore(reverting);
-  const all = useStore(changes);
   const gone = useGone([...(v?.quotes.map((q) => q.path) ?? []), row.to ?? row.page]);
 
   useEffect(() => {
@@ -818,7 +830,7 @@ function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: num
       if (e.defaultPrevented || keyIsElsewhere(e)) return;
       if (isMod(e) && e.key === "Enter") {
         if (e.repeat || !isHeld || readOnly || accepting || !v || v.problem) return;
-        void acceptRun(row.group, all ?? [], q);
+        void acceptRun(row.group, shown, narrowed);
       } else if (e.repeat && (e.key === "a" || e.key === "r")) return;
       else if (e.metaKey || e.ctrlKey || e.altKey) return;
       else if (e.key === "j") onMove(1);

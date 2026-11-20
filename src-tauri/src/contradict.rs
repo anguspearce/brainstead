@@ -147,7 +147,10 @@ fn run_held(app: &AppHandle, trigger: Option<&str>, group: Option<&str>) -> Last
     let mut l = Last { started: proposals::now_local(), running: true, ..Default::default() };
     save_last(app, &l);
     let group = group.map(String::from).unwrap_or_else(|| format!("contradictions-{}", proposals::new_id()));
-    if let Err(e) = run(app, &mut l, trigger, &group) {
+    // A panic is an error in the run, never a check left "running" until restart.
+    let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(app, &mut l, trigger, &group)))
+        .unwrap_or_else(|_| Err("Something went wrong; Brainstead's log has the details (Settings › About).".into()));
+    if let Err(e) = ran {
         l.error = Some(e);
     }
     l.running = false;

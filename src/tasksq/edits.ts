@@ -57,6 +57,16 @@ export function nextDay(rule: string, base: Moment): Moment | null {
   return next ? fromUtc(next) : null;
 }
 
+/** Whether rrule reads the rule's words. It throws on some it can't ("every blue moon"), and a task
+ *  with such a rule is still ticked, as a plain one. */
+function parses(rule: string): boolean {
+  try {
+    return !!RRule.parseText(rule);
+  } catch {
+    return false;
+  }
+}
+
 /** The next occurrence of a recurring task, as a fresh to-do line, or null when it isn't one. */
 export function nextOccurrence(line: string, today: Moment): string | null {
   const f = parseTask(line);
@@ -80,7 +90,7 @@ export function nextOccurrence(line: string, today: Moment): string | null {
       const shifted = nextRef.clone().add(moment(d, DAY).diff(refDay, "days"), "days").format(DAY);
       next = next.replace(new RegExp(`((?:${DATE_EMOJI[k].join("|")})\\uFE0F? *)${d}`, "u"), `$1${shifted}`);
     }
-  } else if (!RRule.parseText(rule)) return null;
+  } else if (!parses(rule)) return null;
   return next.trimEnd();
 }
 

@@ -32,7 +32,7 @@ const TODO_LIST: &str = "Me. To Do List.md";
 const INSTRUCTIONS: &str = "Brainstead's tools over the user's vault (notes, a wiki in wiki/, sources in sources/), doing what the app's screens do. \
 The list_* tools and the others marked read-only only read; help answers questions about the app itself. \
 Every change to a note (tasks, the Inbox, projects, edit_page, create_note, add_image, rename_note, trash_note) is made at once and recorded in Brainstead's Changes, where the user can revert it. \
-A change to Templates/, one that adds code that runs (a script, a Tasks function, a Templater tag) or one that changes a system note's header is always held for the user to accept in the app. \
+A change to Templates/, one that adds or changes code that runs (a script, a Tasks function, a Templater tag) or one that changes a system note's header is always held for the user to accept in the app. \
 Other tools change things at once; each one's description says how it's undone. \
 Change only what the user asked for. While the vault is read-only (app_status says) every change is refused. \
 In a session nobody is watching (a loop, a scheduled agent), pass unattended: true on every call: a change that fails a check is then held for the user, and for the rest of the session nothing held can be accepted and weekly_start_over and moving_over are refused. \
@@ -50,8 +50,8 @@ pub struct Ctx {
     /// The Ask chat that started it, and its model, for Changes.
     pub chat: Option<String>,
     pub model: Option<String>,
-    /// Today, for `updated:` (tests fix it).
-    pub today: chrono::NaiveDate,
+    /// A fixed day for [`Ctx::today`], set by the tests. None reads the clock.
+    pub fixed_today: Option<chrono::NaiveDate>,
     /// The app's own program, to open it for an action when it isn't running; None from the
     /// separate `brainstead-mcp` binary and in tests.
     pub app: Option<PathBuf>,
@@ -91,13 +91,19 @@ impl Ctx {
             vault,
             chat: opt("--chat"),
             model: opt("--model"),
-            today: chrono::Local::now().date_naive(),
+            fixed_today: None,
             app,
             calls: Default::default(),
             session: format!("session-{}", proposals::new_id()),
             unattended: Default::default(),
             init: Default::default(),
         })
+    }
+
+    /// Today, for `updated:`, an action's `on:` and the lookbacks. Read on each call, since a
+    /// terminal session runs for days.
+    pub fn today(&self) -> chrono::NaiveDate {
+        self.fixed_today.unwrap_or_else(|| chrono::Local::now().date_naive())
     }
 
     fn index(&self) -> Result<Index, String> {
@@ -1188,6 +1194,10 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
     }
     // Once a call has said nobody's watching, the whole session is (D-20261005-09).
     let unwatched = ctx.unattended.load(std::sync::atomic::Ordering::Relaxed);
+    // So a later call without the flag is still held when a check fails, here and in the app.
+    if unwatched {
+        obj["unattended"] = json!(true);
+    }
     let act = |action: &str, a: Value| -> Result<Out, CallError> { Ok(act(ctx, action, a)?) };
     // The app records these in Changes as this session's (D-20261005-10).
     if [
@@ -1205,7 +1215,7 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
     ]
     .contains(&name)
     {
-        obj["origin"] = serde_json::to_value(origin(ctx, unattended)).unwrap_or_default();
+        obj["origin"] = serde_json::to_value(origin(ctx, unwatched)).unwrap_or_default();
     }
     match name {
         "search" => Ok(search(ctx, parse(obj)?)?),
@@ -1425,7 +1435,7 @@ fn without(mut obj: Value, keys: &[&str]) -> Value {
 }
 
 /// How long the server waits for the app to answer one action.
-const ACT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(150);
+const ACT_TIMEOUT: std::time::Duration = bridge::ACT_TIMEOUT;
 
 /// Runs an action in the app (src/mcpActions.ts, through core/src/bridge.rs), opening the app
 /// first when it isn't running. A text result is given back as it is, a listing as its text and
@@ -1532,10 +1542,15 @@ fn find_task(ctx: &Ctx, id: &str, text: &str) -> Result<(String, usize, String),
     if let Some(l) = n.checked_sub(1).and_then(|i| lines.get(i)).filter(|l| fits(l)) {
         return Ok((path.to_string(), n - 1, l.to_string()));
     }
-    let hits: Vec<usize> = (0..lines.len()).filter(|&i| fits(lines[i])).collect();
+    // No words to look for (the text was empty, or only a tag): every task would fit, so the
+    // line given is the only one taken, as in src/mcpActions.ts.
+    let hits: Vec<usize> = if want.is_empty() { Vec::new() } else { (0..lines.len()).filter(|&i| fits(lines[i])).collect() };
     match hits.as_slice() {
         [i] => Ok((path.to_string(), *i, lines[*i].to_string())),
-        _ => Err(format!("There's no task at {id} reading “{text}” any more. List the tasks again for its current place.")),
+        _ => {
+            let reading = if text.is_empty() { String::new() } else { format!(" reading “{text}”") };
+            Err(format!("There's no task at {id}{reading} any more. List the tasks again for its current place."))
+        }
     }
 }
 
@@ -1870,7 +1885,7 @@ struct ReasonArgs {
 /// Settings › Vault's Add the example notes: the starter notes the vault doesn't have, each a new
 /// note sent as a change (core/src/starter.rs's add_missing writes the same ones straight away).
 fn add_example_notes(ctx: &Ctx, a: ReasonArgs) -> Result<String, String> {
-    let now = ctx.today.and_time(chrono::Local::now().time());
+    let now = ctx.today().and_time(chrono::Local::now().time());
     let missing: Vec<(String, String)> =
         brainstead_core::starter::files(now).into_iter().filter(|(rel, _)| !ctx.vault.join(rel).exists()).collect();
     if missing.is_empty() {
@@ -2464,7 +2479,7 @@ struct Why<'a> {
 
 /// Sends an initiative page's new text as a change, its quotes checked as edit_page's are.
 fn send_initiative(ctx: &Ctx, ix: &Index, rel: &str, before: &str, after: &str, why: Why, quotes: Vec<QuoteArg>) -> Result<String, String> {
-    let after = proposals::bump_updated(before, after, &ctx.today.to_string());
+    let after = proposals::bump_updated(before, after, &ctx.today().to_string());
     if after == before.replace("\r\n", "\n") {
         return Err("That changes nothing on the page: it's already so.".into());
     }
@@ -2492,9 +2507,9 @@ fn set_action(ctx: &Ctx, a: ActionArgs) -> Result<String, String> {
         due: a.due.clone(),
         quotes: a.quotes.iter().map(page_quote).collect(),
         task: None,
-        on: Some(ctx.today.to_string()),
+        on: Some(ctx.today().to_string()),
     };
-    let seed = format!("{}{}", ctx.session, ctx.today);
+    let seed = format!("{}{}", ctx.session, ctx.today());
     let (after, id) = initiatives::with_action(&before, &edit, &seed)?;
     let name = filename::stem(&rel);
     let title = match &a.action {
@@ -2524,7 +2539,7 @@ fn add_decision(ctx: &Ctx, a: DecisionArgs) -> Result<String, String> {
     let rel = initiative_page(ctx, &a.initiative)?;
     let before = read_text(ctx, &rel)?;
     let quotes: Vec<_> = a.quotes.iter().map(page_quote).collect();
-    let seed = format!("{}{}", ctx.session, ctx.today);
+    let seed = format!("{}{}", ctx.session, ctx.today());
     let (after, id) = initiatives::with_decision(&before, a.date.as_deref(), &a.text, &quotes, &seed)?;
     let title = format!("New decision on {}", filename::stem(&rel));
     let why = Why { title: &title, reason: &a.reason, unattended: a.unattended };
@@ -2599,7 +2614,7 @@ fn summary(ctx: &Ctx, a: SummaryArgs) -> Result<String, CallError> {
     if kind == ReviewKind::Brief {
         let found = match a.day.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
             None => {
-                reviews::latest(kind, ctx.today, read).ok_or_else(|| "There's no brief from the last few weeks on file.".to_string())?
+                reviews::latest(kind, ctx.today(), read).ok_or_else(|| "There's no brief from the last few weeks on file.".to_string())?
             }
             Some(d) => {
                 let file = brainstead_core::brief::path(d);
@@ -2613,7 +2628,7 @@ fn summary(ctx: &Ctx, a: SummaryArgs) -> Result<String, CallError> {
     let name = if kind == ReviewKind::Daily { "daily" } else { "weekly" };
     let found = match a.day.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
         None => {
-            reviews::latest(kind, ctx.today, read).ok_or_else(|| format!("There's no {name} summary from the last few weeks on file."))?
+            reviews::latest(kind, ctx.today(), read).ok_or_else(|| format!("There's no {name} summary from the last few weeks on file."))?
         }
         Some(d) => {
             let t = Target::parse(d).map_err(|_| CallError::Tool(format!("day is YYYY-MM-DD (or a week, 2026-W40), not {d}.")))?;
@@ -2655,7 +2670,7 @@ fn pending_sources(ctx: &Ctx, a: PendingArgs) -> Result<String, String> {
     let files = ix.list(Some("source"))?;
     let paths: Vec<String> = files.into_iter().map(|f| f.path).collect();
     let ingested = ix.ingested(&paths)?;
-    let mut report = lint::run(&ctx.vault, ctx.today, &Default::default());
+    let mut report = lint::run(&ctx.vault, ctx.today(), &Default::default());
     // A source an ingest has read as it is now isn't Changed, as the Sources screen has it.
     lint::without_read_sources(&mut report, &ctx.vault, &lint::read_at(&ctx.data));
     let changed: std::collections::HashSet<String> =
@@ -2793,7 +2808,7 @@ fn lint_tool(ctx: &Ctx, a: LintArgs) -> Result<String, String> {
         Some(p) => Some(existing(ctx, &ctx.index()?, p)?),
         None => None,
     };
-    let mut r = lint::run(&ctx.vault, ctx.today, &Default::default());
+    let mut r = lint::run(&ctx.vault, ctx.today(), &Default::default());
     lint::without_read_sources(&mut r, &ctx.vault, &lint::read_at(&ctx.data));
     let mut out = String::new();
     for c in &r.checks {
@@ -2891,7 +2906,7 @@ fn edit_page(ctx: &Ctx, a: ProposeArgs) -> Result<String, String> {
         _ => proposals::patched(before.as_deref().unwrap_or(""), &patch)?,
     };
     if let Some(b) = &before {
-        after = proposals::bump_updated(b, &after, &ctx.today.to_string());
+        after = proposals::bump_updated(b, &after, &ctx.today().to_string());
         if after.replace("\r\n", "\n") == b.replace("\r\n", "\n") {
             return Err("That changes nothing in the page.".into());
         }

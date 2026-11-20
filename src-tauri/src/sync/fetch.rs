@@ -122,10 +122,14 @@ pub fn parse_conversations(body: &Value) -> Vec<Conv> {
         .unwrap_or_default()
 }
 
+/// How many messages [`chat_messages`] reads: one page. In a quiet chat that can be as many days,
+/// so the sync state remembers more days than this per chat (`state::DAYS_CAP`).
+pub const CHAT_PAGE: usize = 200;
+
 /// A conversation's recent messages, oldest first. One page (enough for a day of a normal chat).
 pub fn chat_messages(client: &Client, s: &SignIn, conv_id: &str) -> Result<Vec<ChatMessage>, String> {
     let url = format!(
-        "{}/v1/users/ME/conversations/{}/messages?view=msnp24Equivalent|supportsMessageProperties&pageSize=200",
+        "{}/v1/users/ME/conversations/{}/messages?view=msnp24Equivalent|supportsMessageProperties&pageSize={CHAT_PAGE}",
         s.chat_service.trim_end_matches('/'),
         urlencode(conv_id)
     );

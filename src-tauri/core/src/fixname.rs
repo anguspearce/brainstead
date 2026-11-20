@@ -74,9 +74,16 @@ fn places(text: &str, name: &str) -> Vec<std::ops::Range<usize>> {
 
 static WIKILINK: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| regex::Regex::new(r"\[\[([^\[\]\n]+?)\]\]").unwrap());
 
+/// Where a markdown link points (`](…)`), a bare web address, and an autolink (`<https://…>`,
+/// `<maya@example.com>`).
+static ADDRESS: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+    regex::Regex::new(r"\]\([^)\n]*\)|https?://[^\s<>]+|<(?:[A-Za-z][A-Za-z0-9+.-]*:|[^<>\s]*@)[^<>\s]*>").unwrap()
+});
+
 /// Byte ranges a rewrite must leave alone: the frontmatter, fenced code, code spans, and the
 /// target of each wikilink or embed (up to its `|`), which would stop resolving if changed. An
-/// alias after the `|` is text and can change.
+/// alias after the `|` is text and can change. Web addresses, markdown link destinations and tags
+/// too: they name a page, a file or a tag, which the fix doesn't rename.
 fn protected(text: &str) -> Vec<std::ops::Range<usize>> {
     let fm = crate::frontmatter::split(text);
     let mut out = Vec::new();
@@ -105,6 +112,8 @@ fn protected(text: &str) -> Vec<std::ops::Range<usize>> {
             let target = t.find('|').map(|i| if i > 0 && t.as_bytes()[i - 1] == b'\\' { i - 1 } else { i }).unwrap_or(t.len());
             out.push(l.start + inner.start()..l.start + inner.start() + target);
         }
+        out.extend(ADDRESS.find_iter(&blanked).map(|m| l.start + m.start()..l.start + m.end()));
+        out.extend(crate::links::TAG.captures_iter(&blanked).filter_map(|c| c.get(1)).map(|m| l.start + m.start()..l.start + m.end()));
     }
     out
 }
@@ -220,14 +229,34 @@ pub fn with_alias(text: &str, alias: &str) -> Option<String> {
 }
 
 /// The page's text with `value` added to the list property `keys[0]` (or the first of `keys` it
-/// has), which is added when there's none; None when the value is there already. Only the
-/// property's lines change: an inline list gets it at the end, a block list a new item with the
-/// same indent, a single value becomes a list of both.
+/// has), which is added when there's none; None when the value is there already, or the
+/// properties couldn't take it (`list_value_added` tells the two apart). Only the property's
+/// lines change: an inline list gets it at the end, a block list a new item with the same indent,
+/// a single value becomes a list of both.
 pub fn with_list_value(text: &str, keys: &[&str], value: &str) -> Option<String> {
+    match list_value_added(text, keys, value) {
+        ListValue::Changed(t) => Some(t),
+        ListValue::Already | ListValue::CannotEdit => None,
+    }
+}
+
+/// What adding a value to a list property came to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ListValue {
+    /// The value is there already.
+    Already,
+    /// The page's new text.
+    Changed(String),
+    /// The properties wouldn't read as YAML with it added, so nothing is to be written.
+    CannotEdit,
+}
+
+/// `with_list_value`, saying why when there's no new text.
+pub fn list_value_added(text: &str, keys: &[&str], value: &str) -> ListValue {
     let fm = crate::frontmatter::split(text);
     let have = crate::frontmatter::list(&fm.data, keys, false);
     if have.iter().any(|a| a == value) {
-        return None;
+        return ListValue::Already;
     }
     // After a byte-order mark, which would otherwise hide the frontmatter's opening `---`.
     let bom = if text.starts_with('\u{feff}') { "\u{feff}" } else { "" };
@@ -235,7 +264,8 @@ pub fn with_list_value(text: &str, keys: &[&str], value: &str) -> Option<String>
     let quoted = write::yaml_scalar(value);
     let main = keys[0];
     let fm_end = if lines.first().is_some_and(|l| l.trim_end() == "---") {
-        lines.iter().skip(1).position(|l| l.trim_end() == "---").map(|i| i + 1)
+        // Closed by `---` or `...`, as `frontmatter::split` reads it.
+        lines.iter().skip(1).position(|l| matches!(l.trim_end(), "---" | "...")).map(|i| i + 1)
     } else {
         None
     };
@@ -270,7 +300,11 @@ pub fn with_list_value(text: &str, keys: &[&str], value: &str) -> Option<String>
         }
     }
     let out = format!("{bom}{}", write::join_lines(&lines, &eol, trailing));
-    crate::frontmatter::split(&out).error.is_none().then_some(out)
+    if crate::frontmatter::split(&out).error.is_none() {
+        ListValue::Changed(out)
+    } else {
+        ListValue::CannotEdit
+    }
 }
 
 /// The substitutions file with the correction added (its other entries, and their order, as
@@ -347,9 +381,16 @@ pub fn apply(root: &Path, subs_path: &Path, r: &Request, rows: &[Row]) -> Result
                 out.push_str(&before[last..]);
                 out
             }
-            "alias" => match with_alias(&before, &r.wrong) {
-                Some(t) => t,
-                None => continue,
+            "alias" => match list_value_added(&before, &["aliases", "alias"], &r.wrong) {
+                ListValue::Changed(t) => t,
+                ListValue::Already => continue,
+                // Not done, so not reported as done: nothing has been written yet.
+                ListValue::CannotEdit => {
+                    return Err(WriteError::Invalid(format!(
+                        "{}'s properties don't read as YAML, so the alias couldn't be added. Nothing was changed: fix them, then try again.",
+                        row.file
+                    )));
+                }
             },
             _ => continue,
         };
@@ -487,6 +528,37 @@ mod tests {
         assert_eq!(with_alias("x\n", "B").unwrap(), "---\naliases: [B]\n---\nx\n");
         assert_eq!(with_alias("---\nalias: OA\n---\n", "Orbit").unwrap(), "---\nalias: [OA, Orbit]\n---\n");
         assert_eq!(with_alias("---\naliases: [OA]\n---\n", "OA"), None);
+        // Properties closed with `...` are still the properties.
+        assert_eq!(with_alias("---\nname: A\n...\nx\n", "B").unwrap(), "---\nname: A\naliases: [B]\n...\nx\n");
+    }
+
+    #[test]
+    fn an_alias_that_cannot_be_added_stops_the_fix() {
+        assert_eq!(list_value_added("---\naliases: [OA]\n---\n", &["aliases"], "OA"), ListValue::Already);
+        assert_eq!(list_value_added("---\naliases: [OA\n---\n", &["aliases"], "Orbit"), ListValue::CannotEdit);
+        let (_t, root) = vault();
+        std::fs::write(root.join("wiki/entities/Lena.md"), "---\nname: Lena\naliases: [Lena F\n---\n").unwrap();
+        let rows = audit(&root, &req());
+        let subs = root.join("../data/substitutions.json");
+        assert!(matches!(apply(&root, &subs, &req(), &rows), Err(WriteError::Invalid(_))));
+        // Nothing written: not the notes, not the correction.
+        assert!(std::fs::read_to_string(root.join("1-1. Lena - 2026-09-01.md")).unwrap().starts_with("Lina said"));
+        assert_eq!(crate::names::load(&subs).len(), 1);
+    }
+
+    #[test]
+    fn addresses_and_tags_are_left_alone() {
+        let r = Request { wrong: "Sam".into(), right: "Samir".into(), right_page: None, guards: vec![], ..req() };
+        let src = "Sam's [profile](https://example.com/users/Sam) and [Sam](people/Sam.md), https://example.com/Sam, <https://example.com/Sam>, <Sam@example.com> #people/Sam #Sam (#Sam) then Sam.\n";
+        let p = rewrite_places(src, &r);
+        let mut out = src.to_string();
+        for x in p.iter().rev() {
+            out.replace_range(x.clone(), &r.right);
+        }
+        assert_eq!(
+            out,
+            "Samir's [profile](https://example.com/users/Sam) and [Samir](people/Sam.md), https://example.com/Sam, <https://example.com/Sam>, <Sam@example.com> #people/Sam #Sam (#Sam) then Samir.\n"
+        );
     }
 
     #[test]

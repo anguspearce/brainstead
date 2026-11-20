@@ -106,11 +106,18 @@ function useLoaded<T>(load: () => Promise<T>, also = 0): T | null {
   const ver = useVaultVersion();
   useEffect(() => {
     let live = true;
-    load()
-      .then((r) => live && setV(r))
-      .catch(() => live && setV(null));
+    let again = 0;
+    // A load that fails keeps what was shown (not "loading" for ever) and is tried twice more.
+    const go = (left: number) =>
+      load()
+        .then((r) => live && setV(r))
+        .catch(() => {
+          if (live && left > 0) again = window.setTimeout(() => go(left - 1), 1500);
+        });
+    void go(2);
     return () => {
       live = false;
+      window.clearTimeout(again);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ver, also]);

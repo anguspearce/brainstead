@@ -382,7 +382,8 @@ function WeekPrep({ here }: { here: boolean }) {
       .then(setSt)
       .catch(() => {});
   useEffect(() => {
-    load();
+    // The setting just changed is saved first, so Rust's "next…" is worked out from it.
+    void settings.flush().then(load);
     const off = api.onWeekprepChanged(() => load()).catch(() => () => {});
     return () => void off.then((f) => f());
   }, [s.weekprepEnabled, s.summariesHere, s.weeklyReview?.day, s.weeklyReview?.time]);
@@ -480,7 +481,8 @@ function DailyCheck() {
       .then(setSt)
       .catch(() => {});
   useEffect(() => {
-    load();
+    // The setting just changed is saved first, so Rust's "next…" is worked out from it.
+    void settings.flush().then(load);
     const off = api.onDailyCheckChanged(() => load()).catch(() => () => {});
     // Its contradiction step reports each batch.
     const off2 = api.onContradictionsChanged(() => load()).catch(() => () => {});

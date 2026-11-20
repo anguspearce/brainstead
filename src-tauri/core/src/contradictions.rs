@@ -11,6 +11,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -114,9 +115,9 @@ pub fn parse_as_of(s: &str) -> Option<NaiveDate> {
 /// A quote or page as words: link targets dropped for the text shown, and anything but letters
 /// and digits a gap.
 fn quote_words(s: &str) -> Vec<String> {
+    static SHOWN: LazyLock<regex::Regex> = LazyLock::new(|| regex::Regex::new(r"\[\[[^\]|]*\|([^\]]*)\]\]").unwrap());
     let k = lint_key(s);
-    let shown = regex::Regex::new(r"\[\[[^\]|]*\|([^\]]*)\]\]").unwrap();
-    let k = shown.replace_all(&k, "$1");
+    let k = SHOWN.replace_all(&k, "$1");
     let mut out = Vec::new();
     let mut cur = String::new();
     for c in k.chars() {
@@ -608,9 +609,18 @@ pub fn parse_lines<T: for<'de> Deserialize<'de>>(text: &str) -> Vec<T> {
 /// output), as against an empty array: a page read that way isn't known to have no claims.
 pub fn parse_answer_lines<T: for<'de> Deserialize<'de>>(text: &str) -> Option<Vec<T>> {
     let t = text.trim();
-    if let (Some(a), Some(b)) = (t.find('['), t.rfind(']')) {
-        if let Ok(v) = serde_json::from_str::<Vec<T>>(&t[a..=b]) {
-            return Some(v);
+    if let Some(a) = t.find('[') {
+        // A `]` before the `[` (prose with brackets) is no array.
+        if let Some(b) = t.rfind(']').filter(|b| a < *b) {
+            if let Ok(v) = serde_json::from_str::<Vec<T>>(&t[a..=b]) {
+                return Some(v);
+            }
+        }
+        // An array cut off part-way: the objects so far aren't the whole answer, so the pages
+        // it didn't reach mustn't be taken to have no claims.
+        let array_first = t.find('{').is_none_or(|o| a < o);
+        if array_first && serde_json::from_str::<Vec<T>>(&t[a..]).is_err_and(|e| e.is_eof()) {
+            return None;
         }
     }
     let v: Vec<T> = t.lines().filter_map(|l| serde_json::from_str::<T>(l.trim().trim_end_matches(',')).ok()).collect();
@@ -621,6 +631,8 @@ pub fn parse_answer_lines<T: for<'de> Deserialize<'de>>(text: &str) -> Option<Ve
 /// could rest on. Found where the quote's first words are.
 pub fn uncited(claims: &[Dated], texts: &HashMap<String, String>) -> Vec<(String, String)> {
     let mut out = Vec::new();
+    // Each page's lines as words, worked out once however many claims the page has.
+    let mut pages: HashMap<&str, Vec<(&str, String)>> = HashMap::new();
     for d in claims {
         let Some(text) = texts.get(&d.claim.page) else { continue };
         let words = quote_words(&d.claim.quote);
@@ -628,7 +640,10 @@ pub fn uncited(claims: &[Dated], texts: &HashMap<String, String>) -> Vec<(String
             continue;
         }
         let head = words.iter().take(4).cloned().collect::<Vec<_>>().join(" ");
-        let line = crate::lint::body(text).lines().find(|l| quote_words(l).join(" ").contains(&head));
+        let lines = pages
+            .entry(d.claim.page.as_str())
+            .or_insert_with(|| crate::lint::body(text).lines().map(|l| (l, quote_words(l).join(" "))).collect());
+        let line = lines.iter().find(|(_, w)| w.contains(&head)).map(|(l, _)| *l);
         if let Some(l) = line {
             if !l.contains("[[") && !l.contains("](") {
                 out.push((d.claim.page.clone(), l.trim().chars().take(160).collect()));
@@ -806,6 +821,12 @@ mod tests {
         assert_eq!(parse_answer_lines::<Claim>("```json\n[]\n```"), Some(vec![]));
         assert_eq!(parse_answer_lines::<Claim>("I can't help with that [policy]."), None);
         assert_eq!(parse_answer_lines::<Claim>(""), None);
+        // A `]` before the `[` isn't an array, and mustn't panic.
+        assert_eq!(parse_answer_lines::<Claim>("Nothing to report] see [note"), None);
+        // An array cut off after its first object isn't a whole answer.
+        let cut = "[\n{\"subject\":\"A\",\"attribute\":\"role\",\"value\":\"x\"},\n{\"subject\":\"B\",\"attri";
+        assert_eq!(parse_answer_lines::<Claim>(cut), None);
+        assert_eq!(parse_answer_lines::<Claim>(&format!("```json\n{cut}")), None);
         let a: Vec<Claim> = parse_lines("[{\"subject\":\"A\",\"attribute\":\"role\",\"value\":\"x\"}]");
         assert_eq!(a.len(), 1);
         let b: Vec<Claim> = parse_lines("{\"subject\":\"A\",\"attribute\":\"role\",\"value\":\"x\"}\nnot json\n{\"subject\":\"B\",\"attribute\":\"team\",\"value\":\"y\"},");

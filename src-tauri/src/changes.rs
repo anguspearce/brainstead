@@ -402,11 +402,17 @@ fn revert_claims(st: &Store, root: &Path, c: &Change) {
 /// The start of a Reshape pages run's group.
 pub const RESHAPE_RUN: &str = "reshape-";
 
+/// The ingest run a change came from. `chat` is always the run's own id; `run` is its group, which
+/// for the daily check's ingests is the check, not a run.
+fn ingest_run(o: &Origin) -> Option<&str> {
+    o.chat.as_deref().or(o.run.as_deref())
+}
+
 /// The log line for an applied change: one per ingest run (with its first page), else one each.
 fn log_line(c: &Change) -> Option<String> {
     let now = chrono::Local::now().naive_local();
     Some(match c.origin.kind.as_str() {
-        "ingest" => return c.origin.run.as_deref().or(c.origin.chat.as_deref()).and_then(crate::ingest::take_log),
+        "ingest" => return ingest_run(&c.origin).and_then(crate::ingest::take_log),
         "review" => reviews::log_entry("review", c.origin.label.as_deref().unwrap_or(&c.title), None, now),
         // Reshape pages and Write Current state write one line for their run.
         "lint" if c.origin.run.as_deref().is_some_and(|r| r.starts_with(RESHAPE_RUN) || r.starts_with(crate::currentstate::RUN)) => {
@@ -1047,6 +1053,15 @@ mod tests {
         assert_eq!(h[0].old, vec!["Soft launch to staff is planned for 14 November."]);
         assert_eq!(h[0].new, vec!["Soft launch to staff is planned for 28 November."]);
         assert!(asked(&Instruction::Page { content: "x".into() }).is_empty());
+    }
+
+    #[test]
+    fn an_ingest_in_a_daily_check_is_logged_by_its_own_run() {
+        let o =
+            Origin { kind: "ingest".into(), chat: Some("run-1".into()), run: Some("daily-check-2026-11-18".into()), ..Default::default() };
+        assert_eq!(ingest_run(&o), Some("run-1"));
+        let alone = Origin { kind: "ingest".into(), run: Some("run-2".into()), ..Default::default() };
+        assert_eq!(ingest_run(&alone), Some("run-2"));
     }
 
     #[test]

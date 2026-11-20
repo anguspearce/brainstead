@@ -54,7 +54,7 @@ An assistant reads the same list, with the same tabs, types and day, with the `l
 ## Revert a change
 **Revert** undoes a change on the page as it is now, keeping later edits. It works on any change in the history, not just the last. If the change's lines have since been edited, or appear in more than one place, it says so and shows the page as it was before, to copy from. A reverted change is marked **Reverted**; `⌘Z` straight after undoes the revert.
 
-A run with several changes has **Revert all**, after asking: it reverts them newest first, and lists any page edited since (those edits are kept). With a search on, it reverts only the run's changes the search shows. Reverting a meeting note puts its transcript, if it wasn't trashed, back in the [Inbox](app:inbox).
+A run with several changes has **Revert all**, after asking: it reverts them newest first, and lists any page edited since (those edits are kept). With a search, a type or a day on, it reverts only the run's changes that are shown. Reverting a meeting note puts its transcript, if it wasn't trashed, back in the [Inbox](app:inbox).
 
 A page's side pane also lists the agent changes to it, under **Agent changes**, each with **Revert**.
 
@@ -64,7 +64,7 @@ Held changes are at the top, under **Held for you**, by run, each with why it wa
 - **Reject** (`R`) turns it down and leaves the page as it is.
 - **Edit before accepting** opens the page with the change as an unsaved draft; click **Restore**, edit, then save. If the page already has unsaved edits, save or discard them first. Revert still works after you save.
 
-**Accept all** and **Reject all** (after asking) do every held change in a run, or with a search on only those the search shows; `⌘↩` accepts the run you're on. A meeting note accepted this way gets its follow-up offer; one that couldn't be made stays held. The keys do nothing while a dialog is open or you're typing.
+**Accept all** and **Reject all** (after asking) do every held change in a run, or with a search, a type or a day on only those that are shown; `⌘↩` accepts the run you're on. A meeting note accepted this way gets its follow-up offer; one that couldn't be made stays held. The keys do nothing while a dialog is open or you're typing.
 
 A held change keeps what the assistant asked for (a section's new text, a find and replace, a task to add), not a copy of the page, so it still applies after other edits. A held change shows one status: why it was held, and, if what it changes is gone, that it can't be made as it stands. Then there's no Accept: **Edit the page** opens it to make the change yourself, or **Reject** it. **What it asked for** shows the words it would have changed, before and after.
 

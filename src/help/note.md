@@ -31,7 +31,7 @@ Images stay drawn in Edit, including `<img>` tags from other apps. Hover one for
 Spelling and grammar are checked in Edit and Source: click an underlined word for suggestions, **Learn** or **Ignore**. Turn checking off in [Settings › Notes](app:settings/notes).
 
 ## Save, drafts and outside changes
-Press `⌘S`, or click **Save** or the **Unsaved · ⌘S** pill. Unsaved text is kept as a draft a second after you stop typing, so nothing is lost if the app quits; reopening the note offers **Restore** or **Discard**.
+Press `⌘S`, or click **Save** or the **Unsaved · ⌘S** pill. Unsaved text is kept as a draft a second after you stop typing, so nothing is lost if the app quits; reopening the note offers **Restore** or **Discard**. If you type instead, the offer stays until you leave the note, and what you typed becomes the draft that's kept.
 
 Leaving a note with unsaved changes asks first: **Stay**, **Keep as draft**, **Discard changes** or **Save**.
 
@@ -52,7 +52,7 @@ Press `⌘F` to find in the note. `↩` goes to the next match, `⇧↩` to the 
 In Edit and Source you can also replace: type in **Replace with**, then click **Replace** (or `↩`) or **Replace all**. `⌘Z` undoes it. View only finds.
 
 ## Tick tasks and run queries
-Tick a task's box in View or Edit. In View with nothing unsaved, it's saved at once (`⌘Z` undoes it); otherwise it joins your unsaved edits. Hover a date icon for its meaning. In Edit, typing `due:`, `defer:`, `start:` or `created:` in a task opens a date picker.
+Tick a task's box in View or Edit. In View with nothing unsaved, it's saved at once (`⌘Z` undoes it); otherwise it joins your unsaved edits. Either way a repeating task gets its next occurrence, and one marked to delete when done goes. Hover a date icon for its meaning. In Edit, typing `due:`, `defer:`, `start:` or `created:` in a task opens a date picker.
 
 Inline fields such as `[status:: open]` show as small labels in View; the text itself is unchanged.
 

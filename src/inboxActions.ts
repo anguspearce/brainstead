@@ -195,12 +195,19 @@ export async function makeTask(i: InboxItem, text: string): Promise<unknown> {
  *  from the Trash, it's back in the Inbox. */
 export const trashCapture = (path: string) => (isTranscriptPath(path) ? trashTranscript(path) : api.trashMove(path));
 
+/** A note's text with the item added as a bullet at its end, a blank line before it. The note's own
+ *  ending (its trailing blank lines) is left as it was: only what's missing is added. */
+export function withReference(content: string, text: string): string {
+  const eol = content.includes("\r\n") ? "\r\n" : "\n";
+  const ended = content === "" || content.endsWith("\n");
+  const blank = content.trim() === "" || /\n[ \t]*\r?\n$/.test(content);
+  return `${content}${ended ? "" : eol}${blank ? "" : eol}- ${text.replace(/\n/g, " ")}${eol}`;
+}
+
 /** Adds the item's text as a bullet at the end of a note (File as reference). */
 export async function appendAsReference(path: string, text: string): Promise<void> {
   const d = await api.docRead(path);
-  const body = d.content.replace(/\s*$/, "");
-  const eol = d.content.includes("\r\n") ? "\r\n" : "\n";
-  await api.docSave(path, `${body}${eol}${eol}- ${text.replace(/\n/g, " ")}${eol}`, d.version);
+  await api.docSave(path, withReference(d.content, text), d.version);
 }
 
 /** A new note holding the item (File as reference, to a note that isn't there yet). */

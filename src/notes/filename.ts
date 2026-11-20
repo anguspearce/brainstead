@@ -45,9 +45,12 @@ const clean = (v: string) =>
 
 /** `[Type. ]Title[ - Date].md`, or "" when there's no usable title. */
 export function composeFilename(n: { type?: string | null; title: string; date?: string | null }, ext = ".md"): string {
-  const title = clean(n.title.replace(EXT, ""));
+  // A name can't start with a dot: the vault skips hidden files, so ".NET migration.md" would be
+  // made and never listed (as Rust's `compose`).
+  const undotted = (v: string) => v.replace(/^[. ]+/, "");
+  const type = n.type ? undotted(clean(n.type)) : "";
+  const title = type ? clean(n.title.replace(EXT, "")) : undotted(clean(n.title.replace(EXT, "")));
   if (!title) return "";
-  const type = n.type ? clean(n.type) : "";
   const date = n.date?.trim();
   let s = type ? `${type}. ${title}` : title;
   if (date) s += ` - ${date}`;

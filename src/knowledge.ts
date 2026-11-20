@@ -14,17 +14,30 @@ export const health = new Store<HealthView | null>(null);
 
 let started = false;
 
+// The latest request wins: of several under way at once (a burst of changes), an earlier one that
+// answers last doesn't put its older list back.
+let changesAsked = 0;
+let healthAsked = 0;
+
 export function reloadChanges() {
+  const n = ++changesAsked;
   return api
     .changesList()
-    .then((r) => changes.set(r))
-    .catch(() => changes.set(changes.get() ?? []));
+    .then((r) => {
+      if (n === changesAsked) changes.set(r);
+    })
+    .catch(() => {
+      if (n === changesAsked) changes.set(changes.get() ?? []);
+    });
 }
 
 export function reloadHealth(fresh = false) {
+  const n = ++healthAsked;
   return api
     .healthReport(fresh)
-    .then((r) => health.set(r))
+    .then((r) => {
+      if (n === healthAsked) health.set(r);
+    })
     .catch(() => {});
 }
 

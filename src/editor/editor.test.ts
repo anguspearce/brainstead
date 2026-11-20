@@ -8,7 +8,7 @@ import { openTaskAt } from "./taskHint";
 import { forceParsing } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { merge3 } from "./merge";
-import { frontmatterEnd, frontmatterKeys, lineSeparator, toggledLine } from "./text";
+import { frontmatterEnd, frontmatterKeys, lineSeparator, tickChange, tickedText, toggledLine } from "./text";
 
 let ed: CMEditor | null = null;
 afterEach(() => {
@@ -140,6 +140,15 @@ describe("text rules", () => {
   it("ticks and unticks as the task screens do", () => {
     expect(toggledLine("- [ ] a ^rank-5", true, "2026-10-02")).toBe("- [x] a ✅ 2026-10-02 ^rank-5");
     expect(toggledLine("- [x] a ✅ 2026-10-01 ^rank-5", false, "2026-10-02")).toBe("- [ ] a");
+    // A recurring task ticked in the editor gets its next occurrence, as on the task screens.
+    expect(tickedText("- [ ] Bins 🔁 every week 📅 2026-10-03", true, "2026-10-03")).toBe(
+      "- [ ] Bins 🔁 every week 📅 2026-10-10\n- [x] Bins 🔁 every week 📅 2026-10-03 ✅ 2026-10-03",
+    );
+    expect(tickedText("- [ ] a", true, "2026-10-02")).toBe("- [x] a ✅ 2026-10-02");
+    // 🏁 delete takes the line, and its break, away.
+    expect(tickedText("- [ ] Once 🏁 delete", true, "2026-10-02")).toBe("");
+    expect(tickChange({ length: 30 }, { from: 10, to: 20 }, "")).toEqual({ from: 10, to: 21, insert: "" });
+    expect(tickChange({ length: 20 }, { from: 10, to: 20 }, "")).toEqual({ from: 9, to: 20, insert: "" });
     expect(toggledLine("> > - [ ] a ^rank-5", true, "2026-10-02")).toBe("> > - [x] a ✅ 2026-10-02 ^rank-5");
     expect(toggledLine("  * [ ] nested", true, "2026-10-02")).toBe("  * [x] nested ✅ 2026-10-02");
   });

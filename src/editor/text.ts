@@ -5,6 +5,8 @@
 // Plain-text rules the editor works by: which line break to keep, where the properties end, and
 // the edits a tick or a date word makes to one task line.
 
+import moment from "moment";
+import { completion, inQuote } from "../tasksq/edits";
 import { splitQuote } from "../tasksq/fields";
 
 /** The line separator to give CodeMirror so the text comes back byte for byte. A file of CRLF
@@ -52,3 +54,18 @@ export function toggledLine(line: string, done: boolean, today: string): string 
 }
 
 export const TASK_LINE = /^(?:[ \t]{0,3}>[ \t]?)*\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\]\s/;
+
+/** A task's line ticked or unticked in the editor's text, as the task screens tick it: a recurring
+ *  task's next occurrence goes above the done one and 🏁 delete takes the done one away, so the
+ *  result can be two lines, or none (""); any other task is `toggledLine`. */
+export function tickedText(line: string, done: boolean, today: string): string {
+  const c = done ? inQuote(line, (l) => completion(l, moment(today, "YYYY-MM-DD"))) : null;
+  return c ? c.lines.join("\n") : toggledLine(line, done, today);
+}
+
+/** The change that puts `next` (from `tickedText`) in a line's place; a line that goes ("") takes
+ *  its line break with it. */
+export function tickChange(doc: { length: number }, l: { from: number; to: number }, next: string) {
+  if (next !== "") return { from: l.from, to: l.to, insert: next };
+  return l.to < doc.length ? { from: l.from, to: l.to + 1, insert: "" } : { from: Math.max(0, l.from - 1), to: l.to, insert: "" };
+}

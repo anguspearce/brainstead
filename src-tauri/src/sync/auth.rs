@@ -379,11 +379,14 @@ pub fn token(svc: Service) -> Result<String, String> {
     }
     match s.tokens.get(svc.key()) {
         Some(t) if t.expires > now_secs() + MARGIN_SECS => Ok(t.token.clone()),
-        _ => {
-            Err("The Teams sign-in has gone stale. Keep Teams open in your browser (Chrome) so the extension hands a fresh one over."
-                .into())
-        }
+        _ => Err(stale_message(svc)),
     }
+}
+
+/// What to do about a token that's missing or expired: mail's comes only from the Outlook tab.
+fn stale_message(svc: Service) -> String {
+    let (app, tab) = if svc == Service::Outlook { ("Outlook", "Outlook on the web") } else { ("Teams", "Teams") };
+    format!("The {app} sign-in has gone stale. Keep {tab} open in your browser (Chrome) so the extension hands a fresh one over.")
 }
 
 #[cfg(test)]
@@ -397,6 +400,15 @@ mod tests {
         use base64::Engine;
         let enc = |v: &Value| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(serde_json::to_vec(v).unwrap());
         format!("{}.{}.sig", enc(&json!({"alg": "RS256"})), enc(&json!({"aud": aud, "scp": scp, "exp": exp})))
+    }
+
+    #[test]
+    fn a_stale_token_names_the_tab_that_supplies_it() {
+        let mail = stale_message(Service::Outlook);
+        assert!(mail.contains("Keep Outlook on the web open") && !mail.contains("Teams"), "{mail}");
+        for svc in [Service::Spaces, Service::Substrate, Service::Csa] {
+            assert!(stale_message(svc).contains("Keep Teams open"));
+        }
     }
 
     #[test]

@@ -385,7 +385,20 @@ fn start(app: &AppHandle, week: &str, trigger: &str, unattended: bool) -> Result
     wp.save();
     let _ = app.emit(CHANGED, ());
     let (app2, id2, week2) = (app.clone(), id.clone(), week.to_string());
-    std::thread::spawn(move || run(&app2, &id2, &week2, &model));
+    std::thread::spawn(move || {
+        // A panic ends the run as `run` would, so preparation isn't left going until restart.
+        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&app2, &id2, &week2, &model))).is_err() {
+            let wp = app2.state::<WeekPrep>();
+            wp.update_run(&id2, |r| {
+                r.finished_at = Some(stamp(now()));
+                r.status = "error".into();
+                r.error = Some("Something went wrong; Brainstead's log has the details (Settings › About).".into());
+            });
+            *crate::lock(&wp.going) = None;
+            let _ = app2.emit("review-done", Finished { chat_id: id2.clone(), filename: None });
+            let _ = app2.emit(CHANGED, ());
+        }
+    });
     Ok(id)
 }
 

@@ -40,7 +40,7 @@ Choose **Read aloud** on the top bar's ⋯, or press ⇧⌘P, to hear the note o
 
 ⌘S saves, and never reformats what you didn't change. Leaving a note with unsaved changes asks first.
 
-- Unsaved text is kept as a draft a second after you stop typing. If the app quits, opening the note again offers it back.
+- Unsaved text is kept as a draft a second after you stop typing. If the app quits, opening the note again offers it back. Typing instead leaves the offer up until you leave the note; what you typed is then the draft that's kept.
 - If another app changed the file meanwhile, changes on other lines are merged in. Changes on the same lines show a banner with **Reload**, **Keep mine** and **Compare** (which marks the lines that differ). Nothing is overwritten.
 
 ## Queries, callouts and diagrams

@@ -91,6 +91,10 @@ fn settings_write(app: AppHandle, st: State<AppState>, settings: Settings) -> Re
     if scene().is_some() {
         return Ok(next);
     }
+    // The file couldn't be read at start, so what the window sent is the defaults with one change:
+    // saving that would replace the real settings. While it still can't be read the save is
+    // refused; once it can, the file's settings are put in use (and returned to the window) instead.
+    let next = if settings::unread() { settings::reread(&st.settings_path)? } else { next };
     // Saved first: a save that fails leaves the settings in use as they were, matching the file.
     let prev = {
         let mut cur = lock(&st.settings);
@@ -859,7 +863,7 @@ pub fn run() {
         platform::own_webview_data(&data);
     }
     let settings_path = data.join("settings.json");
-    let (settings, settings_warning) = settings::load_checked(&settings_path);
+    let (settings, settings_warning) = settings::load_at_start(&settings_path);
     applog::init(&data, log_days(&settings));
     if let Some(w) = &settings_warning {
         crate::applog!("settings: {w}");

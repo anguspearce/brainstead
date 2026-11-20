@@ -143,15 +143,76 @@ pub fn load(path: &Path) -> Settings {
     load_checked(path).0
 }
 
+/// The file's bytes; None when there's no file (a first start). Any other error (the file held for
+/// a moment by a sync client or a scanner) is tried again a few times before it's given up on.
+fn read_file(path: &Path) -> std::io::Result<Option<Vec<u8>>> {
+    let mut tries = 0;
+    loop {
+        match std::fs::read(path) {
+            Ok(b) => return Ok(Some(b)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) if tries == 3 => return Err(e),
+            Err(_) => {
+                tries += 1;
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        }
+    }
+}
+
+/// The settings in use are the defaults only because the file was there at start and couldn't be
+/// read. Nothing is saved over it until it can be (`reread`).
+static UNREAD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// At start: as [`load_checked`], and a file that's there but can't be read is remembered, so
+/// `settings_write` doesn't replace the real settings with the defaults the window was given.
+pub fn load_at_start(path: &Path) -> (Settings, Option<String>) {
+    let got = load_file(path);
+    UNREAD.store(got.is_err(), std::sync::atomic::Ordering::SeqCst);
+    got.unwrap_or_else(|why| (Settings::default(), Some(why)))
+}
+
+/// Whether the file couldn't be read at start and hasn't been since.
+pub fn unread() -> bool {
+    UNREAD.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// The file's settings, now it can be read, to put in use in place of the defaults; while it still
+/// can't be, the reason, for the user.
+pub fn reread(path: &Path) -> Result<Settings, String> {
+    let (s, _) = load_file(path)?;
+    UNREAD.store(false, std::sync::atomic::Ordering::SeqCst);
+    Ok(s)
+}
+
 /// The settings from the file, and what was wrong with it, if anything, for the user. A file that
 /// isn't JSON at all is kept beside it (`settings.json.bad`) and the defaults are used; one with a
-/// bad value keeps every other setting and puts only that one back to its default.
+/// bad value keeps every other setting and puts only that one back to its default. One that can't
+/// be read gives the defaults too.
 pub fn load_checked(path: &Path) -> (Settings, Option<String>) {
-    let Ok(b) = std::fs::read(path) else { return (Settings::default(), None) };
+    load_file(path).unwrap_or_else(|why| (Settings::default(), Some(why)))
+}
+
+/// [`load_checked`], with a file that's there but can't be read as an error.
+fn load_file(path: &Path) -> Result<(Settings, Option<String>), String> {
+    let b = match read_file(path) {
+        Ok(Some(b)) => b,
+        Ok(None) => return Ok((Settings::default(), None)),
+        Err(e) => {
+            return Err(format!(
+                "Brainstead couldn't read its settings file ({e}), so it's using the defaults. Settings aren't saved until it can read the file, so nothing in it is lost."
+            ))
+        }
+    };
+    Ok(parsed(path, &b))
+}
+
+/// The settings in the file's bytes, a bad file or value handled as [`load_checked`] says.
+fn parsed(path: &Path, b: &[u8]) -> (Settings, Option<String>) {
     let keep_copy = || {
         let _ = std::fs::copy(path, path.with_extension("json.bad"));
     };
-    let Ok(s) = serde_json::from_slice::<Settings>(&b) else {
+    let Ok(s) = serde_json::from_slice::<Settings>(b) else {
         keep_copy();
         return (
             Settings::default(),
@@ -223,6 +284,29 @@ mod tests {
         assert_eq!(got.summaries.daily_time, "06:30");
         assert!(t.path().join("settings.json.bad").exists());
         assert_eq!(load_checked(&t.path().join("none.json")).1, None);
+    }
+
+    #[test]
+    fn a_file_that_cant_be_read_isnt_saved_over_with_defaults() {
+        let t = tempfile::tempdir().unwrap();
+        let p = t.path().join("settings.json");
+        // A folder in its place: there, but not readable as a file.
+        std::fs::create_dir(&p).unwrap();
+        let (got, warning) = load_at_start(&p);
+        assert_eq!(got, Settings::default());
+        assert!(warning.is_some());
+        assert!(unread());
+        assert!(reread(&p).is_err());
+        assert!(unread());
+        // Readable again: the real settings come back, and saving is allowed.
+        std::fs::remove_dir(&p).unwrap();
+        let real = Settings { vault_path: Some("/v".into()), read_only: false, ..Default::default() };
+        save(&p, &real).unwrap();
+        assert_eq!(reread(&p).unwrap(), real);
+        assert!(!unread());
+        // No file at all is a first start, not an unread one.
+        assert_eq!(load_at_start(&t.path().join("none.json")), (Settings::default(), None));
+        assert!(!unread());
     }
 
     #[test]

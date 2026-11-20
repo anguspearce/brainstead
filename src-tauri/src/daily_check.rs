@@ -210,11 +210,31 @@ pub fn start_scheduler(app: &AppHandle) {
 /// Its changes, and those of the ingests and contradiction check it starts, are one group in
 /// Changes.
 fn run(app: &AppHandle, trigger: Option<&str>) {
-    let group = format!("daily-check-{}", now().format("%Y%m%d%H%M%S"));
-    let mut st = load();
-    if st.running {
+    // One at a time: Run now and the scheduler's tick are two threads, and the file alone is a
+    // check-then-set either could pass. The file is kept for what the screens show.
+    if RUNNING.swap(true, std::sync::atomic::Ordering::SeqCst) {
         return;
     }
+    // A panic ends the check, not the scheduler's thread, and never leaves it "running".
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| check(app, trigger))).is_err() {
+        crate::applog!("daily check: panicked");
+        save(&State {
+            running: false,
+            doing: String::new(),
+            summary: "Stopped: something went wrong; the log has the details".into(),
+            ..load()
+        });
+        let _ = app.emit("daily-check-changed", ());
+    }
+    RUNNING.store(false, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Whether a daily check is going in this process.
+static RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn check(app: &AppHandle, trigger: Option<&str>) {
+    let group = format!("daily-check-{}", now().format("%Y%m%d%H%M%S"));
+    let mut st = load();
     st.running = true;
     st.doing = "contradictions".into();
     save(&st);

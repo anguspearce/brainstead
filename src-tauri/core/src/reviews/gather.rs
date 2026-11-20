@@ -422,14 +422,9 @@ fn weekly(
     let pool =
         task(TaskQuery { status: Status::NotDone, tags_include: vec!["#someday-maybe".into()], sort: Sort::Manual, ..Default::default() })?;
 
-    // This month's weekly summaries and last week's file, which is last month's at a boundary,
-    // under their new names and their old.
-    let mut review_files = target::with_old(&w.file);
-    if w.prev_file != w.file {
-        review_files.extend(target::with_old(&w.prev_file));
-    }
-    let texts: Vec<String> = review_files.iter().filter_map(|n| find_note(all, n).first().map(|f| read(root, &f.path))).collect();
-    let stuck = stuck(&open, &review_blocks(&texts), w.label(), 2, 5);
+    let texts: Vec<String> =
+        review_files(w, STUCK_WEEKS).iter().filter_map(|n| find_note(all, n).first().map(|f| read(root, &f.path))).collect();
+    let stuck = stuck(&open, &review_blocks(&texts), w.label(), STUCK_WEEKS, 5);
 
     // Last week's block, wherever it is: the new file first, under either heading.
     let previous_review = target::with_old(&w.prev_file).iter().find_map(|name| {
@@ -459,6 +454,29 @@ fn weekly(
         previous_review,
         your_review,
     })
+}
+
+/// How many weekly summaries before this one a task must be in to count as stuck.
+const STUCK_WEEKS: usize = 2;
+
+/// The monthly files holding this week's summary and those of the `prior` weeks before it, under
+/// their new names and their old. A week is filed by its Sunday, so the week two back can be in
+/// last month's file while last week's is in this month's.
+fn review_files(w: &Window, prior: usize) -> Vec<String> {
+    let mut files = target::with_old(&w.file);
+    let sunday = chrono::NaiveDate::parse_from_str(&w.end, "%Y-%m-%d").ok();
+    for k in 1..=prior as i64 {
+        let file = match sunday {
+            Some(s) => target::window(target::Target::week_of(s - Duration::days(7 * k))).file,
+            None => w.prev_file.clone(),
+        };
+        for name in target::with_old(&file) {
+            if !files.contains(&name) {
+                files.push(name);
+            }
+        }
+    }
+    files
 }
 
 /// Wikilinks in wiki pages to nothing in the vault: the most-linked first, and how many there are.
@@ -697,6 +715,25 @@ mod tests {
     use crate::reviews::target::{window, Target};
     use crate::reviews::{fixture, tasks};
     use crate::vault::Vault;
+
+    #[test]
+    fn the_stuck_check_reads_the_file_of_the_week_two_back() {
+        // W41 ends on Sunday 11 October and W40 on the 4th, both in October's file; W39 ended in
+        // September.
+        let w = window(Target::parse("2026-W41").unwrap());
+        assert_eq!(w.prev_file, w.file);
+        assert_eq!(
+            review_files(&w, STUCK_WEEKS),
+            [
+                "Me. Weekly Summaries - 2026-10.md",
+                "Me. Weekly Reviews - 2026-10.md",
+                "Me. Weekly Summaries - 2026-09.md",
+                "Me. Weekly Reviews - 2026-09.md"
+            ]
+        );
+        // A week whose last three Sundays are in one month reads one file.
+        assert_eq!(review_files(&window(Target::parse("2026-W43").unwrap()), STUCK_WEEKS).len(), 2);
+    }
 
     fn setup(tmp: &Path) -> (std::path::PathBuf, Index) {
         let root = fixture::vault(tmp);

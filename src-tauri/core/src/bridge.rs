@@ -16,6 +16,11 @@ pub const REQUESTS: &str = "requests";
 pub const REPLIES: &str = "replies";
 pub const ALIVE: &str = "alive.json";
 
+/// How long the server waits for the app to answer one action: a little over the app's wait for
+/// its window to be ready (30 s) plus the time the window may take (120 s), so a freshly opened
+/// app's reply isn't lost by a tick. A request older than this has nobody waiting for it.
+pub const ACT_TIMEOUT: Duration = Duration::from_secs(160);
+
 /// The bridge folder in the app data folder.
 pub fn dir(data: &Path) -> PathBuf {
     data.join("bridge")
@@ -106,13 +111,45 @@ pub fn app_alive(data: &Path) -> bool {
         .is_some_and(|a| now_ms().saturating_sub(a.at) < 6_000)
 }
 
-/// Requests waiting, each claimed by renaming it so it's taken up once.
+/// Whether a bridge file is older than `ACT_TIMEOUT`, so whoever wrote it has stopped waiting:
+/// by the time its id starts with (`new_id`), or by when it was written for any other name.
+fn stale(path: &Path) -> bool {
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    let age = match stem.split('-').next().and_then(|n| n.parse::<u128>().ok()) {
+        Some(at) => now_ms().saturating_sub(at),
+        None => std::fs::metadata(path).and_then(|m| m.modified()).ok().and_then(|m| m.elapsed().ok()).map_or(0, |d| d.as_millis()),
+    };
+    age > ACT_TIMEOUT.as_millis()
+}
+
+/// Clears what an earlier run left in the bridge folder (`dir`): requests and replies nobody is
+/// waiting for any more, and half-written files. A claimed request (`.taken`) always goes: the
+/// copy of the app that claimed it has gone, and it must not be carried out again. The app calls
+/// this once as it starts, before it looks for requests.
+pub fn clear_stale(dir: &Path) {
+    for sub in [REQUESTS, REPLIES] {
+        let Ok(rd) = std::fs::read_dir(dir.join(sub)) else { continue };
+        for e in rd.flatten() {
+            let p = e.path();
+            if p.extension().and_then(|x| x.to_str()) == Some("taken") || stale(&p) {
+                let _ = std::fs::remove_file(&p);
+            }
+        }
+    }
+}
+
+/// Requests waiting, each claimed by renaming it so it's taken up once. One nobody is waiting for
+/// any more (the app wasn't open, or was busy) is dropped rather than carried out late.
 pub fn take_requests(dir: &Path) -> Vec<(PathBuf, Request)> {
     let Ok(rd) = std::fs::read_dir(dir) else { return Vec::new() };
     let mut out = Vec::new();
     for e in rd.flatten() {
         let p = e.path();
         if p.extension().and_then(|x| x.to_str()) != Some("json") {
+            continue;
+        }
+        if stale(&p) {
+            let _ = std::fs::remove_file(&p);
             continue;
         }
         let taken = p.with_extension("taken");
@@ -151,7 +188,8 @@ pub fn ask(data: &Path, req: &Request, timeout: Duration) -> Reply {
     let d = dir(data);
     let _ = std::fs::create_dir_all(d.join(REQUESTS));
     let _ = std::fs::create_dir_all(d.join(REPLIES));
-    if let Err(e) = write_json(&d.join(REQUESTS).join(format!("{}.json", req.id)), req) {
+    let sent = d.join(REQUESTS).join(format!("{}.json", req.id));
+    if let Err(e) = write_json(&sent, req) {
         return Reply::err(&format!("Couldn't send the request to Brainstead: {e}"));
     }
     let reply = d.join(REPLIES).join(format!("{}.json", req.id));
@@ -162,6 +200,11 @@ pub fn ask(data: &Path, req: &Request, timeout: Duration) -> Reply {
             return r;
         }
         std::thread::sleep(Duration::from_millis(100));
+    }
+    // Take the request back, so it isn't carried out whenever the app next looks. If it was still
+    // there, the app never took it up.
+    if std::fs::remove_file(&sent).is_ok() {
+        return Reply::err("Brainstead didn't answer in time. Is it open? Nothing was done.");
     }
     Reply::err("Brainstead didn't answer in time. Is it open? The action may still happen: check before trying again.")
 }
@@ -213,5 +256,77 @@ mod tests {
         assert_eq!(r, Reply { ok: true, result: json!({"done": 3}), error: None });
         let r = ask(&data, &Request { id: new_id(), ..req }, Duration::from_millis(300));
         assert!(!r.ok && r.error.unwrap().contains("didn't answer"));
+    }
+
+    fn request(id: &str) -> Request {
+        Request { id: id.into(), action: "task.edit".into(), args: json!({}), chat: None, model: None }
+    }
+
+    #[test]
+    fn an_unanswered_request_is_taken_back() {
+        let t = tempfile::tempdir().unwrap();
+        let requests = dir(t.path()).join(REQUESTS);
+        // Nobody took it up: it's removed, and the error says nothing happened.
+        let req = request(&new_id());
+        let r = ask(t.path(), &req, Duration::from_millis(200));
+        assert!(r.error.unwrap().contains("Nothing was done"));
+        assert!(!requests.join(format!("{}.json", req.id)).exists());
+        assert!(take_requests(&requests).is_empty());
+        // The app took it up and never answered: it may still happen.
+        let req = request(&format!("{}-late", now_ms()));
+        let d = requests.clone();
+        let app = std::thread::spawn(move || loop {
+            if !take_requests(&d).is_empty() {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        });
+        let r = ask(t.path(), &req, Duration::from_millis(400));
+        app.join().unwrap();
+        assert!(r.error.unwrap().contains("may still happen"));
+    }
+
+    #[test]
+    fn an_old_request_is_dropped_not_carried_out() {
+        let t = tempfile::tempdir().unwrap();
+        let d = dir(t.path());
+        let (requests, replies) = (d.join(REQUESTS), d.join(REPLIES));
+        std::fs::create_dir_all(&requests).unwrap();
+        std::fs::create_dir_all(&replies).unwrap();
+        let long_ago = now_ms() - ACT_TIMEOUT.as_millis() - 5_000;
+        let aged = |p: &Path| {
+            let then = SystemTime::now() - ACT_TIMEOUT - Duration::from_secs(5);
+            std::fs::File::options().write(true).open(p).unwrap().set_modified(then).unwrap();
+        };
+        let old = format!("{long_ago}-7");
+        let fresh = new_id();
+        for id in [old.as_str(), fresh.as_str(), "named", "named-new"] {
+            write_json(&requests.join(format!("{id}.json")), &request(id)).unwrap();
+        }
+        // An id with no time in it is judged by when the file was written.
+        aged(&requests.join("named.json"));
+        let mut got: Vec<String> = take_requests(&requests).into_iter().map(|(_, r)| r.id).collect();
+        got.sort();
+        let mut want = vec![fresh.clone(), "named-new".to_string()];
+        want.sort();
+        assert_eq!(got, want);
+        assert!(!requests.join(format!("{old}.json")).exists());
+        assert!(!requests.join("named.json").exists());
+
+        // Starting up: claimed requests, old replies and old half-written files go; fresh ones stay.
+        write_reply(&replies, &old, &Reply::err("late")).unwrap();
+        write_reply(&replies, &fresh, &Reply::err("soon")).unwrap();
+        std::fs::write(replies.join("half.tmp"), "{").unwrap();
+        aged(&replies.join("half.tmp"));
+        write_json(&requests.join("waiting.json"), &request("waiting")).unwrap();
+        clear_stale(&d);
+        let names = |p: &Path| {
+            let mut v: Vec<String> =
+                std::fs::read_dir(p).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+            v.sort();
+            v
+        };
+        assert_eq!(names(&requests), ["waiting.json"]);
+        assert_eq!(names(&replies), [format!("{fresh}.json")]);
     }
 }

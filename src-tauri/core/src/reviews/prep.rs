@@ -929,21 +929,35 @@ fn check_action(a: &serde_json::Value, i: &Inputs, refs: &Refs) -> Result<Action
     })
 }
 
-/// The note with the first `phrase` outside a link made a link to `target`; None when there's no
-/// such mention.
+/// Links and addresses on a line: a mention inside one isn't linked again.
+static LINKISH: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"!?\[\[[^\]\n]*\]\]|!?\[[^\]\n]*\]\([^)\n]*\)|https?://\S+").unwrap());
+
+/// The note with the first plain `phrase` made a link to `target`: in the body (not the
+/// properties), as whole words, outside code, links and web addresses. None when there's no such
+/// mention.
 pub fn with_link(text: &str, phrase: &str, target: &str) -> Option<String> {
     if phrase.is_empty() {
         return None;
     }
-    let mut from = 0;
-    while let Some(at) = text[from..].find(phrase).map(|x| x + from) {
-        let before = &text[..at];
-        let inside = before.rfind("[[").is_some_and(|o| before.rfind("]]").is_none_or(|c| c < o));
-        if !inside {
-            let link = if phrase == target { format!("[[{target}]]") } else { format!("[[{target}|{phrase}]]") };
-            return Some(format!("{before}{link}{}", &text[at + phrase.len()..]));
+    let body = crate::frontmatter::split(text).body_start;
+    let edge = |c: Option<char>| c.is_none_or(|c| !c.is_alphanumeric());
+    for l in crate::markdown::lines(text, body).iter().filter(|l| !l.code) {
+        let line = crate::markdown::blank_code_spans(l.text);
+        let busy: Vec<_> = LINKISH.find_iter(&line).map(|m| m.range()).collect();
+        let mut from = 0;
+        while let Some(i) = line[from..].find(phrase).map(|x| x + from) {
+            let end = i + phrase.len();
+            let before = &text[..l.start + i];
+            // A link left open earlier (its `]]` further on) counts too.
+            let inside = busy.iter().any(|r| r.start < end && i < r.end)
+                || before.rfind("[[").is_some_and(|o| before.rfind("]]").is_none_or(|c| c < o));
+            if !inside && edge(line[..i].chars().next_back()) && edge(line[end..].chars().next()) {
+                let link = if phrase == target { format!("[[{target}]]") } else { format!("[[{target}|{phrase}]]") };
+                return Some(format!("{before}{link}{}", &text[l.start + end..]));
+            }
+            // On by one character, so a mention overlapping this one is still looked at.
+            from = i + line[i..].chars().next().map_or(1, char::len_utf8);
         }
-        from = at + phrase.len();
     }
     None
 }
@@ -1019,6 +1033,12 @@ mod tests {
         assert_eq!(with_link("the app launch", "app", "Orbit App").unwrap(), "the [[Orbit App|app]] launch");
         assert!(with_link("nothing here", "Orbit", "Orbit App").is_none());
         assert!(with_link("[[Orbit App]]", "Orbit", "Orbit").is_none());
+        // Not in the properties, in code, in another link or address, or inside a longer word.
+        let note = "---\nattendees: Maya, Lena\n---\n`Maya` and Mayara\n```\nMaya\n```\n[Maya](https://acme.example/Maya) https://acme.example/Maya\nAsk Maya.\n";
+        assert_eq!(with_link(note, "Maya", "Maya").unwrap(), note.replace("Ask Maya.", "Ask [[Maya]]."));
+        assert!(with_link("---\nattendees: Maya, Lena\n---\nNobody.\n", "Maya", "Maya").is_none());
+        assert!(with_link("Samantha came", "Sam", "Sam").is_none());
+        assert_eq!(with_link("Samantha and Sam's notes", "Sam", "Sam").unwrap(), "Samantha and [[Sam]]'s notes");
     }
 
     #[test]

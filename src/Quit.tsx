@@ -14,10 +14,18 @@ import { isMac } from "./platform";
 import { settings } from "./store";
 import { Dialog } from "./ui";
 
+/** Quits, the settings saved first: a change still waiting out its delay (a closed tab, the place
+ *  you were) would otherwise be lost with the window. */
+const quit = () =>
+  void settings
+    .flush()
+    .catch(() => {})
+    .then(() => api.appQuit());
+
 export function QuitDialog() {
   const [shown, setShown] = useState(false);
   useEffect(() => {
-    const off = api.onQuitRequested((ask) => whenFree(() => (ask ? setShown(true) : void api.appQuit()))).catch(() => () => {});
+    const off = api.onQuitRequested((ask) => whenFree(() => (ask ? setShown(true) : quit()))).catch(() => () => {});
     return () => void off.then((f) => f());
   }, []);
   if (!shown) return null;
@@ -36,7 +44,7 @@ export function QuitDialog() {
           <button type="button" className="btn lg" title="Keep Brainstead open" onClick={() => setShown(false)}>
             Cancel
           </button>
-          <button type="button" className="btn lg pri" title="Quit Brainstead" autoFocus onClick={() => void api.appQuit()}>
+          <button type="button" className="btn lg pri" title="Quit Brainstead" autoFocus onClick={() => quit()}>
             Quit
           </button>
         </div>

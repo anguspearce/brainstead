@@ -29,7 +29,9 @@ fn root(svc: &VaultService) -> Res<PathBuf> {
     Ok(svc.root().ok_or("No vault is open.".to_string())?)
 }
 
-/// Saves the editor's text if the file is still at `base`; the draft goes once it's saved.
+/// Saves the editor's text if the file is still at `base`. The note's draft is left alone: the
+/// editor discards its own after a save, and a save from elsewhere (the Inbox's File as reference,
+/// on a note that isn't open) mustn't delete a draft the user chose to keep.
 #[tauri::command]
 pub async fn doc_save(app: AppHandle, path: String, content: String, base: String) -> Res<String> {
     writing(move || {
@@ -37,7 +39,6 @@ pub async fn doc_save(app: AppHandle, path: String, content: String, base: Strin
         let abs = app.state::<VaultService>().resolve_path(&path)?;
         refuse_not_utf8(&abs, &path)?;
         let v = write::save_file(&abs, &content, &base)?;
-        app.state::<Drafts>().discard(&path);
         written(&app, &[abs]);
         Ok(v)
     })

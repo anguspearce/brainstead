@@ -58,11 +58,6 @@ async function start() {
   if (new URLSearchParams(location.search).get("view") === "capture") {
     document.documentElement.classList.add("capture-view");
     document.getElementById("splash")?.remove();
-    // A reply you sent (even one archived with its thread) topped up its thread's source: ingested
-    // again, unattended, so what it settles reaches the initiatives (D-20261120-06).
-    void api.onSyncReplied((paths) => {
-      if (settings.get().ingestOnArrival && paths.length) ingest(paths, true);
-    });
     root.render(
       <React.StrictMode>
         <CaptureWindow />
@@ -96,6 +91,12 @@ async function start() {
     if (tab && pane && here.screen === screen) nav.replace({ ...here, view: { ...here.view, [tab]: pane } });
     else if (tab && pane) nav.go({ screen: screen as Screen, view: { [tab]: pane } });
     else nav.go(pane ? { screen: screen as Screen, pane: pane as SettingsPane } : (screen as Screen));
+  });
+  // A reply you sent (even one archived with its thread) topped up its thread's source: ingested
+  // again, unattended, so what it settles reaches the initiatives (D-20261120-06). Here, in the main
+  // window, as every other ingest is: its setting is the live one, and one window starts the runs.
+  void api.onSyncReplied((paths) => {
+    if (settings.get().ingestOnArrival && paths.length) ingest(paths, true);
   });
   // A capture from the Outlook or Teams extension (src-tauri/src/nativehost.rs).
   void api.onCapture((c) => {

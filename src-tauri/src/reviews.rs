@@ -413,7 +413,18 @@ fn start_for(app: &AppHandle, kind: ReviewKind, target: Target, trigger: &str) -
     let retry = trigger == "schedule";
     let scheduled = trigger != "manual";
     std::thread::spawn(move || {
-        if !run(&app2, &id2, kind, window, &model, retry, scheduled) && retry {
+        // A panic ends the run as `run` would, so its kind isn't left running until restart. It
+        // isn't tried again: the same notes would panic again.
+        let written = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&app2, &id2, kind, window, &model, retry, scheduled)))
+            .unwrap_or_else(|_| {
+                let rv = app2.state::<Reviews>();
+                rv.update_run(&id2, |r| r.finished_at = Some(stamp(now())));
+                rv.running.lock().unwrap().retain(|k| *k != kind);
+                let _ = app2.emit("review-done", Finished { chat_id: id2.clone(), filename: None });
+                let _ = app2.emit("reviews-changed", ());
+                true
+            });
+        if !written && retry {
             std::thread::sleep(std::time::Duration::from_secs(RETRY_AFTER_SECS));
             // Not when one is going already (Run now, or the next scheduled one).
             let busy = app2.state::<Reviews>().running.lock().unwrap().contains(&kind);

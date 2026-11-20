@@ -9,14 +9,29 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
 
+use chrono::{DateTime, Local, Utc};
 use serde::{Deserialize, Serialize};
 
 const FILE: &str = "sync-state.json";
 /// At most this many captured mail ids and transcribed meeting ids are remembered.
 const SEEN_CAP: usize = 4000;
-/// At most this many written days per chat (old chats drop off).
-const DAYS_CAP: usize = 180;
+/// At most this many written days per chat (old chats drop off). Always more than the page of
+/// messages a pass reads: a quiet chat's page can span that many days, and a day dropped while it
+/// is still in the page would be written again as a duplicate on every pass.
+const DAYS_CAP: usize = super::fetch::CHAT_PAGE + 100;
+const _: () = assert!(DAYS_CAP > super::fetch::CHAT_PAGE);
+
+/// Held from [`load`] to [`save`] by whatever changes the state (a sync pass, an on-demand pull), so
+/// one can't save its older copy over the other's and have days and threads delivered again.
+static CHANGING: Mutex<()> = Mutex::new(());
+
+/// Takes the state for changing: load, change and save while holding what this returns. It waits
+/// for whoever holds it now.
+pub fn lock() -> MutexGuard<'static, ()> {
+    CHANGING.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
@@ -28,9 +43,14 @@ pub struct State {
     /// Per-occurrence keys (thread id + the occurrence's local day) whose transcript was already
     /// captured; a recurring meeting's series shares one thread id, so the day disambiguates sittings.
     pub transcripts: Vec<String>,
-    /// Set once the first sync pass has finished, so the "load N days on first sync" limit is applied
-    /// only that first time for mail (chats apply it per chat, the first time each is seen).
+    /// Set once the first sync pass has finished. Mail's first-sync limit goes by
+    /// [`State::mail_first_run`]; this is kept for state written before `mail_initialized`.
     pub initialized: bool,
+    /// Set once a pass has read the Inbox, so the "load N days on first sync" limit is applied to
+    /// mail only that first time, whenever Outlook is switched on (chats apply it per chat, the
+    /// first time each is seen).
+    #[serde(default)]
+    pub mail_initialized: bool,
     /// The vault path written for a chat day (`"<conv>\n<day>"` → `sources/…`), for the on-demand
     /// pull to vend what's already there. Absent on older state (then the pull finds the file by name).
     #[serde(default)]
@@ -75,6 +95,13 @@ fn chat_key(conv: &str, day: &str) -> String {
     format!("{conv}\n{day}")
 }
 
+/// A meeting transcript's key: its thread and the local day it started. A recurring meeting's whole
+/// series shares one thread id, so the day tells the sittings apart. The sync pass and the on-demand
+/// pull both use it, so each sees what the other has already captured.
+pub fn transcript_key(thread: &str, start: DateTime<Utc>) -> String {
+    format!("{thread}#{}", start.with_timezone(&Local).date_naive())
+}
+
 pub fn path(data: &Path) -> PathBuf {
     data.join(FILE)
 }
@@ -89,6 +116,13 @@ pub fn save(data: &Path, s: &State) -> Result<(), String> {
 }
 
 impl State {
+    /// Whether mail's first-sync history limit still applies: no pass has read the Inbox yet. State
+    /// from before `mail_initialized` counts as past it when a pass has run and there are threads
+    /// on file, so nobody already syncing mail is limited or flooded again.
+    pub fn mail_first_run(&self) -> bool {
+        !self.mail_initialized && !(self.initialized && !(self.thread_paths.is_empty() && self.mail.is_empty()))
+    }
+
     /// Whether this chat's day has already been written.
     pub fn chat_day_done(&self, conv: &str, day: &str) -> bool {
         self.chats.get(conv).is_some_and(|days| days.iter().any(|d| d == day))
@@ -226,6 +260,67 @@ mod tests {
         assert_eq!(s.transcripts.len(), SEEN_CAP);
         assert!(s.transcript_done(&format!("m{}", SEEN_CAP + 49)), "newest kept");
         assert!(!s.transcript_done("m0"), "oldest dropped");
+    }
+
+    #[test]
+    fn a_quiet_chats_whole_page_of_days_stays_remembered() {
+        // One message a day fills the page with as many days: none may drop off, or it is written
+        // again as a duplicate on the next pass.
+        let mut s = State::default();
+        let first = chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+        let days: Vec<String> =
+            (0..super::super::fetch::CHAT_PAGE as i64).map(|i| (first + chrono::Duration::days(i)).to_string()).collect();
+        for d in &days {
+            s.mark_chat_day("c1", d, None);
+        }
+        assert!(days.iter().all(|d| s.chat_day_done("c1", d)));
+        // Older days still drop off in the end.
+        for i in 0..DAYS_CAP as i64 {
+            s.mark_chat_day("c1", &(first + chrono::Duration::days(1000 + i)).to_string(), None);
+        }
+        assert_eq!(s.chats["c1"].len(), DAYS_CAP);
+        assert!(!s.chat_day_done("c1", &days[0]));
+    }
+
+    #[test]
+    fn a_transcripts_key_is_its_thread_and_local_day() {
+        use chrono::TimeZone;
+        let at = |d: u32| Local.with_ymd_and_hms(2026, 10, d, 10, 0, 0).unwrap().with_timezone(&Utc);
+        assert_eq!(transcript_key("19:meeting_abc@thread.v2", at(24)), "19:meeting_abc@thread.v2#2026-10-24");
+        // A weekly meeting's sittings share the thread and differ by day, so last week's transcript
+        // isn't taken for this week's.
+        let mut s = State::default();
+        s.mark_transcript(&transcript_key("t1", at(17)), Some("sources/Teams. Transcript. Steerco - 2026-10-17.md"));
+        assert!(s.transcript_done(&transcript_key("t1", at(17))));
+        assert!(!s.transcript_done(&transcript_key("t1", at(24))));
+    }
+
+    #[test]
+    fn mail_has_its_own_first_run() {
+        // Teams alone has been syncing: mail's first run is still to come when Outlook goes on.
+        let teams_only = State { initialized: true, ..Default::default() };
+        assert!(State::default().mail_first_run());
+        assert!(teams_only.mail_first_run());
+        assert!(!State { mail_initialized: true, ..Default::default() }.mail_first_run());
+        // State from before the flag, with mail already captured, isn't limited again.
+        let old: State =
+            serde_json::from_str(r#"{"initialized": true, "threadPaths": {"conv1": "sources/Email. Thread. Roadmap - 2026-10-24.md"}}"#)
+                .unwrap();
+        assert!(!old.mail_initialized && !old.mail_first_run());
+    }
+
+    #[test]
+    fn changing_the_state_is_one_at_a_time() {
+        let held = lock();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let other = std::thread::spawn(move || {
+            let _held = lock();
+            tx.send(()).unwrap();
+        });
+        assert!(rx.recv_timeout(std::time::Duration::from_millis(200)).is_err(), "waits while it's held");
+        drop(held);
+        rx.recv_timeout(std::time::Duration::from_secs(5)).expect("gets it once it's free");
+        other.join().unwrap();
     }
 
     #[test]

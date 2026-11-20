@@ -196,10 +196,29 @@ fn runs_dir() -> PathBuf {
     crate::platform::data_dir().join("runs")
 }
 
-fn save_run(r: &Run) {
+/// Held across each read-then-write of a run's file: the worker saves its own copy while
+/// `take_log`, on whichever thread applies a change, marks the one on disk.
+static RUN_FILES: Mutex<()> = Mutex::new(());
+
+fn write_run(r: &Run) {
     let _ = std::fs::create_dir_all(runs_dir());
     if let Ok(j) = serde_json::to_vec_pretty(r) {
         let _ = brainstead_core::write::write_atomic(&runs_dir().join(format!("{}.json", r.id)), &j, false);
+    }
+}
+
+/// Whether a run is saved as logged. `take_log` marks the run on disk only, and the worker's own
+/// copy never hears of it, so a save of that copy keeps the mark: one `log.md` line per ingest.
+fn logged_kept(r: &Run, on_disk: Option<&Run>) -> bool {
+    r.logged || on_disk.is_some_and(|d| d.logged)
+}
+
+fn save_run(r: &Run) {
+    let _files = crate::lock(&RUN_FILES);
+    if logged_kept(r, load_run(&r.id).as_ref()) && !r.logged {
+        write_run(&Run { logged: true, ..r.clone() });
+    } else {
+        write_run(r);
     }
 }
 
@@ -212,12 +231,16 @@ pub fn load_run(id: &str) -> Option<Run> {
 
 /// The `log.md` line for a run's first accepted page; None after that (one line per ingest).
 pub fn take_log(id: &str) -> Option<String> {
-    let mut r = load_run(id)?;
-    if r.logged {
-        return None;
-    }
-    r.logged = true;
-    save_run(&r);
+    let r = {
+        let _files = crate::lock(&RUN_FILES);
+        let mut r = load_run(id)?;
+        if r.logged {
+            return None;
+        }
+        r.logged = true;
+        write_run(&r);
+        r
+    };
     let link = brainstead_core::lint::name_of(&r.source).trim_end_matches(".md").to_string();
     let n = r.proposals.len().max(r.planned);
     let summary = format!("{n} page change{}", if n == 1 { "" } else { "s" });
@@ -369,8 +392,24 @@ fn enqueue(app: &AppHandle, runs: Vec<Run>) {
             emit(&app, &r);
             continue;
         }
-        run(&app, &mut r);
+        // A panic (a parser on odd input) ends this run, not the queue: the worker goes on to
+        // the next, and the run is failed so the next start doesn't take it again.
+        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&app, &mut r))).is_err() {
+            crate::applog!("ingest {}: panicked on {}", r.id, r.source);
+            panicked(&mut r);
+            emit(&app, &r);
+        }
     });
+}
+
+/// A run whose thread panicked: failed, so it isn't left "running" and resumed at the next start.
+fn panicked(r: &mut Run) {
+    r.status = "failed".into();
+    r.finished = Some(proposals::now_local());
+    r.error = Some("Brainstead stopped this run because something went wrong; its log has the details (Settings › About).".into());
+    for s in r.steps.iter_mut().filter(|s| s.status == "waiting" || s.status == "running") {
+        s.status = "skipped".into();
+    }
 }
 
 /// What happens at start to a run an earlier session left "queued" or "running" (the app closed, or
@@ -1162,6 +1201,27 @@ mod tests {
             read_versions: Vec::new(),
             read_messages: None,
         }
+    }
+
+    #[test]
+    fn a_logged_run_stays_logged_when_the_worker_saves_its_copy() {
+        let worker = run("running", "2026-11-18 23:10", &["running"]);
+        let on_disk = Run { logged: true, ..worker.clone() };
+        assert!(logged_kept(&worker, Some(&on_disk)));
+        assert!(!logged_kept(&worker, Some(&worker)));
+        assert!(!logged_kept(&worker, None));
+        assert!(logged_kept(&on_disk, None));
+    }
+
+    #[test]
+    fn a_run_that_panicked_is_failed_and_not_taken_again() {
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 11, 19).unwrap();
+        let mut r = run("running", "2026-11-18 23:10", &["running", "waiting"]);
+        assert!(left_over(&r, today).is_some());
+        panicked(&mut r);
+        assert_eq!(r.status, "failed");
+        assert!(r.steps.iter().all(|s| s.status == "skipped"));
+        assert!(left_over(&r, today).is_none());
     }
 
     #[test]

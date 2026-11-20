@@ -36,6 +36,8 @@ pub fn start(app: AppHandle) {
     for d in [dir.join(wire::REQUESTS), dir.join(wire::REPLIES)] {
         let _ = std::fs::create_dir_all(d);
     }
+    // What an earlier run left behind is never carried out now.
+    wire::clear_stale(&dir);
     let alive = dir.join(wire::ALIVE);
     std::thread::spawn(move || loop {
         let _ = wire::write_alive(&alive, std::process::id());

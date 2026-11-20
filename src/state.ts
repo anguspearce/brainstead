@@ -4,6 +4,7 @@
 
 // What the window knows about the vault and the app's permissions, kept current from Rust's events.
 
+import { useEffect, useState } from "react";
 import { api, Permissions, VaultChanges, VaultStatus } from "./api";
 import { settings, Store, useStore } from "./store";
 
@@ -80,4 +81,34 @@ export async function startStatus() {
   await api.onVaultChanged((c) => vaultVersion.set({ n: vaultVersion.get().n + 1, changes: c }));
   const first = await api.vaultStatus();
   if (!heard) vaultStatus.set(first);
+}
+
+/** The time, redrawn on the hour (so the greeting and the date move on while the app stays open)
+ *  and when the window comes back after the computer slept, as timers don't run during sleep. */
+export function useHourly(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    let t = 0;
+    const arm = () => {
+      const d = new Date();
+      setNow(d);
+      const next = new Date(d);
+      next.setHours(d.getHours() + 1, 0, 1, 0);
+      t = window.setTimeout(arm, next.getTime() - d.getTime());
+    };
+    const wake = () => {
+      if (document.visibilityState !== "visible") return;
+      window.clearTimeout(t);
+      arm();
+    };
+    t = window.setTimeout(arm, 0);
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("focus", wake);
+    return () => {
+      window.clearTimeout(t);
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("focus", wake);
+    };
+  }, []);
+  return now;
 }

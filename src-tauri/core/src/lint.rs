@@ -31,7 +31,9 @@ pub const ADVISORY: [&str; 3] = ["stale-pages", "uncited-claims", "no-current-st
 pub const IN_INBOX: [&str; 1] = ["uningested-sources"];
 const STALE_MIN_BACKLINKS: usize = 3;
 
-pub(crate) static FRONTMATTER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)\A---\n(.*?)\n---\n").unwrap());
+// `\r?\n`: a page saved with Windows line endings has properties too, and a fix must not write
+// into them.
+pub(crate) static FRONTMATTER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)\A---\r?\n(.*?)\r?\n---\r?\n").unwrap());
 /// lint_wiki.py's wikilink: the target, without a heading or alias.
 pub(crate) static WIKILINK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[\[([^\]|#\n]+?)(?:[|#][^\]\n]*)?\]\]").unwrap());
 
@@ -657,29 +659,6 @@ pub fn is_synced_thread(rel: &str) -> bool {
     ["Email. Thread. ", "Teams. Chat. ", "Slack. Chat. "].iter().any(|p| n.starts_with(p))
 }
 
-/// Files directly in `sources/` that no wiki page's `sources:` names: check 7 alone, without
-/// reading the rest of the vault.
-pub fn pending_sources(root: &Path) -> Vec<String> {
-    let mut cited: HashSet<String> = HashSet::new();
-    for sub in WIKI_SUBDIRS {
-        let Ok(rd) = std::fs::read_dir(root.join("wiki").join(sub)) else { continue };
-        for e in rd.flatten().filter(|e| e.path().extension().is_some_and(|x| x == "md")) {
-            let text = read(&e.path());
-            cited.extend(WIKILINK.captures_iter(sources_block(frontmatter_block(&text))).map(|c| lint_key(c[1].trim())));
-        }
-    }
-    let Ok(rd) = std::fs::read_dir(root.join("sources")) else { return vec![] };
-    let mut out: Vec<String> = rd
-        .flatten()
-        .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
-        .filter_map(|e| e.file_name().to_str().map(str::to_string))
-        .filter(|n| !n.starts_with('.') && !cited.contains(&lint_key(stem(n))) && !cited.contains(&lint_key(n)))
-        .map(|n| format!("sources/{n}"))
-        .collect();
-    out.sort();
-    out
-}
-
 fn sort(items: &mut [Item]) {
     items.sort_by(|a, b| a.text.cmp(&b.text));
 }
@@ -1037,7 +1016,6 @@ mod tests {
         assert_eq!(changed[0].page.as_deref(), Some("sources/Roadmap Update 2026-09-18.md"));
         assert_eq!(changed[0].pages, ["wiki/concepts/Role Framework.md", "wiki/entities/Orbit App.md"]);
         let pending: Vec<String> = r.check("uningested-sources").unwrap().items.iter().map(|i| i.text.clone()).collect();
-        assert_eq!(pending_sources(&root), pending);
         // One an ingest read, with nothing in it worth citing, isn't pending.
         let read: HashSet<String> = pending.iter().take(1).cloned().collect();
         let after = run_with(&root, today(), &HashSet::new(), fixture::zone(), &read);
@@ -1084,6 +1062,14 @@ mod tests {
         assert_eq!(link_first_mention(fenced, "Orbit App").unwrap(), "```\nOrbit App\n```\n[[Orbit App]]\n");
         // Only in a link's anchor: nothing to link, so the check doesn't list it either.
         assert_eq!(link_first_mention("At the demo ([[Meeting. Demo - 2026-10-02#Questions (Lena Park)]]).\n", "Lena Park"), None);
+        // Windows line endings: the properties are still the properties.
+        let crlf = "---\r\naliases: [Orbit App Mobile]\r\nupdated: 2026-10-02\r\n---\r\nOrbit App ships.\r\n";
+        assert_eq!(fm_field(frontmatter_block(crlf), "updated"), "2026-10-02");
+        assert_eq!(body(crlf), "Orbit App ships.\r\n");
+        assert_eq!(
+            link_first_mention(crlf, "Orbit App").unwrap(),
+            "---\r\naliases: [Orbit App Mobile]\r\nupdated: 2026-10-02\r\n---\r\n[[Orbit App]] ships.\r\n"
+        );
     }
 
     #[test]

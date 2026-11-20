@@ -115,7 +115,30 @@ impl Index {
         if let Some(d) = path.parent() {
             std::fs::create_dir_all(d).map_err(e)?;
         }
-        Self::setup(Connection::open(path).map_err(e)?)
+        match Connection::open(path).map_err(e).and_then(Self::setup) {
+            Err(_) if Self::corrupt(path) => {
+                // The index is rebuilt from the vault, so one that isn't a database any more is
+                // thrown away rather than keeping the vault shut.
+                for ext in ["", "-wal", "-shm"] {
+                    let mut name = path.as_os_str().to_owned();
+                    name.push(ext);
+                    let _ = std::fs::remove_file(PathBuf::from(name));
+                }
+                Self::setup(Connection::open(path).map_err(e)?)
+            }
+            r => r,
+        }
+    }
+
+    /// Whether the file at `path` can't be read as a database at all. A locked or unwritable one
+    /// is another matter, and is left where it is.
+    fn corrupt(path: &Path) -> bool {
+        use rusqlite::ErrorCode::{DatabaseCorrupt, NotADatabase};
+        let Ok(conn) = Connection::open(path) else { return false };
+        matches!(
+            conn.query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0)),
+            Err(rusqlite::Error::SqliteFailure(f, _)) if matches!(f.code, DatabaseCorrupt | NotADatabase)
+        )
     }
 
     /// Opens the app's index for reading only, as the MCP server does: never rebuilt from here,
@@ -529,6 +552,22 @@ mod tests {
 
     fn fixture() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/vault")
+    }
+
+    #[test]
+    fn an_index_that_is_not_a_database_is_thrown_away() {
+        let t = tempfile::tempdir().unwrap();
+        let path = t.path().join("index.db");
+        std::fs::write(&path, "not a database ".repeat(400)).unwrap();
+        std::fs::write(t.path().join("index.db-wal"), "nor is this").unwrap();
+        let ix = Index::open(&path).unwrap();
+        let v: i64 = ix.conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(v, SCHEMA_VERSION);
+        // A good one is kept as it is.
+        ix.conn.execute_batch("CREATE TABLE kept (x)").unwrap();
+        drop(ix);
+        let again = Index::open(&path).unwrap();
+        assert_eq!(again.conn.query_row("SELECT count(*) FROM sqlite_master WHERE name = 'kept'", [], |r| r.get::<_, i64>(0)).unwrap(), 1);
     }
 
     /// The fixture vault copied to a temp dir, so tests can change it.

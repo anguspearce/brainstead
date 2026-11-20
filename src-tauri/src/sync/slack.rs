@@ -566,12 +566,19 @@ fn workspace(
                 }
             }
         }
-        if let Some(e) = failed.filter(|_| msgs.is_empty()) {
+        // A later page that failed (a rate limit): what was read is still written, but the
+        // conversation isn't marked read, so the next pass reads it again for the rest.
+        let partial = failed.is_some();
+        if let Some(e) = failed {
             r.problems.push(e);
-            continue;
+            if msgs.is_empty() {
+                continue;
+            }
         }
-        prog.updated_read.insert(c.id.clone(), c.updated);
-        prog.read_at.insert(c.id.clone(), Utc::now().timestamp());
+        if !partial {
+            prog.updated_read.insert(c.id.clone(), c.updated);
+            prog.read_at.insert(c.id.clone(), Utc::now().timestamp());
+        }
         // Counts only, never what was said: enough to see where messages go missing.
         crate::applog!(
             "slack: {} {} from {}: {} message(s){}{}",
@@ -619,14 +626,15 @@ fn workspace(
                 // Written, and nothing new since.
                 Some(_) if prog.counts.get(&key).copied().unwrap_or(0) >= n => {}
                 // Grown (a thread revived): rewritten in place. One that's gone starts afresh.
-                Some(path) if vault.join(&path).is_file() => {
-                    if brainstead_core::webcapture::rewrite(vault, &path, &cap, Local::now()).is_ok() {
+                Some(path) if vault.join(&path).is_file() => match brainstead_core::webcapture::rewrite(vault, &path, &cap, Local::now()) {
+                    Ok(()) => {
                         prog.counts.insert(key, n);
                         r.chats += 1;
                         r.topped_up.push(path.clone());
                         r.paths.push(path);
                     }
-                }
+                    Err(e) => r.problems.push(e.to_string()),
+                },
                 _ => match crate::nativehost::deliver(data, Some(vault), false, "slack", &cap, true, when.map(|t| t.to_rfc3339())) {
                     Ok(path) => {
                         r.paths.push(path.clone());
@@ -638,7 +646,7 @@ fn workspace(
                 },
             }
         }
-        if first {
+        if first && !partial {
             prog.seen.push(c.id.clone());
         }
     }

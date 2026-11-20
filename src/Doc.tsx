@@ -36,7 +36,7 @@ import { checkTemplate } from "./notes/templater";
 import { templaterSyntax } from "./notes/templaterSyntax";
 import { templaterAssist } from "./editor/templaterAssist";
 import { TemplaterDocsLink, TestRun } from "./notes/TemplateRun";
-import { toggledLine } from "./editor/text";
+import { tickChange, tickedText } from "./editor/text";
 import { localToday } from "./md/taskQuery";
 import { toggleTask } from "./taskModel";
 import { noteOpened } from "./recent";
@@ -339,8 +339,8 @@ export function DocScreen() {
     if (dirty && e) {
       if (line + 1 > e.view.state.doc.lines) return;
       const l = e.view.state.doc.line(line + 1);
-      const next = toggledLine(l.text, done, localToday());
-      if (next !== l.text) e.view.dispatch({ changes: { from: l.from, to: l.to, insert: next }, userEvent: "input.tick" });
+      const next = tickedText(l.text, done, localToday());
+      if (next !== l.text) e.view.dispatch({ changes: tickChange(e.view.state.doc, l, next), userEvent: "input.tick" });
       return;
     }
     if (!doc || !s) return;

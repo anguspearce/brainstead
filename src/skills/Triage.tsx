@@ -8,7 +8,7 @@
 // (a new wiki page, revertable in Changes), Make a task, Archive, or Remove (a missing one). Only
 // `Me. Bookmarks.md` changes, a line at a time, each undoable.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, BookmarkRow, BookmarkSuggestion } from "../api";
 import { filedPage } from "../Ask";
 import { makePage } from "../knowledge";
@@ -19,6 +19,7 @@ import { useVaultVersion } from "../state";
 import { reportEditError, undoAction } from "../taskModel";
 import { toast } from "../Toast";
 import { TopBar } from "../TopBar";
+import { keyIsElsewhere } from "../Review";
 import { toTriage } from "../needsYou";
 import { TableBand } from "../ui";
 import { SuggestButton, SuggestChip, SuggestionRow } from "../Suggestions";
@@ -135,8 +136,12 @@ export function TriageScreen() {
     }
   };
 
+  // One decision at a time: a key held or pressed twice would otherwise make the task or page twice.
+  const deciding = useRef(false);
   /** `edited`: the suggestion's page or task as Edit changed it. */
   const decide = async (r: BookmarkRow, d: Decision, edited?: { page?: string; task?: string }) => {
+    if (deciding.current) return;
+    deciding.current = true;
     const found = sugg.get(r.target);
     const s = found && edited ? { ...found, page: edited.page || found.page, task: edited.task || found.task } : found;
     try {
@@ -164,6 +169,8 @@ export function TriageScreen() {
       if (d === "promote") toast("The new page is made; it's in Changes, with Revert", { label: "Changes", run: () => nav.go("review") });
     } catch (e) {
       reportEditError(e);
+    } finally {
+      deciding.current = false;
     }
   };
 
@@ -171,9 +178,13 @@ export function TriageScreen() {
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (!cur || e.metaKey || e.ctrlKey || e.altKey) return;
-      if ((e.target as HTMLElement)?.closest?.("input, textarea, [contenteditable]")) return;
+      // Not while a dialog is up or a box has the keys, nor for a held key.
+      if (e.defaultPrevented || e.repeat || keyIsElsewhere(e)) return;
+      // ↩ on a button the keyboard is on presses that button.
+      const onButton = !!(e.target as HTMLElement)?.closest?.("button, a, [role='button']");
       const s = sugg.get(cur.target);
       const hit = KEYS.find(([key]) => key === e.key || key === e.key.toLowerCase());
+      if (e.key === "Enter" && onButton) return;
       if (e.key === "Enter" && (s || cur.missing)) void decide(cur, cur.missing ? "remove" : s!.decision);
       else if (hit) void decide(cur, hit[1]);
       else return;

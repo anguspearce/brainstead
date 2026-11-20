@@ -1556,6 +1556,9 @@ async function changesTool(a: Args): Promise<string | Listing> {
     if (!group) throw new Error("Which run? Give its group from list_changes.");
     const { todo, ids } = await inRun(group, "held");
     const m = action === "accept_run" ? await api.changesAcceptAll(group, true, ids) : await api.changesRejectAll(group, ids);
+    // Nothing made and something refused is a failure, not "Accepted 0".
+    if (!m.done && m.failed.length)
+      throw new Error(`None ${action === "accept_run" ? "accepted" : "rejected"}. Couldn't: ${m.failed.join("; ")}`);
     noted(`${action === "accept_run" ? "accepted" : "rejected"} ${m.done} held change${m.done === 1 ? "" : "s"}`);
     // The run's meeting notes that were made, offered their follow-up, as the screen's Accept all does.
     const made = action === "accept_run" ? new Set((await api.changesList()).filter((c) => c.status === "applied").map((c) => c.id)) : null;
@@ -1573,6 +1576,7 @@ async function changesTool(a: Args): Promise<string | Listing> {
     const group = str(a, "group");
     if (!group) throw new Error("Which run? Give its group from list_changes.");
     const m = await api.changesRevertAll(group, (await inRun(group, "applied")).ids);
+    if (!m.done && m.failed.length) throw new Error(`None reverted. Left as they are (edited since): ${m.failed.join("; ")}`);
     noted(`reverted ${m.done} change${m.done === 1 ? "" : "s"} from a run`);
     return `Reverted ${m.done}.${m.failed.length ? ` Left as they are (edited since): ${m.failed.join("; ")}` : ""}`;
   }
@@ -1631,8 +1635,9 @@ async function changesTool(a: Args): Promise<string | Listing> {
   }
   if (action === "revert") {
     const r = await api.changeRevert(id);
-    if (r.ok) noted("reverted a change");
-    return r.ok ? r.message : `${r.message} (The page as it was before is in Changes, for the user to copy from.)`;
+    if (!r.ok) throw new Error(`${r.message} (The page as it was before is in Changes, for the user to copy from.)`);
+    noted("reverted a change");
+    return r.message;
   }
   throw new Error("action is list, show, accept, reject, accept_run, reject_run, revert, revert_run or history.");
 }

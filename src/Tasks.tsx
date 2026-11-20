@@ -15,6 +15,7 @@ import { Icon } from "./icons";
 import { fmtShortDate } from "./md/dates";
 import { taskLabel } from "./md/TaskBlock";
 import { localToday } from "./md/taskQuery";
+import { useHourly } from "./state";
 import { nav, openDoc, useViewState } from "./nav";
 import { askWith } from "./askState";
 import { InfoTip, TaskEditor, taskKey, TaskList, TasksFailed, useTaskListKeys } from "./TaskList";
@@ -51,7 +52,8 @@ export function TasksScreen() {
   const inbox = useInbox();
   const [viewId, setViewId] = useViewState("tasks:view", "next");
   const [sel, setSel] = useViewState<string | null>("tasks:sel", null);
-  const today = localToday();
+  // Redrawn on the hour and on coming back from sleep, so a list left open overnight moves on a day.
+  const today = localToday(useHourly());
   const view = VIEWS.find((v) => v.id === viewId) ?? VIEWS[0];
   // The search narrows every list, so the counts on the left say where the matches are.
   const [q, setQ] = useViewState("tasks:q", "");

@@ -39,7 +39,9 @@ export function systemCallout(text: string): [number, number] | null {
   return [pos, pos + text.slice(pos, end).replace(/[\r\n]+$/, "").length];
 }
 
-const rangeIn = (state: EditorState) => systemCallout(state.sliceDoc(0, Math.min(state.doc.length, LOOK)));
+// The document's own text, a break one character as its positions count it (sliceDoc would give a
+// CRLF file's breaks as two, and the range would drift a place right for each).
+const rangeIn = (state: EditorState) => systemCallout(state.doc.sliceString(0, Math.min(state.doc.length, LOOK)));
 
 class Lock extends WidgetType {
   toDOM() {

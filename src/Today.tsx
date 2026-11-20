@@ -22,7 +22,7 @@ import { nav, openDoc, useViewState } from "./nav";
 import { recentDocs } from "./recent";
 import { DraftNudge, LoadFailed, TaskList, TasksFailed, useTaskListKeys } from "./TaskList";
 import { deferredPast, tasksFailed, todayRows, useAllTasks, viewRows, VIEWS } from "./taskModel";
-import { useVaultOpening, useVaultVersion, vaultStatus } from "./state";
+import { useHourly, useVaultOpening, useVaultVersion, vaultStatus } from "./state";
 import { TopBar } from "./TopBar";
 import { ago, fmtCount, TableBand } from "./ui";
 import { captureDefault, hasSync, keyLabel } from "./platform";
@@ -33,36 +33,6 @@ export function greeting(h: number, name?: string) {
   const g = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
   const first = name?.trim().split(/\s+/)[0];
   return first ? `${g}, ${first}` : g;
-}
-
-/** The time, redrawn on the hour (so the greeting and the date move on while the app stays open)
- *  and when the window comes back after the computer slept, as timers don't run during sleep. */
-function useHourly(): Date {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    let t = 0;
-    const arm = () => {
-      const d = new Date();
-      setNow(d);
-      const next = new Date(d);
-      next.setHours(d.getHours() + 1, 0, 1, 0);
-      t = window.setTimeout(arm, next.getTime() - d.getTime());
-    };
-    const wake = () => {
-      if (document.visibilityState !== "visible") return;
-      window.clearTimeout(t);
-      arm();
-    };
-    t = window.setTimeout(arm, 0);
-    document.addEventListener("visibilitychange", wake);
-    window.addEventListener("focus", wake);
-    return () => {
-      window.clearTimeout(t);
-      document.removeEventListener("visibilitychange", wake);
-      window.removeEventListener("focus", wake);
-    };
-  }, []);
-  return now;
 }
 
 export function TodayScreen() {
