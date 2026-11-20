@@ -62,17 +62,18 @@
   --display: "Geist Variable", -apple-system, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   --mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, "Cascadia Mono", Consolas, monospace;
 
-  /* The type scale: every UI size is one of these (D-20261119-15). Note text follows --read-size and
-     the export looks keep their pt sizes; only the brand wordmark sits off the scale. */
-  --fs-2xs: 10px; /* rail labels, tiny pills, weekday initials */
-  --fs-xs: 11px; /* chips, counts, meta lines, hints */
-  --fs-sm: 12px; /* secondary text, rows' second line, small buttons */
-  --fs-base: 13px; /* the UI's body: rows, buttons, inputs */
-  --fs-md: 14px; /* reading-size UI text: Ask, Review bodies, empty states */
-  --fs-lg: 15px; /* pane titles, large inputs */
-  --fs-xl: 17px; /* dialog titles, capture box, big numbers */
-  --fs-2xl: 20px; /* panel headings */
-  --fs-3xl: 22px; /* .h2 */
+  /* The type scale: every UI size is one of these (D-20261119-15), a step up from the first
+     (D-20261120-10). Note text follows --read-size and the export looks keep their pt sizes; only
+     the brand wordmark sits off the scale. */
+  --fs-2xs: 11px; /* rail labels, tiny pills, weekday initials */
+  --fs-xs: 12px; /* chips, counts, meta lines, hints */
+  --fs-sm: 13px; /* secondary text, rows' second line, small buttons */
+  --fs-base: 14px; /* the UI's body: rows, buttons, inputs */
+  --fs-md: 15px; /* reading-size UI text: Ask, Review bodies, empty states */
+  --fs-lg: 16px; /* pane titles, large inputs */
+  --fs-xl: 18px; /* dialog titles, capture box, big numbers */
+  --fs-2xl: 21px; /* panel headings */
+  --fs-3xl: 23px; /* .h2 */
   --fs-display: 34px; /* .h1, the health score */
 
   /* The left panes, one width each kind: a nav or list beside a page (Inbox, Tasks, Search, Wiki,
