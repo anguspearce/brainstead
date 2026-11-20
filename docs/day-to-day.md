@@ -14,10 +14,12 @@ Brainstead's menu-bar icon shows three dots while a run is going, and a dot when
 
 - A headline: **All clear**, **Things need you**, runs going, or what couldn't load. A **Read-only** pill shows while the vault is read-only and opens Settings › Vault. **Overdue**, **Due today** and **Waiting for** counts open Today.
 - A capture box, the same as Quick capture.
-- Each run that's going (an ingest, a summary, the daily check, Find tasks and projects and so on), with its progress and **Stop**.
+- Each run that's going (an ingest, a summary, the daily check, Find tasks and projects and so on), with its progress and **Stop**. Ingests waiting their turn are one line, "3 more waiting their turn", which opens Sources.
 - A line summing up the sync and ingests (when the sync last ran, what came in today, what's being ingested, problems today), which opens Activity › Sync & ingest.
 - Changes held for you (opening Changes › Held) and items in the Inbox, counted as Today's To process and the sidebar count them.
 - **Open Brainstead** (⌘O), **Today** (⌘T), **Ask** (⌘J), **Run the daily check now**, **Settings…** (⌘,) and **Quit Brainstead** (⌘Q).
+
+In the main window, the foot of the sidebar shows the same: while something runs, a line above the file count says what ("Daily check · 62%", or "2 running, 3 waiting"), and a click lists each run with its progress, **Stop** and a link to where it lives, then the runs that ended since Brainstead opened. When a run ends a short message says so ("Daily check finished: 115 pages read"), with **Open**; an ingest says so only when it fails. For half an hour after the last run ends the line says it finished.
 
 Turn on **Open at login** (in Settings › General or the menu-bar window) and **Only in the menu bar when the window is closed** (Settings › General), and Brainstead starts when you log in and stays out of the Dock until you open its window. Windows has no such setting, because a closed window is already out of the taskbar: with **Show in the menu bar** on, closing the window hides it to the tray; with it off, closing the window quits Brainstead. On Windows, **Open at login** starts Brainstead with its window, and starting Brainstead a second time brings the running window forward.
 

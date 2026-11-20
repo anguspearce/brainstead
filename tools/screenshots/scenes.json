@@ -1075,5 +1075,10 @@
     "settings": { "sidebarRail": { "narrow": false } },
     "window": [1040, 760],
     "width": 1040
+  },
+  {
+    "name": "runs-open",
+    "screen": "today",
+    "runs": "open"
   }
 ]

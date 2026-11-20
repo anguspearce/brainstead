@@ -556,6 +556,90 @@ html[data-platform="windows"] .top {
 }
 
 /* The sidebar's status line, with the Read-only pill (also in the tray header) at its end. */
+
+/* The sidebar's Running line (src/RunsLine.tsx): above the index line while something runs, and
+   for a while after the last run ends. */
+.runsline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 6px 0 0;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--ink2);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  cursor: pointer;
+}
+.runsline:hover {
+  background: var(--hover);
+}
+.runsline.going {
+  color: var(--accent-ink);
+}
+.runsline.bad {
+  color: var(--red);
+}
+.runsline.rail {
+  position: relative;
+  justify-content: center;
+  padding: 6px 0;
+}
+.runsline .runsn {
+  position: absolute;
+  top: 0;
+  right: 6px;
+  font-size: var(--fs-2xs);
+  color: var(--ink2);
+}
+.runspop {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.runspop .mhead {
+  padding: 0;
+}
+.runspop .tray-runhead .linkish {
+  color: var(--ink);
+  font-weight: 500;
+  text-align: left;
+}
+.runsdone {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--ink2);
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.runsdone.bad {
+  color: var(--red);
+}
+.runsdone:hover .grow {
+  text-decoration: underline;
+}
+.tray-queued {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.tray-queued:hover {
+  text-decoration: underline;
+}
+
 .statusrow {
   display: flex;
   align-items: flex-end;

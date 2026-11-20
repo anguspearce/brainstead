@@ -19,6 +19,7 @@ import { localToday } from "./md/taskQuery";
 import { reportEditError, tasksFailed, todayRows, undoLast, useAllTasks, viewRows, VIEWS } from "./taskModel";
 import { ago, fmtCount } from "./ui";
 import { toast } from "./Toast";
+import { RunsLine } from "./RunsLine";
 import { changes, health, startKnowledge } from "./knowledge";
 import type { IndexStats, Layer, VaultStatus } from "./api";
 import { dragRegion, keyLabel } from "./platform";
@@ -495,6 +496,7 @@ export function Sidebar({ onSearch, rail = false }: { onSearch: () => void; rail
           {VAULT.map(item)}
         </VaultFold>
         {FOOTER.map(item)}
+        <RunsLine rail={rail} />
         <div className="statusrow">
           <div className={`status ${line.tone}`} title={rail ? [line.text, line.tip].filter(Boolean).join(" · ") : line.tip} role="status">
             <i />

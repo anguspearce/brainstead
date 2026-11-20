@@ -7,6 +7,7 @@
 
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { focusMode } from "./focus";
+import { runsNow, sampleRuns, sceneRuns } from "./runs";
 import { imageView } from "./ImageViewer";
 import { toast } from "./Toast";
 import { sceneSignIn } from "./SyncDot";
@@ -80,6 +81,8 @@ export interface Scene {
   replyDraft?: boolean;
   /** An image in the vault (its path) shown full size over the window. */
   image?: string;
+  /** Sample runs in the sidebar's Running line (src/RunsLine.tsx); "open" opens its list too. */
+  runs?: "going" | "open";
   /** For "weekly": sample suggestions for the week, instead of preparing them. */
   weekprep?: boolean;
   /** For "inbox": a sample suggestion for the open item, as Suggest would make. */
@@ -279,6 +282,10 @@ export function applyScene(sc: Scene) {
   if (sc.dialog === "fix-name") fixNameOpen.set({ wrong: sc.q, right: sc.title });
   if (sc.docMenu) sceneDocMenu.set(sc.docMenu);
   if (sc.weekprep) scenePrep.set(true);
+  if (sc.runs) {
+    sceneRuns.set(sc.runs);
+    runsNow.set(sampleRuns());
+  }
   if (sc.inboxSuggest) sceneInboxSuggest.set(true);
   if (sc.image) imageView.set({ url: convertFileSrc(vaultFile(settings.get().vaultPath ?? "", sc.image)), alt: sc.image });
   if (sc.chat) ask.set({ chats: [sc.chat === "tutorial" ? tutorialChat() : sampleChat()], active: "scene" });

@@ -53,7 +53,8 @@ import { focusMode, startFocus } from "./focus";
 import { hideSplash } from "./splash";
 import { permissions } from "./state";
 import { settings, useStore } from "./store";
-import { Toasts } from "./Toast";
+import { toast, Toasts } from "./Toast";
+import { watchRuns } from "./runs";
 import { startUpdates, UpdateHost, updateView } from "./Update";
 import { Tooltips } from "./ui";
 import { isMod, strayCtrl } from "./platform";
@@ -125,6 +126,16 @@ export default function App({ scene }: { scene: Scene | null }) {
       }),
     ].map((o) => o.catch(() => () => {}));
     return () => off.forEach((o) => void o.then((f) => f()));
+  }, []);
+
+  // What's running, for the sidebar's line (src/RunsLine.tsx), and a toast as each run ends:
+  // every one but an ingest that went well, which an auto-ingest makes many of (its changes are in
+  // Changes and the Running list keeps it).
+  useEffect(() => {
+    return watchRuns((f) => {
+      if (f.key.startsWith("ingest:") && !f.failed) return;
+      toast(f.text, { label: "Open", run: () => nav.go(f.place) }, f.failed ? "bad" : undefined);
+    });
   }, []);
 
   // The update dialog: offers from src-tauri/src/updates.rs and what follows them.

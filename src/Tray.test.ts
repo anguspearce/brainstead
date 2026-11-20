@@ -15,7 +15,15 @@ import type { CurrentStateRun, DailyCheckStatus, FindState, IngestRun, ReviewsSt
 import { runningOf, TrayData, trayFailed, trayStatus } from "./Tray";
 
 const base: TrayData = { overdue: 0, due: 0, waiting: 0, inbox: 0, held: 0, running: [], nextReview: null };
-const run = (label: string) => ({ key: label, label, doing: "", progress: null, stop: async () => {} });
+const run = (label: string) => ({
+  key: label,
+  label,
+  short: label,
+  doing: "",
+  progress: null,
+  stop: async () => {},
+  place: { screen: "today" as const },
+});
 
 describe("the menu-bar window", () => {
   it("sums things up without repeating the tiles, and says which icon to show", () => {
