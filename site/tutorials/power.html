@@ -73,11 +73,11 @@
 
   <section class="t-hero">
     <h1 class="rise">Command centre.<br><span class="accent">One sentence at a time.</span></h1>
-    <p class="lede rise">Your assistant in Terminal, with Brainstead's tools and the rest of your stack: Jira, Confluence, Asana, Figma, Slack, GitHub and your calendar. Ten recipes that turn an afternoon's work into one request.</p>
+    <p class="lede rise">Your assistant in Terminal, with Brainstead's tools and the rest of your stack: Jira, Confluence, Asana, Figma, Slack, GitHub and your calendar. Eleven recipes that turn an afternoon's work into one request.</p>
     <ul class="meta rise">
       <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20v-4M12 20v-9M19 20V5"/></svg>Power user</li>
       <li><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Dip in, any order</li>
-      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-6-6-6M12 19h8"/></svg>10 recipes</li>
+      <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17l6-6-6-6M12 19h8"/></svg>11 recipes</li>
       <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg>After <a href="advanced.html">Your own wiki</a></li>
     </ul>
     <div class="pick rise">
@@ -116,9 +116,10 @@
         <li><a href="#figma"><span>5</span>Design to decision</a></li>
         <li><a href="#lease"><span>6</span>The lease changed</a></li>
         <li><a href="#meeting"><span>7</span>After the meeting</a></li>
-        <li><a href="#review"><span>8</span>Review in Terminal</a></li>
-        <li><a href="#overnight"><span>9</span>While you sleep</a></li>
-        <li><a href="#commands"><span>10</span>Your own commands</a></li>
+        <li><a href="#replies"><span>8</span>Replies where they belong</a></li>
+        <li><a href="#review"><span>9</span>Review in Terminal</a></li>
+        <li><a href="#overnight"><span>10</span>While you sleep</a></li>
+        <li><a href="#commands"><span>11</span>Your own commands</a></li>
       </ol>
       <div class="bar" aria-hidden="true"><i></i></div>
     </aside>
@@ -369,8 +370,40 @@
       </section>
 
       <!-- 8 -->
-      <section id="review" class="lesson">
+      <section id="replies" class="lesson">
         <span class="num">8</span>
+        <h2>Replies, where they belong.</h2>
+        <p class="why">Theo has emailed about the fibre engineer's visit, and Lena has asked in a Teams chat whether the goods lift is booked. Sync has brought both in. Answer each one from what your vault knows, and leave the replies waiting where they'll be sent.</p>
+        <ul class="uses"><li class="mcp">brainstead</li></ul>
+        <div class="session reveal">
+          <div class="s-bar"><i></i><i></i><i></i><span>claude — ~</span></div>
+          <div class="s-body">
+            <p class="s-label s-l-you">You ask Claude:</p>
+            <p class="s-you">Draft a brief reply to Theo's email about the fibre engineer, and one to Lena's Teams chat about the goods lift. Put the email reply in Outlook and Lena's in Teams. I'll send them.</p>
+            <p class="s-label s-l-tools">Claude uses these tools:</p>
+            <ul class="s-tools">
+              <li><b class="mcp">brainstead</b> search <span class="r">Fibre engineer visit (email) · Lena / goods lift (Teams chat)</span></li>
+              <li><b class="mcp">brainstead</b> draft_reply <span class="r">Re Fibre engineer visit — fully answered</span></li>
+              <li><b class="mcp">brainstead</b> draft_reply <span class="r">Lena: goods lift — fully answered</span></li>
+              <li><b class="mcp">brainstead</b> draft_reply place <span class="r">Put in Outlook — reply-all draft on the thread</span></li>
+              <li><b class="mcp">brainstead</b> draft_reply place <span class="r">Put in Teams — typed into Lena's chat</span></li>
+            </ul>
+            <p class="s-label s-l-result">Claude drafts both replies and leaves them unsent:</p>
+            <div class="s-answer">
+              <p>Theo's reply confirms you'll be on site from 8 on Tuesday and asks which door the engineer will use. It's a reply-all draft on his email in Outlook, open in your browser.</p>
+              <p>Lena's reply says the goods lift is booked from 7 to 11 on moving day. It's typed into her chat in Teams, waiting for you to press Send.</p>
+            </div>
+          </div>
+        </div>
+        <div class="tip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7l-5 5 5 5 M5 12h9a5 5 0 0 1 5 5v1"/></svg>
+          <p><b>Nothing is ever sent.</b> The email reply needs Outlook on the web open, as Sync does, and the chat reply needs the Teams extension. You read each one and press Send yourself.</p>
+        </div>
+      </section>
+
+      <!-- 9 -->
+      <section id="review" class="lesson">
+        <span class="num">9</span>
         <h2>The weekly review, in Terminal.</h2>
         <p class="why">Friday afternoon. Do the review as a conversation: the assistant walks the same steps as the screen, using what Brainstead prepared from your week.</p>
         <ul class="uses"><li class="mcp">brainstead</li><li class="mcp github">github</li></ul>
@@ -396,9 +429,9 @@
         </div>
       </section>
 
-      <!-- 9 -->
+      <!-- 10 -->
       <section id="overnight" class="lesson">
-        <span class="num">9</span>
+        <span class="num">10</span>
         <h2>While you sleep.</h2>
         <p class="why">Let the assistant do the routine work before you're up: ingest what arrived, tidy the wiki, and leave a briefing. Run with nobody watching, anything that fails a check is <b>held</b> for you, not made.</p>
         <ul class="uses"><li class="mcp">brainstead</li><li class="mcp slack">slack</li><li class="mcp notion">notion</li></ul>
@@ -428,9 +461,9 @@
         </div>
       </section>
 
-      <!-- 10 -->
+      <!-- 11 -->
       <section id="commands" class="lesson">
-        <span class="num">10</span>
+        <span class="num">11</span>
         <h2>Your own commands.</h2>
         <p class="why">Found a recipe you use every week? Save it as a command, and run it with a word.</p>
         <ol class="do">
