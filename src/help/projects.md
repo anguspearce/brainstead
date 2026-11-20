@@ -25,6 +25,9 @@ Click a project to open it. Edit its name, **Done looks like** (the outcome) and
 
 The side shows the project note, notes that link it, wiki pages it links, recent activity and what's done (cancelled tasks struck through).
 
+## Update a project with what's happened
+**Update…** in the project's bar takes a line saying what has happened ("the vendor signed, kickoff is on the 3rd"). An assistant applies it in the background, in an Ask chat of its own called **Update: …**, with Brainstead's own tools: it marks things done or dropped, changes a date, owner or wording, adds a follow-up (a waiting-for when someone else has the next step) and notes what happened on the project's or initiative's page. Change only what the update means is the rule it works to; when it can't tell, it changes nothing and says what it needs. While it works it's in the sidebar's Running line; when it ends a message says what it changed, with **Open** for its chat. Every change is in [Changes](help:review) with **Revert**, made at once as anything you start is.
+
 ## Change its status
 Under the tasks are **Mark complete** (or **Make active**), **Edit** and ⋯. They change only the note's status:
 

@@ -26,6 +26,9 @@ export interface Chat extends SavedChat {
   review?: boolean;
   /** A message you might send next, offered in the box after an answer. */
   suggestion?: string | null;
+  /** A chat Brainstead started for you in the background (an Update…): it keeps its title and
+   *  offers no next message. */
+  job?: "update";
 }
 
 export const CLI_LABEL: Record<CliName, string> = {
@@ -203,7 +206,7 @@ export function fromSaved(c: SavedChat): Chat {
 
 /** What Rust saves: the chat without what only lives while it's open. */
 export function toSaved(c: Chat): SavedChat {
-  const { streaming: _s, status: _st, looked: _l, busy: _b, queue: _q, unread: _u, review: _r, suggestion: _n, ...saved } = c;
+  const { streaming: _s, status: _st, looked: _l, busy: _b, queue: _q, unread: _u, review: _r, suggestion: _n, job: _j, ...saved } = c;
   return saved;
 }
 
@@ -364,6 +367,14 @@ export async function openSaved(filename: string) {
 }
 
 /** Sends a message, or queues it while the chat is answering. */
+/** A chat in its own tab, started in the background: the tab you're on stays selected. */
+export function backgroundChat(title: string, prompt: string, model: string, job: "update"): string {
+  const c = { ...blankChat(model), title, job };
+  setChats((cs) => [...cs, c], ask.get().active);
+  start(c.id, prompt);
+  return c.id;
+}
+
 export function send(id: string, text: string) {
   const t = text.trim();
   if (!t) return;
@@ -436,12 +447,12 @@ async function finish(d: AskDone) {
   // After the first exchange, a proper title.
   const users = c.transcript.filter((i) => i.role === "user");
   const answer = c.transcript.find((i) => i.role === "assistant");
-  if (users.length === 1 && answer && !c.review) void retitle(c.id, users[0].text, answer.text);
+  if (users.length === 1 && answer && !c.review && !c.job) void retitle(c.id, users[0].text, answer.text);
   if (c.queue.length) {
     const [next, ...rest] = c.queue;
     update(c.id, (x) => ({ ...x, queue: rest }));
     start(c.id, next);
-  } else if (!c.review && !d.error) void suggest(c.id);
+  } else if (!c.review && !c.job && !d.error) void suggest(c.id);
 }
 
 /** The pairs of question and answer in a transcript, oldest first. */

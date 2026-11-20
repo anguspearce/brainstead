@@ -507,6 +507,14 @@ pub fn tools() -> Vec<Value> {
                 "text": {"type": "string", "description": "What to capture: a task on one line, or a Scratchpad note (several lines are fine)."},
                 "reason": reason
             }), &["kind", "text"])),
+        tool("update_item", "Apply an update", Change,
+            "Update…, as the Inbox, a task's menu and a project's detail offer it (needs the app): a line saying what has happened (\"Lena has already replied to Maya\") about an Inbox item, a task or a project, which Brainstead hands to an assistant in a chat of its own in the background. That assistant applies it with these same tools (an action or task done or dropped, a new date, a follow-up, a dated line on the project's or initiative's note); each change is in Changes with Revert. Returns at once with the chat it runs in; run_status and Ask show how it went. Give exactly one of item, task or project. Only when the user is there and asks for it: refused in an unattended session.",
+            schema(json!({
+                "update": {"type": "string", "description": "What has happened, in the user's words."},
+                "item": {"type": "string", "description": "An Inbox item's id from list_inbox: action:<id>, task:12, capture:sources/…"},
+                "task": task, "text": task_text,
+                "project": {"type": "string", "description": "A project's name, as list_projects gives it."}
+            }), &["update"])),
         tool("list_projects", "List projects", Read,
             "Every project, as the Projects screen lists them (needs the app), in its order (by area, as dragged there or with move_project, then A to Z): its name, status and count of next actions, flagged as the screen flags an active one (Stuck: no next action; Quiet: nothing has happened for two weeks), with its note's path. detail adds the area, what done looks like and the waiting, someday and done counts. Statuses are the screen's tabs: active, on-hold, someday, completed. Use the name with list_tasks' project, create_task or update_project.",
             schema(json!({"detail": detail}), &[])),
@@ -1299,6 +1307,10 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
                 acting(obj, name, &["accept", "reject", "accept_run", "reject_run", "revert", "revert_run", "history"], "", &["page"])?,
             )
         }
+        "update_item" if unwatched => Err(CallError::Tool(
+            "update_item hands the update to an assistant whose changes are made at once, so it's only for when the user is there and asks for it, not in an unattended session.".into(),
+        )),
+        "update_item" => act("item.update", obj),
         "weekly_start_over" | "moving_over" if unwatched => {
             Err(CallError::Tool("That's only for when the user is there and asks for it, not in an unattended session.".into()))
         }

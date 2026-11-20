@@ -18,6 +18,11 @@ import { toggleTaskEdit } from "./taskModel";
  *  takes it out), only a thread is waited on, and any capture can be asked about (Ask, which
  *  leaves it in the Inbox). The Inbox's buttons, keys and ticked-several choices, and
  *  clarify_inbox, all follow this. */
+/** An item's id for clarify_inbox and list_inbox: an action by its id (lines repeat across
+ *  initiatives), a capture by its path, the rest by kind and line. */
+export const inboxKey = (i: InboxItem) =>
+  i.kind === "action" && i.action?.id ? `action:${i.action.id}` : i.kind === "capture" ? `capture:${i.path}` : `${i.kind}:${i.line + 1}`;
+
 export function inboxChoices(i: InboxItem): string[] {
   // An initiative's action: a task (a waiting-for when it's delegated), done or dropped.
   if (i.kind === "action")

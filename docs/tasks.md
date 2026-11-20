@@ -85,6 +85,10 @@ An active project with no next action says **No next action** in red, and one wh
 
 In the daily and weekly summaries, area Personal goes under **Personal** and any other area under **Work done** ([Day to day](day-to-day.md)).
 
+### Update…: say what's happened
+
+An Inbox item (`U`), a task's ⋯ menu and a project's bar have **Update…**: a line saying what has happened, such as "Lena has already replied to Maya" on a *Close the loop with Maya* action. Brainstead hands it to an assistant in an Ask chat of its own (**Update: …**), in the background, and it applies the update with Brainstead's tools: the action or task done or dropped, a new date or owner, a follow-up when someone else has the next step, a dated line on the project's or initiative's note. When it can't tell what the update means it changes nothing and says so. The sidebar's Running line shows it while it works and a message says what changed when it ends; each change is in Changes with Revert. Assistants can do the same with the `update_item` tool, but not in an unattended session.
+
 ## The weekly review
 
 <a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/weekly-dark.png"><img alt="The weekly review: the steps by phase on the left, and the current step's real items to act on" src="images/weekly-light.png"></picture></a>

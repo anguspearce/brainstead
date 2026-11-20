@@ -134,7 +134,7 @@ export default function App({ scene }: { scene: Scene | null }) {
   useEffect(() => {
     return watchRuns((f) => {
       if (f.key.startsWith("ingest:") && !f.failed) return;
-      toast(f.text, { label: "Open", run: () => nav.go(f.place) }, f.failed ? "bad" : undefined);
+      toast(f.text, { label: "Open", run: () => (f.open ? f.open() : nav.go(f.place)) }, f.failed ? "bad" : undefined);
     });
   }, []);
 

@@ -6,6 +6,7 @@
 // forward. A project with nothing to do next is flagged red, one that's gone quiet for two weeks
 // muted (worth a look, not a problem). The open one shows its outcome, next actions, waiting-fors and the notes that link it.
 
+import { UpdateBox } from "./UpdateBox";
 import { FoundBar, FoundList } from "./Found";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ProjectRow, TaskRow } from "./api";
@@ -396,6 +397,8 @@ function AreaBand({
 }
 
 function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAllTasks> }) {
+  // Update…'s box, at its button (src/UpdateBox.tsx).
+  const [upd, setUpd] = useState<DOMRect | null>(null);
   const side = usePanes({ "project.side": PANES["project.side"] });
   const t = useMemo(() => projectTasks(all ?? [], p.path), [all, p.path]);
   const [adding, setAdding] = useState("");
@@ -561,6 +564,16 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
               Make active
             </button>
           )}
+          <button
+            type="button"
+            className="btn"
+            title="Say what's happened on it (“the vendor signed”) and an assistant applies it in the background: tasks done, follow-ups, a note of it"
+            onClick={(e) => setUpd(e.currentTarget.getBoundingClientRect())}
+          >
+            <Icon name="zap" size={14} />
+            Update…
+          </button>
+          {upd && <UpdateBox target={{ kind: "project", project: p }} at={upd} onClose={() => setUpd(null)} />}
           <button
             type="button"
             className="btn ghost"

@@ -10,6 +10,8 @@
 // out here or by the MCP server, then made or held by the rule in src-tauri/src/changes.rs, each
 // recorded in Changes with Revert.
 
+import { startUpdate, targetName, UpdateTarget } from "./updates";
+import { runsNow, windowRuns } from "./runs";
 import { compareMarkdown, compareNote } from "./skills/Compare";
 import { extensionOutdatedText, rejectedText } from "./syncStatus";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
@@ -71,6 +73,7 @@ import {
   appendAsReference,
   doneNow,
   inboxChoices,
+  inboxKey,
   newReferenceNote,
   settleInboxItem,
   suggestKind,
@@ -683,8 +686,6 @@ async function projectPath(name: string, activeOnly = false): Promise<string> {
 
 /** An item's id for clarify_inbox: an action by its id (lines repeat across initiatives). */
 // A capture by its file: captures have no line, so by line two would share an id.
-const inboxKey = (i: InboxItem) =>
-  i.kind === "action" && i.action?.id ? `action:${i.action.id}` : i.kind === "capture" ? `capture:${i.path}` : `${i.kind}:${i.line + 1}`;
 
 /** How many items Suggest asks about at once, as the Inbox's top-bar Suggest (the first 20) does. */
 const SUGGEST_AT_MOST = 20;
@@ -1069,6 +1070,29 @@ export async function clarifyItem(i: InboxItem, a: Args, unattended = false): Pr
       throw new Error("becomes is next, waiting, someday, project, done, reference, ingest or delete.");
   }
   return said;
+}
+
+/** Update…: what has happened, about an Inbox item, a task or a project, handed to an assistant in
+ *  the background as the screens do (src/updates.ts). */
+async function updateItem(a: Args): Promise<string> {
+  const update = str(a, "update");
+  if (!update) throw new Error("Give update: what has happened, in the user's words.");
+  const which = ["item", "task", "project"].filter((k) => str(a, k));
+  if (which.length !== 1) throw new Error("Give exactly one of item (an Inbox id), task (path:line) or project (its name).");
+  let target: UpdateTarget;
+  if (str(a, "item")) {
+    const key = str(a, "item")!;
+    const i = (await api.inboxList()).filter(unclarified).find((x) => inboxKey(x) === key);
+    if (!i) throw new Error(`No Inbox item ${key}. list_inbox shows them, each with its id.`);
+    target = { kind: "inbox", item: i };
+  } else if (str(a, "task")) target = { kind: "task", task: findTask(await api.tasksAll(), str(a, "task")!, str(a, "text")) };
+  else {
+    const path = await projectPath(str(a, "project")!);
+    const p = (await api.projectsList()).find((x) => x.path === path)!;
+    target = { kind: "project", project: p };
+  }
+  const chat = startUpdate(target, update);
+  return `Updating ${targetName(target)} in the background, in the Ask chat “Update: ${targetName(target)}” (${chat}). Its changes go to Changes as it makes them; run_status and the sidebar's Running line show it while it works.`;
 }
 
 /** Quick capture: a task to the To Do list's Inbox (the top of its Other section) or a note to
@@ -1786,6 +1810,16 @@ export function summaryRunLine(r: ReviewRun, changes: ChangeRow[]): string {
   return `- ${name} · ${how} · ${when} · ${state}${change}${r.chat ? ` · chat ${r.chat}` : ""}`;
 }
 
+/** run_status's Update… lines: those going, and those that ended this session, as the Running list shows them. */
+function updateLines(): string[] {
+  const going = windowRuns.get().filter((r) => r.key.startsWith("update:"));
+  const ended = runsNow.get().finished.filter((f) => f.key.startsWith("update:"));
+  return [
+    going.length ? `Updates running: ${going.map((r) => `${r.label} (${r.doing})`).join("; ")}` : "",
+    ended.length ? `Updates that ended: ${ended.map((f) => f.text).join("; ")}` : "",
+  ].filter(Boolean);
+}
+
 async function runStatus(a: Args = {}): Promise<string> {
   const [runs, check, reviews, prep, find, contra, cs, changes] = await Promise.all([
     api.ingestRuns(),
@@ -1830,6 +1864,7 @@ async function runStatus(a: Args = {}): Promise<string> {
         .join("; ") || "none"
     }`,
     `Daily check: ${check.running ? `running (${check.doing}, ${Math.round(check.progress * 100)}%)` : `last ${check.lastRun ?? "never"}, next ${check.next ?? "not scheduled"}`}${check.summary ? ` — ${check.summary}` : ""}`,
+    ...updateLines(),
     `Daily and weekly summaries: ${reviews.running.length ? `running the ${reviews.running.join(" and ")} summary; ` : ""}next daily ${reviews.next.daily ?? "not scheduled"}, next weekly ${reviews.next.weekly ?? "not scheduled"}`,
     `Weekly review preparation: ${
       prep.running
@@ -3002,6 +3037,7 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   "inbox.list": (a) => listInbox(a),
   "inbox.clarify": clarify,
   "inbox.capture": captureTool,
+  "item.update": updateItem,
   "projects.list": async (a) =>
     listed(a, orderedProjects(await api.projectsList()), {
       text: (p) => projectOut(p),

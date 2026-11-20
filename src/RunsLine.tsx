@@ -129,7 +129,11 @@ function RunsPopover({
                 type="button"
                 className={`runsdone${f.failed ? " bad" : ""}`}
                 title={`Open where it is: ${f.text}`}
-                onClick={() => go(f.place)}
+                onClick={() => {
+                  if (!f.open) return go(f.place);
+                  onClose();
+                  f.open();
+                }}
               >
                 <Icon name={f.failed ? "alert" : "check"} size={12} />
                 <span className="grow ell">{f.text}</span>

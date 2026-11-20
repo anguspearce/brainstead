@@ -24,6 +24,8 @@ export interface Running {
   queued?: boolean;
   /** Where the run and what it made are: its pane, screen or list. */
   place: Place;
+  /** How it ended, for a run the window keeps itself (an Update…), read once it's gone. */
+  end?: () => Pick<Finished, "text" | "failed" | "place" | "open">;
 }
 
 /** What's going, as run_status lists it (src/mcpActions.ts): each run with its Stop. */
@@ -151,11 +153,14 @@ export interface Finished {
   at: number;
   failed: boolean;
   place: Place;
+  /** Opens what it made, where a place alone can't (an Update…'s chat in Ask). */
+  open?: () => void;
 }
 
 /** How a run that has gone from the running list ended, from what the states now say. */
 export function endOf(r: Running, s: RunStates, at: number): Finished {
   const base = { key: `${r.key}@${at}`, short: r.short, at, place: r.place, failed: false };
+  if (r.end) return { ...base, ...r.end() };
   if (r.key.startsWith("ingest:")) {
     const run = s.ingests.find((x) => `ingest:${x.id}` === r.key);
     const what =
@@ -228,9 +233,12 @@ export function sampleRuns(): RunsNow {
   };
 }
 
+/** Runs the window keeps itself rather than Rust (src/updates.ts's Update… runs). */
+export const windowRuns = new Store<Running[]>([]);
+
 /** The next state from the last one and fresh states: runs gone from the list become finished. */
-export function nextRuns(prev: RunsNow, s: RunStates, at: number): { now: RunsNow; ended: Finished[] } {
-  const running = runningOf(s);
+export function nextRuns(prev: RunsNow, s: RunStates, at: number, own: Running[] = []): { now: RunsNow; ended: Finished[] } {
+  const running = [...runningOf(s), ...own];
   const keys = new Set(running.map((r) => r.key));
   const ended = prev.running.filter((r) => !keys.has(r.key)).map((r) => endOf(r, s, at));
   return { now: { running, finished: [...ended, ...prev.finished].slice(0, FINISHED_KEPT) }, ended };
@@ -242,6 +250,16 @@ export function watchRuns(onEnd: (f: Finished) => void): () => void {
   let live = true;
   let timer = 0;
   let busy = false;
+  let last: RunStates | null = null;
+  const settle = (s: RunStates) => {
+    const { now, ended } = nextRuns(runsNow.get(), s, Date.now(), windowRuns.get());
+    runsNow.set(now);
+    ended.forEach(onEnd);
+  };
+  // The window's own runs change without Rust saying so: settled at once on the last states.
+  const offOwn = windowRuns.subscribe(() => {
+    if (last && !sceneRuns.get()) settle(last);
+  });
   const refresh = async () => {
     if (busy) return;
     busy = true;
@@ -250,9 +268,8 @@ export function watchRuns(onEnd: (f: Finished) => void): () => void {
       if (!live) return;
       // A scene's sample runs stay as they are.
       if (sceneRuns.get()) return;
-      const { now, ended } = nextRuns(runsNow.get(), s, Date.now());
-      runsNow.set(now);
-      ended.forEach(onEnd);
+      last = s;
+      settle(s);
     } finally {
       busy = false;
     }
@@ -272,6 +289,7 @@ export function watchRuns(onEnd: (f: Finished) => void): () => void {
   ];
   return () => {
     live = false;
+    offOwn();
     window.clearTimeout(timer);
     offs.forEach((o) => void o.then((f) => f()));
   };

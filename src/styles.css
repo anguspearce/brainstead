@@ -596,6 +596,27 @@ html[data-platform="windows"] .top {
   font-size: var(--fs-2xs);
   color: var(--ink2);
 }
+
+/* Update…'s box (src/UpdateBox.tsx). */
+.updbox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+}
+.updbox .mhead {
+  padding: 0;
+}
+.updbox textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  font-size: var(--fs-md);
+}
+.updbox p {
+  margin: 0;
+}
+
 .runspop {
   display: flex;
   flex-direction: column;
@@ -7475,6 +7496,11 @@ select.sel {
 }
 .iask {
   align-self: flex-start;
+}
+.iasks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .ikeys {
   display: grid;

@@ -9,6 +9,7 @@
 // suggestion from the model is only shown until you accept it.
 
 import { ask as askChats, askedFromInbox } from "./askState";
+import { UpdateBox } from "./UpdateBox";
 import { nav, openDoc, useViewState } from "./nav";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sampleSuggestion, sceneInboxSuggest } from "./scene";
@@ -277,6 +278,9 @@ export function InboxScreen() {
   const items = useMemo(() => inboxRows(raw ?? []), [raw]);
   const [sel, setSel] = useViewState<string | null>("inbox:sel", null);
   const [form, setForm] = useState<{ mode: "next" | "waiting"; c: Clarified } | null>(null);
+  // Update…'s box, at its button (src/UpdateBox.tsx).
+  const [upd, setUpd] = useState<DOMRect | null>(null);
+  const updBtn = useRef<HTMLButtonElement>(null);
   const [filing, setFiling] = useState(false);
   const [making, setMaking] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
@@ -485,7 +489,9 @@ export function InboxScreen() {
       const map: Record<string, string> = Object.fromEntries(
         inboxChoices(cur).map((b) => [keyOf(b, cur) === "⌫" ? "Backspace" : keyOf(b, cur).toLowerCase(), b]),
       );
-      if (e.key === "j" || e.key === "ArrowDown") setSel(key(items[Math.min(items.length - 1, idx + 1)]));
+      if (e.key === "u" && !map.u && !busy(cur) && updBtn.current) {
+        if (!e.repeat && !isStrayKey(e)) setUpd(updBtn.current.getBoundingClientRect());
+      } else if (e.key === "j" || e.key === "ArrowDown") setSel(key(items[Math.min(items.length - 1, idx + 1)]));
       else if (e.key === "k" || e.key === "ArrowUp") setSel(key(items[Math.max(0, idx - 1)]));
       else if ((e.key === "Enter" && s) || map[e.key]) {
         // A held key repeats: it acts once, and not again while that action is still under way.
@@ -762,17 +768,32 @@ export function InboxScreen() {
                     ))}
                 </div>
               )}
-              {!busy(cur) && choiceGroups(cur).ask && (
-                <button
-                  type="button"
-                  className="btn sm ghost iask"
-                  title={`${CHOICE.ask.tip(cur)} (${keyOf("ask", cur)})`}
-                  onClick={() => outcome(cur, { becomes: "ask" })}
-                >
-                  <Icon name="ask" size={13} />
-                  {CHOICE.ask.label(cur)}
-                  <span className="kbd">{keyOf("ask", cur)}</span>
-                </button>
+              {!busy(cur) && (
+                <div className="iasks">
+                  {choiceGroups(cur).ask && (
+                    <button
+                      type="button"
+                      className="btn sm ghost iask"
+                      title={`${CHOICE.ask.tip(cur)} (${keyOf("ask", cur)})`}
+                      onClick={() => outcome(cur, { becomes: "ask" })}
+                    >
+                      <Icon name="ask" size={13} />
+                      {CHOICE.ask.label(cur)}
+                      <span className="kbd">{keyOf("ask", cur)}</span>
+                    </button>
+                  )}
+                  <button
+                    ref={updBtn}
+                    type="button"
+                    className="btn sm ghost iask"
+                    title="Say what's happened (“Lena has already replied to Maya”) and an assistant applies it in the background (U)"
+                    onClick={(e) => setUpd(e.currentTarget.getBoundingClientRect())}
+                  >
+                    <Icon name="pencil" size={13} />
+                    Update…
+                    <span className="kbd">U</span>
+                  </button>
+                </div>
               )}
             </>
           ) : (
@@ -786,6 +807,7 @@ export function InboxScreen() {
           )}
         </div>
       </div>
+      {upd && cur && <UpdateBox target={{ kind: "inbox", item: cur }} at={upd} onClose={() => setUpd(null)} />}
       {form && cur && (
         <ClarifyForm
           mode={form.mode}

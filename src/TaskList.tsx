@@ -5,6 +5,7 @@
 // A list of tasks you can work: tick, click a chip to change its field, right-click or ⋯ for its menu, drag to reorder (in
 // manual lists). Used by Tasks, Today and the task blocks in documents.
 
+import { UpdateForm } from "./UpdateBox";
 import moment from "moment";
 import { askWith } from "./askState";
 import { Fragment, useEffect, useRef, useState } from "react";
@@ -610,7 +611,7 @@ const canRename = (t: TaskRow) => {
   return !!retitled(t.lineText, words, words || "x");
 };
 
-/** The task's verbs: rename, in progress, waiting for, cancel; More… (the menu's fields); its note; delete.
+/** The task's verbs: update, rename, in progress, waiting for, cancel; More… (the menu's fields); its note; delete.
  *  `lead`: fields above them (the pane), so a line before them. */
 function TaskActions({
   t,
@@ -619,6 +620,7 @@ function TaskActions({
   lead,
   onRename,
   onMore,
+  onUpdate,
 }: {
   t: TaskRow;
   done: () => void;
@@ -626,6 +628,8 @@ function TaskActions({
   lead?: boolean;
   onRename: () => void;
   onMore?: () => void;
+  /** Update…: say what's happened, for an assistant to apply (src/updates.ts). */
+  onUpdate?: () => void;
 }) {
   const rename = canRename(t);
   // A done task it can't rename has none of its state verbs, so no empty group.
@@ -633,6 +637,17 @@ function TaskActions({
   return (
     <>
       {lead && any && <div className="sep" />}
+      {onUpdate && !t.done && (
+        <button
+          type="button"
+          role={item}
+          title="Say what's happened (“Maya has replied”) and an assistant applies it in the background: done, a new date, a follow-up"
+          onClick={onUpdate}
+        >
+          <Icon name="zap" size={14} />
+          Update…
+        </button>
+      )}
       {rename && (
         <button type="button" role={item} title="Change the task's words (its dates and tags stay)" onClick={onRename}>
           <Icon name="pencil" size={14} />
@@ -719,7 +734,7 @@ function TaskActions({
 
 /** What a task's popover shows: the ⋯ menu's verbs, its More… (every field), a row's + (fields
  *  it hasn't got), renaming, or one field's picker (a chip). */
-export type TaskPopView = "menu" | "more" | "add" | "rename" | TaskField;
+export type TaskPopView = "menu" | "more" | "add" | "rename" | "update" | TaskField;
 
 /** A task's popover by its row: the ⋯ menu, a chip's picker or the row's +. Closes after each change. */
 function TaskPop({ t, at, view: first, onClose }: { t: TaskRow; at: DOMRect; view: TaskPopView; onClose: () => void }) {
@@ -727,12 +742,22 @@ function TaskPop({ t, at, view: first, onClose }: { t: TaskRow; at: DOMRect; vie
   const [picker, setPick] = useDatePick(t, onClose);
   // More… in two columns when the window can take them beside the row; one on a narrow window.
   const wide = window.innerWidth >= 600 && view === "more" && !picker;
-  const width = wide ? 540 : view === "menu" || view === "add" ? 250 : 290;
+  const width = wide ? 540 : view === "menu" || view === "add" ? 250 : view === "update" ? 360 : 290;
   let body: React.ReactNode;
   if (picker) body = picker;
   else if (view === "rename") body = <RenameBox t={t} done={onClose} onBack={() => setView("menu")} />;
+  else if (view === "update") body = <UpdateForm target={{ kind: "task", task: t }} onClose={onClose} />;
   else if (view === "menu")
-    body = <TaskActions t={t} done={onClose} item="menuitem" onRename={() => setView("rename")} onMore={() => setView("more")} />;
+    body = (
+      <TaskActions
+        t={t}
+        done={onClose}
+        item="menuitem"
+        onRename={() => setView("rename")}
+        onMore={() => setView("more")}
+        onUpdate={() => setView("update")}
+      />
+    );
   else if (view === "more")
     body = (
       <div className="tmcols">
@@ -1115,7 +1140,7 @@ export function TaskList({
                 type="button"
                 className="ibtn tmore"
                 aria-label="Task actions"
-                title="Rename, waiting for, in progress, cancel, open its note or delete; More… for its fields"
+                title="Update, rename, waiting for, in progress, cancel, open its note or delete; More… for its fields"
                 onClick={(e) => {
                   e.stopPropagation();
                   setMenu({ t, at: e.currentTarget.getBoundingClientRect(), view: "menu" });
