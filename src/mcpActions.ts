@@ -48,7 +48,9 @@ import {
   TaskRow,
   Transcript,
   WeeklyState,
+  WeekPrepAction,
   WeekPrepSuggestion,
+  WeekPrepTask,
 } from "./api";
 import { ACTION as FIX_ACTION, chosenRows, startUnticked } from "./FixName";
 import {
@@ -164,7 +166,17 @@ import { focusMode } from "./focus";
 import { RAIL_BELOW, RailWidth, railOn, railWidth, setRail } from "./sidebarRail";
 import { DEFAULT_SCHEDULE, DEFAULT_WEEKLY_REVIEW } from "./Jobs";
 import { foundDetail, handedOver, INSTALL, languageName, SCREEN_NAME, scriptsFolder, terminalCommands, WEBSITE } from "./Settings";
-import { choice, editableText, prepStep, WEEKLY_STATE_CHANGED, withText } from "./weeklyPrep";
+import {
+  addLine,
+  choice,
+  clarifyArgs,
+  current as currentTask,
+  editableText,
+  inboxItem,
+  prepStep,
+  WEEKLY_STATE_CHANGED,
+  withText,
+} from "./weeklyPrep";
 import { draftNotes, followThrough, isTranscriptPath, keepNote, noteFile, specOf, specOk, trashTranscript } from "./meetingFlow";
 import { DONE as MEETING_DONE, needsDate, noteExists, TYPES as MEETING_TYPES } from "./Meeting";
 import { order as contradictionsOrder, reportMarkdown } from "./Contradictions";
@@ -505,6 +517,18 @@ async function submitAll(list: ChangeSubmit[]): Promise<{ applied: boolean; mess
 }
 
 async function editTask(a: Args, r: McpRequest): Promise<string> {
+  const { t, line, change, done } = await taskEdit(a, r);
+  const was = taskWords(t.text);
+  const o = await submitAll([change]);
+  told(o.applied ? `${done.join(", ")}: “${was}”` : `held a change to “${was}” for you in Changes`);
+  if (!o.applied) return o.message;
+  const now = (await api.tasksAll()).find((x) => x.path === t.path && x.lineText === line) ?? t;
+  return `Done (${done.join(", ")}). The task is now:\n${taskLineOut(now)}\n${o.message}`;
+}
+
+/** edit_task's edit worked out, not yet submitted: the task, its line afterwards, the change and
+ *  what it does in words. An accepted weekly suggestion's task edit is made with it too. */
+async function taskEdit(a: Args, r: McpRequest): Promise<{ t: TaskRow; line: string; change: ChangeSubmit; done: string[] }> {
   const id = str(a, "task");
   if (!id) throw new Error("Which task? Give its id from list_tasks (path:line).");
   const t = findTask(await api.tasksAll(), id, str(a, "text"));
@@ -587,14 +611,13 @@ async function editTask(a: Args, r: McpRequest): Promise<string> {
     throw new Error(
       "Nothing to change: give words, done, due, defer, start, created, priority, contexts, effort, project, waiting, followup or status.",
     );
-  const was = taskWords(t.text);
-  const o = await submitAll([
-    sub(a, r, t.path, "task", `Edit “${was}”: ${done.join(", ")}`, { op: "lines", at: t.line, old: [t.lineText], new: lines }),
-  ]);
-  told(o.applied ? `${done.join(", ")}: “${was}”` : `held a change to “${was}” for you in Changes`);
-  if (!o.applied) return o.message;
-  const now = (await api.tasksAll()).find((x) => x.path === t.path && x.lineText === last()) ?? t;
-  return `Done (${done.join(", ")}). The task is now:\n${taskLineOut(now)}\n${o.message}`;
+  const change = sub(a, r, t.path, "task", `Edit “${taskWords(t.text)}”: ${done.join(", ")}`, {
+    op: "lines",
+    at: t.line,
+    old: [t.lineText],
+    new: lines,
+  });
+  return { t, line: last(), change, done };
 }
 
 /** The spacing a renumbered list's ranks get (1024, 2048…), as Rust's RANK_SPACING. */
@@ -1003,8 +1026,9 @@ export async function clarifyChanges(
   }
 }
 
-/** Clarifies one Inbox item as `a` says (becomes, text, project…) and returns what it became, for
- *  the caller to say: the MCP server's clarify, and the weekly review's suggestions. `unattended`:
+/** Clarifies one Inbox item as `a` says (becomes, text, project…) with the screen's own writes,
+ *  and returns what it became, for the caller to say: the weekly review's Accept, which the user
+ *  clicks. An assistant's clarify is clarifyChanges, weekly_suggestion's too. `unattended`:
  *  nobody is watching, so an ingest it starts runs as a scheduled one. */
 export async function clarifyItem(i: InboxItem, a: Args, unattended = false): Promise<string> {
   a = renewArgs("inbox.clarify", a);
@@ -2024,7 +2048,70 @@ async function weeklyStatus(): Promise<string> {
   return out.join("\n");
 }
 
-async function weeklySuggestion(a: Args): Promise<string> {
+/** An accepted suggestion as an assistant's changes (D-20261005-10): what the review's Accept
+ *  writes, built as the tools for the same edits build them (edit_task, clarify_inbox, capture),
+ *  so it's recorded in Changes with Revert and held by the usual rules. A link is a change
+ *  already (weekprep_link) and isn't made here. */
+async function suggestionChanges(
+  act: Exclude<WeekPrepAction, { do: "link" }>,
+  projects: ProjectRow[],
+  a: Args,
+  r: McpRequest,
+): Promise<{ did: string; changes: ChangeSubmit[]; after?: () => Promise<unknown> }> {
+  const task = (t: WeekPrepTask) => ({ ...a, task: `${t.path}:${t.line + 1}`, text: t.text });
+  const edit = async (t: WeekPrepTask, set: Args, did: (label: string) => string) => {
+    const e = await taskEdit({ ...task(t), ...set }, r);
+    return { did: did(taskLabel(e.t.text)), changes: [e.change] };
+  };
+  switch (act.do) {
+    case "add": {
+      // Where the screen's Add task puts it: its project's Next actions or Waiting for, else the
+      // To Do list's Other.
+      const p = act.project ? projects.find((x) => x.name.toLowerCase() === act.project!.toLowerCase()) : undefined;
+      const line = `- [ ] ${addLine(act, p)}`;
+      const heading = p && act.tags.includes("waiting-for") ? { heading: WAITING_FOR } : {};
+      return {
+        did: `Added “${act.text}”${p ? ` to ${p.name}` : ""}`,
+        changes: [sub(a, r, p?.path ?? TODO_LIST, "task", `Add “${taskWords(line)}”`, { op: "add_task", line, ...heading })],
+      };
+    }
+    case "tick":
+      return edit(act.task, { done: true }, (l) => `Ticked “${l}”`);
+    case "defer":
+      return edit(act.task, { defer: act.date }, (l) => `Deferred “${l}” to ${act.date}`);
+    case "waiting": {
+      const t = await currentTask(act.task);
+      if (t.tags.some((x) => x.replace(/^#/, "") === "waiting-for")) throw new Error("That task is already waiting for someone.");
+      return edit(act.task, { waiting: true }, (l) => `Marked “${l}” as waiting for`);
+    }
+    case "someday": {
+      const t = await currentTask(act.task);
+      if (t.tags.some((x) => x.replace(/^#/, "") === "someday-maybe")) throw new Error("That task is on Someday / maybe already.");
+      const c = inQuote(t.lineText, (l) => tagToggled(l, "someday-maybe", "Moved to someday", "Made a next action"));
+      const label = taskLabel(t.text);
+      return {
+        did: `Moved “${label}” to Someday / maybe`,
+        changes: [
+          sub(a, r, t.path, "task", `Move “${taskWords(t.text)}” to Someday / maybe`, {
+            op: "lines",
+            at: t.line,
+            old: [t.lineText],
+            new: c.lines,
+          }),
+        ],
+      };
+    }
+    case "edit":
+      return edit(act.task, { words: act.text }, (l) => `Reworded “${l}” to “${act.text}”`);
+    case "clarify": {
+      const i = await inboxItem(act.item);
+      const c = await clarifyChanges(i, renewArgs("inbox.clarify", { ...a, ...clarifyArgs(act) }), r);
+      return { did: `Clarified “${i.text.slice(0, 60)}” as ${c.said}`, changes: c.changes, after: c.after };
+    }
+  }
+}
+
+async function weeklySuggestion(a: Args, r: McpRequest): Promise<string> {
   const id = str(a, "id");
   const how = str(a, "action");
   if (!id) throw new Error("Which suggestion? Give its id from weekly_review.");
@@ -2040,13 +2127,37 @@ async function weeklySuggestion(a: Args): Promise<string> {
     );
   if (st.handled?.[id]) throw new Error(`That suggestion was ${st.handled[id]} already.`);
   let line = "";
+  // What to say after "Accepted: <line>": how it's undone, or that it's held.
+  let then = "";
   if (how === "accept") {
     const projects = (await api.projectsList()).filter((p) => p.status === "active");
     const text = str(a, "text");
     if (text && editableText(s) === null) throw new Error("That suggestion has no words to change: accept it as it is, or skip it.");
-    const c = toFile(s) ? null : choice(withText(s, text), week, projects, a.unattended === true);
-    if (!c) throw new Error(`Accepting it does ${offers(s, week, projects)}. Skip it once it's dealt with.`);
-    line = await c.run();
+    const edited = withText(s, text);
+    const c = toFile(s) ? null : choice(edited, week, projects, a.unattended === true);
+    if (!c || !edited.action) throw new Error(`Accepting it does ${offers(s, week, projects)}. Skip it once it's dealt with.`);
+    if (edited.action.do === "link") {
+      line = await c.run();
+      then = line.startsWith("Held ") ? ". Nothing is changed until they accept it." : "; the link is made (revertable in Changes).";
+      if (line.startsWith("Held ")) line = line.replace(/\.$/, "");
+    } else {
+      // An assistant's accept is its own change, not the screen's direct write: this session's
+      // (held when nobody is watching and a check fails), with the suggestion as its reason.
+      const origin = { ...originOf(a, r), ...(a.unattended === true ? { trigger: "scheduled" as const } : {}) };
+      const args = { origin, reason: str(a, "reason") ?? `A weekly review suggestion: ${s.text}` };
+      const { did, changes, after } = await suggestionChanges(edited.action, projects, args, r);
+      const o = changes.length ? await submitAll(changes) : null;
+      if (!o || o.applied) {
+        const out = await after?.();
+        line = did;
+        then = `.${typeof out === "string" ? ` ${out}` : ""}${o ? " It's recorded in Changes, where the user can revert it." : ""}`;
+        told(did.charAt(0).toLowerCase() + did.slice(1));
+      } else {
+        line = `Held for the user in Changes: ${c.title}`;
+        then = `. ${o.outs.map((x) => x.flags.join(" ")).find(Boolean) ?? "A check didn't pass."} Nothing is changed until they accept it.`;
+        told(`held a weekly review suggestion for you in Changes: “${s.text.slice(0, 60)}”`);
+      }
+    }
   }
   // Kept with the review's progress, as the screen keeps it, so it stays hidden there.
   await api.weeklyStateWrite({
@@ -2059,11 +2170,7 @@ async function weeklySuggestion(a: Args): Promise<string> {
     noted(`skipped a weekly review suggestion: “${s.text.slice(0, 60)}”`);
     return `Skipped “${s.text}”.`;
   }
-  return s.action?.do === "link"
-    ? line.startsWith("Held ")
-      ? `Accepted: ${line.replace(/\.$/, "")}. Nothing is changed until they accept it.`
-      : `Accepted: ${line}; the link is made (revertable in Changes).`
-    : `Accepted: ${line}. ${keyLabel("⌘Z")} in the app undoes it.`;
+  return `Accepted: ${line}${then}`;
 }
 
 /** The weekly review's Start over: its progress, notes, decisions and handled suggestions dropped,
@@ -2711,8 +2818,10 @@ async function syncPull(a: Args): Promise<string> {
   const kindsArg = Array.isArray(a.kinds) ? (a.kinds as string[]).filter((k) => ["chats", "mail", "transcripts"].includes(k)) : undefined;
   const r = await api.syncPull(query, days, kindsArg);
   if (r.blocked) throw new Error(r.blocked);
+  // What a skip list kept out is said, apart from what went wrong.
+  const leftOut = r.leftOut ?? [];
   if (!r.items.length)
-    return `Nothing found for ${query ? `"${query}"` : "that window"} in the last ${days} days.${r.problems.length ? ` Problems: ${r.problems.join("; ")}.` : ""}`;
+    return `Nothing found for ${query ? `"${query}"` : "that window"} in the last ${days} days.${r.problems.length ? ` Problems: ${r.problems.join("; ")}.` : ""}${leftOut.length ? ` ${leftOut.join(". ")}.` : ""}`;
   const pulled = r.items.filter((i) => !i.alreadyHad).length;
   const byKind = (k: string) => r.items.filter((i) => i.kind === k);
   const section = (k: string, label: string) => {
@@ -2732,6 +2841,7 @@ async function syncPull(a: Args): Promise<string> {
     ...section("chat", "Teams chats"),
     ...section("transcript", "Meeting transcripts"),
     ...(r.problems.length ? ["", `Problems: ${r.problems.join("; ")}`] : []),
+    ...(leftOut.length ? ["", ...leftOut] : []),
   ].join("\n");
 }
 

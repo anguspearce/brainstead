@@ -8,7 +8,8 @@
 //! in the vault is vended, not fetched again — and pulls only what's missing (D-20261025-04). Chats
 //! and mail threads go through the sync pass's own steps (`run::sync_chat`, `run::sync_thread`), so a
 //! chat is read back page by page to the first day asked for and a source that has gained messages
-//! is topped up. Reads only, like the rest of the sync; macOS and Windows (wherever there is a
+//! is topped up. A chat on Chats to skip and mail from a sender on Mail to skip are left out here as
+//! they are there, and the result says so. Reads only, like the rest of the sync; macOS and Windows (wherever there is a
 //! secret store).
 
 use chrono::{Duration, Local, Utc};
@@ -39,7 +40,10 @@ pub struct Item {
 #[serde(rename_all = "camelCase")]
 pub struct Outcome {
     pub items: Vec<Item>,
+    /// What went wrong.
     pub problems: Vec<String>,
+    /// What wasn't read because it's on a skip list (Settings › Sync): said, but not a problem.
+    pub left_out: Vec<String>,
     pub blocked: Option<String>,
 }
 
@@ -164,8 +168,14 @@ fn pull_chats(p: &Pass, st: &mut state::State, terms: &[String], cutoff_day: &st
         }
     };
     let me = fetch::my_name(&p.sign_in);
+    let mut skipped = 0;
     for conv in convs {
         if !run::chat_taken(&conv, p.s) {
+            continue;
+        }
+        // On Chats to skip: not read, as in a sync pass, so whether it's about the topic isn't known.
+        if run::chat_skipped(&conv.id, p.s) {
+            skipped += 1;
             continue;
         }
         let covers = |day: &str, msgs: &[fetch::ChatMessage]| covered(&conv.topic, day, msgs, cutoff_day, terms);
@@ -189,6 +199,23 @@ fn pull_chats(p: &Pass, st: &mut state::State, terms: &[String], cutoff_day: &st
             }
         }
     }
+    out.left_out.extend(chats_left_out(skipped));
+}
+
+/// What the result says of the chats on Chats to skip, so less coming back isn't taken for nothing
+/// being there.
+fn chats_left_out(skipped: usize) -> Option<String> {
+    match skipped {
+        0 => None,
+        1 => Some("Left out, not read: 1 chat on Chats to skip (Settings › Sync)".into()),
+        n => Some(format!("Left out, not read: {n} chats on Chats to skip (Settings › Sync)")),
+    }
+}
+
+/// The same for mail in the days asked for whose sender is on Mail to skip.
+fn mail_left_out(senders: &std::collections::BTreeSet<String>) -> Option<String> {
+    let senders: Vec<&str> = senders.iter().map(String::as_str).collect();
+    (!senders.is_empty()).then(|| format!("Left out, not read: mail from {}, on Mail to skip (Settings › Sync)", senders.join(", ")))
 }
 
 /// Whether the mailbox lists a message later than the last one in the thread's source (None: the
@@ -209,12 +236,18 @@ fn pull_mail(p: &Pass, query: &str, terms: &[String], since: chrono::DateTime<Ut
         }
     };
     let mut seen = std::collections::HashSet::new();
+    let mut skipped = std::collections::BTreeSet::new();
     for m in mail {
         if m.received < since || m.conversation_id.is_empty() || !seen.insert(m.conversation_id.clone()) {
             continue;
         }
         // $search already matched the thread; for an inbox listing without a query, matches() passes.
         if query.trim().is_empty() && !matches(&format!("{} {}", m.subject, m.from), terms) {
+            continue;
+        }
+        // On Mail to skip: the thread is left out by its latest message, as in a sync pass.
+        if run::ignored(&m.from_address, &p.s.sync_ignore_senders) {
+            skipped.insert(m.from_address.trim().to_ascii_lowercase());
             continue;
         }
         // Already captured, still present and holding this message → vend it, without a fetch.
@@ -235,6 +268,7 @@ fn pull_mail(p: &Pass, query: &str, terms: &[String], since: chrono::DateTime<Ut
         let date = last.unwrap_or(m.received).with_timezone(&Local).format("%Y-%m-%d").to_string();
         out.items.push(Item { kind: "email".into(), title: m.subject, date, path, already_had });
     }
+    out.left_out.extend(mail_left_out(&skipped));
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -305,6 +339,21 @@ mod tests {
         assert!(!covered("", "2026-10-24", &said("See you at ten"), "2026-10-22", &t));
         assert!(!covered("Orbit App", "2026-10-21", &said("Orbit"), "2026-10-22", &t), "before the days asked for");
         assert!(covered("", "2026-10-24", &said("anything"), "2026-10-22", &terms("")));
+    }
+
+    #[test]
+    fn what_the_skip_lists_left_out_is_said() {
+        assert_eq!(chats_left_out(0), None);
+        assert_eq!(chats_left_out(1).unwrap(), "Left out, not read: 1 chat on Chats to skip (Settings › Sync)");
+        assert_eq!(chats_left_out(3).unwrap(), "Left out, not read: 3 chats on Chats to skip (Settings › Sync)");
+        let mut senders = std::collections::BTreeSet::new();
+        assert_eq!(mail_left_out(&senders), None);
+        senders.insert("offers@shop.example".to_string());
+        senders.insert("news@acme.example".to_string());
+        assert_eq!(
+            mail_left_out(&senders).unwrap(),
+            "Left out, not read: mail from news@acme.example, offers@shop.example, on Mail to skip (Settings › Sync)"
+        );
     }
 
     #[test]

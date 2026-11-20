@@ -719,6 +719,8 @@ fn task_inbox_and_project_edits_carry_the_session() {
         // Wiki health's safe fixes and Fix name go through Changes too, as this session's.
         ("fix_health", "health.fix", json!({})),
         ("fix_name", "fix_name", json!({"written_as": "Lenna", "correct_spelling": "Lena", "apply": true})),
+        // An accepted weekly review suggestion is the assistant's change, not the screen's own write.
+        ("weekly_suggestion", "weekly.suggestion", json!({"id": "s1", "action": "accept"})),
         // Said unattended, which holds for the calls after it, so these come last.
         ("edit_task", "task.edit", json!({"task": "Me. To Do List.md:12", "text": "Call Sam", "done": true, "unattended": true})),
         // A restore and a saved contradictions report are changes too, held unattended when a check fails.

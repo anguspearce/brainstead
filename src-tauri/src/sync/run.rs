@@ -158,7 +158,8 @@ pub(super) struct Pass<'a> {
     /// A back-fill's first day (`YYYY-MM-DD`), see [`run_from`].
     pub(super) from: Option<String>,
     /// An on-demand pull (`pull.rs`), which was asked for what it reads: a source that has gone from
-    /// the vault is written again though nothing new came.
+    /// the vault is written again though nothing new came. A chat it reads that no pass has seen
+    /// keeps its first sync for the pass (`State::chat_read`).
     pub(super) regather: bool,
 }
 
@@ -224,7 +225,7 @@ fn sync_chats(p: &Pass, st: &mut state::State, r: &mut Report) {
         covers: &|_, _| true,
     };
     for conv in convs {
-        if !chat_taken(&conv, p.s) || p.s.sync_ignore_chats.contains(&conv.id) {
+        if !chat_taken(&conv, p.s) || chat_skipped(&conv.id, p.s) {
             continue;
         }
         sync_chat(p, &conv, &me, &days, st, r);
@@ -239,6 +240,12 @@ pub(super) fn chat_taken(conv: &fetch::Conv, s: &settings::Settings) -> bool {
         ConvKind::Channel => s.sync_channels.iter().any(|c| c == &conv.id),
         ConvKind::Meeting | ConvKind::Other => false,
     }
+}
+
+/// Whether a chat is on Chats to skip (Settings › Sync): never read, by a pass or by an on-demand
+/// pull.
+pub(super) fn chat_skipped(conv_id: &str, s: &settings::Settings) -> bool {
+    s.sync_ignore_chats.iter().any(|c| c == conv_id)
 }
 
 /// How far back a chat is read and which of its days are taken.
@@ -276,8 +283,10 @@ pub(super) struct DaySource {
 pub(super) fn sync_chat(p: &Pass, conv: &fetch::Conv, me: &str, days: &Days, st: &mut state::State, r: &mut Report) -> ChatRead {
     // The first time a chat is seen, skip days older than the first-sync cutoff (and mark them
     // done, so they're never pulled later) — that's where the flood of old history would come
-    // from. A chat already being synced only gets genuinely new days anyway.
-    let first_seen = !st.chats.contains_key(&conv.id);
+    // from. A chat already being synced only gets genuinely new days anyway. A chat only an
+    // on-demand pull has read is still to be seen: the pull wrote the days it was asked for, and
+    // the older ones are no more wanted for that.
+    let first_seen = st.chat_first_seen(&conv.id);
     // Read back until the oldest day read needs nothing written: a busy day runs past one page.
     let enough = |msgs: &[fetch::ChatMessage], pages: usize| {
         let Some(first) = msgs.first() else { return true };
@@ -361,6 +370,7 @@ pub(super) fn sync_chat(p: &Pass, conv: &fetch::Conv, me: &str, days: &Days, st:
             sources.push(DaySource { day, path: path.to_string(), fresh });
         }
     }
+    st.chat_read(&conv.id, p.regather, first_seen);
     ChatRead { partner, days: sources }
 }
 
@@ -437,6 +447,9 @@ fn read_enough(st: &state::State, from: Option<&str>, cutoff: Option<&str>, d: &
         return d.day < f;
     }
     match day_plan(st, from, cutoff, d) {
+        // A chat only an on-demand pull has read: a day the pull wrote says nothing of the days
+        // before it, so its first pass reads on to the first-sync cutoff.
+        DayPlan::Leave if d.first_seen => !cutoff.is_some_and(|c| d.day >= c),
         DayPlan::Leave | DayPlan::Skip => true,
         DayPlan::TopUp => false,
         // A chat seen for the first time with no first-sync limit takes its newest page, as before.
@@ -896,6 +909,34 @@ mod tests {
         // One already written that has grown is topped up, unless only its end was read.
         assert_eq!(day_plan(&st, from, from, &day("2026-10-24", 8, 2000, false)), DayPlan::TopUp);
         assert_eq!(day_plan(&st, from, from, &day("2026-10-24", 8, 2000, true)), DayPlan::Leave);
+    }
+
+    #[test]
+    fn a_chat_only_a_pull_has_read_still_gets_its_first_sync() {
+        // A pull wrote the 24th of a chat no pass has seen; History on first sync reaches the 22nd.
+        let mut st = written("2026-10-24", 5, Some(1000));
+        st.chat_read("c1", true, true);
+        assert!(st.chat_first_seen("c1"));
+        let cutoff = Some("2026-10-22");
+        let first = |d: &'static str, last: i64| Day { first_seen: true, ..day(d, 5, last, false) };
+        assert_eq!(day_plan(&st, None, cutoff, &first("2026-10-18", 500)), DayPlan::Skip, "older than the limit");
+        assert_eq!(day_plan(&st, None, cutoff, &first("2026-10-23", 900)), DayPlan::Write);
+        assert_eq!(day_plan(&st, None, cutoff, &first("2026-10-24", 1000)), DayPlan::Leave, "the pull's day isn't written again");
+        assert_eq!(day_plan(&st, None, cutoff, &first("2026-10-24", 2000)), DayPlan::TopUp);
+        // The pull's day doesn't end the reading: the days before it, back to the limit, are wanted.
+        assert!(!read_enough(&st, None, cutoff, &first("2026-10-24", 1000), 1));
+        assert!(read_enough(&st, None, cutoff, &first("2026-10-21", 500), 2));
+        assert!(read_enough(&st, None, None, &first("2026-10-24", 1000), 1), "no limit: the newest page, as for any new chat");
+        // Without the mark (a chat a pass has seen) the 18th would be written, and reading stops at a day left.
+        assert_eq!(day_plan(&st, None, cutoff, &day("2026-10-18", 5, 500, false)), DayPlan::Write);
+        assert!(read_enough(&st, None, cutoff, &day("2026-10-24", 5, 1000, false), 1));
+    }
+
+    #[test]
+    fn a_chat_to_skip_is_told_by_its_id() {
+        let s = settings::Settings { sync_ignore_chats: vec!["19:abc".into()], ..Default::default() };
+        assert!(chat_skipped("19:abc", &s));
+        assert!(!chat_skipped("19:abcd", &s));
     }
 
     #[test]

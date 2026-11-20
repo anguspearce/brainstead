@@ -39,7 +39,7 @@ Each suggestion is a row above the step's usual content, with the same buttons a
 
 Nothing changes until you click. An accepted suggestion does the app's usual undoable action, with Undo on the message. A new task goes under Other on the To Do list, or into its project. A link is listed in [Changes](app:review) with Revert. What you accept or skip stays hidden after a pause, and what you accept goes in the review's log. The [Inbox](app:inbox) shows the inbox suggestions too.
 
-In [Ask](app:ask) you can ask for help, such as "go through this week's suggestions with me". Once the review is started, the assistant can read the suggestions, accept one (with its words changed, as Edit does) or skip one, or prepare them again (for a paused review, its own week).
+In [Ask](app:ask) you can ask for help, such as "go through this week's suggestions with me". Once the review is started, the assistant can read the suggestions, accept one (with its words changed, as Edit does) or skip one, or prepare them again (for a paused review, its own week). What an assistant accepts is made as a change in [Changes](app:review), with **Revert**, and is held for you there when a check fails.
 
 ## Act on what you find
 Each step lists the real items with their usual actions:

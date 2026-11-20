@@ -59,7 +59,7 @@ const BECOMES: Record<string, string> = {
 };
 
 /** The task an action is on, as it is now. */
-async function current(t: WeekPrepTask): Promise<TaskRow> {
+export async function current(t: WeekPrepTask): Promise<TaskRow> {
   return findTask(await api.tasksAll(), `${t.path}:${t.line + 1}`, t.text);
 }
 
@@ -73,12 +73,28 @@ function said(r: { undo: string | null } | string, fallback: string): string {
 }
 
 /** The Inbox item a clarify is on, as the Inbox lists it now. */
-async function inboxItem(want: { kind: string; path: string; line: number; lineText: string }): Promise<InboxItem> {
+export async function inboxItem(want: { kind: string; path: string; line: number; lineText: string }): Promise<InboxItem> {
   const items = (await api.inboxList()).filter(unclarified);
   const same = (i: InboxItem) => i.kind === want.kind && i.path === want.path && i.lineText === want.lineText;
   const i = items.find((x) => same(x) && x.line === want.line) ?? items.find(same);
   if (!i) throw new Error("That Inbox item has changed or gone since the suggestions were prepared.");
   return i;
+}
+
+/** A clarify's choice as the Inbox's clarify takes it (clarify_inbox's becomes and values). */
+export function clarifyArgs(a: Extract<WeekPrepAction, { do: "clarify" }>): Record<string, unknown> {
+  const b = a.becomes;
+  return b === "project"
+    ? { becomes: b, project_name: a.text ?? undefined }
+    : b === "reference"
+      ? { becomes: b, note: a.text ?? undefined }
+      : {
+          becomes: b,
+          text: a.text ?? undefined,
+          project: a.project ?? undefined,
+          context: a.context ?? undefined,
+          due: a.due ?? undefined,
+        };
 }
 
 /** The task line an add writes, without its checkbox: as the Inbox writes one, with its tags and
@@ -92,9 +108,10 @@ export function addLine(a: Extract<WeekPrepAction, { do: "add" }>, project: Proj
   return due ? `${line.slice(0, due.index)} ${extra}${due[0]}` : `${line} ${extra}`;
 }
 
-/** What a suggestion offers; none for a prompt. `unattended`: an assistant nobody is watching
- *  accepts it, so a link (a change in Changes) is held when a check fails, and an ingest a clarify
- *  starts runs as a scheduled one (never on an Ollama model, brainstead_core::ask::job_run_model). */
+/** What a suggestion offers; none for a prompt. `run` is the screen's Accept: an assistant's
+ *  accept (weekly_suggestion) runs only a link's, and makes the rest as its own changes in Changes
+ *  (src/mcpActions.ts suggestionChanges). `unattended`: an assistant nobody is watching accepts
+ *  it, so a link (a change in Changes) is held when a check fails. */
 export function choice(s: WeekPrepSuggestion, week: string, projects: ProjectRow[], unattended = false): Choice | null {
   const a = s.action;
   if (!a) return null;
@@ -167,19 +184,7 @@ export function choice(s: WeekPrepSuggestion, week: string, projects: ProjectRow
         title: `Clarify this Inbox item as ${BECOMES[b] ?? b}${a.text && b !== "reference" ? `: “${a.text}”` : ""}`,
         run: async () => {
           const i = await inboxItem(a.item);
-          const args =
-            b === "project"
-              ? { becomes: b, project_name: a.text ?? undefined }
-              : b === "reference"
-                ? { becomes: b, note: a.text ?? undefined }
-                : {
-                    becomes: b,
-                    text: a.text ?? undefined,
-                    project: a.project ?? undefined,
-                    context: a.context ?? undefined,
-                    due: a.due ?? undefined,
-                  };
-          const as = await clarifyItem(i, args, unattended);
+          const as = await clarifyItem(i, clarifyArgs(a), unattended);
           toast(`Clarified as ${as}`, undoAction, "ok");
           return `Clarified “${i.text.slice(0, 60)}” as ${as}`;
         },

@@ -51,7 +51,7 @@ An assistant can list, reject or revert changes when you ask. It accepts a held 
 
 **At once, undoable with ⌘Z** (the app says an assistant made the change):
 
-- accept or skip the Weekly review's prepared suggestions, and **Finish and save**;
+- accept or skip the Weekly review's prepared suggestions (each accepted one made as a change in Changes), and **Finish and save**;
 - accept or skip Find tasks and projects' suggestions (each made as a change in Changes);
 - save an Ask chat to the vault;
 - bookmarks, saved searches, adding files to Sources, restoring from the Trash;

@@ -12,7 +12,7 @@ An assistant never edits a file itself. Its tools ask the app, which makes each 
 ## What happens at once
 These change things straight away, and each is undoable with `⌘Z`. A toast in the app says an assistant made it.
 
-- Accept or skip the [Weekly review](app:weekly)'s prepared suggestions, and **Finish and save** the review.
+- Accept or skip the [Weekly review](app:weekly)'s prepared suggestions, and **Finish and save** the review. Each one accepted is a change in [Changes](app:review), with **Revert**.
 - Accept or skip Find tasks and projects' suggestions. Each one accepted is a change in [Changes](app:review), with **Revert**.
 - Save an [Ask](app:ask) chat to the vault.
 - Add or remove bookmarks, save a search, add files to Sources, and restore from the Trash.

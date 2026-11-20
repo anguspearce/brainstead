@@ -92,6 +92,11 @@ pub struct State {
     /// new since (D-20261120-06). None before the first look.
     #[serde(default)]
     pub sent_checked: Option<String>,
+    /// Chats only an on-demand pull has read (conversation ids): no pass has given them their first
+    /// sync yet, so the "load N days on first sync" limit is still theirs. A pass that reads one
+    /// takes it off. Absent on older state: every chat on file then counts as seen by a pass.
+    #[serde(default)]
+    pub pulled_chats: std::collections::BTreeSet<String>,
 }
 
 /// An attachment's key: its thread, its message's received time and its name. Outlook's message and
@@ -130,6 +135,22 @@ impl State {
     /// on file, so nobody already syncing mail is limited or flooded again.
     pub fn mail_first_run(&self) -> bool {
         !self.mail_initialized && !(self.initialized && !(self.thread_paths.is_empty() && self.mail.is_empty()))
+    }
+
+    /// Whether no sync pass has read this chat yet: it isn't on file, or only an on-demand pull put
+    /// it there.
+    pub fn chat_first_seen(&self, conv: &str) -> bool {
+        !self.chats.contains_key(conv) || self.pulled_chats.contains(conv)
+    }
+
+    /// Notes who has just read a chat: a pull (`by_pull`) of one no pass had seen (`first_seen`, as
+    /// [`State::chat_first_seen`] said before the read) leaves it still to be seen; a pass ends that.
+    pub fn chat_read(&mut self, conv: &str, by_pull: bool, first_seen: bool) {
+        if !by_pull {
+            self.pulled_chats.remove(conv);
+        } else if first_seen && self.chats.contains_key(conv) {
+            self.pulled_chats.insert(conv.to_string());
+        }
     }
 
     /// Whether this chat's day has already been written.
@@ -349,6 +370,28 @@ mod tests {
         s.mark_transcript(&transcript_key("t1", at(17)), Some("sources/Teams. Transcript. Steerco - 2026-10-17.md"));
         assert!(s.transcript_done(&transcript_key("t1", at(17))));
         assert!(!s.transcript_done(&transcript_key("t1", at(24))));
+    }
+
+    #[test]
+    fn a_chat_stays_first_seen_until_a_pass_reads_it() {
+        let mut s = State::default();
+        assert!(s.chat_first_seen("c1"));
+        // A pull that wrote nothing leaves no mark; one that wrote a day does.
+        s.chat_read("c1", true, true);
+        assert!(s.pulled_chats.is_empty());
+        s.mark_chat_day("c1", "2026-10-24", Some("sources/Teams. Chat. Maya - 2026-10-24.md"));
+        s.chat_read("c1", true, true);
+        assert!(s.chat_first_seen("c1"), "only a pull has read it");
+        s.chat_read("c1", true, true);
+        assert!(s.chat_first_seen("c1"), "a second pull changes nothing");
+        s.chat_read("c1", false, true);
+        assert!(!s.chat_first_seen("c1"), "a pass has read it");
+        // A pull of a chat the pass already syncs doesn't make it new again.
+        s.chat_read("c1", true, false);
+        assert!(!s.chat_first_seen("c1"));
+        // State from before the mark was kept: every chat on file counts as seen by a pass.
+        let old: State = serde_json::from_str(r#"{"chats":{"c2":["2026-10-20"]}}"#).unwrap();
+        assert!(!old.chat_first_seen("c2"));
     }
 
     #[test]

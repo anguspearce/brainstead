@@ -1531,6 +1531,8 @@ export const api = {
     invoke<{
       items: { kind: string; title: string; date: string; path: string; alreadyHad: boolean }[];
       problems: string[];
+      /** What wasn't read because it's on a skip list (Settings › Sync). */
+      leftOut?: string[];
       blocked: string | null;
     }>("sync_pull", { query, days, kinds }),
   // Dataview (src-tauri/src/dataview.rs, src/md/dataview/).

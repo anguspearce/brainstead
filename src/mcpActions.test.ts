@@ -733,6 +733,7 @@ describe("MCP actions", () => {
       answers.projects_list = () => [];
       answers.tasks_all = () => [row({})];
       answers.task_toggle = edited;
+      answers.changes_submit_many = outcomes(true);
     });
 
     it("gives the week, the progress and the suggestions still to decide, by step", async () => {
@@ -756,13 +757,149 @@ describe("MCP actions", () => {
       expect(out).not.toContain("Not started");
     });
 
-    it("accepts a suggestion with the screen's undoable action, and keeps it with the progress", async () => {
+    it("accepts a suggestion as a change in Changes, not the screen's direct write, and keeps it with the progress", async () => {
       const out = (await run("weekly.suggestion", { id: "s1", action: "accept" })) as string;
-      expect(out).toMatch(/^Accepted: Ticked/);
-      expect(calls.some(([c]) => c === "task_toggle")).toBe(true);
+      expect(out).toBe("Accepted: Ticked “Call Sam about the launch”. It's recorded in Changes, where the user can revert it.");
+      expect(calls.some(([c]) => c === "task_toggle")).toBe(false);
+      expect(submitted()).toHaveLength(1);
+      expect(submitted()[0]).toMatchObject({
+        page: "Me. To Do List.md",
+        kind: "task",
+        title: "Edit “call sam about the launch”: ticked",
+        reason: "A weekly review suggestion: The launch call happened",
+        origin: { kind: "chat" },
+        instruction: { op: "lines", at: 11, old: ["- [ ] Call Sam about the launch"] },
+      });
       const saved = calls.find(([c]) => c === "weekly_state_write")![1]!.state as typeof state;
       expect(saved.handled).toEqual({ s0: "skipped", s1: "accepted" });
-      expect(saved.log).toEqual(["Added “Book the room”", "Ticked"]);
+      expect(saved.log).toEqual(["Added “Book the room”", "Ticked “Call Sam about the launch”"]);
+    });
+
+    it("makes each task suggestion as the change its own tool makes", async () => {
+      const proj = { name: "Acme rollout", path: "Project. Acme rollout.md", status: "active" };
+      const add = {
+        do: "add",
+        text: "Chase Lena",
+        project: "Acme rollout",
+        context: null,
+        tags: ["waiting-for"],
+        due: null,
+        scheduled: null,
+      };
+      const acts: Record<string, unknown> = {
+        a: add,
+        d: { do: "defer", task, date: "2099-01-09" },
+        w: { do: "waiting", task },
+        m: { do: "someday", task },
+        e: { do: "edit", task, text: "Ring Sam about the launch" },
+      };
+      answers.weekprep_status = () => ({
+        prep: { ...prep, suggestions: Object.entries(acts).map(([id, action]) => ({ id, step: "next", text: id, source: null, action })) },
+        running: false,
+        error: null,
+      });
+      answers.projects_list = () => [proj];
+      answers.change_task_line = (a) => `${a!.line} ⏳ ${(a!.edit as { date: string }).date}`;
+      const made = async (id: string) => {
+        calls.length = 0;
+        await run("weekly.suggestion", { id, action: "accept" });
+        expect(calls.some(([c]) => ["task_add", "project_add_task", "task_set_date", "task_replace", "task_change"].includes(c))).toBe(
+          false,
+        );
+        expect(submitted()).toHaveLength(1);
+        return submitted()[0];
+      };
+      expect(await made("a")).toMatchObject({
+        page: proj.path,
+        instruction: { op: "add_task", line: "- [ ] Chase Lena [[Project. Acme rollout]] #waiting-for", heading: "Waiting for" },
+      });
+      expect(await made("d")).toMatchObject({
+        instruction: { op: "lines", at: 11, new: ["- [ ] Call Sam about the launch ⏳ 2099-01-09"] },
+      });
+      expect(await made("w")).toMatchObject({ instruction: { new: ["- [ ] Call Sam about the launch #waiting-for"] } });
+      expect(await made("m")).toMatchObject({ instruction: { new: ["- [ ] Call Sam about the launch #someday-maybe"] } });
+      expect(await made("e")).toMatchObject({ instruction: { new: ["- [ ] Ring Sam about the launch"] } });
+      // As the screen refuses one that's there already.
+      answers.tasks_all = () => [row({ tags: ["#waiting-for"] })];
+      answers.weekly_state_read = () => ({ ...state, handled: {} });
+      await expect(run("weekly.suggestion", { id: "w", action: "accept" })).rejects.toThrow(/already waiting/);
+    });
+
+    it("clarifies an Inbox item through Changes as clarify_inbox does, an action's task with its initiative's link", async () => {
+      const thought = {
+        kind: "thought",
+        path: "Me. Scratchpad.md",
+        line: 4,
+        text: "Ask Lena about the beta",
+        lineText: "### 2026-10-02 09:00",
+        stamp: "2026-10-02 09:00",
+        block: "### 2026-10-02 09:00\nAsk Lena about the beta\n",
+      };
+      const act = {
+        kind: "action",
+        path: "wiki/initiatives/Orbit launch.md",
+        line: 12,
+        lineText: "- Book the room [owner:: me] [status:: open] ^a-2",
+        text: "Book the room",
+        stamp: null,
+        action: { id: "a-2", initiative: "Orbit launch", owner: "me", person: null, due: null, since: null, overdue: false, quotes: [] },
+      };
+      const clarify = (item: unknown, becomes: string, context: string | null = null) => ({
+        do: "clarify",
+        item,
+        becomes,
+        text: null,
+        project: null,
+        context,
+        due: null,
+      });
+      answers.weekprep_status = () => ({
+        prep: {
+          ...prep,
+          suggestions: [
+            { id: "t", step: "inbox", text: "A task", source: null, action: clarify(thought, "todo") },
+            { id: "n", step: "inbox", text: "Next", source: null, action: clarify(act, "next", "office") },
+          ],
+        },
+        running: false,
+        error: null,
+      });
+      answers.inbox_list = () => [thought, act];
+      answers.initiative_action_line = (a) => `${a!.lineText} ${JSON.stringify(a!.edit)}`;
+      // To Do: the task added and the thought taken out, as two changes made together; none of makeTask's writes.
+      const out = (await run("weekly.suggestion", { id: "t", action: "accept" })) as string;
+      expect(out).toMatch(/^Accepted: Clarified “Ask Lena about the beta” as a task on the To Do list\. It's recorded in Changes/);
+      expect(calls.some(([c]) => c === "todo_add_task" || c === "inbox_remove_thought" || c === "inbox_task_to_todo")).toBe(false);
+      expect(submitted().map((c) => [c.page, (c.instruction as { op: string }).op])).toEqual([
+        ["Me. Scratchpad.md", "lines"],
+        ["Me. To Do List.md", "add_task"],
+      ]);
+      expect(submitted()[1].instruction).toMatchObject({ line: "- [ ] Ask Lena about the beta", heading: "To Do" });
+      // An action made a next action: its task links back to the initiative, and the action is marked.
+      calls.length = 0;
+      await run("weekly.suggestion", { id: "n", action: "accept" });
+      expect(submitted()[0].instruction).toMatchObject({
+        op: "add_task",
+        line: "- [ ] Book the room [[Orbit launch#^a-2|Orbit launch]] #context/office",
+      });
+      expect(submitted()[1]).toMatchObject({ page: act.path, instruction: { at: 12, old: [act.lineText] } });
+    });
+
+    it("holds an accept when its change is held, and makes it this session's with unattended", async () => {
+      answers.changes_submit_many = outcomes(false);
+      const origin = { kind: "chat", chat: "chat-1", run: "chat-1", trigger: "scheduled" };
+      const out = (await run("weekly.suggestion", { id: "s1", action: "accept", unattended: true, origin })) as string;
+      expect(submitted()[0].origin).toEqual(origin);
+      expect(out).toBe(
+        "Accepted: Held for the user in Changes: Tick “Call Sam about the launch” off as done. It changes or takes out text in your own note. Nothing is changed until they accept it.",
+      );
+      const saved = calls.find(([c]) => c === "weekly_state_write")![1]!.state as typeof state;
+      expect(saved.handled).toEqual({ s0: "skipped", s1: "accepted" });
+      expect(saved.log[1]).toBe("Held for the user in Changes: Tick “Call Sam about the launch” off as done");
+      // Without the server's origin, unattended alone still makes it a scheduled change.
+      calls.length = 0;
+      await run("weekly.suggestion", { id: "s1", action: "accept", unattended: true });
+      expect(submitted()[0].origin).toMatchObject({ kind: "chat", trigger: "scheduled" });
     });
 
     it("accepts one with its words changed, as Edit does, and refuses text where there are none", async () => {
@@ -772,9 +909,10 @@ describe("MCP actions", () => {
         running: false,
         error: null,
       });
-      answers.task_add = edited;
       await run("weekly.suggestion", { id: "s5", action: "accept", text: "Book the big room" });
-      expect(calls.find(([c]) => c === "task_add")![1]).toMatchObject({ text: "Book the big room" });
+      // To the To Do list's Other, as capture's task is.
+      expect(submitted()[0]).toMatchObject({ page: "Me. To Do List.md", instruction: { op: "add_task", line: "- [ ] Book the big room" } });
+      expect(submitted()[0].instruction).not.toHaveProperty("heading");
       await expect(run("weekly.suggestion", { id: "s1", action: "accept", text: "Something" })).rejects.toThrow(/no words to change/);
     });
 
