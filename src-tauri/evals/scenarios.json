@@ -256,5 +256,38 @@
       "Jonas bringing the projector is his own action (other), from the second branch, not delegated by Sam",
       "The decision or fact that the venue is the Riverside room on 12 November is recorded once"
     ]
+  },
+  {
+    "name": "re-ingest a grown thread",
+    "kind": "ingest",
+    "model": "claude:sonnet",
+    "source": "sources/emails/Email. Thread. Orbit App pilot - 2026-10-06.md",
+    "owner": "Sam",
+    "earlier": 40,
+    "plants": [
+      {
+        "path": "wiki/initiatives/Orbit App pilot.md",
+        "text": "---\ntype: initiative\nname: Orbit App pilot\nstatus: active\ndescription: The Orbit App staff pilot.\nsources: []\n---\n\nThe Orbit App staff pilot.\n\n## Current state\n\nPlanning.\n\n## Actions\n\n## Decisions\n"
+      },
+      {
+        "path": "sources/emails/Email. Thread. Orbit App pilot - 2026-10-06.md",
+        "text": "# Orbit App pilot\n\n**Source:** [Open in Outlook](https://outlook.office.com/mail/)\n**Captured:** 2026-10-06T10:00:00.000Z\n\n---\n\n## Maya — 2026-10-06 09:00\n\n**To:** Sam, Lena\n\nThe Orbit App staff pilot starts on 19 October with 20 staff from the Leeds office.\n\n---\n\n## Lena — 2026-10-06 09:30\n\n**To:** Maya, Sam\n\nI'll have the training materials ready by 14 October.\n\n---\n\n"
+      }
+    ],
+    "grow": "## Sam — 2026-10-13 16:00\n\n**To:** Maya, Lena\n\nThe SSO change has slipped, so the Orbit App pilot moves to 26 October. Lena, please have the training materials ready by 21 October instead.\n\n---\n\n",
+    "actions": [
+      {
+        "page": "wiki/initiatives/Orbit App pilot.md",
+        "words": "training",
+        "owner": "delegated",
+        "person": "Lena",
+        "status": "open"
+      }
+    ],
+    "expect": [
+      "The second ingest records that the pilot moves to 26 October because the SSO change slipped, quoting Sam",
+      "The second ingest's changes take nothing new from the earlier messages: no second entry for the 19 October start, the 20 staff or the routine prep notes",
+      "Lena's training action is updated to 21 October rather than a second training action added"
+    ]
   }
 ]

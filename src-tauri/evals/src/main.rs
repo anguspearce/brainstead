@@ -44,6 +44,14 @@ struct Scenario {
     /// For ingest: ingest the source a second time once the first's changes are made.
     #[serde(default)]
     twice: bool,
+    /// For ingest: a synced thread that grows. These messages are added once the first ingest's
+    /// changes are made, and it's ingested again with the new ones marked (D-20261120-09).
+    #[serde(default)]
+    grow: Option<String>,
+    /// For ingest with `grow`: this many routine messages put at the thread's start first, so the
+    /// second ingest has earlier messages to leave out.
+    #[serde(default)]
+    earlier: usize,
     #[serde(default)]
     question: String,
     #[serde(default)]
@@ -254,26 +262,35 @@ fn pad_page(root: &Path, rel: &str) {
 }
 
 /// What one ingest of the source would change: the model's answer, checked.
-fn ingest_once(s: &Scenario, root: &Path, model: &str) -> Result<(ingest::Source, Vec<ingest::Planned>, Vec<ingest::Dropped>), String> {
+type Ingested = (ingest::Source, Vec<ingest::Planned>, Vec<ingest::Dropped>, String);
+
+/// One ingest of the scenario's source, as the app makes it; with `seen`, the messages of an
+/// earlier read, so the new ones are marked. Also gives the prompt.
+fn ingest_once(s: &Scenario, root: &Path, model: &str, seen: Option<&std::collections::HashSet<String>>) -> Result<Ingested, String> {
     let text = std::fs::read_to_string(root.join(&s.source)).unwrap_or_default();
     let src = ingest::Source { rel: s.source.clone(), text: ingest::SourceText::Text(text.clone()) };
     let m = names::mentions(&text, &wiki_pages(root));
     let pages: Vec<(String, String)> =
         m.iter().filter_map(|x| std::fs::read_to_string(root.join(&x.page)).ok().map(|t| (x.page.clone(), t))).collect();
     let tracking = ingest::Tracking::read(root, s.owner.clone());
-    let answer = ask_model(
-        model,
-        &ingest::prompt(&src, &pages, &brainstead_core::catalogue::render(root), "Friday 2 October 2026", &tracking),
-        root,
-        None,
-    )
-    .and_then(|a| ingest::parse_answer(&a))?;
+    let prompt = ingest::prompt_since(&src, &pages, &brainstead_core::catalogue::render(root), "Friday 2 October 2026", &tracking, seen);
+    let answer = ask_model(model, &prompt, root, None).and_then(|a| ingest::parse_answer(&a))?;
     let read = |r: &str| std::fs::read_to_string(root.join(r)).ok();
     let resolve =
         |n: &str| m.iter().find(|x| brainstead_core::lint::stem(brainstead_core::lint::name_of(&x.page)) == n).map(|x| x.page.clone());
     let planned = ingest::plan(&src, &answer, read, resolve, "2026-10-02", ingest::page_budget(pages.len()));
     let (planned, dropped) = ingest::plan_tracking(&src, &answer, &tracking, read, "eval", "2026-10-02", planned);
-    Ok((src, planned, dropped))
+    Ok((src, planned, dropped, prompt))
+}
+
+/// A routine message for a thread's start ([`Scenario::earlier`]).
+fn routine(i: usize) -> String {
+    format!(
+        "## Maya — 2026-09-{:02} 08:{:02}\n\nDaily pilot prep note {i}: checklist on track, nothing new to report. {}\n\n---\n\n",
+        1 + i % 28,
+        i % 60,
+        "The usual stand-up covered rota, room bookings and the help desk script, all unchanged. ".repeat(6)
+    )
 }
 
 /// The planned changes' claims kept, as the app keeps them with each change (D-20261006-16).
@@ -304,11 +321,73 @@ fn run_ingest(s: &Scenario, root: &Path, model: &str) -> Outcome {
     let files = brainstead_core::pageshape::vault_files(root);
     let sources = brainstead_core::pageshape::Sources::from_paths(files.iter().map(String::as_str));
     let is_source = |t: &str| sources.is_source(t) || t.starts_with("Weekly sync");
-    let (src, mut planned, mut dropped) = match ingest_once(s, root, model) {
+    if s.earlier > 0 {
+        // The routine messages go after the header, before the thread's own.
+        let file = root.join(&s.source);
+        let text = std::fs::read_to_string(&file).unwrap_or_default();
+        let at = text.find("\n---\n\n").map_or(0, |i| i + "\n---\n\n".len());
+        let filler: String = (0..s.earlier).map(routine).collect();
+        std::fs::write(&file, format!("{}{filler}{}", &text[..at], &text[at..])).unwrap();
+    }
+    let (src, mut planned, mut dropped, first_prompt) = match ingest_once(s, root, model, None) {
         Ok(x) => x,
         Err(e) => return Outcome { output: e.clone(), failures: vec![e] },
     };
     let mut output = String::new();
+    if let Some(more) = &s.grow {
+        // The first ingest's changes made, then the thread grows (its capture time with it) and
+        // is ingested again with the messages the first read as seen.
+        for p in &planned {
+            output.push_str(&format!("## First ingest: {} ({:?})\n\n{}\n\n", p.page, p.kind, p.after));
+            let to = root.join(&p.page);
+            std::fs::create_dir_all(to.parent().unwrap()).unwrap();
+            std::fs::write(to, &p.after).unwrap();
+        }
+        keep_claims(root, &src, &planned);
+        let file = root.join(&s.source);
+        let before = std::fs::read_to_string(&file).unwrap_or_default();
+        let seen: std::collections::HashSet<String> = ingest::message_keys(&before).into_iter().collect();
+        let grown = format!("{}{more}", before.replacen("**Captured:** 2026-10-0", "**Captured:** 2026-10-1", 1));
+        std::fs::write(&file, &grown).unwrap();
+        let marked = ingest::since_seen(&grown, &seen);
+        match &marked {
+            None => failures.push("The grown thread's new messages weren't found.".into()),
+            Some(m) => {
+                let added = ingest::message_keys(&format!("head\n---\n{more}")).len();
+                if m.new != added {
+                    failures.push(format!("{} messages marked new, not the {added} added.", m.new));
+                }
+                output.push_str(&format!(
+                    "Second ingest: {} new, {} earlier left out; source shown {} characters of {}; prompt {} characters, the first's {}.\n\n",
+                    m.new,
+                    m.left_out,
+                    m.text.chars().count(),
+                    grown.chars().count(),
+                    0,
+                    first_prompt.chars().count()
+                ));
+            }
+        }
+        match ingest_once(s, root, model, Some(&seen)) {
+            Ok((_, p2, d2, prompt)) => {
+                if prompt.matches(ingest::NEW_MARK).count() != ingest::message_keys(&format!("head\n---\n{more}")).len() + 1 {
+                    failures.push("The second prompt doesn't mark each new message once.".into());
+                }
+                if prompt.chars().count() >= first_prompt.chars().count() + more.chars().count() && s.earlier > 0 {
+                    failures.push("The second prompt isn't shorter than reading the whole grown thread.".into());
+                }
+                output = output.replacen("prompt 0 characters", &format!("prompt {} characters", prompt.chars().count()), 1);
+                eprintln!("  {}", output.lines().find(|l| l.starts_with("Second ingest:")).unwrap_or_default());
+                (planned, dropped) = (p2, d2);
+            }
+            Err(e) => return Outcome { output: e.clone(), failures: vec![e] },
+        }
+        for p in &planned {
+            if p.after.contains(ingest::NEW_MARK) || p.after.contains("left out: read before") {
+                failures.push(format!("{} carries the new-message marker or a left-out note.", p.page));
+            }
+        }
+    }
     if s.twice {
         // The first ingest's changes made, then the same source again.
         for p in &planned {
@@ -318,8 +397,8 @@ fn run_ingest(s: &Scenario, root: &Path, model: &str) -> Outcome {
             std::fs::write(to, &p.after).unwrap();
         }
         keep_claims(root, &src, &planned);
-        match ingest_once(s, root, model) {
-            Ok((_, p2, d2)) => (planned, dropped) = (p2, d2),
+        match ingest_once(s, root, model, None) {
+            Ok((_, p2, d2, _)) => (planned, dropped) = (p2, d2),
             Err(e) => return Outcome { output: e.clone(), failures: vec![e] },
         }
     }
@@ -369,13 +448,13 @@ fn run_ingest(s: &Scenario, root: &Path, model: &str) -> Outcome {
     if src.is_journal() && summary {
         failures.push("A summary page for a journal note.".into());
     }
-    if !src.is_journal() && !summary && !s.twice {
+    if !src.is_journal() && !summary && !s.twice && s.grow.is_none() {
         failures.push("No summary page for a document.".into());
     }
     for p in &planned {
         output.push_str(&format!(
             "## Proposed{}: {} ({:?})\n\n{}\n\n",
-            if s.twice { " by the second ingest" } else { "" },
+            if s.twice || s.grow.is_some() { " by the second ingest" } else { "" },
             p.page,
             p.kind,
             p.after
