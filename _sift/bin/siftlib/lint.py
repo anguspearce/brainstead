@@ -107,13 +107,14 @@ HR_PATTERNS = [
     # An amount, not any digit: "W20" sitting near the word "compensation" is
     # how a check like this starts crying wolf, and the first thing it cried
     # wolf at was the page documenting it.
-    re.compile(r"(?i)\b(salary|remuneration|compensation|day ?rate|rate ?card|"
+    # "per-day rate" is a measurement averaged per day (data, power), not a contractor's day rate.
+    re.compile(r"(?i)\b(salary|remuneration|compensation|(?<!per-)(?<!per )day ?rate|rate ?card|"
                r"cost to company|\bCTC\b|headcount cost|bonus|equity grant)\b"
                r"[^\n]{0,40}?(?:[R$£€]\s?\d|\d{3})"),
     # The amount's tail is bounded: unbounded, it and the 40-character window
     # overlapped and a long run of digits took a minute to search.
     re.compile(r"(?i)(?:[R$£€]\s?\d|\d{3})[\d ,.]{0,30}[^\n]{0,40}?\b(salary|remuneration|"
-               r"compensation|day ?rate|rate ?card|cost to company|\bCTC\b|"
+               r"compensation|(?<!per-)(?<!per )day ?rate|rate ?card|cost to company|\bCTC\b|"
                r"per annum|p\.?a\.?)\b"),
 ]
 
