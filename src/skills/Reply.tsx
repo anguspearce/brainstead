@@ -53,7 +53,7 @@ export const replyTo = (path: string | null): "Outlook" | "Teams" | null =>
 export const placedText = (to: "outlook" | "teams") =>
   to === "outlook"
     ? "The reply is a draft in Outlook, opening now: check it and press Send there"
-    : "Teams is opening the chat with the reply in its message box: check it and press Send. It's on the clipboard too";
+    : "Teams is opening the chat, and the extension types the reply into its message box once it sees that chat is open: check it and press Send. If the box stays empty, paste it: it's on the clipboard";
 
 /** Whether the draft answered the thread, as the verdict above it says (an assistant's draft_reply too). */
 export const ANSWERED: Record<string, [string, string]> = {

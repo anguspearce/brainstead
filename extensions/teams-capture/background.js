@@ -479,7 +479,8 @@ async function handOver(notes) {
 //
 // Brainstead opens a chat's link with `brainstead-reply=<key>` on it. When that link starts to
 // load, the reply left under the key is collected from Brainstead's helper (once: the helper
-// forgets it) and, once the tab has loaded, typed into the chat's message box (reply-fill.js).
+// forgets it) and, once the tab has loaded, typed into the chat's message box (reply-fill.js), but
+// only once the page shows that chat is the one open: never into another chat.
 // Nothing is sent. Should it not go in, the action's badge says so; Brainstead copied the reply too.
 
 importScripts("reply-fill.js");
@@ -518,7 +519,7 @@ async function typeReply(tabId, url) {
     const [r] = await chrome.scripting.executeScript({
       target: { tabId },
       func: globalThis.brainsteadReply.fill,
-      args: [reply.html, reply.text],
+      args: [reply.html, reply.text, reply.conversation],
     });
     if (!r?.result?.ok) await replyNotTyped(tabId, r?.result?.why || "no answer from the page");
   } catch (err) {

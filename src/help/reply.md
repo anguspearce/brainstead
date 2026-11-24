@@ -20,7 +20,7 @@ Edit the draft in place. **To fill in** lists the gaps the reply leaves for you,
 
 **Put in Outlook** (on an email) saves the reply, as it stands with your edits, as a reply-all draft on the thread's latest message in Outlook, above the quoted history, and opens it in the browser for you to check and send. It uses the Outlook sign-in [Sync](app:settings/sync) has, so it needs Outlook on the web open, as the sync does. Click it again and you get a second draft.
 
-**Put in Teams** (on a chat the sync brought in) opens the chat in Chrome, and the Teams extension types the reply into its message box, where it waits for you to press Send. Check it's the right chat first. It's also copied, so if the box stays empty (the extension's icon shows `!` and says why), paste it. It needs the Teams extension 1.2.0 or later, and a chat you captured by hand with the extension's button can't be found again this way: copy its reply instead.
+**Put in Teams** (on a chat the sync brought in) opens the chat in Chrome, and the Teams extension types the reply into its message box, where it waits for you to press Send. It types only once it sees that chat is the one open, never into another chat; check it's the right one anyway. It's also copied, so if the box stays empty (the extension's icon shows `!` and says why), paste it. It needs the Teams extension 1.2.1 or later, and a chat you captured by hand with the extension's button can't be found again this way: copy its reply instead.
 
 **Copy reply** copies plain text; **Copy as rich text** keeps the paragraphs for an email. When the reply commits you to something, **Add task** captures that follow-up as a task, linked to the captured thread.
 
