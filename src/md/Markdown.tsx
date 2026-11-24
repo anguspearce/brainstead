@@ -58,6 +58,13 @@ export function wikiTargets(md: string): string[] {
   return [...out];
 }
 
+/** `was` when it holds exactly what `now` does, else `now`. */
+function same<K, V>(was: Map<K, V> | null, now: Map<K, V>): Map<K, V> {
+  if (!was || was.size !== now.size) return now;
+  for (const [k, v] of now) if (!was.has(k) || was.get(k) !== v) return now;
+  return was;
+}
+
 /** Where wikilink targets go, looked up in the index: again when the vault changes, as a note
  *  linked to may have been made, renamed or trashed. */
 function useResolved(targets: string[]): Map<string, string | null> | null {
@@ -67,12 +74,17 @@ function useResolved(targets: string[]): Map<string, string | null> | null {
   useEffect(() => {
     let live = true;
     if (!targets.length) {
-      setMap(new Map());
+      setMap((was) => same(was, new Map()));
       return;
     }
     api
       .linksResolve(targets)
-      .then((r) => live && setMap(new Map(targets.map((t, i) => [t, r[i]]))))
+      // The same map when nothing in it changed: a new one makes every link, picture and block in the
+      // note mount again, which flashes the whole note on each change in the vault (a sync writing).
+      .then((r) => {
+        const now = new Map(targets.map((t, i) => [t, r[i]]));
+        if (live) setMap((was) => same(was, now));
+      })
       .catch(() => live && setMap(new Map()));
     return () => {
       live = false;

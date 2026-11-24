@@ -489,11 +489,13 @@ export function DocScreen() {
   useEffect(() => {
     let live = true;
     const names = sourceNames ? sourceNames.split("\n") : [];
-    if (!names.length) setCites({ listed: [], order: [] });
+    // Kept as it is when nothing changed, so the note isn't drawn afresh on each change in the vault.
+    const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+    if (!names.length) setCites((c) => (c.listed.length || c.order.length ? { listed: [], order: [] } : c));
     else
       void api.linksResolve(names).then((ps) => {
         const listed = ps.filter((p): p is string => !!p).filter((p, i, a) => a.indexOf(p) === i);
-        if (live) setCites((c) => ({ listed, order: c.order }));
+        if (live) setCites((c) => (sameList(c.listed, listed) ? c : { listed, order: c.order }));
       });
     return () => {
       live = false;
