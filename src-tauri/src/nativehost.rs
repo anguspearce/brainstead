@@ -130,13 +130,16 @@ fn handle(data: &Path, origin: &str, v: Value) -> Value {
     // chats, mail and calendar (D-20261025-01). It carries no capture to write.
     if v.get("type").and_then(Value::as_str) == Some("sign-in") {
         // The Outlook extension hands over only the mail token, from an Outlook on the web tab.
+        // `renew`: services whose only token in the tab is one Microsoft turned down, for the
+        // extension to reload the tab so the page fetches fresh ones (D-20261124-03).
         let accepted = match ext.as_str() {
             "outlook" => crate::sync::accept_mail_handover(&v),
-            "slack" => crate::sync::slack::accept_handover(&v),
+            "slack" => crate::sync::slack::accept_handover(&v).map(|()| Vec::new()),
             _ => crate::sync::accept_handover(&v),
         };
         return match accepted {
-            Ok(()) => json!({"ok": true}),
+            Ok(renew) if renew.is_empty() => json!({"ok": true}),
+            Ok(renew) => json!({"ok": true, "renew": renew}),
             Err(message) => json!({"ok": false, "message": message}),
         };
     }

@@ -83,17 +83,19 @@ app:
 # program, which keep running and pick up the new build themselves.
 APP_PIDS = ps -axo pid=,args= | awk '$$2 ~ /\/Brainstead$$/ && !/ --mcp|chrome-extension:/ { print $$1 }'
 
-## Build and replace /Applications/Brainstead.app, keeping the version: only a release build (make app) bumps it. Quits the app first, as ⌘Q does, but not the MCP servers Claude sessions are using: they start the new build when it's in place.
+## Build and replace /Applications/Brainstead.app, keeping the version: only a release build (make app) bumps it. Quits the app first, as ⌘Q does, but not the MCP servers Claude sessions are using: they start the new build when it's in place. An app that was running is started again, so an install never leaves the sync and the schedule off.
 install-app: VERSION = $(shell python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
 install-app: app
-	@if [ -n "$$($(APP_PIDS))" ]; then \
+	@was=$$($(APP_PIDS)); \
+	if [ -n "$$was" ]; then \
 	  osascript -e 'quit app id "com.wayned.brainstead"' >/dev/null 2>&1 || true; \
 	  for _ in 1 2 3 4 5 6 7 8 9 10; do [ -n "$$($(APP_PIDS))" ] || break; sleep 0.5; done; \
 	  pids=$$($(APP_PIDS)); [ -z "$$pids" ] || kill $$pids; \
-	fi
-	@rm -rf "/Applications/Brainstead.app"
-	@ditto "$(APP)" "/Applications/Brainstead.app"
-	@echo "installed /Applications/Brainstead.app"
+	fi; \
+	rm -rf "/Applications/Brainstead.app" && \
+	ditto "$(APP)" "/Applications/Brainstead.app" && \
+	echo "installed /Applications/Brainstead.app" && \
+	if [ -n "$$was" ]; then open -a "/Applications/Brainstead.app" && echo "started it again"; fi
 
 ## Pack the built app into the release DMG (src-tauri/target/release/bundle/dmg/), laid out like other Mac installers, and write the updater's files beside it (tools/update_files.py): Brainstead.app.tar.gz, its signature and latest.json, with NOTES="…" as what's new.
 dmg:

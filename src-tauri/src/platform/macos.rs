@@ -404,8 +404,17 @@ pub fn secret_get(service: &str, account: &str) -> Option<String> {
 }
 
 pub fn secret_set(service: &str, account: &str, value: &str) -> Result<(), String> {
-    security_framework::passwords::set_generic_password(service, account, value.as_bytes())
-        .map_err(|e| format!("Couldn't keep the sign-in in the Keychain: {e}"))
+    use security_framework::passwords::{delete_generic_password, set_generic_password};
+    match set_generic_password(service, account, value.as_bytes()) {
+        // errSecDuplicateItem from the update after a refused add: the Keychain kept turning
+        // handovers away with it, an item this build couldn't update in place. It's replaced.
+        Err(e) if e.code() == -25299 => {
+            let _ = delete_generic_password(service, account);
+            set_generic_password(service, account, value.as_bytes())
+        }
+        r => r,
+    }
+    .map_err(|e| format!("Couldn't keep the sign-in in the Keychain: {e}"))
 }
 
 pub fn secret_delete(service: &str, account: &str) -> Result<(), String> {

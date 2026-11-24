@@ -250,7 +250,14 @@ pub fn state() -> SignInState {
 /// page's own sign-in state (`origin`, the MSAL refresh-token and access-token entries, and Teams'
 /// region settings), which the extension read from the open tab. Returns None if it carries no live
 /// token the sync uses, so a handover from a signed-out tab doesn't replace a good sign-in.
+#[cfg(test)]
 pub fn from_handover(v: &Value) -> Option<SignIn> {
+    from_handover_avoiding(v, &BTreeMap::new())
+}
+
+/// [`from_handover`], leaving out the tokens the earlier sign-in had turned down (`refused`: by
+/// service key, each one's fingerprint), so a live one beside it in the page is taken instead.
+pub fn from_handover_avoiding(v: &Value, refused: &BTreeMap<String, String>) -> Option<SignIn> {
     let origin = v["origin"].as_str()?.to_string();
     let rt = &v["rt"];
     let refresh_token = rt["secret"].as_str().unwrap_or("").to_string();
@@ -268,7 +275,7 @@ pub fn from_handover(v: &Value) -> Option<SignIn> {
     let now = now_secs();
     let mut tokens = BTreeMap::new();
     for svc in [Service::Spaces, Service::Outlook, Service::Substrate, Service::Csa] {
-        if let Some(best) = best_page_token(&ats, svc, now) {
+        if let Some(best) = best_page_token(&ats, svc, now, refused.get(svc.key()).map(String::as_str)) {
             tokens.insert(svc.key().to_string(), best);
         }
     }
@@ -308,7 +315,8 @@ pub fn keep_missing(mut new: SignIn, old: Option<SignIn>) -> SignIn {
 /// starts one holding only the mail token.
 pub fn with_mail_handover(old: Option<SignIn>, v: &Value) -> Option<SignIn> {
     let ats = v["ats"].as_array().cloned().unwrap_or_default();
-    let token = best_page_token(&ats, Service::Outlook, now_secs())?;
+    let refused = old.as_ref().and_then(|o| o.rejected.get(Service::Outlook.key()).cloned());
+    let token = best_page_token(&ats, Service::Outlook, now_secs(), refused.as_deref())?;
     let mut s = old.unwrap_or_else(|| SignIn {
         origin: v["origin"].as_str().unwrap_or("").to_string(),
         tenant: ats.iter().find_map(|a| a["realm"].as_str()).unwrap_or("common").to_string(),
@@ -353,11 +361,17 @@ pub fn keep_rejected(mut new: SignIn, old: Option<&SignIn>) -> SignIn {
     new
 }
 
-/// The longest-lived unexpired access token in the page for `svc`.
-fn best_page_token(ats: &[Value], svc: Service, now: i64) -> Option<Token> {
+/// The longest-lived unexpired access token in the page for `svc`, leaving out the one Microsoft
+/// already turned down (`refused`, its fingerprint). The page often keeps an older long-lived token
+/// beside the one it renewed after the refusal, and the older one can outlast the new: it must not
+/// keep winning.
+fn best_page_token(ats: &[Value], svc: Service, now: i64, refused: Option<&str>) -> Option<Token> {
     ats.iter()
         .filter_map(|a| {
             let token = a["secret"].as_str()?.to_string();
+            if refused.is_some_and(|fp| fingerprint(&token) == fp) {
+                return None;
+            }
             let c = claims(&token);
             let aud = c["aud"].as_str().unwrap_or("").trim_end_matches('/');
             let scp = c["scp"].as_str().unwrap_or("");
@@ -487,6 +501,42 @@ mod tests {
         assert!(again.tokens.contains_key(Service::Outlook.key()));
         // An Outlook tab with no mail token changes nothing.
         assert!(with_mail_handover(None, &json!({ "ats": [] })).is_none());
+    }
+
+    #[test]
+    fn a_handover_passes_over_the_refused_token_for_a_live_one_beside_it() {
+        let now = now_secs();
+        // The page keeps the long-lived token Microsoft turned down and the one it fetched after.
+        let refused = jwt("https://outlook.office.com", "Mail.Read", now + 20 * 3600);
+        let renewed = jwt("https://outlook.office.com", "Mail.Read", now + 3600);
+        let tab = json!({ "origin": "https://outlook.cloud.microsoft", "ats": [
+            { "secret": refused, "realm": "t" }, { "secret": renewed, "realm": "t" },
+        ]});
+        // Before anything was refused, the longer-lived one is taken.
+        let first = with_mail_handover(None, &tab).unwrap();
+        assert_eq!(first.tokens[Service::Outlook.key()].token, refused);
+        // Microsoft turns it down (as reject() records it).
+        let mut old = first;
+        let t = old.tokens.remove(Service::Outlook.key()).unwrap();
+        old.rejected.insert(Service::Outlook.key().into(), fingerprint(&t.token));
+        // The next handover takes the renewed one and clears the refusal.
+        let next = keep_rejected(with_mail_handover(Some(old.clone()), &tab).unwrap(), Some(&old));
+        assert_eq!(next.tokens[Service::Outlook.key()].token, renewed);
+        assert!(next.rejected.is_empty());
+        // A tab with only the refused one gives nothing to take: the extension is asked to renew it.
+        let only = json!({ "origin": "https://outlook.cloud.microsoft", "ats": [{ "secret": refused, "realm": "t" }] });
+        assert!(with_mail_handover(Some(old.clone()), &only).is_none());
+
+        // Teams alike.
+        let dead = jwt("https://api.spaces.skype.com", "Authorization.ReadWrite", now + 20 * 3600);
+        let live = jwt("https://api.spaces.skype.com", "Authorization.ReadWrite", now + 3600);
+        let teams = json!({ "origin": "https://teams.cloud.microsoft", "gtm": "{}", "ats": [
+            { "secret": dead, "realm": "t" }, { "secret": live, "realm": "t" },
+        ]});
+        let mut refused_map = BTreeMap::new();
+        refused_map.insert(Service::Spaces.key().to_string(), fingerprint(&dead));
+        let s = from_handover_avoiding(&teams, &refused_map).unwrap();
+        assert_eq!(s.tokens[Service::Spaces.key()].token, live);
     }
 
     #[test]

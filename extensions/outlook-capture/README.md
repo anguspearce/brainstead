@@ -17,7 +17,7 @@ The manifest carries a fixed public key, so the extension's ID is the same on ev
 
 ## Mail for the sync
 
-While an Outlook on the web tab is open, the extension hands that tab's Outlook token to Brainstead every 15 minutes (and when Chrome starts or the extension is reloaded), so the sync can read your Inbox. Brainstead takes only the mail token from it; the rest of the sync's sign-in comes from the Teams extension. To keep Chrome's Energy Saver from freezing the tab on battery, add `outlook.cloud.microsoft` and `outlook.office.com` under Chrome's Settings › Performance › **Always keep these sites active**. What the last hand-over did is kept in the extension's storage (`signin-last-handover`), never a token.
+While an Outlook on the web tab is open, the extension hands that tab's Outlook token to Brainstead every 15 minutes (and when Chrome starts or the extension is reloaded), so the sync can read your Inbox. Brainstead takes only the mail token from it; the rest of the sync's sign-in comes from the Teams extension. To keep Chrome's Energy Saver from freezing the tab on battery, add `outlook.cloud.microsoft` and `outlook.office.com` under Chrome's Settings › Performance › **Always keep these sites active**. When Brainstead says Microsoft turned down the only mail token the tab has, the extension reloads the tab (not one you're looking at, at most every 45 minutes) so Outlook fetches a fresh one, and hands it over a minute later (1.1.2 or later). What the last hand-over did is kept in the extension's storage (`signin-last-handover`), never a token.
 
 ## Use: one thread
 

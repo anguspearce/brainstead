@@ -37,22 +37,40 @@ pub fn client() -> Client {
 
 /// Takes the sign-in a Teams-extension handover carried (`auth::from_handover`) and keeps it. Called
 /// from the native host when the extension hands over.
-pub fn accept_handover(v: &serde_json::Value) -> Result<(), String> {
-    let sign_in = auth::from_handover(v).ok_or("The Teams sign-in handover had no live sign-in to use.")?;
+pub fn accept_handover(v: &serde_json::Value) -> Result<Vec<String>, String> {
     auth::changing(|| {
         let old = auth::load();
-        auth::store(&auth::keep_rejected(auth::keep_missing(sign_in, old.clone()), old.as_ref()))
+        let refused = old.as_ref().map(|o| o.rejected.clone()).unwrap_or_default();
+        let sign_in = auth::from_handover_avoiding(v, &refused).ok_or("The Teams sign-in handover had no live sign-in to use.")?;
+        let s = auth::keep_rejected(auth::keep_missing(sign_in, old.clone()), old.as_ref());
+        auth::store(&s)?;
+        Ok(still_refused(&s, &[auth::Service::Spaces, auth::Service::Substrate, auth::Service::Csa]))
     })
 }
 
 /// Takes the mail token an Outlook-extension handover carried and keeps it with the rest of the
 /// sign-in (D-20261028-02).
-pub fn accept_mail_handover(v: &serde_json::Value) -> Result<(), String> {
+pub fn accept_mail_handover(v: &serde_json::Value) -> Result<Vec<String>, String> {
     auth::changing(|| {
         let old = auth::load();
-        let sign_in = auth::with_mail_handover(old.clone(), v).ok_or("The Outlook tab had no live mail sign-in to use.")?;
-        auth::store(&auth::keep_rejected(sign_in, old.as_ref()))
+        let sign_in = match auth::with_mail_handover(old.clone(), v) {
+            Some(s) => s,
+            // Only the token Microsoft turned down: the tab needs a fresh one.
+            None if old.as_ref().is_some_and(|o| o.rejected.contains_key(auth::Service::Outlook.key())) => {
+                return Ok(vec![auth::Service::Outlook.what().to_string()]);
+            }
+            None => return Err("The Outlook tab had no live mail sign-in to use.".into()),
+        };
+        let s = auth::keep_rejected(sign_in, old.as_ref());
+        auth::store(&s)?;
+        Ok(still_refused(&s, &[auth::Service::Outlook]))
     })
+}
+
+/// Which of `of` are still turned down after a handover (the tab gave only the token Microsoft
+/// refused): the extension reloads the tab so the page fetches fresh ones (D-20261124-03).
+fn still_refused(s: &auth::SignIn, of: &[auth::Service]) -> Vec<String> {
+    of.iter().filter(|svc| s.rejected.contains_key(svc.key())).map(|svc| svc.what().to_string()).collect()
 }
 
 /// A meeting for the Today screen (dates as RFC 3339 strings, so no extra chrono features are needed).

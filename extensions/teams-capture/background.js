@@ -459,6 +459,12 @@ async function handOver(notes) {
           "Brainstead's answer",
         );
         answer = reply?.ok ? "handed over" : `Brainstead refused: ${reply?.message || "no answer"}`;
+        // Microsoft turned down the only token the tab had for these: reload it so Teams fetches
+        // fresh ones (Brainstead D-20261124-03), rather than handing the dead one over every time.
+        if (reply?.ok && reply.renew?.length) {
+          notes.push(`turned down: ${reply.renew.join(", ")}; ${await renewSignIn(tab)}`);
+          return answer;
+        }
       } catch (e) {
         // Brainstead not running or not registered yet; try again on the next alarm.
         answer = `Brainstead unreachable: ${e?.message || e}`;
