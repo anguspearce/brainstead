@@ -331,7 +331,14 @@ mod tests {
     #[test]
     fn a_day_is_taken_when_asked_for_and_about_the_topic() {
         let said = |body: &str| {
-            vec![fetch::ChatMessage { id: "1".into(), sender: "Maya".into(), body: body.into(), time: Utc::now(), files: vec![] }]
+            vec![fetch::ChatMessage {
+                id: "1".into(),
+                sender: "Maya".into(),
+                body: body.into(),
+                time: Utc::now(),
+                files: vec![],
+                pictures: vec![],
+            }]
         };
         let t = terms("orbit");
         assert!(covered("", "2026-10-24", &said("The Orbit App launch moved"), "2026-10-22", &t));

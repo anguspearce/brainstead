@@ -15,6 +15,7 @@ pub mod auth;
 pub mod fetch;
 pub mod html;
 pub mod log;
+pub mod pictures;
 pub mod pull;
 pub mod reply;
 pub mod run;

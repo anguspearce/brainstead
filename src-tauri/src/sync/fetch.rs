@@ -24,6 +24,79 @@ pub struct ChatMessage {
     pub time: DateTime<Utc>,
     /// Files shared with the message. They live in OneDrive or SharePoint, so only their links come.
     pub files: Vec<SharedFile>,
+    /// Pictures pasted into the message, kept in Teams' own picture store (`pictures` brings them in).
+    pub pictures: Vec<ChatPicture>,
+}
+
+/// A picture pasted into a chat message: where Teams keeps it and, once the sync has dealt with it,
+/// the source it became or why it didn't.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ChatPicture {
+    /// Its id in Teams' picture store, the same however the message is read.
+    pub object: String,
+    /// The full-size picture's address (`views/imgo`), on a Teams picture store host only.
+    pub url: String,
+    pub path: Option<String>,
+    pub note: Option<String>,
+}
+
+/// Whether `host` is Teams' picture store (AMS): the only place a chat picture is fetched from, so the
+/// chat sign-in is never sent anywhere a message's HTML happens to point.
+pub fn picture_host(host: &str) -> bool {
+    let h = host.to_ascii_lowercase();
+    h.ends_with(".asm.skype.com") || h == "asyncgw.teams.microsoft.com" || h.ends_with(".asyncgw.teams.microsoft.com")
+}
+
+/// The pictures pasted into a message's HTML: its `<img>` tags pointing at Teams' picture store
+/// (`https://<host>/v1/objects/<id>/views/<view>`), each once. Emoji and stickers come from other
+/// hosts and are left out.
+pub fn chat_pictures(html: &str) -> Vec<ChatPicture> {
+    let mut out: Vec<ChatPicture> = Vec::new();
+    let lower = html.to_ascii_lowercase();
+    let mut from = 0;
+    while let Some(at) = lower[from..].find("<img").map(|i| i + from) {
+        let end = lower[at..].find('>').map_or(lower.len(), |i| at + i);
+        from = end;
+        let tag = &html[at..end];
+        let Some(src) = attr(tag, "src") else { continue };
+        let src = src.replace("&amp;", "&");
+        let Some(rest) = src.strip_prefix("https://") else { continue };
+        let Some((host, path)) = rest.split_once('/') else { continue };
+        if !picture_host(host) {
+            continue;
+        }
+        let Some(obj) = path.strip_prefix("v1/objects/").and_then(|p| p.split('/').next()) else { continue };
+        if obj.is_empty() || !obj.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.') {
+            continue;
+        }
+        if out.iter().any(|p| p.object == obj) {
+            continue;
+        }
+        out.push(ChatPicture { object: obj.to_string(), url: format!("https://{host}/v1/objects/{obj}/views/imgo"), ..Default::default() });
+    }
+    out
+}
+
+/// An attribute's value in an HTML tag (quoted with " or ').
+fn attr(tag: &str, name: &str) -> Option<String> {
+    let lower = tag.to_ascii_lowercase();
+    let mut from = 0;
+    while let Some(i) = lower[from..].find(name).map(|i| i + from) {
+        from = i + name.len();
+        let before_ok = i > 0 && lower.as_bytes()[i - 1].is_ascii_whitespace();
+        let rest = lower[from..].trim_start();
+        if !before_ok || !rest.starts_with('=') {
+            continue;
+        }
+        let start = tag.len() - rest.len() + 1;
+        let v = tag[start..].trim_start();
+        let q = v.chars().next()?;
+        if q == '"' || q == '\'' {
+            return v[1..].split(q).next().map(str::to_string);
+        }
+        return v.split(|c: char| c.is_whitespace() || c == '>').next().map(str::to_string);
+    }
+    None
 }
 
 /// A file shared in a Teams chat: its name and where it lives.
@@ -221,9 +294,10 @@ pub fn parse_messages(body: &Value) -> Vec<ChatMessage> {
                     }
                     let content = m["content"].as_str().unwrap_or("");
                     let body = if mt == "RichText/Html" { html::to_text(content) } else { content.trim().to_string() };
-                    // A message that only shares a file has no text but is kept, for the file's link.
+                    // A message that only shares a file or a picture has no text but is kept, for them.
                     let files = shared_files(m);
-                    if body.is_empty() && files.is_empty() {
+                    let pictures = if mt == "RichText/Html" { chat_pictures(content) } else { Vec::new() };
+                    if body.is_empty() && files.is_empty() && pictures.is_empty() {
                         return None;
                     }
                     let time = m["originalarrivaltime"].as_str().or_else(|| m["composetime"].as_str())?;
@@ -234,6 +308,7 @@ pub fn parse_messages(body: &Value) -> Vec<ChatMessage> {
                         body,
                         time,
                         files,
+                        pictures,
                     })
                 })
                 .collect()
@@ -285,9 +360,10 @@ pub fn chat_capture(conv: &Conv, day_msgs: &[ChatMessage], me: &str, url_base: &
             date: Some(m.time.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string()),
             body: m.body.clone(),
             attachments: m
-                .files
+                .pictures
                 .iter()
-                .map(|f| Attachment { name: f.name.clone(), url: Some(f.url.clone()), ..Default::default() })
+                .map(|p| Attachment { name: "Picture".into(), path: p.path.clone(), url: None, note: p.note.clone() })
+                .chain(m.files.iter().map(|f| Attachment { name: f.name.clone(), url: Some(f.url.clone()), ..Default::default() }))
                 .collect(),
         })
         .collect();
@@ -1063,6 +1139,7 @@ mod tests {
                 body: format!("message {i}"),
                 time: start + chrono::Duration::minutes(i),
                 files: vec![],
+                pictures: vec![],
             })
             .collect();
         ChatPage { messages, older: older.map(str::to_string) }
@@ -1155,8 +1232,8 @@ mod tests {
         let conv = Conv { id: "19:x@unq.gbl.spaces".into(), topic: String::new(), kind: ConvKind::OneOnOne };
         let t = "2026-10-24T09:00:00Z".parse().unwrap();
         let msgs = vec![
-            ChatMessage { id: "1".into(), sender: "Maya".into(), body: "hi".into(), time: t, files: vec![] },
-            ChatMessage { id: "2".into(), sender: "Me Myself".into(), body: "hello".into(), time: t, files: vec![] },
+            ChatMessage { id: "1".into(), sender: "Maya".into(), body: "hi".into(), time: t, files: vec![], pictures: vec![] },
+            ChatMessage { id: "2".into(), sender: "Me Myself".into(), body: "hello".into(), time: t, files: vec![], pictures: vec![] },
         ];
         let cap = chat_capture(&conv, &msgs, "Me Myself", "https://teams.microsoft.com", "2026-10-24", "Maya").unwrap();
         match &cap {
@@ -1178,7 +1255,14 @@ mod tests {
     fn a_one_on_one_day_where_only_i_wrote_still_names_the_partner() {
         let conv = Conv { id: "19:x@unq.gbl.spaces".into(), topic: String::new(), kind: ConvKind::OneOnOne };
         let t = "2026-10-14T16:00:00Z".parse().unwrap();
-        let msgs = vec![ChatMessage { id: "1".into(), sender: "Me Myself".into(), body: "any update?".into(), time: t, files: vec![] }];
+        let msgs = vec![ChatMessage {
+            id: "1".into(),
+            sender: "Me Myself".into(),
+            body: "any update?".into(),
+            time: t,
+            files: vec![],
+            pictures: vec![],
+        }];
         let cap = chat_capture(&conv, &msgs, "Me Myself", "https://teams.microsoft.com", "2026-10-14", "Marnus Freeman").unwrap();
         match cap {
             Capture::Teams(th) => assert_eq!(th.title, "Marnus Freeman", "falls back to the partner"),
@@ -1426,5 +1510,34 @@ mod sent_tests {
         s.tokens.insert(Service::Outlook.key().into(), auth::Token { token: jwt, expires: 0 });
         assert_eq!(my_address(&s), "lena@acme.example");
         assert_eq!(my_address(&SignIn::default()), "");
+    }
+
+    #[test]
+    fn finds_pictures_pasted_into_a_chat_message_and_keeps_a_picture_only_message() {
+        let html = concat!(
+            r#"<p>The slide for Thursday</p><p><img itemtype="http://schema.skype.com/AMSImage" alt="image" "#,
+            r#"src="https://eu-api.asm.skype.com/v1/objects/0-weu-d1-abc123/views/imgo?v=1&amp;x=2" width="250"></p>"#,
+            r#"<img src='https://eu-prod.asyncgw.teams.microsoft.com/v1/objects/0-neu-d4-def/views/imgpsh_fullsize_anim'>"#,
+            r#"<img src="https://eu-api.asm.skype.com/v1/objects/0-weu-d1-abc123/views/imgt1">"#,
+            r#"<img itemtype="http://schema.skype.com/Emoji" src="https://statics.teams.cdn.office.net/evergreen-assets/smile.png">"#,
+            r#"<img src="https://evil.example/v1/objects/0-x/views/imgo">"#,
+        );
+        let pics = chat_pictures(html);
+        assert_eq!(
+            pics.iter().map(|p| p.url.as_str()).collect::<Vec<_>>(),
+            vec![
+                "https://eu-api.asm.skype.com/v1/objects/0-weu-d1-abc123/views/imgo",
+                "https://eu-prod.asyncgw.teams.microsoft.com/v1/objects/0-neu-d4-def/views/imgo",
+            ],
+            "Teams' picture store only, each once, full size; emoji and other hosts left out"
+        );
+        let body = json!({"messages": [{
+            "id": "1", "messagetype": "RichText/Html", "imdisplayname": "Maya",
+            "originalarrivaltime": "2026-11-23T09:00:00Z",
+            "content": "<p><img src=\"https://eu-api.asm.skype.com/v1/objects/0-weu-d1-abc/views/imgo\"></p>"
+        }]});
+        let msgs = parse_messages(&body);
+        assert_eq!(msgs.len(), 1, "a message that's only a picture is kept");
+        assert_eq!(msgs[0].pictures[0].object, "0-weu-d1-abc");
     }
 }

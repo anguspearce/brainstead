@@ -83,6 +83,39 @@ fn read(resp: reqwest::blocking::Response, url: &str) -> Result<Value, String> {
     resp.json().map_err(|e| format!("{host} gave an unreadable answer: {e}"))
 }
 
+/// A picture from Teams' picture store (a chat's pasted picture), with its content type, read with the
+/// Skype token as Teams web reads it. Refuses any other host, so the sign-in only goes to Teams, and a
+/// picture over `max` bytes.
+pub fn get_picture(client: &Client, url: &str, max: u64) -> Result<(Vec<u8>, Option<String>), String> {
+    let host = url.strip_prefix("https://").and_then(|r| r.split('/').next()).unwrap_or("");
+    if !super::fetch::picture_host(host) {
+        return Err("That picture isn't in Teams' picture store.".into());
+    }
+    let spaces = auth::token(Service::Spaces)?;
+    let skype = skype_token(client, &spaces)?;
+    let resp = client
+        .get(url)
+        .header("Authorization", format!("skype_token {skype}"))
+        .header("Origin", "https://teams.microsoft.com")
+        .header("Referer", "https://teams.microsoft.com/")
+        .send()
+        .map_err(|e| e.to_string())?;
+    // A refused picture isn't taken as the chat sign-in having expired: chats still read.
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(format!("{host} answered {}", status.as_u16()));
+    }
+    if resp.content_length().is_some_and(|n| n > max) {
+        return Err(format!("it's over {} MB", max / (1024 * 1024)));
+    }
+    let kind = resp.headers().get("content-type").and_then(|v| v.to_str().ok()).map(str::to_string);
+    let bytes = resp.bytes().map_err(|e| e.to_string())?;
+    if bytes.len() as u64 > max {
+        return Err(format!("it's over {} MB", max / (1024 * 1024)));
+    }
+    Ok((bytes.to_vec(), kind))
+}
+
 /// Exchanges the Spaces bearer for a Skype token (authsvc), which chatsvc and the middle tier
 /// require. Short-lived, so it's fetched per sync run rather than cached.
 fn skype_token(client: &Client, spaces: &str) -> Result<String, String> {

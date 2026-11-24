@@ -53,6 +53,12 @@ pub fn skip_reason(a: &MailAttachment) -> Option<&'static str> {
 /// The source file's name: `Email. Attachment. <name> - <day>.<ext>`, the name cleaned of
 /// characters that break links or file names and kept short.
 pub fn source_name(name: &str, day: &str) -> String {
+    named("Email. Attachment.", name, day)
+}
+
+/// `<prefix> <name> - <day>.<ext>`, the name cleaned of characters that break links or file names
+/// and kept short.
+pub fn named(prefix: &str, name: &str, day: &str) -> String {
     let (stem, ext) = match name.rsplit_once('.') {
         Some((s, e)) if !e.is_empty() && e.len() <= 8 && !e.contains(' ') => (s, Some(e.to_ascii_lowercase())),
         _ => (name, None),
@@ -66,8 +72,8 @@ pub fn source_name(name: &str, day: &str) -> String {
         stem = "attachment".into();
     }
     match ext {
-        Some(e) => format!("Email. Attachment. {stem} - {day}.{e}"),
-        None => format!("Email. Attachment. {stem} - {day}"),
+        Some(e) => format!("{prefix} {stem} - {day}.{e}"),
+        None => format!("{prefix} {stem} - {day}"),
     }
 }
 

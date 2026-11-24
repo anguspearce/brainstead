@@ -68,13 +68,15 @@ pub struct Attachment {
 }
 
 impl Attachment {
-    /// The attachment's list line: a wiki link to the source it became (by vault path), a link to
-    /// where it's shared, or its name, with the note after.
+    /// The attachment's list line: a wiki link to the source it became (by vault path), embedded when
+    /// it's a picture (a Teams chat's pasted picture), a link to where it's shared, or its name, with
+    /// the note after.
     fn line(&self) -> String {
         let name = self.name.replace(['[', ']', '|'], " ");
         let what = match (&self.path, &self.url) {
             // The full vault path, so whoever reads the thread (an assistant too) finds the file
             // without a search; links resolve by name, so the index sees it as a link either way.
+            (Some(p), _) if is_picture(p) => format!("![[{p}|{name}]]"),
             (Some(p), _) => format!("[[{p}|{name}]]"),
             (None, Some(u)) => format!("[{name}]({})", u.replace(' ', "%20").replace('(', "%28").replace(')', "%29")),
             (None, None) => name,
@@ -84,6 +86,12 @@ impl Attachment {
             None => format!("- {what}"),
         }
     }
+}
+
+/// Whether a vault path is a picture, shown in place rather than linked.
+fn is_picture(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    [".png", ".jpg", ".jpeg", ".gif", ".webp"].iter().any(|e| lower.ends_with(e))
 }
 
 /// The `**Attachments:**` list under a message's body, when it has any.

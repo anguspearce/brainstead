@@ -309,7 +309,14 @@ pub(super) fn sync_chat(p: &Pass, conv: &fetch::Conv, me: &str, days: &Days, st:
     // With older messages left unread, the oldest day read may be only its end.
     let cut = more.then(|| msgs.first().map(|m| fetch::local_day(m.time))).flatten();
     let mut sources = Vec::new();
-    for (day, day_msgs) in fetch::by_local_day(&msgs) {
+    let title = if !conv.topic.is_empty() {
+        conv.topic.clone()
+    } else if !partner.is_empty() {
+        partner.clone()
+    } else {
+        "Teams chat".to_string()
+    };
+    for (day, mut day_msgs) in fetch::by_local_day(&msgs) {
         if !(days.covers)(&day, &day_msgs) {
             continue;
         }
@@ -319,7 +326,20 @@ pub(super) fn sync_chat(p: &Pass, conv: &fetch::Conv, me: &str, days: &Days, st:
         let d = Day { conv: &conv.id, day: &day, count, last, partial: cut.as_deref() == Some(day.as_str()), first_seen };
         let gone = p.regather && st.chat_day_path(&conv.id, &day).is_some_and(|path| !p.vault.join(path).is_file());
         let mut fresh = false;
-        match regathered(day_plan(st, days.from, days.cutoff, &d), gone) {
+        let mut plan = regathered(day_plan(st, days.from, days.cutoff, &d), gone);
+        // A whole day already written with a picture never tried (written before pictures were
+        // brought in): written again once, to bring it in.
+        if matches!(plan, DayPlan::Leave)
+            && !d.partial
+            && super::pictures::untried(st, &conv.id, &day_msgs)
+            && st.chat_day_path(&conv.id, &day).is_some_and(|path| p.vault.join(path).is_file())
+        {
+            plan = DayPlan::TopUp;
+        }
+        if matches!(plan, DayPlan::TopUp | DayPlan::Write) {
+            bring_pictures(p, &conv.id, &title, &mut day_msgs, st, r);
+        }
+        match plan {
             DayPlan::Leave => {}
             DayPlan::Adopt => {
                 st.set_chat_day_count(&conv.id, &day, count);
@@ -372,6 +392,16 @@ pub(super) fn sync_chat(p: &Pass, conv: &fetch::Conv, me: &str, days: &Days, st:
     }
     st.chat_read(&conv.id, p.regather, first_seen);
     ChatRead { partner, days: sources }
+}
+
+/// Brings in the pictures pasted into a day's messages (`pictures`), before its source is written.
+fn bring_pictures(p: &Pass, conv: &str, title: &str, msgs: &mut [fetch::ChatMessage], st: &mut state::State, r: &mut Report) {
+    if msgs.iter().all(|m| m.pictures.is_empty()) {
+        return;
+    }
+    let client = super::attachments::client();
+    let get = |url: &str| super::api::get_picture(&client, url, super::attachments::MAX_BYTES);
+    super::pictures::for_day(p.data, p.vault, conv, title, msgs, st, &mut r.problems, &get);
 }
 
 /// An on-demand pull's day whose source has gone from the vault (`gone`): it was asked for, so it is
