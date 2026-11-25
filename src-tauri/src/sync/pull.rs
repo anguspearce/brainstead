@@ -303,7 +303,12 @@ fn pull_transcripts(
             out.items.push(Item { kind: "transcript".into(), title: ev.subject.clone(), date, path: p.to_string(), already_had: true });
             continue;
         }
-        match fetch::transcript_capture(client, sign_in, &ev) {
+        let mut pictures = |msgs: &mut [fetch::ChatMessage]| {
+            let pc = super::attachments::client();
+            let get = |url: &str| super::api::get_picture(&pc, url, super::attachments::MAX_BYTES);
+            super::pictures::for_day(data, vault, thread, &ev.subject, msgs, st, &mut out.problems, &get);
+        };
+        match fetch::transcript_capture(client, sign_in, &ev, &mut pictures) {
             Ok(Some(cap)) => {
                 if let Some(path) = deliver(data, vault, &cap, "teams", Some(ev.start), out) {
                     st.mark_transcript(&id, Some(&path));

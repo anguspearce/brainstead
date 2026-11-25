@@ -685,7 +685,9 @@ fn sync_transcripts(p: &Pass, st: &mut state::State, r: &mut Report) {
         if ev.end > now || st.transcript_done(&id) {
             continue; // not finished yet, or already done
         }
-        match fetch::transcript_capture(&p.client, &p.sign_in, &ev) {
+        // Pictures pasted into the meeting chat come in as the chat sync brings in other chats'.
+        let mut pictures = |msgs: &mut [fetch::ChatMessage]| bring_pictures(p, &thread, &ev.subject, msgs, st, r);
+        match fetch::transcript_capture(&p.client, &p.sign_in, &ev, &mut pictures) {
             Ok(Some(cap)) => {
                 if let Some(path) = deliver(p.data, p.vault, &cap, "teams", Some(ev.start), r) {
                     st.mark_transcript(&id, Some(&path));

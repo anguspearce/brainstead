@@ -327,6 +327,15 @@ pub fn chat_display_name(msgs: &[ChatMessage], me: &str) -> String {
     names.join(", ")
 }
 
+/// A chat message's attachments in its source: its pictures (brought into the vault, or a note saying
+/// why not), then the files shared in it. A picture-only message has no text, and these stand in for it.
+fn attachments_of(m: &ChatMessage) -> Vec<Attachment> {
+    m.pictures
+        .iter()
+        .map(|p| Attachment { name: "Picture".into(), path: p.path.clone(), url: None, note: p.note.clone() })
+        .chain(m.files.iter().map(|f| Attachment { name: f.name.clone(), url: Some(f.url.clone()), ..Default::default() }))
+        .collect()
+}
 /// Builds a Teams chat capture for one local `day` of a conversation. The title is the chat's topic,
 /// else the people who wrote that day, else `fallback` (the chat's partner across the whole thread, so
 /// a 1:1 day where only the user wrote still names the other person), else "Teams chat". The file is
@@ -359,12 +368,7 @@ pub fn chat_capture(conv: &Conv, day_msgs: &[ChatMessage], me: &str, url_base: &
             recipients: None,
             date: Some(m.time.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string()),
             body: m.body.clone(),
-            attachments: m
-                .pictures
-                .iter()
-                .map(|p| Attachment { name: "Picture".into(), path: p.path.clone(), url: None, note: p.note.clone() })
-                .chain(m.files.iter().map(|f| Attachment { name: f.name.clone(), url: Some(f.url.clone()), ..Default::default() }))
-                .collect(),
+            attachments: attachments_of(m),
         })
         .collect();
     Some(Capture::Teams(Thread {
@@ -857,7 +861,7 @@ fn meeting_thread_id(e: &Value) -> Option<String> {
 /// The messages people typed in a meeting's chat, as webcapture messages, with a divider ahead of
 /// them — for folding into the meeting's transcript source (D-20261025-02). Empty on any failure or
 /// when the meeting had no chat, so it never blocks the transcript.
-fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
+fn meeting_chat(client: &Client, s: &SignIn, ev: &Event, pictures: Pictures) -> Vec<Message> {
     let Some(thread_id) = &ev.thread_id else { return Vec::new() };
     let url = format!(
         "{}/v1/users/ME/conversations/{}/messages?view=msnp24Equivalent|supportsMessageProperties&pageSize=200",
@@ -867,7 +871,7 @@ fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
     // A recurring meeting's chat thread carries every session's messages, so keep only this meeting's
     // day (local) — the chat that belongs with this transcript.
     let day = ev.start.with_timezone(&Local).date_naive();
-    let msgs: Vec<ChatMessage> = api::get_chatsvc(client, &url)
+    let mut msgs: Vec<ChatMessage> = api::get_chatsvc(client, &url)
         .map(|b| parse_messages(&b))
         .unwrap_or_default()
         .into_iter()
@@ -876,6 +880,15 @@ fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
     if msgs.is_empty() {
         return Vec::new();
     }
+    pictures(&mut msgs);
+    meeting_chat_messages(&msgs)
+}
+
+/// Brings in the pictures pasted into a meeting's chat, as the chat sync does for other chats.
+pub type Pictures<'a> = &'a mut dyn FnMut(&mut [ChatMessage]);
+
+/// A meeting chat's messages, under their heading, as they go after the transcript.
+fn meeting_chat_messages(msgs: &[ChatMessage]) -> Vec<Message> {
     let mut out =
         vec![divider(brainstead_core::webcapture::MEETING_CHAT_HEADING, "Messages typed in the meeting chat during the meeting:")];
     out.extend(msgs.iter().map(|m| Message {
@@ -888,7 +901,7 @@ fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
         recipients: None,
         date: Some(m.time.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string()),
         body: m.body.clone(),
-        attachments: m.files.iter().map(|f| Attachment { name: f.name.clone(), url: Some(f.url.clone()), ..Default::default() }).collect(),
+        attachments: attachments_of(m),
     }));
     out
 }
@@ -896,7 +909,7 @@ fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
 /// The transcript for a meeting thread, as a Teams transcript capture, when one exists. Best-effort:
 /// returns Ok(None) when the meeting had no transcript (not recorded, or still processing). The
 /// meeting's chat, when any, is folded in after the transcript.
-pub fn transcript_capture(client: &Client, s: &SignIn, ev: &Event) -> Result<Option<Capture>, String> {
+pub fn transcript_capture(client: &Client, s: &SignIn, ev: &Event, pictures: Pictures) -> Result<Option<Capture>, String> {
     let Some(thread_id) = &ev.thread_id else { return Ok(None) };
     let filter = format!("ItemProperties/Default/MeetingThreadId eq '{thread_id}'");
     let select = "ItemId,ItemProperties/Default/TranscriptJson,ItemProperties/Default/RecordingStartDateTime,Visualization";
@@ -925,7 +938,7 @@ pub fn transcript_capture(client: &Client, s: &SignIn, ev: &Event) -> Result<Opt
     // Fold the meeting chat in after the transcript, when there is one. Both parts are then labelled
     // with a divider so a reader (or the meeting-note model) can tell the spoken transcript from the
     // typed chat; a transcript with no chat is left unlabelled, as before.
-    let chat = meeting_chat(client, s, ev);
+    let chat = meeting_chat(client, s, ev, pictures);
     if !chat.is_empty() {
         thread.messages.insert(0, divider("Meeting transcript", "What was said in the meeting (times are offsets from the start):"));
         thread.messages.extend(chat);
@@ -1328,6 +1341,38 @@ mod tests {
         let e2 = json!({"skypeTeamsData": "{\"cid\":\"19:meeting_XYZ@thread.v2\"}"});
         assert_eq!(meeting_thread_id(&e2).as_deref(), Some("19:meeting_XYZ@thread.v2"));
         assert_eq!(meeting_thread_id(&json!({})), None);
+    }
+
+    #[test]
+    fn a_picture_only_message_in_a_meeting_chat_does_not_refuse_the_transcript() {
+        // A picture pasted alone into a meeting's chat has no text: the picture stands in for it, as in
+        // other chats, or the capture check refuses the whole transcript on every pass.
+        let pic = ChatMessage {
+            id: "1".into(),
+            sender: "Maya".into(),
+            body: String::new(),
+            time: "2026-11-25T07:10:00Z".parse().unwrap(),
+            files: vec![],
+            pictures: vec![ChatPicture {
+                object: "0-weu-d1-abc".into(),
+                path: Some("sources/Teams. Picture. Steerco - 2026-11-25.png".into()),
+                ..Default::default()
+            }],
+        };
+        let mut messages = vec![divider("Meeting transcript", "What was said:")];
+        messages.extend(meeting_chat_messages(&[pic]));
+        let cap = Capture::Teams(Thread {
+            continues: None,
+            url: "https://teams.microsoft.com/".into(),
+            title: "Steerco".into(),
+            kind: Some("transcript".into()),
+            messages,
+            meeting_date: Some("2026-11-25".into()),
+            meeting_start: Some("09:00".into()),
+        });
+        assert_eq!(cap.check(), Ok(()));
+        let (_, text) = brainstead_core::webcapture::render(&cap, Utc::now(), "2026-11-25");
+        assert!(text.contains("![[sources/Teams. Picture. Steerco - 2026-11-25.png|Picture]]"), "{text}");
     }
 
     #[test]
