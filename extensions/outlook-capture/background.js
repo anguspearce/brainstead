@@ -555,7 +555,7 @@ async function openRowAndSettle(convid, prevSignature, hintScrollTop) {
 
 // ---------------------------------------------------------- mail sign-in ----
 
-// Brainstead's Teams and Outlook sync reads mail with the token Outlook on the web already holds:
+// Brainstead's sync reads mail with the token Outlook on the web already holds:
 // every 15 minutes, while an Outlook tab is open, this hands that tab's Outlook token over
 // (D-20261028-02). Teams' own page stopped reliably keeping one that can read mail. The rest of the
 // sync's sign-in still comes from the Teams extension; Brainstead takes only the mail token from here.
@@ -575,6 +575,33 @@ function inTime(p, what) {
     timer = setTimeout(() => reject(new Error(`${what} took over ${STEP_MS / 1000}s`)), STEP_MS);
   });
   return Promise.race([p, late]).finally(() => clearTimeout(timer));
+}
+
+/** At most one reload in this long, so a sign-in Outlook doesn't renew on load can't cause a loop. */
+const RELOAD_GAP_MS = 45 * 60 * 1000;
+const LAST_RELOAD_KEY = "signin-last-reload";
+/** A one-off hand-over a minute after a reload, once Outlook has fetched a fresh sign-in. */
+const AFTER_RELOAD_ALARM = "brainstead-mail-after-reload";
+
+/** Reloads a background Outlook tab so Outlook fetches a fresh mail sign-in, when Microsoft turned
+ *  down the one it keeps (Brainstead D-20261124-03), then hands it over a minute later. Never a tab
+ *  the user is looking at, and at most once in RELOAD_GAP_MS. */
+async function renewSignIn(tab) {
+  if (tab.audible) return "not reloaded: playing sound";
+  if (tab.active) {
+    const win = await chrome.windows.get(tab.windowId).catch(() => null);
+    if (win?.focused) return "not reloaded: you're looking at it";
+  }
+  const last = (await chrome.storage.local.get(LAST_RELOAD_KEY))[LAST_RELOAD_KEY] || 0;
+  if (Date.now() - last < RELOAD_GAP_MS) return "not reloaded: reloaded in the last 45 minutes";
+  await chrome.storage.local.set({ [LAST_RELOAD_KEY]: Date.now() });
+  try {
+    await chrome.tabs.reload(tab.id);
+    chrome.alarms.create(AFTER_RELOAD_ALARM, { delayInMinutes: 1 });
+    return "reloaded";
+  } catch (_) {
+    return "not reloaded: the tab went away";
+  }
 }
 
 async function handOverMailSignIn() {
@@ -614,6 +641,9 @@ async function handOverMail(notes) {
         chrome.runtime.sendNativeMessage(HOST, { type: "sign-in", ...page, version: chrome.runtime.getManifest().version }),
         "Brainstead's answer",
       );
+      if (reply?.ok && reply.renew?.length) {
+        notes.push(`turned down: ${reply.renew.join(", ")}; ${await renewSignIn(tab)}`);
+      }
       return reply?.ok ? "handed over" : `Brainstead refused: ${reply?.message || "no answer"}`;
     } catch (e) {
       return `Brainstead unreachable: ${e?.message || e}`;
@@ -624,7 +654,7 @@ async function handOverMail(notes) {
 
 chrome.alarms.create(MAIL_HANDOVER_ALARM, { periodInMinutes: 15 });
 chrome.alarms.onAlarm.addListener((a) => {
-  if (a.name === MAIL_HANDOVER_ALARM) handOverMailSignIn();
+  if (a.name === MAIL_HANDOVER_ALARM || a.name === AFTER_RELOAD_ALARM) handOverMailSignIn();
 });
 chrome.runtime.onStartup.addListener(handOverMailSignIn);
 chrome.runtime.onInstalled.addListener(handOverMailSignIn);

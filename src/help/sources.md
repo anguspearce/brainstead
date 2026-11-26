@@ -11,15 +11,15 @@ Sources are the files in your vault's `sources/` folder: captured emails and cha
 ## Add a source
 - Drag files from Finder (or Explorer) onto the Sources screen, or click **Import** and pick them. Each is copied into `sources/`, renamed if the name is taken. Folders, files already in the vault and files over 200 MB are refused.
 - Capture from the browser with the Outlook and Teams extensions (set up in [Settings › Capture extensions](app:settings/capture)). A capture lands in `sources/` as an `Email. …` or `Teams. …` note, and also waits in the [Inbox](app:inbox).
-- On macOS and Windows, turn on [Teams and Outlook sync](app:settings/sync) to have your own chats, meeting transcripts and Inbox mail read in on their own, without the extension button.
+- On macOS and Windows, turn on Teams and Outlook in [Settings › Sync](app:settings/sync) (and Slack, there too) to have your own chats, meeting transcripts and Inbox mail read in on their own, without the extension button.
 
 Nothing can be added while Read-only is on in [Settings › Vault](app:settings/vault).
 
-## See what needs ingesting
-Each source has a status:
+## See each source's status
+Sources is the library: every source, whatever its status. The new ones waiting to be dealt with are in the [Inbox](app:inbox) under **Captures**, where you ingest each or keep it in Sources; Today's **To process** counts them there. Each source has a status:
 
-- **New**: no wiki page cites it.
-- **Changed**: it changed after the pages citing it were written.
+- **New**: no wiki page cites it. It's grey: the Inbox's **Captures** is where it waits for you.
+- **Changed**, in amber: it changed after the pages citing it were written, and no ingest has read it since, so ingest it again or check them. A synced email thread or chat that's grown is Changed until the daily check ingests it again, when that's switched on. Ingesting one again reads its new messages, with the latest earlier ones as context, rather than the whole thread from the start.
 - **Ingested**.
 
 Filter with **All**, **New**, **Changed** and **Ingested** above the list. **Search sources** searches their text and names with the same rules as [Search](help:search). Kind says what each file is; Folder says which folder under `sources/` it's in (hover for the full path). On the right, the count of sources shown and what they take on disk.
@@ -33,7 +33,7 @@ Markdown, text, PDF, Word, PowerPoint and Excel files and images (not SVG) can b
 - **Ingest** in the top bar ingests every new and changed source, one after another. Teams transcripts get meeting notes instead.
 - You can also choose **Ingest into the wiki** from a note's ⋯ or right-click menu, or press `I` on a capture in the [Inbox](app:inbox).
 
-Ingests run one at a time, oldest source first, so a newer source has the last word on a page.
+Ingests run one at a time, oldest source first, so a newer source has the last word on a page. A day of a Teams or Slack chat that an ingest finds nothing in (no news for the wiki, no action or decision) is moved to the Trash afterwards, listed in [Changes](app:review) where Revert puts it back; emails, documents and transcripts stay. Quitting or restarting Brainstead doesn't lose the ones waiting: they carry on at the next start. One that was in the middle of making its changes is stopped instead, so nothing is made twice; ingest it again to finish it.
 
 A real document also gets a summary page in the wiki, named `Summary. ` and the source's name, so a link to the source's name still reaches the source. A source that already has a summary doesn't get a second one: Brainstead looks for a summary page that cites the source in its `sources:`, whatever the page is called, so older summaries (named like their source) and a renamed source's summary count.
 
@@ -47,12 +47,12 @@ On a long page the AI rewrites only a section it saw in full; "left out by the c
 
 A change is dropped only when none of its quotes is found in the source. One with some quotes missing is kept and flagged. A change from an image is never dropped for a missing quote (the AI may read what text recognition missed); it's kept and flagged.
 
-The changes are made at once, with a line in `log.md`, and listed in [Changes](app:review), where you can revert them. Only when the daily check runs on its schedule is a flagged change held there for you instead. The source is added to each page's `sources:`.
+The changes are made at once, with a line in `log.md`, and listed in [Changes](app:review), where you can revert them. Only when the daily check runs on its schedule is a flagged change held there for you instead. The source is added to each page's `sources:`; where a page's properties don't read as YAML it can't be, and the change is flagged to say so.
 
 To ingest new sources as soon as they arrive, turn on **Ingest new sources as they arrive** in [Settings › AI assistants](app:settings/assistants).
 
 ## Follow an ingest run
-The **Ingest runs** pane on the right shows each run's steps, with **Stop** while it runs or waits. An assistant can stop one too. When it's done, **See N changes** (or **Review N held changes**) opens Changes at the run's first change, and "left out by the checks" lists what was dropped and why. The pane shows the latest runs; scroll down for older ones. **Search runs** at its top finds runs by the source or meeting note's name, state (Done, Failed, Stopped), model or day; `↓` and `↑` step through what it found, and `Esc` or ✕ clears it.
+The **Ingest runs** pane on the right shows each run's steps, with **Stop** while it runs or waits. An assistant can stop one too. When it's done, **See N changes** (or **Open Changes (N held)**) opens Changes at the run's first change, and "left out by the checks" lists what was dropped and why. The pane shows the latest runs; scroll down for older ones. **Search runs** at its top finds runs by the source or meeting note's name, state (Done, Failed, Stopped), model or day; `↓` and `↑` step through what it found, and `Esc` or ✕ clears it.
 
 ## Preview a source
 Open a source to read it.
@@ -70,4 +70,4 @@ Beside the preview, the provenance card, **Cited by N pages**, says when the sou
 A source's top bar has **Ask**, which starts a chat about it. A captured thread has **Draft a reply**, and other documents have **Doc check**. On the Sources list, **Meeting notes** opens [Meeting notes](app:meeting).
 
 ## Resize the panes
-Drag the line between the list and the ingest runs to resize them, and a column heading's left edge to resize that column; **Title** takes the rest, and a double-click puts either back ([pane widths](help:settings-general)).
+Drag the line between the list and the ingest runs to resize them, and a column heading's left edge to resize that column; **Title** takes the rest, and a double-click puts either back ([pane widths](help:settings-general)). In a window narrower than about 940 pixels the list leaves out **Folder**, **Modified** and **Size** (newest stays first) so its buttons fit; widen the window to see them.

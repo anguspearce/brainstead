@@ -4,7 +4,7 @@
 
 // The weekly review's prepared suggestions: their rows, accepting one and skipping one.
 
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const task = { path: "Me. To Do List.md", line: 3, lineText: "- [ ] Book the venue", text: "Book the venue" };
@@ -62,16 +62,22 @@ function rows(list: WeekPrepSuggestion[], step: WeekPrepSuggestion["step"] = "ba
   return onHandle;
 }
 
+/** A row's button by its name: each row has its own Accept, Edit and Skip. */
+const btn = (id: string, name: string) => within(document.querySelector(`[data-id="${id}"]`) as HTMLElement).getByRole("button", { name });
+
 describe("the prepared suggestions", () => {
-  it("shows each with its source, the action's verb and Skip", () => {
+  it("shows each with its source, what accepting does, Accept, Edit where there are words, and Skip", () => {
     rows([add, tick, defer], "next");
     expect(screen.getByText("You said you'd send Lena the rota.")).toBeTruthy();
     const src = screen.getByRole("button", { name: "Meeting. Rota - 2026-10-01" });
     expect(src.getAttribute("title")).toContain("I'll send Lena the rota");
-    expect(screen.getByText(/→ Send Lena the rota · Orbit App launch/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Add task" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Tick" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^Defer to / }).getAttribute("title")).toContain("2026-10-30");
+    expect(screen.getByText(/Add task → Send Lena the rota · Orbit App launch/)).toBeTruthy();
+    expect(btn("a1", "Accept").title).toContain("Send Lena the rota");
+    expect(btn("a1", "Edit")).toBeTruthy();
+    expect(btn("t1", "Accept").title).toContain("Tick");
+    expect(btn("d1", "Accept").title).toContain("2026-10-30");
+    expect(screen.getByText(/^Defer to /)).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1);
     expect(screen.getAllByRole("button", { name: "Skip" })).toHaveLength(3);
     for (const b of screen.getAllByRole("button")) expect(b.getAttribute("title")).toBeTruthy();
   });
@@ -82,10 +88,10 @@ describe("the prepared suggestions", () => {
     expect(screen.queryAllByRole("button")).toHaveLength(0);
   });
 
-  it("adds a task to its project on Add task, says so with Undo, and remembers it", async () => {
+  it("adds a task to its project on Accept, says so with Undo, and remembers it", async () => {
     const onHandle = rows([add]);
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Add task" }));
+      fireEvent.click(btn("a1", "Accept"));
     });
     await vi.waitFor(() => expect(onHandle).toHaveBeenCalled());
     const call = invoke.mock.calls.find((c) => c[0] === "project_add_task")!;
@@ -101,7 +107,7 @@ describe("the prepared suggestions", () => {
     const loose = { ...add, action: { ...add.action!, project: null } } as WeekPrepSuggestion;
     const onHandle = rows([loose]);
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Add task" }));
+      fireEvent.click(btn("a1", "Accept"));
     });
     await vi.waitFor(() => expect(onHandle).toHaveBeenCalled());
     expect(invoke.mock.calls.find((c) => c[0] === "task_add")?.[1]).toMatchObject({ text: "Send Lena the rota #context/computer" });
@@ -110,12 +116,24 @@ describe("the prepared suggestions", () => {
   it("ticks the task as it is now", async () => {
     const onHandle = rows([tick], "next");
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Tick" }));
+      fireEvent.click(btn("t1", "Accept"));
     });
     await vi.waitFor(() => expect(onHandle).toHaveBeenCalledWith("t1", "accepted", "Did task_toggle"));
     const call = invoke.mock.calls.find((c) => c[0] === "task_toggle")!;
     expect(call[1]).toMatchObject({ done: true });
     expect(JSON.stringify(call[1])).toContain('"line":3');
+  });
+
+  it("adds the words Edit changed", async () => {
+    const onHandle = rows([add]);
+    fireEvent.click(btn("a1", "Edit"));
+    fireEvent.change(screen.getByRole("textbox", { name: "The words" }), { target: { value: "Send Lena the new rota" } });
+    await act(async () => {
+      fireEvent.click(btn("a1", "Accept"));
+    });
+    await vi.waitFor(() => expect(onHandle).toHaveBeenCalled());
+    const call = invoke.mock.calls.find((c) => c[0] === "project_add_task")!;
+    expect((call[1] as { text: string }).text).toContain("Send Lena the new rota");
   });
 
   it("remembers a skip without doing anything", () => {
@@ -127,8 +145,8 @@ describe("the prepared suggestions", () => {
 
   it("hides the ones dealt with", () => {
     rows([add, tick], "next", { a1: "accepted" });
-    expect(screen.queryByRole("button", { name: "Add task" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Tick" })).toBeTruthy();
+    expect(document.querySelector('[data-id="a1"]')).toBeNull();
+    expect(btn("t1", "Accept")).toBeTruthy();
     expect(screen.getByText(/1 dealt with/)).toBeTruthy();
   });
 });
@@ -141,11 +159,11 @@ describe("the preparation's line", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("offers Retry after a failure, and Prepare again runs the week", async () => {
+  it("offers Suggest again after a failure, which runs the week", async () => {
     render(<PrepHeader status={status({ error: "No assistant answered." })} week="2026-W40" />);
     expect(screen.getByText(/No assistant answered/)).toBeTruthy();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      fireEvent.click(screen.getByRole("button", { name: "Suggest again" }));
     });
     expect(invoke).toHaveBeenCalledWith("weekprep_run", { week: "2026-W40", unattended: false });
   });

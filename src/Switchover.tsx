@@ -59,7 +59,7 @@ export function checklist(s: Settings, status: Status | null, recent: Captured[]
     {
       id: "summaries",
       label: "Brainstead runs the daily and weekly summaries",
-      detail: s.summariesHere ? "The daily and weekly summaries are written here." : "Switch this on in Jobs & schedule.",
+      detail: s.summariesHere ? "The daily and weekly summaries are written here." : "Switch this on in Automations.",
       done: !!s.summariesHere,
     },
     {
@@ -128,8 +128,8 @@ export function Switchover() {
   ];
   const actions: Record<string, Row["action"]> = {
     writes: ["Vault", goTo("vault"), "Open Settings › Vault, where read-only is switched"],
-    summaries: ["Jobs & schedule", goTo("jobs"), "Open Settings › Jobs & schedule to run the summaries here"],
-    automated: ["Jobs & schedule", goTo("jobs"), "Open Settings › Jobs & schedule, where you list your tools"],
+    summaries: ["Automations", goTo("jobs"), "Open Settings › Automations to run the summaries here"],
+    automated: ["Automations", goTo("jobs"), "Open Settings › Automations, where you list your tools"],
     outlook: capture,
     teams: capture,
     retire: retired

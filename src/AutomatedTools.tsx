@@ -2,7 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Your own tools that start Claude Code sessions (Settings › Jobs & schedule): the daily summary
+// Your own tools that start Claude Code sessions (Settings › Automations): the daily summary
 // counts their sessions as automated instead of writing them up as your work. Each tool is a name
 // and what its sessions have in common: a folder they run in, the words their first message opens
 // with, or both. Folders whose recent sessions look like a tool's are offered to add in one click.
@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import { api, Automation, AutomationSuggestion } from "./api";
 import { Icon } from "./icons";
+import { LearnMore } from "./help/HelpDrawer";
 import { reportEditError } from "./taskModel";
 import { toast } from "./Toast";
 
@@ -77,9 +78,8 @@ export function AutomatedTools() {
     <section className="sgroup">
       <h2 className="h3">Your tools that start Claude Code sessions</h2>
       <p className="faint">
-        The daily summary writes up your Claude Code sessions as your work. A tool of yours that starts sessions itself (a script, another
-        app) would show there too: list it, and its sessions are counted as automated instead. Brainstead&apos;s own jobs are recognised
-        already.
+        A tool listed here has its sessions counted as automated, not as your work, in the daily summary.{" "}
+        <LearnMore topic="settings-jobs" section="Keep your tools' sessions out of the summaries" />
       </p>
       <div className="card autotools">
         {failed && (
@@ -149,9 +149,7 @@ export function AutomatedTools() {
       {list && shown.length > 0 && (
         <>
           <h3 className="eyebrow">Folders that look like a tool&apos;s</h3>
-          <p className="faint">
-            In the last two weeks, nearly every session in these folders was one prompt and done, as a tool runs Claude Code.
-          </p>
+          <p className="faint">In the last two weeks, nearly every session in these folders was one prompt and done.</p>
           <div className="card autotools">
             {shown.map((g) => (
               <div key={g.cwd} className="srow">

@@ -43,7 +43,7 @@ On [The wiki and sources](../wiki.md).
 - A source's provenance: [light](source-provenance-light.png) · [dark](source-provenance-dark.png)
 - Changes: [light](review-light.png) · [dark](review-dark.png)
 - A wiki page: [light](wiki-page-light.png) · [dark](wiki-page-dark.png)
-- Knowledge health: [light](health-light.png) · [dark](health-dark.png)
+- Wiki health: [light](health-light.png) · [dark](health-dark.png)
 - The graph: [light](graph-light.png) · [dark](graph-dark.png)
 
 ## Ask and assistants
@@ -58,6 +58,6 @@ On [Ask and assistants](../ask.md).
 On [Day to day](../day-to-day.md).
 
 - The menu-bar window: [light](tray-light.png) · [dark](tray-dark.png)
-- Settings › Jobs & schedule: [light](settings-jobs-light.png) · [dark](settings-jobs-dark.png)
+- Settings › Automations: [light](settings-jobs-light.png) · [dark](settings-jobs-dark.png)
 - The help drawer on Tasks: [light](help-light.png) · [dark](help-dark.png)
 - Settings › General: [light](settings-general-light.png) · [dark](settings-general-dark.png)

@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TrashEntry } from "../api";
 import { byFile, renamedPath } from "./Rename";
+import { settings } from "../store";
 
 const entries: TrashEntry[] = [
   {
@@ -32,6 +33,8 @@ vi.mock(import("../api"), async (orig) => ({ ...(await orig()), api: api as neve
 const { TrashScreen, deletedWhen } = await import("./Trash");
 const { previewView } = await import("../Preview");
 const { setPlatform } = await import("../platform");
+
+beforeEach(() => settings.update({ readOnly: false }));
 
 afterEach(() => {
   cleanup();
@@ -71,6 +74,16 @@ describe("Trash", () => {
     }
   });
 
+  it("says so and greys out its changes while the vault is read-only", async () => {
+    settings.update({ readOnly: true });
+    api.trashList.mockResolvedValue(entries);
+    render(<TrashScreen />);
+    await screen.findByText("Dup");
+    expect(screen.getByText(/nothing here can be restored or deleted/)).toBeTruthy();
+    expect((screen.getByRole("button", { name: /Empty the Trash/ }) as HTMLButtonElement).disabled).toBe(true);
+    for (const b of screen.getAllByRole("button", { name: "Restore" })) expect((b as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("searches by name and the folder it was in", async () => {
     api.trashList.mockResolvedValue(entries);
     render(<TrashScreen />);
@@ -92,7 +105,7 @@ describe("Trash", () => {
     render(<TrashScreen />);
     expect(await screen.findByText("Meeting. Old - 2026-09-24")).toBeTruthy();
     expect(screen.getByText("wiki/entities/")).toBeTruthy();
-    fireEvent.click(screen.getByRole("radio", { name: "Wikis · 1" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Wikis 1" }));
     expect(screen.queryByText("Meeting. Old - 2026-09-24")).toBeNull();
     fireEvent.click(screen.getByRole("radio", { name: "All" }));
     fireEvent.click(screen.getAllByRole("button", { name: "Restore" })[0]);

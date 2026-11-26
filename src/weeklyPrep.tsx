@@ -2,8 +2,9 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The weekly review's prepared suggestions (src-tauri/src/weekprep.rs): a compact row each above a
-// step's own content, with the action's verb and Skip. Accepting runs one of the app's own undoable
+// The weekly review's prepared suggestions (src-tauri/src/weekprep.rs): a row each above a step's
+// own content, as the one suggestion component's (src/Suggestions.tsx), with what accepting does,
+// Accept, Edit and Skip. Accepting runs one of the app's own undoable
 // actions (the task edits the Tasks screen uses, the Inbox's clarify, Quick capture's add) and says
 // so with Undo; a link is made too, revertable in Changes. Nothing is done without a click.
 
@@ -18,6 +19,7 @@ import { inQuote, tagToggled } from "./tasksq/edits";
 import { changeTaskEdit, reportEditError, retitled, toggleTaskEdit, undoAction } from "./taskModel";
 import { toast } from "./Toast";
 import { iconizeEmoji } from "./md/fieldEmoji";
+import { SuggestButton, SuggestionRow } from "./Suggestions";
 
 export type Handled = Record<string, "accepted" | "skipped">;
 
@@ -46,6 +48,7 @@ interface Choice {
 
 const BECOMES: Record<string, string> = {
   next: "a next action",
+  todo: "a task on the To Do list",
   waiting: "waiting for",
   someday: "someday / maybe",
   done: "done",
@@ -56,7 +59,7 @@ const BECOMES: Record<string, string> = {
 };
 
 /** The task an action is on, as it is now. */
-async function current(t: WeekPrepTask): Promise<TaskRow> {
+export async function current(t: WeekPrepTask): Promise<TaskRow> {
   return findTask(await api.tasksNotes(), `${t.path}:${t.line + 1}`, t.text);
 }
 
@@ -70,12 +73,28 @@ function said(r: { undo: string | null } | string, fallback: string): string {
 }
 
 /** The Inbox item a clarify is on, as the Inbox lists it now. */
-async function inboxItem(want: { kind: string; path: string; line: number; lineText: string }): Promise<InboxItem> {
+export async function inboxItem(want: { kind: string; path: string; line: number; lineText: string }): Promise<InboxItem> {
   const items = (await api.inboxList()).filter(unclarified);
   const same = (i: InboxItem) => i.kind === want.kind && i.path === want.path && i.lineText === want.lineText;
   const i = items.find((x) => same(x) && x.line === want.line) ?? items.find(same);
   if (!i) throw new Error("That Inbox item has changed or gone since the suggestions were prepared.");
   return i;
+}
+
+/** A clarify's choice as the Inbox's clarify takes it (clarify_inbox's becomes and values). */
+export function clarifyArgs(a: Extract<WeekPrepAction, { do: "clarify" }>): Record<string, unknown> {
+  const b = a.becomes;
+  return b === "project"
+    ? { becomes: b, project_name: a.text ?? undefined }
+    : b === "reference"
+      ? { becomes: b, note: a.text ?? undefined }
+      : {
+          becomes: b,
+          text: a.text ?? undefined,
+          project: a.project ?? undefined,
+          context: a.context ?? undefined,
+          due: a.due ?? undefined,
+        };
 }
 
 /** The task line an add writes, without its checkbox: as the Inbox writes one, with its tags and
@@ -89,9 +108,10 @@ export function addLine(a: Extract<WeekPrepAction, { do: "add" }>, project: Proj
   return due ? `${line.slice(0, due.index)} ${extra}${due[0]}` : `${line} ${extra}`;
 }
 
-/** What a suggestion offers; none for a prompt. `unattended`: an assistant nobody is watching
- *  accepts it, so a link (a change in Changes) is held when a check fails, and an ingest a clarify
- *  starts runs as a scheduled one (never on an Ollama model, brainstead_core::ask::job_run_model). */
+/** What a suggestion offers; none for a prompt. `run` is the screen's Accept: an assistant's
+ *  accept (weekly_suggestion) runs only a link's, and makes the rest as its own changes in Changes
+ *  (src/mcpActions.ts suggestionChanges). `unattended`: an assistant nobody is watching accepts
+ *  it, so a link (a change in Changes) is held when a check fails. */
 export function choice(s: WeekPrepSuggestion, week: string, projects: ProjectRow[], unattended = false): Choice | null {
   const a = s.action;
   if (!a) return null;
@@ -164,19 +184,7 @@ export function choice(s: WeekPrepSuggestion, week: string, projects: ProjectRow
         title: `Clarify this Inbox item as ${BECOMES[b] ?? b}${a.text && b !== "reference" ? `: “${a.text}”` : ""}`,
         run: async () => {
           const i = await inboxItem(a.item);
-          const args =
-            b === "project"
-              ? { becomes: b, project_name: a.text ?? undefined }
-              : b === "reference"
-                ? { becomes: b, note: a.text ?? undefined }
-                : {
-                    becomes: b,
-                    text: a.text ?? undefined,
-                    project: a.project ?? undefined,
-                    context: a.context ?? undefined,
-                    due: a.due ?? undefined,
-                  };
-          const as = await clarifyItem(i, args, unattended);
+          const as = await clarifyItem(i, clarifyArgs(a), unattended);
           toast(`Clarified as ${as}`, undoAction, "ok");
           return `Clarified “${i.text.slice(0, 60)}” as ${as}`;
         },
@@ -210,6 +218,22 @@ function detail(s: WeekPrepSuggestion): string | null {
   return null;
 }
 
+/** The words Edit can change before accepting: the task to add, the new wording, or what an Inbox
+ *  item becomes (not a note to file it in); null when there are none. */
+export function editableText(s: WeekPrepSuggestion): string | null {
+  const a = s.action;
+  if (a?.do === "add" || a?.do === "edit") return a.text;
+  if (a?.do === "clarify" && a.text && a.becomes !== "reference") return a.text;
+  return null;
+}
+
+/** The suggestion with its words changed, as Edit then Accept (and weekly_suggestion's text) do. */
+export function withText(s: WeekPrepSuggestion, text: string | undefined): WeekPrepSuggestion {
+  const t = text?.trim();
+  if (!t || editableText(s) === null || !s.action) return s;
+  return { ...s, action: { ...s.action, text: t } as WeekPrepAction };
+}
+
 const noteName = (path: string) => path.replace(/\.md$/, "").split("/").pop() ?? path;
 
 function Source({ s }: { s: WeekPrepSuggestion }) {
@@ -227,8 +251,9 @@ function Source({ s }: { s: WeekPrepSuggestion }) {
   );
 }
 
-/** A step's suggestions: rows with the action and Skip, or a short list of prompts. The ones
- *  accepted or skipped are hidden. */
+/** A step's suggestions, always open (D-20261119-06): rows with Accept, Edit where there are words
+ *  to change, and Skip (src/Suggestions.tsx), or a short list of prompts. The ones accepted or
+ *  skipped are hidden. */
 export function PrepRows({
   step,
   rows,
@@ -262,39 +287,39 @@ export function PrepRows({
     );
   return (
     <div className="wprep" aria-label="Suggestions">
-      <div className="eyebrow">Suggested{open.length < rows.length ? ` · ${rows.length - open.length} dealt with` : ""}</div>
+      <div className="eyebrow">
+        {open.length === 1 ? "1 suggestion" : `${open.length} suggestions`}
+        {open.length < rows.length ? ` · ${rows.length - open.length} dealt with` : ""}
+      </div>
       {open.map((s) => {
         const c = choice(s, week, projects);
         const more = detail(s);
-        const act = () => {
-          if (!c || busy) return;
+        const words = editableText(s);
+        const act = (e?: Record<string, string>) => {
+          const cc = e ? choice(withText(s, e.text), week, projects) : c;
+          if (!cc || busy) return;
           setBusy(s.id);
-          c.run()
+          cc.run()
             .then((line) => line && onHandle(s.id, "accepted", line))
-            .catch((e) => (e instanceof Error ? toast(e.message, undefined, "bad") : reportEditError(e)))
+            .catch((err) => (err instanceof Error ? toast(err.message, undefined, "bad") : reportEditError(err)))
             .finally(() => setBusy(null));
         };
         return (
-          <div key={s.id} className="wsugg" data-id={s.id}>
-            <div className="t">
-              <span>{iconizeEmoji(s.text)}</span>
-              {more && <span className="faint small">{more}</span>}
-            </div>
-            <Source s={s} />
-            {c && (
-              <button type="button" className="btn sm" title={c.title} disabled={busy === s.id} onClick={act}>
-                {c.verb}
-              </button>
-            )}
-            <button
-              type="button"
-              className="btn sm ghost"
-              title="Leave this suggestion and hide it"
-              onClick={() => onHandle(s.id, "skipped", "")}
-            >
-              Skip
-            </button>
-          </div>
+          <SuggestionRow
+            key={s.id}
+            id={s.id}
+            busy={busy === s.id}
+            text={iconizeEmoji(s.text)}
+            detail={c ? `${c.verb}${more ? ` ${more}` : ""}` : more}
+            source={<Source s={s} />}
+            accept={c ? { title: c.title, run: act } : undefined}
+            edit={
+              words !== null && c
+                ? { title: "Change the words before accepting it", fields: [{ key: "text", label: "The words", value: words }] }
+                : undefined
+            }
+            skip={{ title: "Leave this suggestion and hide it", run: () => onHandle(s.id, "skipped", "") }}
+          />
         );
       })}
     </div>
@@ -308,8 +333,8 @@ export const when = (local: string) => {
     : d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 };
 
-/** When the suggestions were prepared, with Prepare again; a bar while they're being prepared; or
- *  why the last try failed, with Retry. Nothing when there's no preparation at all (no assistant):
+/** When the suggestions were prepared, with Suggest again; a bar while they're being prepared; or
+ *  why the last try failed, with Suggest again too. Nothing when there's no preparation at all (no assistant):
  *  the steps work as before. */
 export function PrepHeader({ status, week }: { status: WeekPrepStatus | null; week: string }) {
   if (!status || (!status.prep && !status.running && !status.error)) return null;
@@ -327,17 +352,13 @@ export function PrepHeader({ status, week }: { status: WeekPrepStatus | null; we
     return (
       <div className="wprephead">
         <span className="err small grow">The suggestions couldn't be prepared: {status.error}</span>
-        <button type="button" className="btn sm" title="Try preparing this week's suggestions again" onClick={run}>
-          Retry
-        </button>
+        <SuggestButton again title="Try making this week's suggestions again" onClick={run} />
       </div>
     );
   return (
     <div className="wprephead">
       <span className="faint small grow">Suggestions prepared {when(status.prep!.preparedAt)}</span>
-      <button type="button" className="btn sm ghost" title="Read the week again and make fresh suggestions for every step" onClick={run}>
-        Prepare again
-      </button>
+      <SuggestButton again title="Read the week again and make fresh suggestions for every step" onClick={run} />
     </div>
   );
 }

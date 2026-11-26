@@ -23,6 +23,8 @@ pub const HOST: &str = "com.wayned.brainstead";
 /// The extensions' IDs, fixed by the public keys in their manifests.
 pub const OUTLOOK_ID: &str = "fpaoobjjngaheckceaomekehpndbendk";
 pub const TEAMS_ID: &str = "ibmlhbfpbgehbnmkfmllkinogjgcagad";
+/// The Slack extension (D-20261118-01): it only hands over the Slack tab's sign-in.
+pub const SLACK_ID: &str = "gnfhdlhfdpfajnamjgbcafnhjdmhpafo";
 /// How many captures `captures.json` keeps.
 const KEEP: usize = 50;
 
@@ -77,7 +79,7 @@ pub struct Captured {
     pub path: Option<String>,
     pub error: Option<String>,
     pub at: String,
-    /// Made by the Teams and Outlook sync rather than an extension button, so the app can ingest it
+    /// Made by the sync rather than an extension button, so the app can ingest it
     /// unattended. Absent on older captures (reads as false).
     #[serde(default)]
     pub sync: bool,
@@ -85,6 +87,17 @@ pub struct Captured {
     /// start — so the Inbox shows when it happened, not when it was captured. None for a button capture.
     #[serde(default, rename = "itemDate")]
     pub item_date: Option<String>,
+    /// Fetched again by a back-fill (Settings › Sync › Fetch again): it waits in the Inbox, with no
+    /// ingest on arrival and no notification, so hundreds of them don't start hundreds of runs.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub backfill: bool,
+}
+
+/// Set while a back-fill pass runs ([`crate::sync::run`]): what it delivers is marked `backfill`.
+pub static BACKFILL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn backfilling() -> bool {
+    BACKFILL.load(std::sync::atomic::Ordering::SeqCst)
 }
 
 fn extension_of(origin: &str) -> &'static str {
@@ -92,6 +105,7 @@ fn extension_of(origin: &str) -> &'static str {
     match id {
         Some(TEAMS_ID) => "teams",
         Some(OUTLOOK_ID) => "outlook",
+        Some(SLACK_ID) => "slack",
         _ => "other",
     }
 }
@@ -108,15 +122,35 @@ fn handle(data: &Path, origin: &str, v: Value) -> Value {
     if ext == "other" {
         return json!({"ok": false, "message": "Brainstead only takes captures from its own Outlook and Teams extensions."});
     }
+    // The Slack extension only hands over a sign-in; it never sends a capture.
+    if ext == "slack" && v.get("type").and_then(Value::as_str) != Some("sign-in") {
+        return json!({"ok": false, "message": "The Slack extension only hands over the sign-in."});
+    }
     // The Teams extension hands over the open tab's sign-in, so the app can sync the user's own
     // chats, mail and calendar (D-20261025-01). It carries no capture to write.
     if v.get("type").and_then(Value::as_str) == Some("sign-in") {
         // The Outlook extension hands over only the mail token, from an Outlook on the web tab.
-        let accepted = if ext == "outlook" { crate::sync::accept_mail_handover(&v) } else { crate::sync::accept_handover(&v) };
+        // `renew`: services whose only token in the tab is one Microsoft turned down, for the
+        // extension to reload the tab so the page fetches fresh ones (D-20261124-03).
+        let accepted = match ext.as_str() {
+            "outlook" => crate::sync::accept_mail_handover(&v),
+            "slack" => crate::sync::slack::accept_handover(&v).map(|()| Vec::new()),
+            _ => crate::sync::accept_handover(&v),
+        };
         return match accepted {
-            Ok(()) => json!({"ok": true}),
+            Ok(renew) if renew.is_empty() => json!({"ok": true}),
+            Ok(renew) => json!({"ok": true, "renew": renew}),
             Err(message) => json!({"ok": false, "message": message}),
         };
+    }
+    // The Teams extension collects a reply Draft reply left for it, to type into the chat's box
+    // (D-20261120-05). Only the Teams extension: it's the one that types it in.
+    if v.get("type").and_then(Value::as_str) == Some("reply-draft") {
+        if ext != "teams" {
+            return json!({"ok": false, "message": "Only the Teams extension types in a reply."});
+        }
+        let key = v.get("key").and_then(Value::as_str).unwrap_or("");
+        return crate::sync::reply::take_teams(data, key, chrono::Utc::now().timestamp());
     }
     let c: Capture = match serde_json::from_value(v) {
         Ok(c) => c,
@@ -133,7 +167,7 @@ fn handle(data: &Path, origin: &str, v: Value) -> Value {
 }
 
 /// Writes capture `c` into `vault`'s `sources/` and records it in the Inbox and `captures.json`, the
-/// way an extension capture is. `sync` marks a capture the Teams and Outlook sync made rather than a
+/// way an extension capture is. `sync` marks a capture the sync made rather than a
 /// button press (so the app can ingest it unattended). The vault path, or why it was refused; a
 /// refusal is recorded too, so it shows in the Inbox strip and Settings. Shared by the native host
 /// and the in-app sync (`sync::run`).
@@ -162,12 +196,13 @@ pub fn deliver(
             at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             sync,
             item_date,
+            backfill: backfilling(),
         },
     );
     result
 }
 
-/// Writes a file the Teams and Outlook sync brought in (an email attachment) into `sources/` as
+/// Writes a file the sync brought in (an email attachment) into `sources/` as
 /// `name`, or a free name beside it, and notes it like a capture, so it reaches the Inbox and is
 /// ingested as it arrives. Its vault path.
 pub fn deliver_file(
@@ -190,6 +225,7 @@ pub fn deliver_file(
             at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             sync: true,
             item_date,
+            backfill: backfilling(),
         },
     );
     result
@@ -220,8 +256,14 @@ fn write_list(f: &Path, all: &[Captured]) {
 /// Runs `f` holding `captures.lock` in the app data folder: Chrome starts one host process per
 /// extension, and the app changes the Inbox list too, so each read-change-write is one at a time.
 fn locked<T>(data: &Path, f: impl FnOnce() -> T) -> T {
+    locked_by(data, "captures.lock", f)
+}
+
+/// Runs `f` holding the lock file `name` in `data`, across processes: one holder at a time, the
+/// rest wait. Not to be taken again by `f` itself, which would wait for ever.
+pub(crate) fn locked_by<T>(data: &Path, name: &str, f: impl FnOnce() -> T) -> T {
     let _ = std::fs::create_dir_all(data);
-    let lock = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(data.join("captures.lock"));
+    let lock = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(data.join(name));
     // Unlocked when the file closes, at the end of this function.
     let _held = lock.as_ref().ok().filter(|l| l.lock().is_ok());
     f()
@@ -265,6 +307,21 @@ pub fn inbox(data: &Path, gone: impl Fn(&Captured) -> bool) -> Vec<Captured> {
     })
 }
 
+/// The captures noted after `seen` (a capture's `at`), newest first. Those written come from the
+/// Inbox list, which keeps every one: a burst of more than `captures.json` holds between two looks
+/// would otherwise lose the surplus. Refusals are only in `captures.json`, as are all of them
+/// before the Inbox list exists.
+fn noted_since(data: &Path, seen: &str) -> Vec<Captured> {
+    let recent = recent(data);
+    let mut fresh: Vec<Captured> = match read_list(&data.join(INBOX)) {
+        Some(inbox) => inbox.into_iter().chain(recent.into_iter().filter(|c| c.path.is_none())).collect(),
+        None => recent,
+    };
+    fresh.retain(|c| c.at.as_str() > seen);
+    fresh.sort_by(|a, b| b.at.cmp(&a.at));
+    fresh
+}
+
 /// In the app: looks at `captures.json` every couple of seconds and, for each new capture,
 /// re-indexes the file and tells the window (`capture`, then `vault-changed`). The folder watcher
 /// would see the file too, but a synced folder can be slow to report it.
@@ -283,9 +340,8 @@ pub fn watch(app: tauri::AppHandle) {
                 continue;
             }
             last = now;
-            let all = recent(&data);
-            let fresh: Vec<Captured> = all.iter().take_while(|c| c.at > seen).cloned().collect();
-            if let Some(c) = all.first() {
+            let fresh = noted_since(&data, &seen);
+            if let Some(c) = fresh.first() {
                 seen = c.at.clone();
             }
             for c in fresh.into_iter().rev() {
@@ -296,15 +352,17 @@ pub fn watch(app: tauri::AppHandle) {
                 let _ = app.emit("capture", &c);
                 // A notification too when Brainstead isn't the window in front.
                 let focused = app.get_webview_window("main").and_then(|w| w.is_focused().ok()).unwrap_or(false);
-                if !focused {
-                    use tauri_plugin_notification::NotificationExt;
+                if !focused && !c.backfill {
+                    // A synced item is only news (Teams, Outlook or Slack has said so already); a
+                    // capture the user clicked, or one refused, is theirs to hear about.
+                    let need = if c.sync && c.path.is_some() { crate::notify::Need::News } else { crate::notify::Need::You };
                     let (title, body) = match (&c.path, &c.error) {
                         (Some(p), _) => {
                             (format!("{} captured", c.what), p.trim_start_matches("sources/").trim_end_matches(".md").to_string())
                         }
                         (None, e) => (format!("{} not captured", c.what), e.clone().unwrap_or_default().chars().take(200).collect()),
                     };
-                    let _ = app.notification().builder().title(title).body(body).show();
+                    crate::notify::show(&app, need, &title, &body);
                 }
             }
         })
@@ -318,7 +376,11 @@ fn manifest(exe: &Path) -> Value {
         "description": "Brainstead: captures from the Outlook and Teams extensions",
         "path": exe,
         "type": "stdio",
-        "allowed_origins": [format!("chrome-extension://{OUTLOOK_ID}/"), format!("chrome-extension://{TEAMS_ID}/")],
+        "allowed_origins": [
+            format!("chrome-extension://{OUTLOOK_ID}/"),
+            format!("chrome-extension://{TEAMS_ID}/"),
+            format!("chrome-extension://{SLACK_ID}/")
+        ],
     })
 }
 
@@ -335,10 +397,13 @@ pub struct Browser {
 
 /// Registers the host with each installed browser (`platform::register_native_host`: a manifest
 /// in each browser's folder, or the registry on Windows), when it isn't already this. A dev build
-/// only reports: it leaves the installed app's registration alone.
+/// only reports: it leaves the installed app's registration alone, unless it was started with
+/// `BRAINSTEAD_DEV_HOST=1` (`make dev HOST=1`), to try the sign-in hand-overs in it (D-20261118-20).
+/// Then the hand-overs go to the dev build's own Keychain entries until the installed app next
+/// starts and takes the helper back.
 pub fn register() -> Vec<Browser> {
     let Ok(exe) = std::env::current_exe() else { return vec![] };
-    let may_write = !cfg!(debug_assertions);
+    let may_write = !cfg!(debug_assertions) || std::env::var("BRAINSTEAD_DEV_HOST").is_ok_and(|v| v == "1");
     platform::register_native_host(HOST, &manifest(&exe), may_write)
         .into_iter()
         .map(|h| Browser { name: h.browser.to_string(), registered: h.registered, current: h.current })
@@ -398,7 +463,7 @@ pub async fn capture_status(app: tauri::AppHandle) -> Result<CaptureStatus, Stri
         // A stable folder for Load unpacked, refreshed from this build's copy.
         let folder = shipped(&app).and_then(|from| {
             let to = data.join("extensions");
-            ["outlook-capture", "teams-capture"]
+            ["outlook-capture", "teams-capture", "slack-capture"]
                 .iter()
                 .try_for_each(|d| copy_dir(&from.join(d), &to.join(d)))
                 .ok()
@@ -406,7 +471,7 @@ pub async fn capture_status(app: tauri::AppHandle) -> Result<CaptureStatus, Stri
         });
         let mut recent = recent(&data);
         recent.truncate(10);
-        let versions = ["outlook-capture", "teams-capture"]
+        let versions = ["outlook-capture", "teams-capture", "slack-capture"]
             .iter()
             .filter_map(|d| {
                 let b = std::fs::read(data.join("extensions").join(d).join("manifest.json")).ok()?;
@@ -423,7 +488,7 @@ pub async fn capture_status(app: tauri::AppHandle) -> Result<CaptureStatus, Stri
 /// Shows an extension's folder (as `capture_status` copied it) in Finder, for Load unpacked.
 #[tauri::command]
 pub fn capture_reveal(which: String) -> Result<(), String> {
-    if !["outlook-capture", "teams-capture"].contains(&which.as_str()) {
+    if !["outlook-capture", "teams-capture", "slack-capture"].contains(&which.as_str()) {
         return Err("No such extension.".into());
     }
     platform::reveal(&platform::data_dir().join("extensions").join(which))
@@ -453,6 +518,62 @@ mod tests {
         let mut r = &big[..];
         assert!(read_message(&mut r).unwrap().is_err());
         assert_eq!(read_message(&mut r).unwrap().unwrap(), v);
+    }
+
+    fn noted(i: usize, path: Option<&str>) -> Captured {
+        Captured {
+            extension: "teams".into(),
+            what: "Teams chat".into(),
+            path: path.map(str::to_string),
+            error: path.is_none().then(|| "The vault is read-only.".to_string()),
+            at: format!("2026-10-24T09:00:00.{i:03}Z"),
+            sync: true,
+            item_date: None,
+            backfill: false,
+        }
+    }
+
+    #[test]
+    fn a_burst_bigger_than_the_recent_list_is_all_seen() {
+        let data = tempfile::tempdir().unwrap();
+        note(data.path(), noted(0, Some("sources/Teams. Chat. Maya - 2026-10-01.md")));
+        let seen = recent(data.path())[0].at.clone();
+        // Between two looks: more written than captures.json keeps, and a refusal among them.
+        let burst = KEEP + 10;
+        for i in 1..=burst {
+            note(data.path(), noted(i, Some(&format!("sources/Teams. Chat. Lena - {i}.md"))));
+        }
+        note(data.path(), noted(burst + 1, None));
+        assert_eq!(recent(data.path()).len(), KEEP);
+        let fresh = noted_since(data.path(), &seen);
+        assert_eq!(fresh.len(), burst + 1, "every one, not only the last {KEEP}");
+        assert!(fresh[0].path.is_none() && fresh[0].at > fresh[1].at, "newest first, the refusal with them");
+        assert_eq!(fresh.last().unwrap().path.as_deref(), Some("sources/Teams. Chat. Lena - 1.md"));
+        assert!(noted_since(data.path(), &fresh[0].at).is_empty());
+        // Before the Inbox has its own list, captures.json is all there is.
+        std::fs::remove_file(data.path().join(INBOX)).unwrap();
+        assert_eq!(noted_since(data.path(), &seen).len(), KEEP);
+    }
+
+    #[test]
+    fn a_lock_file_is_held_by_one_at_a_time() {
+        let data = tempfile::tempdir().unwrap();
+        let file = data.path().join("count");
+        std::fs::write(&file, "0").unwrap();
+        let bump = || {
+            locked_by(data.path(), "test.lock", || {
+                let n: u32 = std::fs::read_to_string(&file).unwrap().parse().unwrap();
+                std::thread::sleep(std::time::Duration::from_millis(2));
+                std::fs::write(&file, (n + 1).to_string()).unwrap();
+            })
+        };
+        // Each takes the lock through its own open file, as separate processes do.
+        std::thread::scope(|s| {
+            for _ in 0..8 {
+                s.spawn(|| (0..5).for_each(|_| bump()));
+            }
+        });
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "40");
     }
 
     #[test]
@@ -503,6 +624,7 @@ mod tests {
             at: format!("2026-10-03T10:{:02}:{:02}.000Z", i / 60, i % 60),
             sync: false,
             item_date: None,
+            backfill: false,
         };
         // An older install: captures.json only. Its captures seed the Inbox list.
         write_list(&data.path().join("captures.json"), &[cap(0)]);
@@ -523,6 +645,6 @@ mod tests {
     fn the_manifest_allows_only_the_two_extensions() {
         let m = manifest(Path::new("/Applications/Brainstead.app/Contents/MacOS/Brainstead"));
         assert_eq!(m["name"], HOST);
-        assert_eq!(m["allowed_origins"].as_array().unwrap().len(), 2);
+        assert_eq!(m["allowed_origins"].as_array().unwrap().len(), 3);
     }
 }

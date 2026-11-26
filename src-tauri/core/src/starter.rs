@@ -69,15 +69,38 @@ pub fn create(parent: &Path, name: &str, now: NaiveDateTime) -> Result<PathBuf, 
 /// it is. Returns the paths written.
 pub fn add_missing(root: &Path, now: NaiveDateTime) -> Result<Vec<PathBuf>, String> {
     let mut out = Vec::new();
-    for (rel, text) in files(now) {
+    for (raw, text) in STARTER_FILES.iter() {
+        let (rel, text) = (fill(raw, now), fill(text, now));
         let abs = root.join(&rel);
-        if abs.exists() {
+        if abs.exists() || dated_twin(&abs, raw) {
             continue;
         }
         crate::write::create_file(&abs, &text).map_err(|e| format!("Couldn't write {rel}: {e}"))?;
         out.push(abs);
     }
     Ok(out)
+}
+
+/// Whether a starter note with a date in its name (`raw`, placeholders unfilled) is beside `abs`
+/// under another day's date: the example added on an earlier day, which isn't added again.
+fn dated_twin(abs: &Path, raw: &str) -> bool {
+    let name = raw.rsplit('/').next().unwrap_or(raw);
+    if !PLACEHOLDER.is_match(name) {
+        return false;
+    }
+    let mut pattern = String::from("^");
+    let mut last = 0;
+    for c in PLACEHOLDER.captures_iter(name) {
+        let m = c.get(0).unwrap();
+        pattern.push_str(&regex::escape(&name[last..m.start()]));
+        pattern.push_str(if &c[1] == "now" { r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}" } else { r"\d{4}-\d{2}-\d{2}" });
+        last = m.end();
+    }
+    pattern.push_str(&regex::escape(&name[last..]));
+    pattern.push('$');
+    let Ok(same) = Regex::new(&pattern) else { return false };
+    let Some(Ok(rd)) = abs.parent().map(std::fs::read_dir) else { return false };
+    rd.flatten().any(|e| same.is_match(&e.file_name().to_string_lossy()))
 }
 
 #[cfg(test)]
@@ -171,5 +194,11 @@ mod tests {
         let added = add_missing(&v, now()).unwrap();
         assert_eq!(added, [v.join("Start here.md")]);
         assert_eq!(std::fs::read_to_string(v.join("Me. To Do List.md")).unwrap(), "my own list");
+        // Another day: the dated examples are there under the first day's dates, and stay the only ones.
+        let later = now() + Duration::days(3);
+        assert_eq!(add_missing(&v, later).unwrap(), Vec::<PathBuf>::new());
+        // One of them gone is added back, under the new day's date.
+        std::fs::remove_file(v.join("Meeting. Orbit App kick-off - 2026-10-03.md")).unwrap();
+        assert_eq!(add_missing(&v, later).unwrap(), [v.join("Meeting. Orbit App kick-off - 2026-10-06.md")]);
     }
 }

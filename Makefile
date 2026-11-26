@@ -11,7 +11,8 @@ APP      := src-tauri/target/release/bundle/macos/Brainstead.app
 
 # The signing certificate is named in signing.local, which is untracked: the name of a keychain
 # identity is local to the machine that holds it. Copy signing.local.example and put your own
-# self-signed certificate's name in it. Without one the build is signed ad hoc, and macOS forgets
+# certificate's name in it (an Apple Development one, or a self-signed one; it's matched as fixed
+# text, so a name with a Team ID in brackets works). Without one the build is signed ad hoc, and macOS forgets
 # Brainstead's permissions (Full Disk Access, Keychain items) after every rebuild. Brainstead has
 # its own certificate, "Brainstead Dev": never a sibling app's (the archived build plan, §2).
 -include signing.local
@@ -73,7 +74,7 @@ app:
 	@echo "version $$(python3 tools/bump_version.py $(VERSION)), build $(BUILD)"
 	BRAINSTEAD_BUILD=$(BUILD) $(RELEASE_ENV) RUSTFLAGS="$(RELEASE_RUSTFLAGS)" npm run tauri build -- --config '{"bundle":{"macOS":{"bundleVersion":"$(BUILD)"}}}'
 	@if [ -n "$(SIGN_ID)" ]; then \
-	  codesign -dv --verbose=2 "$(APP)" 2>&1 | grep -E "^Authority=$(SIGN_ID)" >/dev/null \
+	  codesign -dv --verbose=2 "$(APP)" 2>&1 | grep -Fx "Authority=$(SIGN_ID)" >/dev/null \
 	    && echo "signed with $(SIGN_ID)" \
 	    || { echo "WARNING: app is not signed with $(SIGN_ID)"; exit 1; }; \
 	else echo "note: no signing.local, so the app is signed ad hoc"; fi
@@ -82,17 +83,19 @@ app:
 # program, which keep running and pick up the new build themselves.
 APP_PIDS = ps -axo pid=,args= | awk '$$2 ~ /\/Brainstead$$/ && !/ --mcp|chrome-extension:/ { print $$1 }'
 
-## Build and replace /Applications/Brainstead.app, keeping the version: only a release build (make app) bumps it. Quits the app first, as ⌘Q does, but not the MCP servers Claude sessions are using: they start the new build when it's in place.
+## Build and replace /Applications/Brainstead.app, keeping the version: only a release build (make app) bumps it. Quits the app first, as ⌘Q does, but not the MCP servers Claude sessions are using: they start the new build when it's in place. An app that was running is started again, so an install never leaves the sync and the schedule off.
 install-app: VERSION = $(shell python3 -c "import json; print(json.load(open('src-tauri/tauri.conf.json'))['version'])")
 install-app: app
-	@if [ -n "$$($(APP_PIDS))" ]; then \
+	@was=$$($(APP_PIDS)); \
+	if [ -n "$$was" ]; then \
 	  osascript -e 'quit app id "com.wayned.brainstead"' >/dev/null 2>&1 || true; \
 	  for _ in 1 2 3 4 5 6 7 8 9 10; do [ -n "$$($(APP_PIDS))" ] || break; sleep 0.5; done; \
 	  pids=$$($(APP_PIDS)); [ -z "$$pids" ] || kill $$pids; \
-	fi
-	@rm -rf "/Applications/Brainstead.app"
-	@ditto "$(APP)" "/Applications/Brainstead.app"
-	@echo "installed /Applications/Brainstead.app"
+	fi; \
+	rm -rf "/Applications/Brainstead.app" && \
+	ditto "$(APP)" "/Applications/Brainstead.app" && \
+	echo "installed /Applications/Brainstead.app" && \
+	if [ -n "$$was" ]; then open -a "/Applications/Brainstead.app" && echo "started it again"; fi
 
 ## Pack the built app into the release DMG (src-tauri/target/release/bundle/dmg/), laid out like other Mac installers, and write the updater's files beside it (tools/update_files.py): Brainstead.app.tar.gz, its signature and latest.json, with NOTES="…" as what's new.
 dmg:
@@ -118,13 +121,13 @@ screenshots:
 sign-check:
 	@codesign -dv --verbose=2 "/Applications/Brainstead.app" 2>&1 | grep -E "^(Identifier|Authority|Signature|TeamIdentifier)"
 	@if [ -n "$(SIGN_ID)" ]; then \
-	  codesign -dv --verbose=2 "/Applications/Brainstead.app" 2>&1 | grep -qE "^Authority=$(SIGN_ID)$$" \
+	  codesign -dv --verbose=2 "/Applications/Brainstead.app" 2>&1 | grep -qFx "Authority=$(SIGN_ID)" \
 	    && echo "signed with $(SIGN_ID)" || { echo "not signed with $(SIGN_ID)"; exit 1; }; \
 	else echo "no signing.local: copy signing.local.example and create the Brainstead Dev certificate"; exit 1; fi
 
-## Run the app in development, with hot reload (Vite on localhost:1440).
+## Run the app in development, with hot reload (Vite on localhost:1440). HOST=1 lets it take the browser extensions' helper over, to try the Teams, Outlook and Slack sign-ins in it.
 dev:
-	npm run tauri dev
+	BRAINSTEAD_DEV_HOST=$(HOST) npm run tauri dev
 
 ## List these targets.
 help:

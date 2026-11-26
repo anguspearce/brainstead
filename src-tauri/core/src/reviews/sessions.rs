@@ -271,7 +271,13 @@ pub(crate) fn sessions_in(
     zone: Zone,
     automations: &[Automation],
 ) -> Vec<Session> {
-    let files = session_files(projects);
+    // A session with a message in the window was written at or after its start, so a log last
+    // written before it is left unread. One whose time can't be read is read.
+    let old = |p: &PathBuf| {
+        let at = std::fs::metadata(p).and_then(|m| m.modified()).ok().and_then(|m| m.duration_since(std::time::UNIX_EPOCH).ok());
+        at.is_some_and(|d| zone.ms_to_local(d.as_millis() as i64) < start)
+    };
+    let files: Vec<PathBuf> = session_files(projects).into_iter().filter(|p| !old(p)).collect();
     let reads: Vec<Read> = files.par_iter().map(|p| read_session(p, zone)).collect();
     let mut found = Vec::new();
     // By session id: renaming a project folder leaves the same session under both names.
@@ -395,6 +401,30 @@ mod tests {
         assert_eq!(got.iter().filter(|s| s.automated().is_some()).count(), 5);
         let week = sessions_in(&projects, day("2026-09-28"), day("2026-10-05"), fixture::zone(), &fixture::automations());
         compare(&week, &fixture::expected("sessions-week.json"));
+    }
+
+    #[test]
+    fn a_log_last_written_before_the_window_is_not_read() {
+        let tmp = tempfile::tempdir().unwrap();
+        let projects = fixture::projects(tmp.path());
+        let day = |d: &str| NaiveDateTime::parse_from_str(&format!("{d} 00:00"), "%Y-%m-%d %H:%M").unwrap();
+        let all = sessions_in(&projects, day("2026-09-30"), day("2026-10-01"), fixture::zone(), &fixture::automations());
+        let alpha = all.iter().find(|s| s.project == "-home-me-Projects-alpha").unwrap();
+        // Its messages say they're in the window, so only the file's time can leave it out.
+        let then = std::time::UNIX_EPOCH + std::time::Duration::from_secs(day("2026-09-20").and_utc().timestamp() as u64);
+        // The same session is under the project's old folder name too.
+        let copies: Vec<PathBuf> =
+            session_files(&projects).into_iter().filter(|p| p.file_name() == Path::new(&alpha.path).file_name()).collect();
+        assert_eq!(copies.len(), 2);
+        for p in &copies {
+            std::fs::File::options().write(true).open(p).unwrap().set_modified(then).unwrap();
+        }
+        let got = sessions_in(&projects, day("2026-09-30"), day("2026-10-01"), fixture::zone(), &fixture::automations());
+        assert_eq!(got.len(), all.len() - 1);
+        assert!(got.iter().all(|s| s.short_id() != "a1111111"));
+        // A window that starts before it was written reads it.
+        let wide = sessions_in(&projects, day("2026-09-19"), day("2026-10-01"), fixture::zone(), &fixture::automations());
+        assert!(wide.iter().any(|s| s.short_id() == "a1111111"));
     }
 
     #[test]

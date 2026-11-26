@@ -18,7 +18,7 @@ use std::sync::LazyLock;
 
 /// The most threads one combined capture takes (the extension's popup has the same cap).
 pub const MAX_BATCH_THREADS: usize = 25;
-/// The heading of the divider the Teams and Outlook sync inserts before a meeting's folded-in chat;
+/// The heading of the divider the sync inserts before a meeting's folded-in chat;
 /// shared so `render` can tell a transcript carries chat and note it at the top.
 pub const MEETING_CHAT_HEADING: &str = "In-meeting chat";
 /// The largest capture accepted, in bytes of JSON.
@@ -27,7 +27,7 @@ pub const MAX_BYTES: usize = 16 * 1024 * 1024;
 #[derive(Debug, Clone, Deserialize)]
 pub struct Message {
     pub sender: String,
-    /// The sender's email address, when known (the Teams and Outlook sync sets it so "Don't sync this
+    /// The sender's email address, when known (the sync sets it so "Don't sync this
     /// sender" can read it back; the extensions don't). Rendered as a `**From:**` line.
     #[serde(default, rename = "fromAddress")]
     pub from_address: Option<String>,
@@ -41,10 +41,17 @@ pub struct Message {
     #[serde(default)]
     pub date: Option<String>,
     pub body: String,
-    /// Files that came with the message (the Teams and Outlook sync sets these; the extensions don't),
+    /// Files that came with the message (the sync sets these; the extensions don't),
     /// listed under the body.
     #[serde(default)]
     pub attachments: Vec<Attachment>,
+    /// The branch of a forked email thread it's on (D-20261118-06), as its heading: the Teams and
+    /// Outlook sync sets it when a thread forked; the messages come branch by branch.
+    #[serde(default)]
+    pub branch: Option<String>,
+    /// A Slack message's thread (D-20261118-07): its replies, written under it.
+    #[serde(default)]
+    pub replies: Vec<Message>,
 }
 
 /// A file that came with a message: brought into `sources/` (`path`), only linked (`url`, a file
@@ -61,13 +68,15 @@ pub struct Attachment {
 }
 
 impl Attachment {
-    /// The attachment's list line: a wiki link to the source it became (by vault path), a link to
-    /// where it's shared, or its name, with the note after.
+    /// The attachment's list line: a wiki link to the source it became (by vault path), embedded when
+    /// it's a picture (a Teams chat's pasted picture), a link to where it's shared, or its name, with
+    /// the note after.
     fn line(&self) -> String {
         let name = self.name.replace(['[', ']', '|'], " ");
         let what = match (&self.path, &self.url) {
             // The full vault path, so whoever reads the thread (an assistant too) finds the file
             // without a search; links resolve by name, so the index sees it as a link either way.
+            (Some(p), _) if is_picture(p) => format!("![[{p}|{name}]]"),
             (Some(p), _) => format!("[[{p}|{name}]]"),
             (None, Some(u)) => format!("[{name}]({})", u.replace(' ', "%20").replace('(', "%28").replace(')', "%29")),
             (None, None) => name,
@@ -77,6 +86,12 @@ impl Attachment {
             None => format!("- {what}"),
         }
     }
+}
+
+/// Whether a vault path is a picture, shown in place rather than linked.
+fn is_picture(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    [".png", ".jpg", ".jpeg", ".gif", ".webp"].iter().any(|e| lower.ends_with(e))
 }
 
 /// The `**Attachments:**` list under a message's body, when it has any.
@@ -103,6 +118,10 @@ pub struct Thread {
     /// Its start (`HH:MM`, local), when the page showed one.
     #[serde(default, rename = "meetingStart")]
     pub meeting_start: Option<String>,
+    /// The earlier thread this one carries on from under a new subject (the sync's, by the reply's
+    /// ConversationIndex): its source's name, linked from a `**Continues:**` line.
+    #[serde(default)]
+    pub continues: Option<String>,
 }
 
 impl Thread {
@@ -129,6 +148,9 @@ pub enum Capture {
     },
     /// A chat or channel thread (`kind` `chat`), or a meeting transcript (`transcript`).
     Teams(Thread),
+    /// One Slack conversation's day (D-20261118-07): a DM, group DM or channel, its day in
+    /// `meeting_date`, threads under their first message.
+    Slack(Thread),
 }
 
 impl Capture {
@@ -153,6 +175,7 @@ impl Capture {
         match self {
             Capture::Outlook(t) => thread(t, false),
             Capture::Teams(t) => thread(t, true),
+            Capture::Slack(t) => thread(t, false),
             Capture::OutlookBatch { threads, .. } => {
                 if threads.is_empty() || threads.len() > MAX_BATCH_THREADS {
                     return Err(format!("A combined capture takes 1 to {MAX_BATCH_THREADS} threads."));
@@ -170,6 +193,7 @@ impl Capture {
             Capture::OutlookBatch { .. } => "Email threads",
             Capture::Teams(t) if t.kind.as_deref() == Some("transcript") => "Teams transcript",
             Capture::Teams(_) => "Teams chat",
+            Capture::Slack(_) => "Slack conversation",
         }
     }
 }
@@ -241,6 +265,23 @@ fn message_lines(m: &Message, level: usize, out: &mut Vec<String>) {
     out.extend(["---".into(), String::new()]);
 }
 
+/// A thread's messages at `level`; a forked thread's under a heading per branch, a level up.
+fn branch_lines(msgs: &[Message], level: usize, out: &mut Vec<String>) {
+    if msgs.iter().all(|m| m.branch.is_none()) {
+        msgs.iter().for_each(|m| message_lines(m, level, out));
+        return;
+    }
+    let mut on: Option<&str> = None;
+    for m in msgs {
+        let b = m.branch.as_deref().unwrap_or("Other messages");
+        if on != Some(b) {
+            out.extend([format!("{} {b}", "#".repeat(level)), String::new()]);
+            on = Some(b);
+        }
+        message_lines(m, level + 1, out);
+    }
+}
+
 fn reading_pane_note(kind: Option<&str>) -> Option<String> {
     (kind == Some("reading-pane")).then(|| {
         "**Capture:** reading-pane text only, not a threaded conversation (meeting invitation, card-only mail, or a DOM the thread extractor didn't recognise).".to_string()
@@ -260,9 +301,10 @@ pub fn render(c: &Capture, now: DateTime<Utc>, today: &str) -> (String, String) 
                 format!("**Source:** [Open in Outlook]({})", t.url),
                 format!("**Captured:** {captured}"),
             ]);
+            l.extend(t.continues.as_ref().map(|c| format!("**Continues:** [[{c}]]")));
             l.extend(reading_pane_note(t.kind.as_deref()));
             l.extend([String::new(), "---".into(), String::new()]);
-            t.messages.iter().for_each(|m| message_lines(m, 2, &mut l));
+            branch_lines(&t.messages, 2, &mut l);
             let prefix = if t.kind.as_deref() == Some("reading-pane") { "Email. Item." } else { "Email. Thread." };
             format!("{prefix} {title} - {today}.md")
         }
@@ -280,7 +322,7 @@ pub fn render(c: &Capture, now: DateTime<Utc>, today: &str) -> (String, String) 
                 l.extend([format!("## {}", t.title), String::new(), format!("**Source:** [Open in Outlook]({})", t.url)]);
                 l.extend(reading_pane_note(t.kind.as_deref()));
                 l.push(String::new());
-                t.messages.iter().for_each(|m| message_lines(m, 3, &mut l));
+                branch_lines(&t.messages, 3, &mut l);
             }
             format!("Email. Threads. {label} - {today}.md")
         }
@@ -323,6 +365,32 @@ pub fn render(c: &Capture, now: DateTime<Utc>, today: &str) -> (String, String) 
             // chat, so a backfilled day isn't misleadingly named with today.
             let day = if transcript { meeting.unwrap_or(today) } else { t.meeting_day().unwrap_or(today) };
             format!("{prefix} {title} - {day}.md")
+        }
+        Capture::Slack(t) => {
+            let title = clean_title(&t.title);
+            l.extend([format!("# {title}"), String::new(), format!("**Source:** [Open in Slack]({})", t.url)]);
+            l.push(format!("**Captured:** {captured}"));
+            l.extend([String::new(), "---".into(), String::new()]);
+            for m in &t.messages {
+                l.push(match &m.date {
+                    Some(d) if !d.is_empty() => format!("## {} — {d}", m.sender),
+                    _ => format!("## {}", m.sender),
+                });
+                l.extend([String::new(), m.body.trim().to_string(), String::new()]);
+                attachment_lines(m, &mut l);
+                // Its thread: each reply under it, a level down.
+                for r in &m.replies {
+                    l.push(match &r.date {
+                        Some(d) if !d.is_empty() => format!("### ↳ {} — {d}", r.sender),
+                        _ => format!("### ↳ {}", r.sender),
+                    });
+                    l.extend([String::new(), r.body.trim().to_string(), String::new()]);
+                    attachment_lines(r, &mut l);
+                }
+                l.extend(["---".into(), String::new()]);
+            }
+            let day = t.meeting_day().unwrap_or(today);
+            format!("Slack. Chat. {title} - {day}.md")
         }
     };
     (name, l.join("\n"))
@@ -384,7 +452,7 @@ pub fn write(vault: &Path, c: &Capture, now: DateTime<Local>) -> Result<String, 
 }
 
 /// Overwrites an existing source `rel` (vault-relative) with capture `c`, in place and atomically —
-/// for the Teams and Outlook sync topping up a chat day or an email thread as new messages arrive.
+/// for the sync topping up a chat day or an email thread as new messages arrive.
 /// Unlike [`write`], it keeps the same file name rather than claiming a free one, so the source grows
 /// instead of spawning copies. The file must already exist (the sync wrote it the first time); its
 /// name (which carries the day) is not recomputed.
@@ -565,7 +633,7 @@ mod tests {
         }
         let (_, text) = render(&tr(json!({"meetingDate": "2026-10-02", "meetingStart": "late"})), at(), "2026-10-03");
         assert!(text.contains("\n**Meeting:** 2026-10-02\n"));
-        // A chat carrying a day (the Teams and Outlook sync sets it to the conversation day) is named
+        // A chat carrying a day (the sync sets it to the conversation day) is named
         // by that day, not the capture day, and still shows no Meeting line (that's transcript-only).
         let chat = cap(json!({"type": "teams", "url": "https://teams.microsoft.com/v2/", "title": "Standup", "meetingDate": "2026-10-02",
             "messages": [{"sender": "Lena", "body": "Ready?"}]}));

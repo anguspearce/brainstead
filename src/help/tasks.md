@@ -17,6 +17,8 @@ Each list on the left shows its count:
 - **Someday / maybe**: tasks tagged `#someday-maybe`.
 - **Done this week** and **Done last week**: ticked tasks by done date, weeks starting on Monday.
 
+To copy a task's words, drag across them (or double-click a word) and press `⌘C`, or right-click the selection and choose Copy. Selecting doesn't choose the row. The same works for Inbox items, answers in Ask, quotes and the other text you'd want to copy.
+
 In Next actions, Follow-ups, Waiting for and Someday / maybe, drag rows by their grip to set your own order (not while grouped, or sorted by priority). The order is saved at the end of each line as `^rank-1024`, and the list is renumbered when it needs room. Tasks a search or filter hides at the time keep their places next to the tasks they followed. An assistant moves a task the same way.
 
 ## Use the keys
@@ -28,23 +30,33 @@ In Next actions, Follow-ups, Waiting for and Someday / maybe, drag rows by their
 
 They work on [Today](app:today), [Projects](app:projects) and the [Weekly review](app:weekly) too, where `↩` opens the task's note, but not in task blocks inside a note.
 
-## Tick, defer and undo
-Tick a task to mark it done; it gets a done date (`✅ 2026-10-03`). Untick it to remove it. ⌘Z undoes up to five task changes, even after a restart, as long as the line hasn't changed since.
+## Update a task with what's happened
+**Update…** in a task's ⋯ menu takes a line saying what has happened ("Maya has replied", "moved to next Friday"). An assistant applies it in the background, in an Ask chat of its own called **Update: …**, with Brainstead's own tools: it marks things done or dropped, changes a date, owner or wording, adds a follow-up (a waiting-for when someone else has the next step) and notes what happened on the project's or initiative's page. Change only what the update means is the rule it works to; when it can't tell, it changes nothing and says what it needs. While it works it's in the sidebar's Running line; when it ends a message says what it changed, with **Open** for its chat. Every change is in [Changes](help:review) with **Revert**, made at once as anything you start is.
 
-Right-click a row, or click its ⋯ button, for the task's menu:
+## Tick, defer and undo
+Tick a task to mark it done; it gets a done date (`✅ 2026-10-03`). Untick it to remove it. ⌘Z undoes up to five task changes, even after a restart, as long as the line hasn't changed since. A deleted task goes back between the two lines it sat between; if they're no longer next to each other, it isn't put back.
+
+Click a chip on a row to change that field: the due or defer date, priority, a context, the effort or the project. Each opens a small picker with its quick choices:
 
 - **Due**: Today, Tomorrow, Mon or Next week.
 - **Defer until**: Tomorrow, Mon, Next week or 2 weeks. A deferred task stays off Next actions until that day, then shows on [Today](app:today).
 - **Pick…** for a calendar, **Clear** to remove.
-- **More dates…** shows the start and created dates. A start date doesn't hide the task; it only makes it less urgent until then.
-- Priority, context, effort and project, with quick chips and **Find…** or **Other…**.
+- Priority, context, effort and project, with quick chips and **Find…** or **Other…**. The project's picker also has **Open** with the project's name, to go to it on [Projects](app:projects).
+
+To add a field the task hasn't got, point at the row (or select it) and click its **+**: it lists the fields the task has none of (due, defer, start, priority, context, effort, project) and opens that field's picker.
+
+Right-click a row, or click its ⋯ button, for the task's menu:
+
 - **Rename…** changes the task's words in the menu (`↩` keeps, `Esc` goes back); its dates and tags stay.
 - **Mark in progress** (its box shows a dot) and **Back to to-do**.
 - **Waiting for someone**, **Cancel task** and **Reopen** on a cancelled task.
+- **More…** shows every field in one place: the due, defer, start and created dates, priority, context, effort and project, with the same quick choices as the chips. A start date doesn't hide the task; it only makes it less urgent until then.
 - **Open** with the note's name, and **Delete task**, which ⌘Z puts back.
 
+The chips, the **+**, the ⋯ menu and the task pane work the same on [Today](app:today), [Projects](app:projects), the [Weekly review](app:weekly) and in task blocks inside a note.
+
 ## Use the task pane
-Click a task to show it in the pane on the right; click it again to let it go. The pane is the task's ⋯ menu, laid out in one column: its dates with quick picks, priority, context, effort and project, then **Rename…**, **Mark in progress**, **Waiting for someone**, **Cancel task**, its note and **Delete task**. Fields the menu doesn't set (a recurrence, an id) and its other tags are listed under them. Context offers the ones in use plus calls, computer, errands, office and personal, or **Other…** for a new one.
+Click a task to show it in the pane on the right; click it again to let it go. On a narrow window the pane slides over the list from the right instead of taking a column: `Esc` or its × puts it away and the task stays picked, and clicking a task brings it back. The pane shows every field at once, in one column: its dates with quick picks (**More dates…** adds start and created), priority, context, effort and project, then the ⋯ menu's **Rename…**, **Mark in progress**, **Waiting for someone**, **Cancel task**, its note and **Delete task**. Fields the pane doesn't set (a recurrence, an id) and its other tags are listed under them. Context offers the ones in use plus calls, computer, errands, office and personal, or **Other…** for a new one.
 
 To change a task's words in any list, point at it and click the pencil after them, or press `↩` on the selected one (`↩` keeps, `Esc` drops; dates and tags stay).
 
@@ -62,12 +74,12 @@ Click a group's band to fold its tasks away; the band and its count stay, and wh
 **Save this list…** keeps a context, effort and grouping under a name, under Saved on the left. Its x forgets it; the tasks stay. An assistant can use the same search, sort, grouping and filters.
 
 ## Find tasks in your notes
-At the top of **Next actions**, **Find tasks and projects** has an assistant read your last 90 days of notes (not the wiki, sources, templates or project notes) for things you'd do, or are waiting on, that aren't tasks yet. It runs only when you start it, here, in [Projects](app:projects) or from `⌘K`, with progress and **Stop** on its row.
+In **Next actions**, **Find tasks and projects** has an assistant read your last 90 days of notes (not the wiki, sources, templates or project notes) for things you'd do, or are waiting on, that aren't tasks yet. At the end of the search and filter bar, a chip says how many it found (**2 suggestions**, with a spinner while it reads) and **Suggest** starts it, then **Suggest again** looks once more; **Stop** shows while it runs. It runs only when you start it, here, in [Projects](app:projects) or from `⌘K`. Click the chip to open the list under the filters and again to fold it; Brainstead remembers which.
 
 Each suggestion names its note: hover for the quote, click to open it. Brainstead checks the quote is in that note and leaves out anything that's already a task.
 
 - **Accept** adds the task to its project's Next actions, or the To Do list, and lists it in [Changes](app:review), where you can revert it.
-- **Edit** lets you reword it first (`↩` adds it).
+- **Edit** lets you reword it first (`↩` adds it, `Esc` leaves it).
 - **Skip** leaves it out.
 
 Neither comes back. Suggested projects are at the top of [Projects](app:projects). Its model is set under Models by job in [Settings › AI assistants](app:settings/assistants).
@@ -86,7 +98,7 @@ Tasks are plain markdown, so other editors read them too.
 - Dates are emoji before the date: `📅` due, `⏳` deferred until, `🛫` start, `➕` created, `✅` done.
 - Priority is one emoji: `🔺` highest, `⏫` high, `🔼` medium, `🔽` low, `⏬` lowest.
 - A context is a tag like `#context/calls`, and effort a field like `[effort:: 30m]`.
-- A task belongs to a project when it's in the project's note or links `[[Project. Orbit App launch]]`.
+- A task belongs to a project when it's in the project's note or links `[[Project. Orbit App launch]]`. A project link at the end of the words shows as the project under the row; one inside the sentence stays in the words.
 - A recurring task carries a rule such as `🔁 every week`. Tick it and the next one is added above, with its dates moved on.
 - Tasks inside quotes and callouts (`> - [ ] Call Maya`) work like any other.
 - A link is `[label](https://example.com)`. A row shows just the label, or a bare web address as its domain, and a click opens it in your browser without selecting the row. A ticket key such as `ORBIT-12` does the same once its prefix is set in [Settings › Notes](app:settings/notes). Write a key once, on the task or note it belongs to: the note and its project gather them.

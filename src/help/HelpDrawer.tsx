@@ -9,7 +9,7 @@
 // closes it.
 
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown, { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "../api";
@@ -22,9 +22,9 @@ import { SearchBox, SearchPick } from "../ui";
 import { appLink, GUIDES, helpUrl, openSection, HelpSection, HelpTopic, searchHelp, TOPICS, topicFor } from ".";
 import { keyLabel } from "../platform";
 
-/** What the drawer shows: a topic (the screen's when none is named), the list of guides (`start`),
- *  or a guide at a step. */
-export type HelpView = { topic?: string; guide?: string; step?: number; q?: string; start?: boolean };
+/** What the drawer shows: a topic (the screen's when none is named), opened at one of its sections
+ *  (`section`, its `##` title) or its first, the list of guides (`start`), or a guide at a step. */
+export type HelpView = { topic?: string; section?: string; guide?: string; step?: number; q?: string; start?: boolean };
 export const helpOpen = new Store<HelpView | null>(null);
 
 // The drawer's own back and forward: the pages it showed since it opened (topics, the guides, a
@@ -40,6 +40,25 @@ export const openHelp = (v: HelpView = {}) => {
   future = [];
   helpOpen.set(v);
 };
+/** A setting's "Learn more": opens the help drawer at the section of its pane's topic that explains
+ *  it (src/help/settings-*.md), so the setting itself keeps to a line. help.test.ts checks each one
+ *  names a section that exists. */
+export function LearnMore({ topic, section }: { topic: string; section: string }) {
+  return (
+    <button
+      type="button"
+      className="tlink learn"
+      title={`Open the help at ${section}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        openHelp({ topic, section });
+      }}
+    >
+      Learn more
+    </button>
+  );
+}
 export const toggleHelp = () => (helpOpen.get() ? helpOpen.set(null) : openHelp({}));
 /** Back to the last page; from the first one that isn't the screen's own, back to the screen's. */
 const canBack = (v: HelpView) => past.length > 0 || !!(v.topic || v.guide || v.start);
@@ -109,9 +128,17 @@ function HelpText({ text }: { text: string }) {
 
 /** A topic's section, folded to its title. `group`: the sections that open one at a time (opening
  *  one closes the one that was open, as <details name> does). */
-function Section({ s, open, group }: { s: HelpSection; open?: boolean; group?: string }) {
+function Section({ s, open, group, reveal }: { s: HelpSection; open?: boolean; group?: string; reveal?: boolean }) {
+  // Opened at this section (a Learn more link): scrolled to, as it may be far down the topic.
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (!reveal || !ref.current) return;
+    ref.current.open = true;
+    ref.current.scrollIntoView?.({ block: "start" });
+  }, [reveal]);
   return (
     <details
+      ref={ref}
       className="help-sec"
       open={open}
       name={group}
@@ -247,14 +274,15 @@ export function HelpDrawer() {
   }, []);
   useEffect(() => {
     setQ(view?.q ?? "");
-  }, [view?.topic, view?.guide, view?.start, view?.q]);
+  }, [view?.topic, view?.section, view?.guide, view?.start, view?.q]);
 
   if (!view) return null;
   const guide = view.guide ? GUIDES.find((g) => g.id === view.guide) : undefined;
   const topic = (view.topic && TOPICS.find((t) => t.id === view.topic)) || topicFor(p);
   const query = q.trim();
   const title = guide ? guide.title : view.start ? "Getting started" : topic ? topic.title : "Help";
-  const first = topic?.id === "keyboard" ? (KEY_SECTION[p.screen] ?? "Anywhere") : topic ? openSection(topic, p) : undefined;
+  const named = view.section && topic?.sections.some((s) => s.title === view.section) ? view.section : undefined;
+  const first = named ?? (topic?.id === "keyboard" ? (KEY_SECTION[p.screen] ?? "Anywhere") : topic ? openSection(topic, p) : undefined);
 
   let body: ReactNode;
   if (query) body = <Results q={query} />;
@@ -265,7 +293,13 @@ export function HelpDrawer() {
       <section className="help-block">
         {topic.intro && <HelpText text={topic.intro} />}
         {topic.sections.map((s) => (
-          <Section key={`${topic.id}:${s.title}`} s={s} open={s.title === first} group={`help:${topic.id}`} />
+          <Section
+            key={`${topic.id}:${s.title}`}
+            s={s}
+            open={s.title === first}
+            group={`help:${topic.id}`}
+            reveal={!!named && s.title === named}
+          />
         ))}
       </section>
     );

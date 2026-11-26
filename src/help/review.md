@@ -3,12 +3,16 @@ title: Changes
 kind: screen
 screens: [review]
 order: 13
-summary: See what AI assistants and Brainstead's runs changed in your vault, revert any of it, and decide the few changes held for you.
+summary: See what AI assistants and Brainstead's runs changed in your vault, revert any of it, decide the few changes held for you, and read the vault's log.
 ---
-Every change assistants and Brainstead's runs make to the vault is listed here with **Revert**. You only need to step in when a change is held for you. Open Changes from the foot of the sidebar; the sidebar count and Today's **Changes held for you** card count held changes only.
+Every change assistants and Brainstead's runs make to the vault is listed here with **Revert**. You only need to step in when a change is held for you. Open Changes from the foot of the sidebar; the sidebar count, the menu-bar window and the **Changes held for you** row of Today's **To process** count held changes only.
+
+Two tabs at the top pick what's listed:
+- **Held** lists only the changes held for you, with their count. Today's **Decide** and the menu-bar window open it.
+- **All**, where Changes opens, lists the held changes first, under the amber **Held for you** band, and then, under **Already made**, everything else, newest first: every change, and the lines of the vault's `log.md` that aren't one of them, as **The vault's log** below explains.
 
 ## What's made at once, and what's held
-A change you started is made at once: something you asked for in Ask or a terminal session, or a run you started by hand (Ingest, **Run now**, **Draft the note**, a Knowledge health fix, **File this answer**, a bookmark made into a wiki page, a link from the weekly review). If a check fails, it's still made, but flagged.
+A change you started is made at once: something you asked for in Ask or a terminal session, or a run you started by hand (Ingest, **Run now**, **Draft the note**, a Wiki health fix, **File this answer**, a bookmark made into a wiki page, a link from the weekly review). If a check fails, it's still made, but flagged.
 
 A change from a scheduled run is made at once if it passes every check, and held for you otherwise. Scheduled runs are the daily check (with the ingests and contradiction check it starts) and the daily and weekly summaries when they run on their own. A terminal session nobody is watching, such as a loop, is treated the same way.
 
@@ -23,25 +27,34 @@ The checks:
 Three kinds of change are always held, whoever started them:
 - a change to a template in `Templates/`, however the assistant spells its path (on Windows, in any case, with `\` or by the folder's short name)
 - a change to a system note's header (the "This is a system note" callout)
-- a change that adds code that runs when a note is shown (a `dataviewjs` block, inline `$=`, a Tasks `by function` line or Templater's `<% %>`)
+- a change that adds code that runs when a note is shown, or changes code that's there (a `dataviewjs` block, inline `$=`, a Tasks `by function` line or Templater's `<% %>`)
 
 Renames and moves to the Trash are made at once, unless they touch a template (the note is one, the rename puts it in `Templates/`, or links it updates are in one): then they're held. An assistant's restore from the Trash is made at once too, unless it puts the file in `Templates/` or the note has code that runs. Revert renames the note back, restores it, or moves a restored one back to the Trash. An image an assistant adds to `images/`, for a note to embed, is made at once and shown here; Revert moves it to Brainstead's Trash.
 
 Assistants' task, Inbox and project edits are listed and held by the same rules; your own edits on those screens aren't listed.
 
-To have the summaries always held for you, turn on **Hold the summaries for me** in [Settings › Jobs & schedule](app:settings/jobs).
+To have the summaries always held for you, turn on **Hold the summaries for me** in [Settings › Automations](app:settings/jobs).
 
 ## Read the feed
 The feed groups changes by run, newest first: "Daily check, 5 Oct: 6 changes to 4 pages", an ingest, an Ask chat. Each run is folded to its heading: click its chevron to show its changes, which folds the one that was open. Moving to a change (`J` and `K`, or a search) opens its run. Click the selected change again, or fold its run, to let it go. Older runs load as you scroll down. Each row shows the title, page, source, model and age, with **Flagged**, **Reverted** or a kind such as **New page**. `J` and `K` move between changes.
 
-**Search changes** above the list narrows held changes and the feed to those with every word you type in their title, page, source or model. The box shows which match you're on out of how many (`3/12`); `↓` and `↑` step through them, and `Esc` or ✕ clears it.
+**Search changes** above the list narrows held changes and the feed to those with every word you type in their title, page, source or model (and a log line's title, text or type). The box shows which match you're on out of how many (`3/12`); `↓` and `↑` step through them, and `Esc` or ✕ clears it.
 
 On the right is the change as a diff under its section, with any flags above it. **What it rests on** lists the quotes behind it, each marked **Found in the source**, **Not found in the source**, or **Not checked** (a file Brainstead can't read). Click a quote's source to open it, or **Open the page**.
+
+## The vault's log
+`log.md` is the vault's own record of what Brainstead changed: ingests, assistants' changes, Wiki health fixes, the daily and weekly summaries, the weekly review, name fixes and the daily check's catalogue update. Your own edits, captures and dropped files aren't logged. Other markdown editors and assistants in a terminal can write to it too.
+
+A change writes its line when it's made, so in **All** that line isn't listed again: you see the change, with its diff and **Revert**. The lines that are listed are those Changes doesn't hold: older than its history, made on another computer, in another editor or in a terminal, and Brainstead's own writes that aren't changes, such as what you accept yourself in the weekly review, and **Fix name** and safe fixes made on their own screens. An assistant's accepted suggestions, name fixes and safe fixes are changes, listed as such. Each says its day and time, its type and **log.md**; click its title to open the page it names, or hover for what it says.
+
+In **All**, the chips under the search keep one type, such as **Ingested**, or **Summary** for a daily or weekly summary; **All types** shows every type. A day picked on [Activity](app:activity) (**Changes that day**) shows as a chip of its own; click it to show every day again.
+
+An assistant reads the same list, with the same tabs, types and day, with the `list_changes` tool.
 
 ## Revert a change
 **Revert** undoes a change on the page as it is now, keeping later edits. It works on any change in the history, not just the last. If the change's lines have since been edited, or appear in more than one place, it says so and shows the page as it was before, to copy from. A reverted change is marked **Reverted**; `⌘Z` straight after undoes the revert.
 
-A run with several changes has **Revert all**, after asking: it reverts them newest first, and lists any page edited since (those edits are kept). With a search on, it reverts only the run's changes the search shows. Reverting a meeting note puts its transcript, if it wasn't trashed, back in the [Inbox](app:inbox).
+A run with several changes has **Revert all**, after asking: it reverts them newest first, and lists any page edited since (those edits are kept). With a search, a type or a day on, it reverts only the run's changes that are shown. Reverting a meeting note puts its transcript, if it wasn't trashed, back in the [Inbox](app:inbox).
 
 A page's side pane also lists the agent changes to it, under **Agent changes**, each with **Revert**.
 
@@ -51,7 +64,7 @@ Held changes are at the top, under **Held for you**, by run, each with why it wa
 - **Reject** (`R`) turns it down and leaves the page as it is.
 - **Edit before accepting** opens the page with the change as an unsaved draft; click **Restore**, edit, then save. If the page already has unsaved edits, save or discard them first. Revert still works after you save.
 
-**Accept all** and **Reject all** (after asking) do every held change in a run, or with a search on only those the search shows; `⌘↩` accepts the run you're on. A meeting note accepted this way gets its follow-up offer; one that couldn't be made stays held. The keys do nothing while a dialog is open or you're typing.
+**Accept all** and **Reject all** (after asking) do every held change in a run, or with a search, a type or a day on only those that are shown; `⌘↩` accepts the run you're on. A meeting note accepted this way gets its follow-up offer; one that couldn't be made stays held. Reject all carries on past a change that can't be rejected and says which. The keys do nothing while a dialog is open or you're typing.
 
 A held change keeps what the assistant asked for (a section's new text, a find and replace, a task to add), not a copy of the page, so it still applies after other edits. A held change shows one status: why it was held, and, if what it changes is gone, that it can't be made as it stands. Then there's no Accept: **Edit the page** opens it to make the change yourself, or **Reject** it. **What it asked for** shows the words it would have changed, before and after.
 

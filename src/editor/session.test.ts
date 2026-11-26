@@ -66,26 +66,34 @@ describe("EditSession", () => {
     expect(n.drafts.has("Note.md")).toBe(false);
   });
 
-  it("keeps a recovered draft untouched while its banner shows: typing, undo to saved, disk change", async () => {
+  it("keeps a recovered draft until the note is edited; new edits then take its place, the offer staying", async () => {
     const m = make();
     const old = { path: "Note.md", content: "old edit\n", base: "v0", at: 1 };
     m.drafts.set("Note.md", old);
     await m.s.checkDraft();
-    m.type("typing\n");
-    await new Promise((r) => setTimeout(r, 5));
-    await m.s.writeDraft();
-    expect(m.drafts.get("Note.md")).toEqual(old);
-    m.type("a\nb\nc\n");
-    expect(m.drafts.get("Note.md")).toEqual(old);
+    // A change on disk and a dismissed notice leave it alone.
     m.s.diskChanged({ content: "z\n", version: "v9" });
     m.s.dismiss();
+    await m.s.writeDraft();
     expect(m.drafts.get("Note.md")).toEqual(old);
     expect(m.s.state.notice).toMatchObject({ kind: "draft" });
-    await m.s.discardDraft();
-    expect(m.drafts.has("Note.md")).toBe(false);
-    m.type("new\n");
+    // Typing is new unsaved work: it's what a draft keeps now (leaving with "Keep as draft"
+    // would lose it otherwise), and the older draft can still be restored from the banner.
+    m.type("typing\n");
     await m.s.writeDraft();
-    expect(m.drafts.get("Note.md")?.content).toBe("new\n");
+    expect(m.drafts.get("Note.md")?.content).toBe("typing\n");
+    expect(m.s.state.notice).toMatchObject({ kind: "draft", draft: old });
+    // Discarding the offer puts the banner away and leaves the new edits' draft.
+    await m.s.discardDraft();
+    expect(m.s.state.notice).toBeNull();
+    expect(m.drafts.get("Note.md")?.content).toBe("typing\n");
+
+    // Untouched, Discard deletes the draft itself.
+    const n = make();
+    n.drafts.set("Note.md", old);
+    await n.s.checkDraft();
+    await n.s.discardDraft();
+    expect(n.drafts.has("Note.md")).toBe(false);
   });
 
   it("keeps the draft of edits made while a save was under way", async () => {

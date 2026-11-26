@@ -7,6 +7,7 @@
 
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { focusMode } from "./focus";
+import { runsNow, sampleRuns, sceneRuns } from "./runs";
 import { imageView } from "./ImageViewer";
 import { toast } from "./Toast";
 import { sceneSignIn } from "./SyncDot";
@@ -70,6 +71,8 @@ export interface Scene {
   settings?: Partial<Settings>;
   /** Pane widths as if dragged (src/panes.ts keys), e.g. a wider sidebar. */
   paneWidths?: Record<string, number>;
+  /** Sidebar sections folded or not, as settings keep them: `{ "vault": false }` opens the Vault fold. */
+  folded?: Record<string, boolean>;
   /** Resize locks on, by type (src/panes.ts), e.g. `{ "columns": true }`. */
   resizeLocks?: Settings["resizeLocks"];
   /** For "ask": show a sample chat. */
@@ -78,11 +81,13 @@ export interface Scene {
   replyDraft?: boolean;
   /** An image in the vault (its path) shown full size over the window. */
   image?: string;
+  /** Sample runs in the sidebar's Running line (src/RunsLine.tsx); "open" opens its list too. */
+  runs?: "going" | "open";
   /** For "weekly": sample suggestions for the week, instead of preparing them. */
   weekprep?: boolean;
   /** For "inbox": a sample suggestion for the open item, as Suggest would make. */
   inboxSuggest?: boolean;
-  /** A task's menu open, by its `path:line` (the task list's key). */
+  /** A task's menu open, by its `path:line` (the task list's key); `path:line|more`, `|add` or a field (`|due`, `|context`…) opens More…, the row's + or that chip's picker. */
   taskMenu?: string;
   /** A toast to show, with an Undo button. */
   toast?: string;
@@ -265,6 +270,7 @@ export function applyScene(sc: Scene) {
   if (sc.sideFolded) settings.update({ docSideFolded: true });
   if (sc.settings) settings.update(sc.settings);
   if (sc.paneWidths) settings.update({ paneWidths: sc.paneWidths });
+  if (sc.folded) settings.update({ folded: sc.folded });
   if (sc.resizeLocks) settings.update({ resizeLocks: sc.resizeLocks });
   if (sc.view) settings.update({ viewMemory: { ...settings.get().viewMemory, ...sc.view } });
   if (sc.screen) nav.replace({ screen: sc.screen, pane: sc.pane, path: sc.path, q: sc.q, view: sc.view });
@@ -276,6 +282,10 @@ export function applyScene(sc: Scene) {
   if (sc.dialog === "fix-name") fixNameOpen.set({ wrong: sc.q, right: sc.title });
   if (sc.docMenu) sceneDocMenu.set(sc.docMenu);
   if (sc.weekprep) scenePrep.set(true);
+  if (sc.runs) {
+    sceneRuns.set(sc.runs);
+    runsNow.set(sampleRuns());
+  }
   if (sc.inboxSuggest) sceneInboxSuggest.set(true);
   if (sc.image) imageView.set({ url: convertFileSrc(vaultFile(settings.get().vaultPath ?? "", sc.image)), alt: sc.image });
   if (sc.chat) ask.set({ chats: [sc.chat === "tutorial" ? tutorialChat() : sampleChat()], active: "scene" });
@@ -287,12 +297,20 @@ export function applyScene(sc: Scene) {
   if (sc.update) updateView.set(sampleUpdate(sc.update));
   if (sc.syncDot) {
     settings.update({ syncEnabled: true });
-    const base = { handedOver: "2026-10-28T07:00:00Z", stale: [], rejected: [], extensionOutdated: null, extensionShipped: "1.1.16" };
+    const base = {
+      handedOver: "2026-10-28T07:00:00Z",
+      stale: [],
+      rejected: [],
+      extensionOutdated: null,
+      extensionShipped: "1.1.16",
+      teams: true,
+      outlook: true,
+    };
     sceneSignIn.set(
       sc.syncDot === "ok"
         ? { ...base, signedIn: true }
         : sc.syncDot === "stale"
-          ? { ...base, signedIn: true, stale: ["mail"] }
+          ? { ...base, signedIn: true, stale: ["mail"], outlook: false }
           : { ...base, signedIn: false, handedOver: null },
     );
   }

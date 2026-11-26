@@ -21,16 +21,58 @@ pub struct Watcher {
     _inner: notify::RecommendedWatcher,
 }
 
-pub fn watch(root: &Path, on_batch: impl Fn(Vec<PathBuf>) + Send + 'static) -> Result<Watcher, String> {
-    let (tx, rx) = mpsc::channel::<PathBuf>();
+/// What the watcher hands over: the paths that changed, or word that changes were missed (the
+/// system's event buffer overflowed, or the watcher reported an error), so the whole vault wants
+/// reading again.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Batch {
+    Paths(Vec<PathBuf>),
+    Rescan,
+}
+
+/// What one event from the system means: its paths, or None for "changes were missed". An error
+/// counts as missed too: after one nothing says which files it was about.
+fn signals(res: notify::Result<notify::Event>) -> Vec<Option<PathBuf>> {
+    match res {
+        Ok(ev) if ev.need_rescan() => vec![None],
+        Ok(ev) if matches!(ev.kind, notify::EventKind::Access(_)) => Vec::new(),
+        Ok(ev) => ev.paths.into_iter().map(Some).collect(),
+        Err(_) => vec![None],
+    }
+}
+
+/// Paths gathered into a batch; one "changes were missed" makes the whole batch a rescan, which
+/// covers its paths too.
+#[derive(Default)]
+struct Gathered {
+    paths: BTreeSet<PathBuf>,
+    rescan: bool,
+}
+
+impl Gathered {
+    fn add(&mut self, signal: Option<PathBuf>) {
+        match signal {
+            Some(p) => {
+                self.paths.insert(p);
+            }
+            None => self.rescan = true,
+        }
+    }
+
+    fn batch(self) -> Batch {
+        if self.rescan {
+            Batch::Rescan
+        } else {
+            Batch::Paths(self.paths.into_iter().collect())
+        }
+    }
+}
+
+pub fn watch(root: &Path, on_batch: impl Fn(Batch) + Send + 'static) -> Result<Watcher, String> {
+    let (tx, rx) = mpsc::channel::<Option<PathBuf>>();
     let mut inner = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        if let Ok(ev) = res {
-            if matches!(ev.kind, notify::EventKind::Access(_)) {
-                return;
-            }
-            for p in ev.paths {
-                let _ = tx.send(p);
-            }
+        for s in signals(res) {
+            let _ = tx.send(s);
         }
     })
     .map_err(|e| e.to_string())?;
@@ -40,7 +82,8 @@ pub fn watch(root: &Path, on_batch: impl Fn(Vec<PathBuf>) + Send + 'static) -> R
         .spawn(move || {
             // Ends when the watcher (and with it the sender) is dropped.
             while let Ok(first) = rx.recv() {
-                let mut batch = BTreeSet::from([first]);
+                let mut batch = Gathered::default();
+                batch.add(first);
                 let started = Instant::now();
                 loop {
                     let left = MAX_WAIT.saturating_sub(started.elapsed());
@@ -48,17 +91,15 @@ pub fn watch(root: &Path, on_batch: impl Fn(Vec<PathBuf>) + Send + 'static) -> R
                         break;
                     }
                     match rx.recv_timeout(QUIET.min(left)) {
-                        Ok(p) => {
-                            batch.insert(p);
-                        }
+                        Ok(s) => batch.add(s),
                         Err(mpsc::RecvTimeoutError::Timeout) => break,
                         Err(mpsc::RecvTimeoutError::Disconnected) => {
-                            on_batch(batch.into_iter().collect());
+                            on_batch(batch.batch());
                             return;
                         }
                     }
                 }
-                on_batch(batch.into_iter().collect());
+                on_batch(batch.batch());
             }
         })
         .map_err(|e| e.to_string())?;
@@ -75,7 +116,12 @@ mod tests {
         // FSEvents reports the real path (/private/var/... for /var/...).
         let root = crate::paths::canonical(t.path()).unwrap();
         let (tx, rx) = mpsc::channel();
-        let _w = watch(&root, move |b| tx.send(b).unwrap()).unwrap();
+        let _w = watch(&root, move |b| {
+            if let Batch::Paths(b) = b {
+                tx.send(b).unwrap()
+            }
+        })
+        .unwrap();
         std::thread::sleep(Duration::from_millis(200));
         std::fs::write(root.join("a.md"), "one").unwrap();
         std::fs::write(root.join("b.md"), "two").unwrap();
@@ -87,5 +133,27 @@ mod tests {
             }
         }
         assert!(seen.contains("a.md") && seen.contains("b.md"), "{seen:?}");
+    }
+
+    /// A dropped-events notice or a watcher error asks for the whole vault to be read again,
+    /// whatever else is in the batch; without one the batch is its paths.
+    #[test]
+    fn missed_changes_ask_for_a_rescan() {
+        let change = |p: &str| notify::Event::new(notify::EventKind::Any).add_path(PathBuf::from(p));
+        assert_eq!(signals(Ok(change("/v/a.md"))), vec![Some(PathBuf::from("/v/a.md"))]);
+        assert_eq!(signals(Ok(change("/v/a.md").set_flag(notify::event::Flag::Rescan))), vec![None]);
+        assert_eq!(signals(Err(notify::Error::generic("overflow"))), vec![None]);
+        let access = notify::Event::new(notify::EventKind::Access(notify::event::AccessKind::Any)).add_path(PathBuf::from("/v/a.md"));
+        assert!(signals(Ok(access)).is_empty());
+
+        let mut g = Gathered::default();
+        g.add(Some(PathBuf::from("/v/b.md")));
+        g.add(Some(PathBuf::from("/v/a.md")));
+        g.add(Some(PathBuf::from("/v/a.md")));
+        assert_eq!(g.batch(), Batch::Paths(vec![PathBuf::from("/v/a.md"), PathBuf::from("/v/b.md")]));
+        let mut g = Gathered::default();
+        g.add(Some(PathBuf::from("/v/a.md")));
+        g.add(None);
+        assert_eq!(g.batch(), Batch::Rescan);
     }
 }

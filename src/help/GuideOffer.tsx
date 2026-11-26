@@ -57,16 +57,16 @@ export function GuideOfferHost() {
         </div>
         <p className="faint">To come back to it, open the help (press ? or click ? at the top right) and click Getting started.</p>
         <div className="row">
-          <label className="row" style={{ gap: 6 }} title="Don't offer Getting started when Brainstead opens">
+          <label className="row tight" title="Don't offer Getting started when Brainstead opens">
             <input type="checkbox" checked={never} onChange={(e) => setNever(e.target.checked)} />
             Don't ask me again
           </label>
           <span className="grow" />
           <button type="button" className="btn lg" title="Close this and carry on" onClick={() => close(false)}>
-            Not Now
+            Not now
           </button>
           <button type="button" className="btn lg pri" autoFocus title="Open the first guide in the help" onClick={() => close(true)}>
-            Open Getting Started
+            Open Getting started
           </button>
         </div>
       </div>

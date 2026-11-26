@@ -35,6 +35,7 @@ describe("the menu's keys where there's no menu bar", () => {
     expect(menuKey(press("Equal", { ctrl: true, shift: true }))).toBe("view:interface-bigger");
     expect(menuKey(press("Minus", { ctrl: true, shift: true }))).toBe("view:interface-smaller");
     expect(menuKey(press("Digit0", { ctrl: true, shift: true }))).toBe("view:interface-usual");
+    expect(menuKey(press("Backslash", { ctrl: true }))).toBe("view:sidebar");
     // Without Shift they're a note's Text size (src/Doc.tsx) and the Sources screen.
     expect(menuKey(press("Equal", { ctrl: true }))).toBeNull();
     expect(menuKey(press("Digit0", { ctrl: true }))).toBeNull();

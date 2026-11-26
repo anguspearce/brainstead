@@ -3,9 +3,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import { Fragment, useEffect, useState } from "react";
+import { DateField } from "./DatePicker";
+import { localToday } from "./md/taskQuery";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { api, AppInfo, CliInfo, CliName, Skill, Theme } from "./api";
-import { extensionOutdatedText, rejectedText } from "./syncStatus";
+import { api, AppInfo, CliInfo, CliName, Skill, SkipSuggestion, Theme } from "./api";
+import { acceptSkip, unskipChat } from "./skips";
+import { extensionOutdatedText, mailOn, rejectedText } from "./syncStatus";
 import appIconDark from "../src-tauri/icons/128x128@2x.png";
 import appIconLight from "../src-tauri/icons/about-light.png";
 import { Icon, TrayMark } from "./icons";
@@ -25,6 +28,7 @@ import { errText } from "./notes/actions";
 import { Switchover } from "./Switchover";
 import { TopBar } from "./TopBar";
 import { Jobs } from "./Jobs";
+import { LearnMore } from "./help/HelpDrawer";
 import {
   CLI_LABEL,
   cliOf,
@@ -46,19 +50,20 @@ import { useDiskUsage, vaultBytes, vaultParts } from "./diskUsage";
 import { sayTest, speechSettingsChanged, voices } from "./speech/player";
 import { SpeedSlider, VoiceSelect } from "./speech/ReadAloud";
 import { DocButton, useIsGone } from "./docButton";
-import { accelLabel, captureDefault, fileManager, hasSync, isMac, isWindows, keyLabel, terminalApp } from "./platform";
+import { accelLabel, captureDefault, fileManager, halfRenamedText, hasSync, isMac, isWindows, keyLabel, terminalApp } from "./platform";
 import { useFeatures } from "./features";
 import { usePanes } from "./PaneResizer";
 import { PANES as PANE_SPECS, RESIZE_LOCKS, ResizeType, resetPaneWidths, resizeLocked, setResizeLock } from "./panes";
+import { narrowWindow, RAIL_BELOW, RailWidth, railOn, setRail } from "./sidebarRail";
 
 const PANES: [SettingsPane, string, string][] = [
   ["general", "General", "settings"],
   ["notes", "Notes", "note"],
   ["vault", "Vault", "folder"],
   ["assistants", "AI assistants", "cpu"],
-  ["jobs", "Jobs & schedule", "calendar"],
+  ["jobs", "Automations", "calendar"],
   ["capture", "Capture extensions", "source"],
-  ["sync", "Teams and Outlook sync", "refresh"],
+  ["sync", "Sync", "refresh"],
   ["permissions", "Permissions", "shield"],
   ["about", "About", "info"],
 ];
@@ -148,7 +153,7 @@ function CaptureShortcut() {
     <section className="sgroup">
       <h2 className="h3">Quick capture</h2>
       <p className="muted">
-        A shortcut that works over any app and opens a capture box. Tasks go to the To Do list, thoughts to the Scratchpad.
+        A shortcut that opens a capture box over any app. <LearnMore topic="settings-general" section="Change the quick capture shortcut" />
       </p>
       <div className="row">
         <button
@@ -208,6 +213,10 @@ function JobModels({ found, fallback }: { found: CliInfo[] | null; fallback: str
   return (
     <section className="sgroup">
       <h2 className="h3">Models by job</h2>
+      <p className="faint">
+        Each kind of background work can have its own model and effort.{" "}
+        <LearnMore topic="settings-assistants" section="Give a job its own model" />
+      </p>
       <div className="card jobmodels">
         {MODEL_JOBS.map(([job, label, icon]) => (
           <div key={job} className="srow">
@@ -343,8 +352,8 @@ function OpenAtLogin() {
           <div className="t">
             <div className="pt">Show in the menu bar</div>
             <div className="faint">
-              An icon in the menu bar opens a small window: today at a glance, a capture box, what's running and what waits for you. It
-              shows dots while a run is going, and a dot when something waits.
+              An icon that opens today at a glance, a capture box and what's running.{" "}
+              <LearnMore topic="settings-general" section="Start at login, and the menu bar" />
             </div>
           </div>
           <Switch label="Show in the menu bar" on={menuBar} onChange={(v) => settings.update({ menuBar: v })} />
@@ -367,9 +376,7 @@ function OpenAtLogin() {
           <Icon name="start" />
           <div className="t">
             <div className="pt">Offer Getting started when Brainstead opens</div>
-            <div className="faint">
-              A welcome that opens the help's step-by-step guides. They're always in the help: press ? and click Getting started.
-            </div>
+            <div className="faint">A welcome that opens the step-by-step guides, which are always in the help.</div>
           </div>
           <Switch
             label="Offer Getting started when Brainstead opens"
@@ -382,10 +389,7 @@ function OpenAtLogin() {
             <Icon name="power" />
             <div className="t">
               <div className="pt">Open at login</div>
-              <div className="faint">
-                Brainstead starts when you log in, so quick capture, captures from the browser, the daily summary and the weekly summary are
-                ready.
-              </div>
+              <div className="faint">Starts Brainstead when you log in, so captures and scheduled jobs are ready.</div>
             </div>
             <Switch
               label="Open at login"
@@ -412,6 +416,31 @@ function General() {
       <OpenAtLogin />
       <CaptureShortcut />
       <section className="sgroup">
+        <h2 className="h3">Notifications</h2>
+        <Seg<"all" | "needs_me" | "off">
+          label="Notifications"
+          value={s.notifications ?? "needs_me"}
+          options={[
+            ["needs_me", "Only when it needs me", "A failure, a refused capture, a capture you clicked, or the sync's sign-in gone stale"],
+            ["all", "All", "Also every synced chat or thread, every ingest done and every summary written"],
+            ["off", "Off", "No notifications from Brainstead"],
+          ]}
+          onChange={(v) => settings.update({ notifications: v })}
+        />
+        <p className="faint">
+          What the sync brought in is always in{" "}
+          <button
+            type="button"
+            className="tlink"
+            title="Open Activity › Sync & ingest"
+            onClick={() => nav.go({ screen: "activity", view: { "activity.view": "sync" } })}
+          >
+            Activity › Sync & ingest
+          </button>
+          . <LearnMore topic="settings-general" section="Notifications" />
+        </p>
+      </section>
+      <section className="sgroup">
         <h2 className="h3">Your name</h2>
         <label className="inp" style={{ maxWidth: 320 }}>
           <input
@@ -421,8 +450,8 @@ function General() {
           />
         </label>
         <p className="faint">
-          Today greets you by your first name. For notes from transcripts: which speaker is you, so your actions become tasks and a
-          two-person meeting is a 1-1.
+          Today greets you by it, and meeting notes know which speaker is you.{" "}
+          <LearnMore topic="settings-general" section="Set your name" />
         </p>
       </section>
       <section className="sgroup">
@@ -440,8 +469,13 @@ function General() {
             applyTheme(t);
           }}
         />
+        <p className="faint">
+          The app's light or dark; documents follow it unless set in Settings › Notes.{" "}
+          <LearnMore topic="settings-general" section="Choose light or dark" />
+        </p>
         <AccentColour />
         <InterfaceSize />
+        <SidebarRail />
         <PaneWidths />
       </section>
     </>
@@ -467,8 +501,34 @@ function AccentColour() {
         onChange={setAccent}
       />
       <p className="faint">
-        System takes the accent colour from Windows Settings › Personalisation › Colours and follows it when it changes, lighter or darker
-        where text on it would be hard to read.
+        System follows the Windows accent colour. <LearnMore topic="settings-general" section="Use the Windows accent colour" />
+      </p>
+    </div>
+  );
+}
+
+/** The sidebar as an icon rail (src/sidebarRail.ts), chosen per width as ⌘\ chooses it. */
+function SidebarRail() {
+  const s = useStore(settings);
+  const width = useStore(narrowWindow) ? "narrow" : "wide";
+  const rows: [RailWidth, string, string][] = [
+    ["wide", "Icons only on a wide window", `The sidebar shows only its icons on a window wider than ${RAIL_BELOW} px`],
+    ["narrow", `Icons only on a narrow window (${RAIL_BELOW} px or less)`, "The sidebar shows only its icons when the window is narrow"],
+  ];
+  return (
+    <div className="ifacesize">
+      <div className="eyebrow">Sidebar</div>
+      <div className="row">
+        {rows.map(([w, label, tip]) => (
+          <label key={w} className="row tight" title={tip}>
+            <input type="checkbox" checked={railOn(s, w === "narrow")} onChange={(e) => setRail(w, e.target.checked)} />
+            {label}
+          </label>
+        ))}
+      </div>
+      <p className="faint">
+        {keyLabel("⌘\\")} switches it for the width the window is at (now {width}); kept for this computer.{" "}
+        <LearnMore topic="settings-general" section="The sidebar as icons" />
       </p>
     </div>
   );
@@ -494,8 +554,7 @@ function PaneWidths() {
         {(Object.keys(RESIZE_LOCKS) as ResizeType[]).map((type) => (
           <label
             key={type}
-            className="row"
-            style={{ gap: 6 }}
+            className="row tight"
             title={`${RESIZE_LOCKS[type].what} keep their widths and their dividers are hidden, until this is off`}
           >
             <input type="checkbox" checked={resizeLocked(type, resizeLocks)} onChange={(e) => setResizeLock(type, e.target.checked)} />
@@ -504,10 +563,8 @@ function PaneWidths() {
         ))}
       </div>
       <p className="faint">
-        Reset pane widths puts every pane and table column back to its usual width; Lock pane widths keeps the sidebar and the screens'
-        panes as they are, and Lock column widths every table's columns, with their lines hidden. To resize one pane, drag the line between
-        two panes or beside a column's heading; the arrow keys move a focused line, and Enter or a double-click puts that pane back. A lock
-        keeps the widths you set and doesn't stop Reset pane widths. Widths and locks are kept for this computer, not in the vault.
+        Drag the line between two panes to resize them; a lock hides the lines. Kept for this computer.{" "}
+        <LearnMore topic="settings-general" section="Resize the panes" />
       </p>
     </div>
   );
@@ -555,10 +612,8 @@ function InterfaceSize() {
         </span>
       </div>
       <p className="faint">
-        Smaller and Bigger change everything in the window together, from {INTERFACE_SIZE.min}% to {INTERFACE_SIZE.max}% in steps of{" "}
-        {INTERFACE_SIZE.step}: the sidebar, lists, dialogs and the text of notes. {keyLabel("⇧⌘=")} and {keyLabel("⇧⌘-")} do the same from
-        any screen, and {keyLabel("⇧⌘0")} puts it back to {INTERFACE_SIZE.default}%. A note's Text size is separate and comes on top of it,
-        the quick capture window stays at 100%, and the size is kept for this computer, not in the vault.
+        Everything in the window, from {INTERFACE_SIZE.min}% to {INTERFACE_SIZE.max}%; {keyLabel("⇧⌘=")} and {keyLabel("⇧⌘-")} from any
+        screen. <LearnMore topic="settings-general" section="Make everything bigger or smaller" />
       </p>
     </div>
   );
@@ -607,7 +662,7 @@ function SpellLanguage() {
       <Icon name="text" />
       <div className="t">
         <div className="pt">Spelling language</div>
-        <div className="faint">Which English words are checked against: colour or color, organise or organize.</div>
+        <div className="faint">Which English to check against: colour or color.</div>
       </div>
       <select
         title="The language spelling is checked in"
@@ -642,11 +697,7 @@ function ReadAloudSettings() {
           <div className="t">
             <div className="pt">Voice</div>
             <div className="faint">
-              {isMac
-                ? "More voices: System Settings › Accessibility › Spoken Content › System voice › Manage Voices. Premium voices sound the most natural (Zoe or Ava for US English, Jamie for British); download one there and it's listed here. Siri's voices can't be used by other apps."
-                : isWindows
-                  ? "More voices: Windows Settings › Time & language › Speech › Manage voices; add one there and it's listed here. Natural voices, where Windows has them, are listed first."
-                  : "More voices: install one in the system's speech settings and it's listed here."}
+              The voice notes are read in. <LearnMore topic="settings-notes" section="Read notes aloud" />
             </div>
           </div>
           <VoiceSelect onChange={speechSettingsChanged} />
@@ -663,6 +714,7 @@ function ReadAloudSettings() {
           <Icon name="stopwatch" />
           <div className="t">
             <div className="pt">Speed</div>
+            <div className="faint">How fast notes are read, from half to twice the usual speed.</div>
           </div>
           <SpeedSlider />
         </div>
@@ -670,7 +722,7 @@ function ReadAloudSettings() {
           <Icon name="eye" />
           <div className="t">
             <div className="pt">Highlight each word</div>
-            <div className="faint">Off: the whole paragraph being read is tinted instead.</div>
+            <div className="faint">Marks each word as it's read; off tints the paragraph instead.</div>
           </div>
           <Switch label="Highlight each word" on={s.speechHighlight !== false} onChange={(v) => settings.update({ speechHighlight: v })} />
         </div>
@@ -697,8 +749,8 @@ function Notes() {
                 <div className="t">
                   <div className="pt">Check spelling</div>
                   <div className="faint">
-                    A red wavy line under words {isMac ? "macOS" : "the system"} doesn't know, as you write. Click one for guesses, Learn or
-                    Ignore.
+                    A red wavy line under unknown words as you write.{" "}
+                    <LearnMore topic="settings-notes" section="Check spelling and grammar" />
                   </div>
                 </div>
                 <Switch label="Check spelling" on={s.spellCheck !== false} onChange={(v) => settings.update({ spellCheck: v })} />
@@ -709,9 +761,7 @@ function Notes() {
                 <Icon name="check" />
                 <div className="t">
                   <div className="pt">Check grammar</div>
-                  <div className="faint">
-                    A blue wavy line where {isMac ? "macOS" : "the system"} sees a grammar problem; click for its explanation and fixes.
-                  </div>
+                  <div className="faint">A blue wavy line under grammar problems, checked on this computer.</div>
                 </div>
                 <Switch label="Check grammar" on={s.grammarCheck !== false} onChange={(v) => settings.update({ grammarCheck: v })} />
               </div>
@@ -723,7 +773,10 @@ function Notes() {
       <ReadAloudSettings />
       <section className="sgroup">
         <h2 className="h3">Document look</h2>
-        <p className="muted">How notes, wiki pages and their PDFs look unless a note has its own. Change one note's from its screen.</p>
+        <p className="muted">
+          How notes, wiki pages and their PDFs look unless a note has its own.{" "}
+          <LearnMore topic="settings-notes" section="Choose how documents look" />
+        </p>
         <LookPicker
           style={d.style}
           accent={d.accent}
@@ -751,13 +804,16 @@ function Notes() {
           ]}
           onChange={(t) => settings.update({ docTheme: t === "app" ? undefined : t })}
         />
-        <p className="muted">PDFs always print light.</p>
+        <p className="muted">
+          Documents can be light or dark apart from the app; PDFs always print light.{" "}
+          <LearnMore topic="settings-notes" section="Make documents light or dark" />
+        </p>
       </section>
       <section className="sgroup">
         <h2 className="h3">Templates</h2>
         <p className="muted">
-          New note runs the templates in the vault’s Templates folder (Templater syntax). Their user scripts (
-          <span className="mono">tp.user</span>) are the .js files in this folder.
+          The folder of the templates' user scripts (<span className="mono">tp.user</span>).{" "}
+          <LearnMore topic="settings-notes" section="Point templates at their scripts" />
         </p>
         <div className="row">
           <span className="inp grow mono">
@@ -813,7 +869,10 @@ function Vault() {
     <>
       <section className="sgroup">
         <h2 className="h3">Vault folder</h2>
-        <p className="muted">Every .md and .txt file in this folder is indexed, except system and excluded folders.</p>
+        <p className="muted">
+          Every .md and .txt file in this folder is indexed, except system and excluded folders.{" "}
+          <LearnMore topic="settings-vault" section="Choose the vault folder" />
+        </p>
         <div className="row">
           <div className="inp grow mono" title={s.vaultPath ?? undefined}>
             <Icon name="folder" size={14} />
@@ -835,11 +894,32 @@ function Vault() {
           </span>
         </div>
       </section>
+      {st.warning && (
+        <div className="doc-banner warn" role="status">
+          <Icon name="info" size={14} />
+          <span>{st.warning}</span>
+        </div>
+      )}
+      {(st.halfRenamed ?? []).map((rel) => (
+        <div key={rel} className="doc-banner warn" role="status">
+          <Icon name="info" size={14} />
+          <span>{halfRenamedText(rel)}</span>
+          <span className="sp" />
+          <button
+            type="button"
+            className="btn sm"
+            title={`Show this file's folder in ${fileManager}`}
+            onClick={() => void api.reveal(rel).catch(() => {})}
+          >
+            {isMac ? "Reveal in Finder" : `Show in ${fileManager}`}
+          </button>
+        </div>
+      ))}
       <div className="card">
         <div className="srow">
           <Icon
             name={st.state === "error" ? "x" : "check"}
-            style={{ color: st.state === "error" ? "var(--red)" : st.state === "ready" ? "var(--green)" : "var(--amber)" }}
+            className={st.state === "error" ? "tint-bad" : st.state === "ready" ? "tint-ok" : "tint-warn"}
           />
           <div className="t">
             <div className="pt">
@@ -895,7 +975,7 @@ function Vault() {
         </div>
         {st.state === "ready" && used && disk && (
           <div className="srow">
-            <Icon name="folder" style={{ color: "var(--accent)" }} />
+            <Icon name="folder" className="tint-accent" />
             <div className="t">
               <div className="pt">{fmtBytes(vaultBytes(used))} on disk</div>
               <div className="faint">
@@ -917,11 +997,11 @@ function Vault() {
           </div>
         )}
         <div className="srow">
-          <Icon name="lock" style={{ color: s.readOnly ? "var(--green)" : "var(--amber)" }} />
+          <Icon name="lock" className={s.readOnly ? "tint-ok" : "tint-warn"} />
           <div className="t">
             <div className="pt">Read-only</div>
             <div className="faint">
-              Never change anything in the vault. Turn it off to tick tasks, set their dates and capture from Brainstead.
+              While it's on, Brainstead changes nothing in the vault. <LearnMore topic="settings-vault" section="Make the vault editable" />
             </div>
           </div>
           {/* Saved at once: Rust refuses or allows writes by it, so the switch and the app mustn't disagree. */}
@@ -930,7 +1010,10 @@ function Vault() {
       </div>
       <section className="sgroup">
         <h2 className="h3">Excluded folders</h2>
-        <p className="muted">Any folder with one of these names, at any depth, is skipped.</p>
+        <p className="muted">
+          Any folder with one of these names, at any depth, is skipped.{" "}
+          <LearnMore topic="settings-vault" section="Skip folders you don't want indexed" />
+        </p>
         <div className="chips">
           {s.excluded.map((x) => (
             <span key={x} className="chip">
@@ -1009,8 +1092,8 @@ function ExampleNotes() {
     <section className="sgroup">
       <h2 className="h3">Example notes</h2>
       <p className="muted">
-        The notes a new vault is made with, which show what Brainstead can do. Only the ones that aren&apos;t in the vault are added;
-        nothing already there is changed.
+        The starter notes a new vault gets; only missing ones are added.{" "}
+        <LearnMore topic="settings-vault" section="Add the example notes" />
       </p>
       <div className="row">
         <span
@@ -1093,7 +1176,10 @@ function Assistants() {
             <Icon name="chevdown" size={12} />
           </button>
         </div>
-        <p className="faint">Each chat keeps the model it started with, and jobs use this one unless they have their own below.</p>
+        <p className="faint">
+          Each chat keeps the model it started with; jobs use this one unless they have their own.{" "}
+          <LearnMore topic="settings-assistants" section="Choose the model for new chats" />
+        </p>
         {at && (
           <Popover anchor={at} onClose={() => setAt(null)} width={300}>
             <ModelMenu
@@ -1108,11 +1194,12 @@ function Assistants() {
         )}
         <div className="card">
           <div className="srow">
-            <Icon name="ask" style={{ color: s.askSuggest === false ? "var(--ink3)" : "var(--green)" }} />
+            <Icon name="ask" className={s.askSuggest === false ? "tint-off" : "tint-ok"} />
             <div className="t">
               <div className="pt">Suggest a next message</div>
               <div className="faint">
-                After each answer, a model offers a follow-up in the message box (→ types it), at the cost of one more call per answer.
+                After each answer, a follow-up is offered in the message box, for one more call.{" "}
+                <LearnMore topic="settings-assistants" section="Suggest a next message" />
               </div>
             </div>
             <Switch label="Suggest a next message" on={s.askSuggest !== false} onChange={(v) => settings.update({ askSuggest: v })} />
@@ -1123,15 +1210,12 @@ function Assistants() {
         <h2 className="h3">Changes</h2>
         <div className="card">
           <div className="srow">
-            <Icon name="history" style={{ color: "var(--accent)" }} />
+            <Icon name="history" className="tint-accent" />
             <div className="t">
               <div className="pt">Keep the history of agent changes</div>
               <div className="faint">
-                Every change an assistant or a run makes can be reverted in Changes. The history is kept for this many days, or until it
-                takes this much space, whichever comes first.
-                {disk && ` It takes ${fmtBytes(disk.changesBytes)} now.`}
-                {/onedrive/i.test(s.vaultPath ?? "") &&
-                  " Your vault is in a OneDrive folder, so older versions are also in OneDrive's version history."}
+                How long Changes can revert what assistants and runs changed{disk && `; it takes ${fmtBytes(disk.changesBytes)} now`}.{" "}
+                <LearnMore topic="settings-assistants" section="Changes" />
               </div>
             </div>
             <select
@@ -1167,7 +1251,7 @@ function Assistants() {
         <h2 className="h3">Meeting notes</h2>
         <div className="card">
           <div className="srow">
-            <Icon name="wiki" style={{ color: s.meetingIngest !== false ? "var(--green)" : "var(--ink3)" }} />
+            <Icon name="wiki" className={s.meetingIngest !== false ? "tint-ok" : "tint-off"} />
             <div className="t">
               <div className="pt">Ingest a meeting note once it's made</div>
               <div className="faint">A note written from a transcript is read into the wiki straight after.</div>
@@ -1179,13 +1263,10 @@ function Assistants() {
             />
           </div>
           <div className="srow">
-            <Icon name="trash" style={{ color: s.meetingTrash !== false ? "var(--green)" : "var(--ink3)" }} />
+            <Icon name="trash" className={s.meetingTrash !== false ? "tint-ok" : "tint-off"} />
             <div className="t">
               <div className="pt">Then move the transcript to the Trash</div>
-              <div className="faint">
-                Only once the note is made (and ingested, when that's on); a transcript whose note or ingest failed is kept. With both off,
-                Brainstead asks after each note.
-              </div>
+              <div className="faint">Once the note is made; with both off, Brainstead asks after each note.</div>
             </div>
             <Switch
               label="Then move the transcript to the Trash"
@@ -1199,11 +1280,12 @@ function Assistants() {
         <h2 className="h3">Ingest</h2>
         <div className="card">
           <div className="srow">
-            <Icon name="inbox" style={{ color: s.ingestOnArrival ? "var(--green)" : "var(--ink3)" }} />
+            <Icon name="inbox" className={s.ingestOnArrival ? "tint-ok" : "tint-off"} />
             <div className="t">
               <div className="pt">Ingest new sources as they arrive</div>
               <div className="faint">
-                An email or chat captured from the browser, or a file dropped or imported into Sources, is ingested straight away.
+                Captures and files dropped or imported into Sources are ingested straight away.{" "}
+                <LearnMore topic="settings-assistants" section="Ingest" />
               </div>
             </div>
             <Switch
@@ -1213,13 +1295,10 @@ function Assistants() {
             />
           </div>
           <div className="srow">
-            <Icon name="refresh" style={{ color: s.refreshStale ? "var(--green)" : "var(--ink3)" }} />
+            <Icon name="refresh" className={s.refreshStale ? "tint-ok" : "tint-off"} />
             <div className="t">
               <div className="pt">Also refresh pages whose sources changed</div>
-              <div className="faint">
-                The daily check (Settings › Jobs &amp; schedule) ingests again each source that changed since the pages citing it were
-                written; the wiki is updated at once, and a change that fails a check is held for you in Changes.
-              </div>
+              <div className="faint">The daily check (Settings › Automations) ingests again each source that changed.</div>
             </div>
             <Switch
               label="Also refresh pages whose sources changed"
@@ -1256,7 +1335,7 @@ function Assistants() {
               {/* A refused OLLAMA_HOST is neither found nor missing: a warning, and no How to install. */}
               <Icon
                 name={c.path ? "check" : c.refused ? "alert" : "x"}
-                style={{ color: c.path ? "var(--green)" : c.refused ? "var(--amber)" : "var(--ink3)" }}
+                className={c.path ? "tint-ok" : c.refused ? "tint-warn" : "tint-off"}
               />
               <div className="t">
                 <div className="pt">
@@ -1303,9 +1382,8 @@ function Assistants() {
           ))}
         </div>
         <p className="faint">
-          Ask runs the assistant you choose on this computer with your own account, and it never writes a file itself. Its effort is what
-          new chats start with (a chat can change its own beside its model in Ask) and what its jobs run at unless Models by job gives a job
-          its own; Default leaves it to the assistant, which picks one for each model.
+          Ask runs these with your own account; an Effort is what new chats and jobs start from.{" "}
+          <LearnMore topic="settings-assistants" section="Set how hard an assistant thinks" />
         </p>
       </section>
       <McpGroup />
@@ -1317,8 +1395,8 @@ function Assistants() {
 export const SCREEN_NAME: Record<string, string> = {
   sources: "Sources (Ingest)",
   fixname: `Fix a name everywhere (${keyLabel("⌘K")})`,
-  contradictions: "Contradictions (Knowledge health)",
-  health: "Knowledge health",
+  contradictions: "Contradictions (Wiki health)",
+  health: "Wiki health",
   meeting: "Meeting note from a transcript",
   triage: "Bookmarks triage",
   reply: "Draft a reply",
@@ -1345,7 +1423,7 @@ function HandedOver() {
       <div className="card">
         {skills.map((s) => (
           <div key={s.name} className="srow">
-            <Icon name="check" style={{ color: "var(--green)" }} />
+            <Icon name="check" className="tint-ok" />
             <div className="t">
               <div className="pt">/{s.name}</div>
               <div className="faint">{SCREEN_NAME[s.opens!] ?? s.opens}</div>
@@ -1354,8 +1432,8 @@ function HandedOver() {
         ))}
       </div>
       <p className="faint">
-        Picking one of these in Ask opens its screen; the vault's own copies in .claude/skills keep working, and Brainstead never deletes
-        them.
+        Picking one in Ask opens its screen; the vault's own copies keep working.{" "}
+        <LearnMore topic="settings-assistants" section="See which vault skills Brainstead now does itself" />
       </p>
     </section>
   );
@@ -1398,14 +1476,11 @@ function McpGroup() {
     <section className="sgroup">
       <h2 className="h3">Brainstead's tools</h2>
       <p className="faint">
-        In Ask, Claude Code, Codex and Copilot get Brainstead's tools: small changes happen at once and can be undone, while prose, renames
-        and deletes are made at once and listed in Changes, where you can revert them (Antigravity uses only its own read tools).
+        Assistants change the vault only through these, and each change is listed in Changes.{" "}
+        <LearnMore topic="settings-assistants" section="Use Brainstead's tools from Terminal" />
       </p>
       {found && info && !cmds.length && (
-        <p className="faint">
-          No assistant is installed on this computer yet (see Found on this computer); once one is, its command to use Brainstead's tools
-          from {terminalApp} shows here.
-        </p>
+        <p className="faint">No assistant is installed yet; once one is, its command for {terminalApp} shows here.</p>
       )}
       {cmds.length > 0 && (
         <>
@@ -1442,12 +1517,17 @@ function PermissionsPane() {
   return (
     <>
       <FullDiskAccessCard />
-      <p className="faint">Notifications and automation are asked for when a feature first needs them, not at startup.</p>
+      <p className="faint">Notifications and automation are asked for when a feature first needs them.</p>
     </>
   );
 }
 
-const EXTENSIONS: { id: "outlook-capture" | "teams-capture"; ext: "outlook" | "teams"; name: string; what: string }[] = [
+const EXTENSIONS: {
+  id: "outlook-capture" | "teams-capture" | "slack-capture";
+  ext: "outlook" | "teams" | "slack";
+  name: string;
+  what: string;
+}[] = [
   {
     id: "outlook-capture",
     ext: "outlook",
@@ -1455,6 +1535,12 @@ const EXTENSIONS: { id: "outlook-capture" | "teams-capture"; ext: "outlook" | "t
     what: "The open email thread in Outlook on the web, or the threads ticked in the list.",
   },
   { id: "teams-capture", ext: "teams", name: "Teams capture", what: "The open Teams chat or channel thread, or a meeting's transcript." },
+  {
+    id: "slack-capture",
+    ext: "slack",
+    name: "Slack sync",
+    what: "Hands your open Slack tab's sign-in to Brainstead for Slack sync (Settings › Sync); it captures nothing itself.",
+  },
 ];
 
 /** The Outlook and Teams extensions: where to load them from, whether the browsers know Brainstead's helper, the last captures. */
@@ -1466,7 +1552,16 @@ function SyncPane() {
   const [loadingChannels, setLoadingChannels] = useState(false);
   const [report, setReport] = useState<import("./api").SyncReport | null>(null);
   const [busy, setBusy] = useState(false);
+  // Fetch again: a week back by default.
+  const [fetchFrom, setFetchFrom] = useState<string | null>(() => localToday(new Date(Date.now() - 7 * 86400000)));
   const [newIgnore, setNewIgnore] = useState("");
+  const [skips, setSkips] = useState<{ suggestions: SkipSuggestion[]; chatNames: Record<string, string> } | null>(null);
+  const loadSkips = () =>
+    api
+      .skipSuggestions()
+      .then(setSkips)
+      .catch(() => setSkips(null));
+  useEffect(() => void loadSkips(), [s.syncIgnoreSenders, s.syncIgnoreChats]);
   const refresh = () =>
     api
       .syncSignInState()
@@ -1484,6 +1579,12 @@ function SyncPane() {
     };
   }, []);
   const enabled = !!s.syncEnabled;
+  const mail = mailOn(s);
+  const teamsParts = ["chats", "transcripts", "channel list"];
+  const teamsStale = (signIn?.stale ?? []).filter((x) => teamsParts.includes(x));
+  const teamsRejected = (signIn?.rejected ?? []).filter((x) => teamsParts.includes(x));
+  const mailStale = !!signIn?.signedIn && (signIn?.stale ?? []).includes("mail");
+  const mailRejected = (signIn?.rejected ?? []).includes("mail");
   const ignore = s.syncIgnoreSenders ?? [];
   const chosen = s.syncChannels ?? [];
   const addIgnore = () => {
@@ -1491,11 +1592,11 @@ function SyncPane() {
     if (v && !ignore.includes(v)) settings.update({ syncIgnoreSenders: [...ignore, v] });
     setNewIgnore("");
   };
-  const syncNow = () => {
+  const syncNow = (from?: string) => {
     setBusy(true);
     setReport(null);
     api
-      .syncNow()
+      .syncNow(from)
       .then((r) => {
         setReport(r);
         if (r.blocked) toast(r.blocked, undefined, "bad");
@@ -1514,103 +1615,69 @@ function SyncPane() {
   return (
     <>
       <section className="sgroup">
-        <h2 className="h3">Teams and Outlook sync</h2>
         <p className="muted">
-          Brainstead reads your own Teams chats, meeting transcripts, Inbox mail and calendar and writes what's new into sources/, ready to
-          ingest and listed in the Inbox — the same as a capture, without clicking. It uses the sign-in your open Teams tab already has,
-          handed over by the Teams extension, so keep Teams open in your browser; it reads only, and nothing leaves this computer but the
-          calls to Microsoft.
+          Reads your own Teams, Outlook and Slack into sources/, with each browser tab's sign-in.{" "}
+          <LearnMore topic="settings-sync" section="How it signs in" />
         </p>
-        <Switch label="Sync Teams and Outlook" on={enabled} onChange={(v) => settings.update({ syncEnabled: v })} />
-        <label className="srow" style={{ gap: 8 }}>
-          <span>On first sync, load the last</span>
-          <input
-            type="number"
-            className="input"
-            style={{ width: "4.5em" }}
-            min={0}
-            max={3650}
-            title="How many days of history the first sync loads for each chat and the mailbox (0 = no limit). Stops a big mailbox or long chat history flooding the Inbox."
-            value={s.syncInitialDays ?? 7}
-            onChange={(e) => settings.update({ syncInitialDays: Math.max(0, Math.min(3650, Math.floor(Number(e.target.value) || 0))) })}
-          />
-          <span>days (0 = everything).</span>
-        </label>
-        <div className="srow">
-          <Icon name="mail" style={{ color: (s.syncMailAttachments ?? true) ? "var(--green)" : "var(--ink3)" }} />
-          <div className="t">
-            <div className="pt">Bring in email attachments</div>
-            <div className="faint">
-              PDF, Word, PowerPoint, Excel and text files up to 30 MB, each its own source, linked from its thread. Others are listed by
-              name.
-            </div>
-          </div>
-          <Switch
-            label="Bring in email attachments"
-            on={s.syncMailAttachments ?? true}
-            onChange={(v) => settings.update({ syncMailAttachments: v })}
-          />
-        </div>
-        {s.readOnly && enabled && (
-          <div className="doc-banner warn" role="status">
-            <Icon name="info" size={14} />
-            <span>Read-only is on (Settings › Vault), so the sync is paused until it's switched off.</span>
-          </div>
-        )}
-      </section>
-
-      <section className="sgroup">
-        <h2 className="h3">Sign-in</h2>
         <div className="card">
-          <div className="srow">
-            <Icon name={signIn?.signedIn ? "check" : "info"} style={{ color: signIn?.signedIn ? "var(--green)" : "var(--ink3)" }} />
+          <label className="srow">
+            <Icon name="history" className="tint-off" />
             <div className="t">
-              <div className="pt">{signIn?.signedIn ? "Signed in" : "Not signed in"}</div>
+              <div className="pt">History on first sync</div>
               <div className="faint">
-                {signIn?.signedIn
-                  ? `Handed over ${signIn.handedOver ? ago(new Date(signIn.handedOver).getTime()) : "recently"}. Keep Teams, and Outlook for mail, open in Chrome tabs; the extensions keep it fresh.`
-                  : "Open Teams in Chrome (with the Teams extension loaded) so it can hand the sign-in over. It arrives within a few minutes."}
-                {signIn?.signedIn && signIn.stale.length > 0 && (
-                  <div style={{ color: "var(--amber)" }}>
-                    Gone stale: {signIn.stale.join(", ")}. Those wait until Teams renews them, within the hour while its tab is open.
-                  </div>
-                )}
-                {signIn?.signedIn && signIn.rejected.length > 0 && (
-                  <div style={{ color: "var(--amber)" }}>{rejectedText(signIn.rejected)}</div>
-                )}
-                {signIn?.handedOver && signIn.extensionOutdated !== null && (
-                  <div style={{ color: "var(--amber)" }}>{extensionOutdatedText(signIn)}</div>
-                )}
+                Days each new chat, channel and the mailbox starts with; 0 loads everything.{" "}
+                <LearnMore topic="settings-sync" section="First sync" />
               </div>
             </div>
-            {signIn?.signedIn && (
-              <button
-                type="button"
-                className="btn sm"
-                title="Forget the Teams sign-in on this computer"
-                onClick={() => void api.syncSignOut().then(refresh)}
-              >
-                Sign out
-              </button>
-            )}
+            <input
+              type="number"
+              className="input"
+              style={{ width: "4.5em" }}
+              min={0}
+              max={3650}
+              aria-label="Days of history on first sync"
+              title="Days of history the first sync loads for each chat, channel and the mailbox (0 = no limit), so a long history can't flood the Inbox"
+              value={s.syncInitialDays ?? 7}
+              onChange={(e) => settings.update({ syncInitialDays: Math.max(0, Math.min(3650, Math.floor(Number(e.target.value) || 0))) })}
+            />
+          </label>
+          <div className="srow">
+            <Icon name="refresh" className="tint-off" />
+            <div className="t">
+              <div className="pt">Sync now</div>
+              <div className="faint">It runs on its own every 15 minutes.</div>
+            </div>
+            <button
+              type="button"
+              className="btn sm"
+              title="Run one sync pass now: Teams and Outlook, and Slack, whichever are on"
+              disabled={busy || !(enabled || mail || s.syncSlack)}
+              onClick={() => syncNow()}
+            >
+              <Icon name="refresh" size={13} className={busy ? "spin" : undefined} />
+              {busy ? "Syncing…" : "Sync now"}
+            </button>
           </div>
-        </div>
-      </section>
-
-      <section className="sgroup">
-        <h2 className="h3">Sync now</h2>
-        <p className="faint">The sync runs on its own every so often. Run it now to check it's working.</p>
-        <div className="row">
-          <button
-            type="button"
-            className="btn"
-            title="Run one Teams and Outlook sync pass now"
-            disabled={busy || !enabled}
-            onClick={syncNow}
-          >
-            <Icon name="refresh" size={13} />
-            {busy ? "Syncing…" : "Sync now"}
-          </button>
+          <div className="srow">
+            <Icon name="history" className="tint-off" />
+            <div className="t">
+              <div className="pt">Fetch again</div>
+              <div className="faint">
+                Fetches everything since this day into the Inbox, without ingesting it.{" "}
+                <LearnMore topic="settings-sync" section="Fetch again" />
+              </div>
+            </div>
+            <DateField value={fetchFrom} onChange={setFetchFrom} label="Day to fetch from" />
+            <button
+              type="button"
+              className="btn sm"
+              title="Fetch Teams and Slack again from the day picked, and the whole Outlook Inbox; what's already in Sources is topped up, not doubled"
+              disabled={busy || !fetchFrom || fetchFrom > localToday() || !(enabled || mail || s.syncSlack)}
+              onClick={() => fetchFrom && syncNow(fetchFrom)}
+            >
+              {busy ? "Fetching…" : "Fetch"}
+            </button>
+          </div>
         </div>
         {report && !report.blocked && (
           <p className="faint" role="status">
@@ -1625,69 +1692,68 @@ function SyncPane() {
             <span>{p}</span>
           </div>
         ))}
-      </section>
-
-      <section className="sgroup">
-        <h2 className="h3">Mail to skip</h2>
-        <p className="faint">
-          Your Inbox syncs, apart from these senders or domains (and anything Outlook files under Other). Use “Don't sync this sender” on a
-          synced email to add one, or add one here.
-        </p>
-        <div className="row">
-          <input
-            className="input"
-            placeholder="name@example.com or example.com"
-            value={newIgnore}
-            onChange={(e) => setNewIgnore(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addIgnore()}
-          />
-          <button
-            type="button"
-            className="btn sm"
-            title="Add this sender or domain to the skip list"
-            onClick={addIgnore}
-            disabled={!newIgnore.trim()}
-          >
-            Add
-          </button>
-        </div>
-        {ignore.length > 0 && (
-          <div className="card">
-            {ignore.map((e) => (
-              <div key={e} className="srow">
-                <Icon name="mail" style={{ color: "var(--ink3)" }} />
-                <div className="t">
-                  <div className="pt mono">{e}</div>
-                </div>
-                <button
-                  type="button"
-                  className="btn sm"
-                  title={`Stop skipping ${e}`}
-                  onClick={() => settings.update({ syncIgnoreSenders: ignore.filter((x) => x !== e) })}
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
+        {s.readOnly && (enabled || mail || s.syncSlack) && (
+          <div className="doc-banner warn" role="status">
+            <Icon name="info" size={14} />
+            <span>Read-only is on (Settings › Vault), so the sync is paused until it's switched off.</span>
           </div>
         )}
       </section>
 
       <section className="sgroup">
-        <h2 className="h3">Channels</h2>
-        <p className="faint">1:1 and group chats sync automatically. Channels are off unless you choose them here.</p>
-        <div className="row">
-          <button
-            type="button"
-            className="btn sm"
-            title="List your Teams channels to choose which to sync"
-            disabled={!signIn?.signedIn || loadingChannels}
-            onClick={loadChannels}
-          >
-            <Icon name="refresh" size={13} className={loadingChannels ? "spin" : undefined} />
-            {loadingChannels ? "Loading…" : channels ? "Refresh channel list" : "Show my channels"}
-          </button>
+        <h2 className="h3">Teams</h2>
+        <div className="card">
+          <div className="srow">
+            <Icon name="chat" className={enabled && signIn?.teams ? "tint-ok" : "tint-off"} />
+            <div className="t">
+              <div className="pt">Sync Teams</div>
+              <div className="faint">
+                {signIn?.teams
+                  ? `Chats, meeting transcripts and your calendar. Signed in, handed over ${signIn.handedOver ? ago(new Date(signIn.handedOver).getTime()) : "recently"}; keep Teams open in a browser tab.`
+                  : "Chats, meeting transcripts and your calendar. Not signed in: open Teams in Chrome with the Teams capture extension loaded."}
+                {teamsStale.length > 0 && (
+                  <div className="tint-warn">
+                    Gone stale: {teamsStale.join(", ")}. Those wait until Teams renews them, within the hour while its tab is open.
+                  </div>
+                )}
+                {teamsRejected.length > 0 && <div className="tint-warn">{rejectedText(teamsRejected)}</div>}
+                {signIn?.handedOver && signIn.extensionOutdated !== null && (
+                  <div className="tint-warn">{extensionOutdatedText(signIn)}</div>
+                )}
+              </div>
+            </div>
+            {signIn?.teams && (
+              <button
+                type="button"
+                className="btn sm"
+                title="Forget the Teams sign-in on this computer (Outlook's stays)"
+                onClick={() => void api.syncSignOut().then(refresh)}
+              >
+                Sign out
+              </button>
+            )}
+            <Switch label="Sync Teams" on={enabled} onChange={(v) => settings.update({ syncEnabled: v, syncOutlook: mail })} />
+          </div>
         </div>
+
+        <h3 className="ssub">Teams channels</h3>
+        <p className="faint">1:1 and group chats sync on their own. Channels sync only when you switch them on here.</p>
+        {signIn?.teams ? (
+          <div className="row">
+            <button
+              type="button"
+              className="btn sm"
+              title="List your Teams channels to choose which to sync"
+              disabled={loadingChannels}
+              onClick={loadChannels}
+            >
+              <Icon name="refresh" size={13} className={loadingChannels ? "spin" : undefined} />
+              {loadingChannels ? "Loading…" : channels ? "Refresh channel list" : "Show my Teams channels"}
+            </button>
+          </div>
+        ) : (
+          <p className="faint">Sign in to Teams to choose channels.</p>
+        )}
         {channels && channels.length === 0 && <p className="faint">No channels found.</p>}
         {channels && channels.length > 0 && (
           <div className="card">
@@ -1706,7 +1772,256 @@ function SyncPane() {
           </div>
         )}
       </section>
+
+      <section className="sgroup">
+        <h2 className="h3">Outlook</h2>
+        <div className="card">
+          <div className="srow">
+            <Icon name="mail" className={mail && signIn?.outlook ? "tint-ok" : "tint-off"} />
+            <div className="t">
+              <div className="pt">Sync Outlook mail</div>
+              <div className="faint">
+                {signIn?.outlook
+                  ? "Your Inbox mail. Signed in; keep Outlook on the web open in a browser tab."
+                  : "Your Inbox mail. Not signed in: open Outlook on the web in Chrome with the Outlook capture extension loaded."}
+                {mailStale && <div className="tint-warn">Gone stale: mail. It waits until Outlook renews it, while its tab is open.</div>}
+                {mailRejected && <div className="tint-warn">{rejectedText(["mail"])}</div>}
+              </div>
+            </div>
+            {signIn?.outlook && (
+              <button
+                type="button"
+                className="btn sm"
+                title="Forget the Outlook mail sign-in on this computer (Teams' stays)"
+                onClick={() => void api.syncSignOutOutlook().then(refresh)}
+              >
+                Sign out
+              </button>
+            )}
+            <Switch label="Sync Outlook mail" on={mail} onChange={(v) => settings.update({ syncOutlook: v })} />
+          </div>
+          <div className="srow">
+            <Icon name="source" className={(s.syncMailAttachments ?? true) ? "tint-ok" : "tint-off"} />
+            <div className="t">
+              <div className="pt">Bring in email attachments</div>
+              <div className="faint">
+                Office, PDF and text files up to 30 MB, each its own source. <LearnMore topic="settings-sync" section="What syncs" />
+              </div>
+            </div>
+            <Switch
+              label="Bring in email attachments"
+              on={s.syncMailAttachments ?? true}
+              onChange={(v) => settings.update({ syncMailAttachments: v })}
+            />
+          </div>
+        </div>
+
+        <h3 className="ssub">Mail to skip</h3>
+        <p className="faint">Senders or domains whose mail isn&apos;t synced.</p>
+        <div className="row">
+          <input
+            className="input"
+            placeholder="name@example.com or example.com"
+            aria-label="Sender or domain to skip"
+            value={newIgnore}
+            onChange={(e) => setNewIgnore(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addIgnore()}
+          />
+          <button
+            type="button"
+            className="btn sm"
+            title="Add this sender or domain to the skip list"
+            onClick={addIgnore}
+            disabled={!newIgnore.trim()}
+          >
+            Add
+          </button>
+        </div>
+        {ignore.length > 0 && (
+          <div className="card">
+            {ignore.map((e) => (
+              <div key={e} className="srow">
+                <Icon name="mail" className="tint-off" />
+                <div className="t">
+                  <div className="pt mono">{e}</div>
+                </div>
+                <button
+                  type="button"
+                  className="btn sm"
+                  title={`Stop skipping ${e}`}
+                  onClick={() => settings.update({ syncIgnoreSenders: ignore.filter((x) => x !== e) })}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <SlackSync />
+
+      {!!skips?.suggestions.length && (
+        <section className="sgroup">
+          <h2 className="h3">Suggested from what you delete</h2>
+          <p className="faint">You keep moving these to the Trash; Skip leaves one out of the sync.</p>
+          <div className="card">
+            {skips.suggestions.map((x) => (
+              <div key={x.key} className="srow">
+                <Icon name={x.kind === "chat" ? "chat" : "mail"} className="tint-off" />
+                <div className="t">
+                  <div className={`pt ${x.kind === "sender" ? "mono" : ""}`}>{x.label}</div>
+                  <div className="faint">
+                    {x.kind === "chat" ? "Chat" : "Sender"} · deleted {x.deletes} times, last on {x.last}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn sm"
+                  title={x.kind === "chat" ? `Stop syncing the chat ${x.label}` : `Stop syncing mail from ${x.label}`}
+                  onClick={() => void acceptSkip(x).then(loadSkips)}
+                >
+                  Skip
+                </button>
+                <button
+                  type="button"
+                  className="btn sm ghost"
+                  title="Keep syncing it, and don't suggest it again"
+                  onClick={() => void api.skipSuggestionDismiss(x.key).then(loadSkips)}
+                >
+                  Not this one
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {(s.syncIgnoreChats ?? []).length > 0 && (
+        <section className="sgroup">
+          <h2 className="h3">Chats to skip</h2>
+          <p className="faint">Teams and Slack chats that don't sync. Skip one from a suggestion above.</p>
+          <div className="card">
+            {(s.syncIgnoreChats ?? []).map((id) => (
+              <div key={id} className="srow">
+                <Icon name="chat" className="tint-off" />
+                <div className="t">
+                  <div className="pt">{skips?.chatNames[id] ?? id}</div>
+                </div>
+                <button
+                  type="button"
+                  className="btn sm"
+                  title={`Sync ${skips?.chatNames[id] ?? "this chat"} again`}
+                  onClick={() => void unskipChat(id).then(loadSkips)}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </>
+  );
+}
+
+/** Slack sync (D-20261118-01): its switch with the sign-in the Slack sync extension handed over, and
+ *  the channels to sync. DMs and group DMs sync always, and threads that mention you. */
+function SlackSync() {
+  const s = useStore(settings);
+  const [state, setState] = useState<Awaited<ReturnType<typeof api.slackSignInState>> | null>(null);
+  const [channels, setChannels] = useState<{ id: string; name: string; workspace: string }[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const refresh = () =>
+    api
+      .slackSignInState()
+      .then(setState)
+      .catch(() => setState(null));
+  useEffect(() => void refresh(), []);
+  const chosen = s.slackChannels ?? [];
+  const load = () => {
+    setLoading(true);
+    setErr(null);
+    api
+      .slackChannels()
+      .then(setChannels)
+      .catch((e) => setErr(String(e)))
+      .finally(() => setLoading(false));
+  };
+  return (
+    <section className="sgroup">
+      <h2 className="h3">Slack</h2>
+      <div className="card">
+        <div className="srow">
+          <Icon name="chat" className={s.syncSlack && state?.signedIn ? "tint-ok" : "tint-off"} />
+          <div className="t">
+            <div className="pt">Sync Slack</div>
+            <div className="faint">
+              {state?.signedIn
+                ? `Signed in to ${state.workspaces.join(", ")}${state.handedOver ? `, handed over ${ago(new Date(state.handedOver).getTime())}` : ""}. Keep Slack open in a browser tab; the desktop app can stay open too.`
+                : "Not signed in: open Slack in Chrome with the Slack sync extension loaded."}
+            </div>
+          </div>
+          {state?.signedIn && (
+            <button
+              type="button"
+              className="btn sm"
+              title="Forget the Slack sign-in on this computer"
+              onClick={() => void api.slackSignOut().then(refresh)}
+            >
+              Sign out
+            </button>
+          )}
+          <Switch label="Sync Slack" on={!!s.syncSlack} onChange={(v) => settings.update({ syncSlack: v })} />
+        </div>
+      </div>
+
+      <h3 className="ssub">Slack channels</h3>
+      <p className="faint">
+        DMs, group DMs and threads that mention you sync on their own. Channels sync only when you switch them on here.
+      </p>
+      {state?.signedIn ? (
+        <div className="row">
+          <button
+            type="button"
+            className="btn sm"
+            title="List your Slack channels to choose which to sync"
+            disabled={loading}
+            onClick={load}
+          >
+            <Icon name="refresh" size={13} className={loading ? "spin" : undefined} />
+            {loading ? "Loading…" : channels ? "Refresh channel list" : "Show my Slack channels"}
+          </button>
+        </div>
+      ) : (
+        <p className="faint">Sign in to Slack to choose channels.</p>
+      )}
+      {err && (
+        <div className="doc-banner warn" role="alert">
+          <Icon name="info" size={14} />
+          <span>{err}</span>
+        </div>
+      )}
+      {channels && channels.length === 0 && <p className="faint">No channels found.</p>}
+      {channels && channels.length > 0 && (
+        <div className="card">
+          {channels.map((c) => (
+            <div key={c.id} className="srow">
+              <div className="t">
+                <div className="pt">{c.name}</div>
+                <div className="faint">{c.workspace}</div>
+              </div>
+              <Switch
+                label={`Sync ${c.name}`}
+                on={chosen.includes(c.id)}
+                onChange={(v) => settings.update({ slackChannels: v ? [...chosen, c.id] : chosen.filter((x) => x !== c.id) })}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1741,10 +2056,10 @@ function CapturePane() {
   return (
     <>
       <section className="sgroup">
-        <h2 className="h3">Outlook and Teams in the browser</h2>
+        <h2 className="h3">Outlook, Teams and Slack in the browser</h2>
         <p className="muted">
-          Two browser extensions send what's open in Outlook on the web or Teams into the vault's sources/ folder, ready to ingest and
-          listed in the Inbox. They reach Brainstead through a small helper the browser starts, so they work while Brainstead is closed.
+          Browser extensions that capture Outlook and Teams into sources/, even while Brainstead is closed.{" "}
+          <LearnMore topic="settings-capture" section="What each extension captures" />
         </p>
         {s.readOnly && (
           <div className="doc-banner warn" role="status">
@@ -1764,7 +2079,7 @@ function CapturePane() {
           const last = st?.recent.find((c) => c.extension === e.ext);
           return (
             <div key={e.id} className="srow">
-              <Icon name={last?.path ? "check" : "source"} style={{ color: last?.path ? "var(--green)" : "var(--ink3)" }} />
+              <Icon name={last?.path ? "check" : "source"} className={last?.path ? "tint-ok" : "tint-off"} />
               <div className="t">
                 <div className="pt">
                   {e.name}
@@ -1826,7 +2141,7 @@ function CapturePane() {
                   ", ",
                 )}${browsers.some((b) => !b.current) ? " (another copy of Brainstead registered it; this one takes over when it starts)" : ""}.`
             : "No Chromium browser was found on this computer: install Chrome, Edge or Brave, then open this page again."}{" "}
-          The extensions' IDs are fixed, so there's nothing to copy or paste.
+          <LearnMore topic="settings-capture" section="Install the extensions" />
         </p>
       </section>
       {!!st?.recent.length && (
@@ -1835,7 +2150,7 @@ function CapturePane() {
           <div className="card">
             {st.recent.map((c) => (
               <div key={c.at} className="srow">
-                <Icon name={c.path ? "check" : "x"} style={{ color: c.path ? "var(--green)" : "var(--red)" }} />
+                <Icon name={c.path ? "check" : "x"} className={c.path ? "tint-ok" : "tint-bad"} />
                 <div className="t">
                   <div className="pt ell">{c.path ? c.path.replace(/^sources\//, "").replace(/\.md$/, "") : `${c.what} not captured`}</div>
                   <div className="faint">
@@ -1919,7 +2234,7 @@ function About() {
           <div className="t">
             <div className="pt">The app's logs</div>
             <div className="faint">
-              What Brainstead noted while running, one file a day in the app data folder's logs. Older files are deleted.
+              One file a day in the app data folder; older ones are deleted. <LearnMore topic="settings-about" section="Find the logs" />
             </div>
           </div>
           <label className="faint" htmlFor="logdays">

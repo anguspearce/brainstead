@@ -25,6 +25,9 @@ mod now_playing;
 mod preview_win;
 #[cfg(target_os = "macos")]
 mod quick_look;
+// Windows' secret store uses it (`other.rs`); built for tests everywhere.
+#[cfg(any(windows, test))]
+mod secret_chunks;
 #[cfg(windows)]
 mod single_instance_win;
 #[cfg(windows)]
@@ -413,6 +416,12 @@ pub fn set_open_at_login(on: bool) -> Result<(), String> {
 
 pub fn reveal(path: &Path) -> Result<(), String> {
     imp::reveal(path)
+}
+
+/// Opens a web link in the browser the capture extensions run in: Chrome when it's there (a Teams
+/// reply is typed in by the Teams extension, D-20261120-05), else the default browser.
+pub fn open_in_chrome(url: &str) -> Result<(), String> {
+    imp::open_in_chrome(url)
 }
 
 /// Whether Brainstead has Full Disk Access: Some(false) when a protected file can't be opened,
@@ -1038,6 +1047,13 @@ fn secret_service() -> String {
     } else {
         "Brainstead".into()
     }
+}
+
+/// Asks another copy of the app, by its process, to quit as its Dock menu's Quit does: for a dev
+/// build to have the installed app step aside when that copy doesn't take the request
+/// (`bridge::one_copy`). macOS: an AppleScript quit to its app bundle; elsewhere nothing.
+pub fn quit_other_copy(pid: u32) {
+    imp::quit_other_copy(pid)
 }
 
 #[cfg(test)]

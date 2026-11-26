@@ -91,6 +91,19 @@ pub fn reveal(path: &Path) -> Result<(), String> {
     }
 }
 
+pub fn open_in_chrome(url: &str) -> Result<(), String> {
+    let chrome = Command::new("/usr/bin/open").args(["-b", "com.google.Chrome", url]).status().map(|s| s.success()).unwrap_or(false);
+    if chrome {
+        return Ok(());
+    }
+    let st = Command::new("/usr/bin/open").arg(url).status().map_err(|e| e.to_string())?;
+    if st.success() {
+        Ok(())
+    } else {
+        Err("The browser didn't open the link.".into())
+    }
+}
+
 /// Opening (not just looking up) a file only Full Disk Access unlocks. TCC's own database is there
 /// on every Mac; Safari's bookmarks are the usual fallback.
 pub fn full_disk_access() -> Option<bool> {
@@ -391,8 +404,17 @@ pub fn secret_get(service: &str, account: &str) -> Option<String> {
 }
 
 pub fn secret_set(service: &str, account: &str, value: &str) -> Result<(), String> {
-    security_framework::passwords::set_generic_password(service, account, value.as_bytes())
-        .map_err(|e| format!("Couldn't keep the sign-in in the Keychain: {e}"))
+    use security_framework::passwords::{delete_generic_password, set_generic_password};
+    match set_generic_password(service, account, value.as_bytes()) {
+        // errSecDuplicateItem from the update after a refused add: the Keychain kept turning
+        // handovers away with it, an item this build couldn't update in place. It's replaced.
+        Err(e) if e.code() == -25299 => {
+            let _ = delete_generic_password(service, account);
+            set_generic_password(service, account, value.as_bytes())
+        }
+        r => r,
+    }
+    .map_err(|e| format!("Couldn't keep the sign-in in the Keychain: {e}"))
 }
 
 pub fn secret_delete(service: &str, account: &str) -> Result<(), String> {
@@ -401,6 +423,15 @@ pub fn secret_delete(service: &str, account: &str) -> Result<(), String> {
         Err(e) if e.code() != -25300 => Err(format!("Couldn't remove the sign-in from the Keychain: {e}")),
         _ => Ok(()),
     }
+}
+
+/// Quits the app bundle process `pid` belongs to, through AppleScript (a normal Quit).
+pub fn quit_other_copy(pid: u32) {
+    let Ok(out) = std::process::Command::new("ps").args(["-o", "comm=", "-p", &pid.to_string()]).output() else { return };
+    let exe = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let Some(bundle) = exe.find(".app/").map(|i| &exe[..i + 4]) else { return };
+    let script = format!("tell application \"{}\" to quit", bundle.replace('"', ""));
+    let _ = std::process::Command::new("osascript").args(["-e", &script]).output();
 }
 
 #[cfg(test)]

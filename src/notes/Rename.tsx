@@ -161,7 +161,7 @@ export function RenameDialog({ path, title }: { path: string; title?: string }) 
               <>
                 <button
                   type="button"
-                  className="rnhead"
+                  className={`rnhead ${ready.changes.length ? "" : "quiet"}`}
                   onClick={() => setOpen(!open)}
                   aria-expanded={open}
                   title={

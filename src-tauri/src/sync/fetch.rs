@@ -24,6 +24,79 @@ pub struct ChatMessage {
     pub time: DateTime<Utc>,
     /// Files shared with the message. They live in OneDrive or SharePoint, so only their links come.
     pub files: Vec<SharedFile>,
+    /// Pictures pasted into the message, kept in Teams' own picture store (`pictures` brings them in).
+    pub pictures: Vec<ChatPicture>,
+}
+
+/// A picture pasted into a chat message: where Teams keeps it and, once the sync has dealt with it,
+/// the source it became or why it didn't.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ChatPicture {
+    /// Its id in Teams' picture store, the same however the message is read.
+    pub object: String,
+    /// The full-size picture's address (`views/imgo`), on a Teams picture store host only.
+    pub url: String,
+    pub path: Option<String>,
+    pub note: Option<String>,
+}
+
+/// Whether `host` is Teams' picture store (AMS): the only place a chat picture is fetched from, so the
+/// chat sign-in is never sent anywhere a message's HTML happens to point.
+pub fn picture_host(host: &str) -> bool {
+    let h = host.to_ascii_lowercase();
+    h.ends_with(".asm.skype.com") || h == "asyncgw.teams.microsoft.com" || h.ends_with(".asyncgw.teams.microsoft.com")
+}
+
+/// The pictures pasted into a message's HTML: its `<img>` tags pointing at Teams' picture store
+/// (`https://<host>/v1/objects/<id>/views/<view>`), each once. Emoji and stickers come from other
+/// hosts and are left out.
+pub fn chat_pictures(html: &str) -> Vec<ChatPicture> {
+    let mut out: Vec<ChatPicture> = Vec::new();
+    let lower = html.to_ascii_lowercase();
+    let mut from = 0;
+    while let Some(at) = lower[from..].find("<img").map(|i| i + from) {
+        let end = lower[at..].find('>').map_or(lower.len(), |i| at + i);
+        from = end;
+        let tag = &html[at..end];
+        let Some(src) = attr(tag, "src") else { continue };
+        let src = src.replace("&amp;", "&");
+        let Some(rest) = src.strip_prefix("https://") else { continue };
+        let Some((host, path)) = rest.split_once('/') else { continue };
+        if !picture_host(host) {
+            continue;
+        }
+        let Some(obj) = path.strip_prefix("v1/objects/").and_then(|p| p.split('/').next()) else { continue };
+        if obj.is_empty() || !obj.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.') {
+            continue;
+        }
+        if out.iter().any(|p| p.object == obj) {
+            continue;
+        }
+        out.push(ChatPicture { object: obj.to_string(), url: format!("https://{host}/v1/objects/{obj}/views/imgo"), ..Default::default() });
+    }
+    out
+}
+
+/// An attribute's value in an HTML tag (quoted with " or ').
+fn attr(tag: &str, name: &str) -> Option<String> {
+    let lower = tag.to_ascii_lowercase();
+    let mut from = 0;
+    while let Some(i) = lower[from..].find(name).map(|i| i + from) {
+        from = i + name.len();
+        let before_ok = i > 0 && lower.as_bytes()[i - 1].is_ascii_whitespace();
+        let rest = lower[from..].trim_start();
+        if !before_ok || !rest.starts_with('=') {
+            continue;
+        }
+        let start = tag.len() - rest.len() + 1;
+        let v = tag[start..].trim_start();
+        let q = v.chars().next()?;
+        if q == '"' || q == '\'' {
+            return v[1..].split(q).next().map(str::to_string);
+        }
+        return v.split(|c: char| c.is_whitespace() || c == '>').next().map(str::to_string);
+    }
+    None
 }
 
 /// A file shared in a Teams chat: its name and where it lives.
@@ -122,15 +195,90 @@ pub fn parse_conversations(body: &Value) -> Vec<Conv> {
         .unwrap_or_default()
 }
 
-/// A conversation's recent messages, oldest first. One page (enough for a day of a normal chat).
-pub fn chat_messages(client: &Client, s: &SignIn, conv_id: &str) -> Result<Vec<ChatMessage>, String> {
+/// How many messages a page of a chat holds. A pass that needs no more reads one page, and in a
+/// quiet chat that can be as many days, so the sync state remembers more days than this per chat
+/// (`state::DAYS_CAP`).
+pub const CHAT_PAGE: usize = 200;
+/// The most pages of one chat a pass reads, however much is still to write.
+pub const CHAT_PAGES: usize = 10;
+/// The most pages of one chat a back-fill reads: it goes back to its first day.
+pub const BACKFILL_CHAT_PAGES: usize = 50;
+
+/// One page of a conversation's messages, oldest first, and chatsvc's link to the page before it
+/// when there is one.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ChatPage {
+    pub messages: Vec<ChatMessage>,
+    pub older: Option<String>,
+}
+
+pub fn parse_page(body: &Value) -> ChatPage {
+    // An empty page ends the chat, whatever link comes with it.
+    let any = body["messages"].as_array().is_some_and(|a| !a.is_empty());
+    let older = body["_metadata"]["backwardLink"].as_str().filter(|l| any && !l.is_empty()).map(str::to_string);
+    ChatPage { messages: parse_messages(body), older }
+}
+
+/// A conversation's recent messages, oldest first, and whether older ones were left unread (the
+/// oldest day may then be only its end). The newest page always; then the pages before it, at most
+/// `most` in all, until `enough` (given the messages so far and how many pages they took) says the
+/// oldest day read needs no more. A page that can't be read ends the reading there.
+pub fn chat_messages(
+    client: &Client,
+    s: &SignIn,
+    conv_id: &str,
+    most: usize,
+    enough: impl FnMut(&[ChatMessage], usize) -> bool,
+) -> Result<(Vec<ChatMessage>, bool), String> {
+    let base = s.chat_service.trim_end_matches('/');
     let url = format!(
-        "{}/v1/users/ME/conversations/{}/messages?view=msnp24Equivalent|supportsMessageProperties&pageSize=200",
-        s.chat_service.trim_end_matches('/'),
+        "{base}/v1/users/ME/conversations/{}/messages?view=msnp24Equivalent|supportsMessageProperties&pageSize={CHAT_PAGE}",
         urlencode(conv_id)
     );
-    let body = api::get_chatsvc(client, &url)?;
-    Ok(parse_messages(&body))
+    let first = parse_page(&api::get_chatsvc(client, &url)?);
+    let older = |link: &str| {
+        // The link is followed with the sign-in's tokens, so only on the chat service itself.
+        if !link.strip_prefix(base).is_some_and(|rest| rest.starts_with('/')) {
+            crate::applog!("sync: a chat's earlier page is somewhere else; left unread");
+            return None;
+        }
+        match api::get_chatsvc(client, link) {
+            Ok(body) => Some(parse_page(&body)),
+            Err(e) => {
+                crate::applog!("sync: a chat's earlier page wasn't given ({e}); left unread");
+                None
+            }
+        }
+    };
+    Ok(page_back(first, most, older, enough))
+}
+
+/// [`chat_messages`] over any source of pages: `older` reads the page a link leads to, or None when
+/// it can't.
+pub fn page_back(
+    first: ChatPage,
+    most: usize,
+    mut older: impl FnMut(&str) -> Option<ChatPage>,
+    mut enough: impl FnMut(&[ChatMessage], usize) -> bool,
+) -> (Vec<ChatMessage>, bool) {
+    let mut msgs = first.messages;
+    let mut link = first.older;
+    let mut pages = 1;
+    while let Some(l) = link.take() {
+        if pages >= most || enough(&msgs, pages) {
+            return (msgs, true);
+        }
+        let Some(page) = older(&l) else { return (msgs, true) };
+        pages += 1;
+        // Pages can overlap by a message: each is kept once.
+        let have: std::collections::HashSet<&str> = msgs.iter().map(|m| m.id.as_str()).collect();
+        let mut all: Vec<ChatMessage> = page.messages.into_iter().filter(|m| !have.contains(m.id.as_str())).collect();
+        all.append(&mut msgs);
+        all.sort_by_key(|m| m.time);
+        msgs = all;
+        link = page.older;
+    }
+    (msgs, false)
 }
 
 pub fn parse_messages(body: &Value) -> Vec<ChatMessage> {
@@ -146,9 +294,10 @@ pub fn parse_messages(body: &Value) -> Vec<ChatMessage> {
                     }
                     let content = m["content"].as_str().unwrap_or("");
                     let body = if mt == "RichText/Html" { html::to_text(content) } else { content.trim().to_string() };
-                    // A message that only shares a file has no text but is kept, for the file's link.
+                    // A message that only shares a file or a picture has no text but is kept, for them.
                     let files = shared_files(m);
-                    if body.is_empty() && files.is_empty() {
+                    let pictures = if mt == "RichText/Html" { chat_pictures(content) } else { Vec::new() };
+                    if body.is_empty() && files.is_empty() && pictures.is_empty() {
                         return None;
                     }
                     let time = m["originalarrivaltime"].as_str().or_else(|| m["composetime"].as_str())?;
@@ -159,6 +308,7 @@ pub fn parse_messages(body: &Value) -> Vec<ChatMessage> {
                         body,
                         time,
                         files,
+                        pictures,
                     })
                 })
                 .collect()
@@ -177,6 +327,15 @@ pub fn chat_display_name(msgs: &[ChatMessage], me: &str) -> String {
     names.join(", ")
 }
 
+/// A chat message's attachments in its source: its pictures (brought into the vault, or a note saying
+/// why not), then the files shared in it. A picture-only message has no text, and these stand in for it.
+fn attachments_of(m: &ChatMessage) -> Vec<Attachment> {
+    m.pictures
+        .iter()
+        .map(|p| Attachment { name: "Picture".into(), path: p.path.clone(), url: None, note: p.note.clone() })
+        .chain(m.files.iter().map(|f| Attachment { name: f.name.clone(), url: Some(f.url.clone()), ..Default::default() }))
+        .collect()
+}
 /// Builds a Teams chat capture for one local `day` of a conversation. The title is the chat's topic,
 /// else the people who wrote that day, else `fallback` (the chat's partner across the whole thread, so
 /// a 1:1 day where only the user wrote still names the other person), else "Teams chat". The file is
@@ -200,6 +359,8 @@ pub fn chat_capture(conv: &Conv, day_msgs: &[ChatMessage], me: &str, url_base: &
     let messages = day_msgs
         .iter()
         .map(|m| Message {
+            branch: None,
+            replies: Vec::new(),
             sender: m.sender.clone(),
             from_address: None,
             to: None,
@@ -207,14 +368,11 @@ pub fn chat_capture(conv: &Conv, day_msgs: &[ChatMessage], me: &str, url_base: &
             recipients: None,
             date: Some(m.time.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string()),
             body: m.body.clone(),
-            attachments: m
-                .files
-                .iter()
-                .map(|f| Attachment { name: f.name.clone(), url: Some(f.url.clone()), ..Default::default() })
-                .collect(),
+            attachments: attachments_of(m),
         })
         .collect();
     Some(Capture::Teams(Thread {
+        continues: None,
         url: format!("{url_base}/_#/conversations/{}", urlencode(&conv.id)),
         title,
         kind: Some("chat".into()),
@@ -284,6 +442,9 @@ pub struct Mail {
     pub web_link: String,
     /// Outlook says it carries attachments (inline images in a signature count).
     pub has_attachments: bool,
+    /// Its ConversationIndex (MAPI 0x0071): the thread's 22-byte header, then 5 bytes for each reply
+    /// down to it, so a reply's index is its parent's plus 5 bytes. Empty when Outlook didn't give it.
+    pub index: Vec<u8>,
 }
 
 const MAIL_SELECT: &str = "Subject,From,ToRecipients,Body,ReceivedDateTime,WebLink,ConversationId,HasAttachments";
@@ -297,16 +458,118 @@ pub fn inbox(client: &Client, top: usize) -> Result<Vec<Mail>, String> {
     Ok(parse_mail(&body))
 }
 
+/// The whole Inbox, newest first, page by page, at most `most` messages.
+pub fn inbox_all(client: &Client, most: usize) -> Result<Vec<Mail>, String> {
+    let mut url = format!(
+        "https://outlook.office.com/api/v2.0/me/mailfolders/inbox/messages?$top=100&$orderby=ReceivedDateTime%20desc&$select={MAIL_SELECT}"
+    );
+    let mut out = Vec::new();
+    loop {
+        let body = api::get_json(client, Service::Outlook, &url)?;
+        out.extend(parse_mail(&body));
+        match body["@odata.nextLink"].as_str() {
+            Some(next) if out.len() < most => url = next.to_string(),
+            _ => break,
+        }
+    }
+    out.truncate(most);
+    Ok(out)
+}
+
+/// The ConversationIndex as an extended property (PidTagConversationIndex), for the reply tree.
+const INDEX_EXPAND: &str = "&$expand=SingleValueExtendedProperties($filter=PropertyId%20eq%20'Binary%200x0071')";
+
+/// The most pages of one mail thread that are read (each of the `top` messages asked for).
+const THREAD_PAGES: usize = 10;
+
 /// Every message of one conversation across all folders (so a thread includes the user's own sent
-/// replies), oldest first.
+/// replies), oldest first, each with its ConversationIndex when Outlook gives it (asked again
+/// without it when it won't, so the thread still comes, in date order). `top` is the page size: a
+/// longer thread is read page by page, [`THREAD_PAGES`] at most.
 pub fn conversation(client: &Client, conversation_id: &str, top: usize) -> Result<Vec<Mail>, String> {
     // Filter by ConversationId only — combining it with $orderby makes Outlook reject the query as an
     // "InefficientFilter", so we sort by received time ourselves below.
     let filter = format!("ConversationId eq '{}'", conversation_id.replace('\'', "''"));
     let url = format!("https://outlook.office.com/api/v2.0/me/messages?$filter={}&$top={top}&$select={MAIL_SELECT}", urlencode(&filter));
-    let mut msgs = parse_mail(&api::get_json(client, Service::Outlook, &url)?);
+    let get = |u: &str| api::get_json(client, Service::Outlook, u);
+    let pages = match paged(&format!("{url}{INDEX_EXPAND}"), THREAD_PAGES, get) {
+        Ok(p) => p,
+        Err(e) => {
+            crate::applog!("sync: a thread's reply tree wasn't given ({e}); reading it in date order");
+            paged(&url, THREAD_PAGES, get)?
+        }
+    };
+    let mut msgs: Vec<Mail> = pages.iter().flat_map(parse_mail).collect();
     msgs.sort_by_key(|m| m.received);
     Ok(msgs)
+}
+
+/// The pages of an Outlook listing from `url` on, following each page's `@odata.nextLink`, `most`
+/// pages at most. `get` reads one page.
+fn paged(url: &str, most: usize, mut get: impl FnMut(&str) -> Result<Value, String>) -> Result<Vec<Value>, String> {
+    let mut url = url.to_string();
+    let mut out = Vec::new();
+    loop {
+        let body = get(&url)?;
+        // The link is followed with the mail token, so only back to Outlook.
+        let next = body["@odata.nextLink"].as_str().filter(|n| n.starts_with("https://outlook.office.com/")).map(str::to_string);
+        out.push(body);
+        match next {
+            Some(n) if out.len() < most => url = n,
+            _ => break,
+        }
+    }
+    Ok(out)
+}
+
+/// The user's mail address, from the mail sign-in's claims, lower-cased; empty when it doesn't say.
+pub fn my_address(s: &SignIn) -> String {
+    let t = s.tokens.get(Service::Outlook.key()).map(|t| t.token.as_str()).unwrap_or("");
+    let c = auth::claims(t);
+    ["upn", "preferred_username", "unique_name", "email"]
+        .iter()
+        .find_map(|k| c[*k].as_str().filter(|v| v.contains('@')))
+        .unwrap_or("")
+        .to_lowercase()
+}
+
+/// The conversations of the mail the user sent since `since`, in any folder (Sent Items, or archived
+/// with the rest of the thread), newest first, deduped, at most `most` messages looked at. `me` is
+/// the user's address ([`my_address`]); empty takes every message sent in the window, which only
+/// costs more threads read again.
+pub fn sent_since(client: &Client, since: DateTime<Utc>, me: &str, most: usize) -> Result<Vec<String>, String> {
+    let filter = format!("SentDateTime ge {} and IsDraft eq false", since.format("%Y-%m-%dT%H:%M:%SZ"));
+    let mut url = format!(
+        "https://outlook.office.com/api/v2.0/me/messages?$filter={}&$orderby=SentDateTime%20desc&$top=100&$select=ConversationId,From,SentDateTime",
+        urlencode(&filter)
+    );
+    let mut out: Vec<String> = Vec::new();
+    let mut looked = 0;
+    loop {
+        let body = api::get_json(client, Service::Outlook, &url)?;
+        out.extend(sent_by(&body, me).into_iter().filter(|c| !out.contains(c)).collect::<Vec<_>>());
+        looked += body["value"].as_array().map_or(0, Vec::len);
+        match body["@odata.nextLink"].as_str() {
+            Some(next) if looked < most => url = next.to_string(),
+            _ => break,
+        }
+    }
+    Ok(out)
+}
+
+/// The conversation ids of the messages in a page that `me` sent (all of them when `me` is empty),
+/// in order, deduped.
+pub fn sent_by(body: &Value, me: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for m in body["value"].as_array().into_iter().flatten() {
+        let from = m["From"]["EmailAddress"]["Address"].as_str().unwrap_or("").to_lowercase();
+        let conv = m["ConversationId"].as_str().unwrap_or("");
+        if conv.is_empty() || (!me.is_empty() && from != me) || out.iter().any(|c| c == conv) {
+            continue;
+        }
+        out.push(conv.to_string());
+    }
+    out
 }
 
 /// Inbox and folders searched for `query` (Outlook REST `$search`, by relevance), newest handling
@@ -345,6 +608,7 @@ pub fn parse_mail(body: &Value) -> Vec<Mail> {
                         body: if is_html { html::to_text(content) } else { content.trim().to_string() },
                         web_link: m["WebLink"].as_str().unwrap_or("").to_string(),
                         has_attachments: m["HasAttachments"].as_bool().unwrap_or(false),
+                        index: conversation_index(m),
                     })
                 })
                 .collect()
@@ -419,7 +683,93 @@ pub fn attachment_bytes(client: &Client, message_id: &str, attachment_id: &str) 
 /// An Outlook capture for a whole email thread: one message block per mail, oldest first. A one-mail
 /// thread renders the same as a single email. `msgs` must be non-empty.
 /// `attachments` holds each message's files, by position (shorter or empty when there are none).
-pub fn thread_capture(msgs: &[Mail], attachments: &[Vec<Attachment>]) -> Option<Capture> {
+/// A message's ConversationIndex from its extended properties, or nothing.
+fn conversation_index(m: &Value) -> Vec<u8> {
+    use base64::Engine;
+    m["SingleValueExtendedProperties"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|p| p["PropertyId"].as_str().is_some_and(|id| id.to_lowercase().replace("0x00", "0x").ends_with("0x71")))
+        .and_then(|p| p["Value"].as_str())
+        .and_then(|v| base64::engine::general_purpose::STANDARD.decode(v).ok())
+        .filter(|b| b.len() >= 22 && (b.len() - 22) % 5 == 0)
+        .unwrap_or_default()
+}
+
+/// The order to write a thread's messages in, and each one's branch when it forked (D-20261118-06):
+/// the reply tree from their ConversationIndex (a reply's is its parent's plus 5 bytes). The first
+/// branch follows the earliest reply at each fork; every other reply at a fork starts a branch,
+/// headed with whose message it answers, when, and who it went to. A thread that never forked, or
+/// whose messages lack an index, stays in date order with no branches. `msgs` are oldest first.
+pub fn branched(msgs: &[Mail]) -> Vec<(usize, Option<String>)> {
+    let plain = || (0..msgs.len()).map(|i| (i, None)).collect();
+    if msgs.len() < 3 || msgs.iter().any(|m| m.index.is_empty()) {
+        return plain();
+    }
+    // Each message's parent: the message whose index is the longest prefix of its own.
+    let parent: Vec<Option<usize>> = msgs
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            msgs.iter()
+                .enumerate()
+                .filter(|(j, o)| *j != i && o.index.len() < m.index.len() && m.index.starts_with(&o.index))
+                .max_by_key(|(_, o)| o.index.len())
+                .map(|(j, _)| j)
+        })
+        .collect();
+    let children = |p: Option<usize>| -> Vec<usize> { (0..msgs.len()).filter(|&i| parent[i] == p).collect() };
+    if !(0..msgs.len()).any(|i| children(Some(i)).len() > 1) && children(None).len() <= 1 {
+        return plain();
+    }
+    let local = |m: &Mail| m.received.with_timezone(&Local).format("%-d %b %H:%M").to_string();
+    let mut out: Vec<(usize, Option<String>)> = Vec::new();
+    // Branches still to write: (first message, its heading).
+    let mut todo: std::collections::VecDeque<(usize, String)> = std::collections::VecDeque::new();
+    let roots = children(None);
+    let mut n = 1;
+    todo.push_back((roots[0], "Branch 1".to_string()));
+    for &r in &roots[1..] {
+        n += 1;
+        todo.push_back((r, format!("Branch {n}: a new message, {}, to {}", local(&msgs[r]), msgs[r].to)));
+    }
+    while let Some((start, heading)) = todo.pop_front() {
+        let mut at = Some(start);
+        while let Some(i) = at {
+            out.push((i, Some(heading.clone())));
+            let kids = children(Some(i));
+            for &k in kids.iter().skip(1) {
+                n += 1;
+                let to = if msgs[k].to.is_empty() { String::new() } else { format!(", to {}", msgs[k].to) };
+                todo.push_back((k, format!("Branch {n}: replies to {}'s message of {}{to}", msgs[i].from, local(&msgs[i]))));
+            }
+            at = kids.first().copied();
+        }
+    }
+    out
+}
+
+/// The thread's ConversationIndex header (its first 22 bytes, in hex), the same on every message of
+/// it; None when Outlook gave no index.
+pub fn thread_header(msgs: &[Mail]) -> Option<String> {
+    msgs.iter().find(|m| m.index.len() >= 22).map(|m| hex(&m.index[..22]))
+}
+
+/// The header of the thread this one replies into, when its first message is itself a reply (its
+/// index longer than a header): a thread carried on under a new subject keeps the old one's header
+/// (D-20261118-06). The caller checks it's another thread's.
+pub fn replies_into(msgs: &[Mail]) -> Option<String> {
+    let first = msgs.iter().filter(|m| !m.index.is_empty()).min_by_key(|m| m.index.len())?;
+    (first.index.len() > 22).then(|| hex(&first.index[..22]))
+}
+
+fn hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// `continues`: the name of the source of the thread this one carries on from, if any.
+pub fn thread_capture(msgs: &[Mail], attachments: &[Vec<Attachment>], continues: Option<String>) -> Option<Capture> {
     let first = msgs.first()?;
     // Title from the most recent message's subject (replies keep the subject, possibly "Re:").
     let title = msgs.last().map(|m| m.subject.clone()).unwrap_or_else(|| first.subject.clone());
@@ -427,10 +777,12 @@ pub fn thread_capture(msgs: &[Mail], attachments: &[Vec<Attachment>]) -> Option<
         .last()
         .and_then(|m| (!m.web_link.is_empty()).then(|| m.web_link.clone()))
         .unwrap_or_else(|| "https://outlook.office.com/mail/".into());
-    let messages = msgs
-        .iter()
-        .enumerate()
-        .map(|(i, m)| Message {
+    let messages = branched(msgs)
+        .into_iter()
+        .map(|(i, branch)| (i, &msgs[i], branch))
+        .map(|(i, m, branch)| Message {
+            branch,
+            replies: Vec::new(),
             sender: m.from.clone(),
             from_address: Some(m.from_address.clone()).filter(|a| !a.is_empty()),
             to: Some(m.to.clone()).filter(|t| !t.is_empty()),
@@ -441,7 +793,7 @@ pub fn thread_capture(msgs: &[Mail], attachments: &[Vec<Attachment>]) -> Option<
             attachments: attachments.get(i).cloned().unwrap_or_default(),
         })
         .collect();
-    Some(Capture::Outlook(Thread { url: link, title, kind: None, messages, meeting_date: None, meeting_start: None }))
+    Some(Capture::Outlook(Thread { url: link, title, kind: None, messages, meeting_date: None, meeting_start: None, continues }))
 }
 
 // ── Calendar ───────────────────────────────────────────────────────────────────────────
@@ -509,7 +861,7 @@ fn meeting_thread_id(e: &Value) -> Option<String> {
 /// The messages people typed in a meeting's chat, as webcapture messages, with a divider ahead of
 /// them — for folding into the meeting's transcript source (D-20261025-02). Empty on any failure or
 /// when the meeting had no chat, so it never blocks the transcript.
-fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
+fn meeting_chat(client: &Client, s: &SignIn, ev: &Event, pictures: Pictures) -> Vec<Message> {
     let Some(thread_id) = &ev.thread_id else { return Vec::new() };
     let url = format!(
         "{}/v1/users/ME/conversations/{}/messages?view=msnp24Equivalent|supportsMessageProperties&pageSize=200",
@@ -519,7 +871,7 @@ fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
     // A recurring meeting's chat thread carries every session's messages, so keep only this meeting's
     // day (local) — the chat that belongs with this transcript.
     let day = ev.start.with_timezone(&Local).date_naive();
-    let msgs: Vec<ChatMessage> = api::get_chatsvc(client, &url)
+    let mut msgs: Vec<ChatMessage> = api::get_chatsvc(client, &url)
         .map(|b| parse_messages(&b))
         .unwrap_or_default()
         .into_iter()
@@ -528,9 +880,20 @@ fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
     if msgs.is_empty() {
         return Vec::new();
     }
+    pictures(&mut msgs);
+    meeting_chat_messages(&msgs)
+}
+
+/// Brings in the pictures pasted into a meeting's chat, as the chat sync does for other chats.
+pub type Pictures<'a> = &'a mut dyn FnMut(&mut [ChatMessage]);
+
+/// A meeting chat's messages, under their heading, as they go after the transcript.
+fn meeting_chat_messages(msgs: &[ChatMessage]) -> Vec<Message> {
     let mut out =
         vec![divider(brainstead_core::webcapture::MEETING_CHAT_HEADING, "Messages typed in the meeting chat during the meeting:")];
     out.extend(msgs.iter().map(|m| Message {
+        branch: None,
+        replies: Vec::new(),
         sender: m.sender.clone(),
         from_address: None,
         to: None,
@@ -538,7 +901,7 @@ fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
         recipients: None,
         date: Some(m.time.with_timezone(&Local).format("%Y-%m-%d %H:%M").to_string()),
         body: m.body.clone(),
-        attachments: m.files.iter().map(|f| Attachment { name: f.name.clone(), url: Some(f.url.clone()), ..Default::default() }).collect(),
+        attachments: attachments_of(m),
     }));
     out
 }
@@ -546,7 +909,7 @@ fn meeting_chat(client: &Client, s: &SignIn, ev: &Event) -> Vec<Message> {
 /// The transcript for a meeting thread, as a Teams transcript capture, when one exists. Best-effort:
 /// returns Ok(None) when the meeting had no transcript (not recorded, or still processing). The
 /// meeting's chat, when any, is folded in after the transcript.
-pub fn transcript_capture(client: &Client, s: &SignIn, ev: &Event) -> Result<Option<Capture>, String> {
+pub fn transcript_capture(client: &Client, s: &SignIn, ev: &Event, pictures: Pictures) -> Result<Option<Capture>, String> {
     let Some(thread_id) = &ev.thread_id else { return Ok(None) };
     let filter = format!("ItemProperties/Default/MeetingThreadId eq '{thread_id}'");
     let select = "ItemId,ItemProperties/Default/TranscriptJson,ItemProperties/Default/RecordingStartDateTime,Visualization";
@@ -575,7 +938,7 @@ pub fn transcript_capture(client: &Client, s: &SignIn, ev: &Event) -> Result<Opt
     // Fold the meeting chat in after the transcript, when there is one. Both parts are then labelled
     // with a divider so a reader (or the meeting-note model) can tell the spoken transcript from the
     // typed chat; a transcript with no chat is left unlabelled, as before.
-    let chat = meeting_chat(client, s, ev);
+    let chat = meeting_chat(client, s, ev, pictures);
     if !chat.is_empty() {
         thread.messages.insert(0, divider("Meeting transcript", "What was said in the meeting (times are offsets from the start):"));
         thread.messages.extend(chat);
@@ -586,6 +949,8 @@ pub fn transcript_capture(client: &Client, s: &SignIn, ev: &Event) -> Result<Opt
 /// A heading-only message used to label a section within a capture.
 fn divider(heading: &str, note: &str) -> Message {
     Message {
+        branch: None,
+        replies: Vec::new(),
         sender: heading.to_string(),
         from_address: None,
         to: None,
@@ -648,6 +1013,8 @@ pub fn parse_transcript(body: &Value, ev: &Event) -> Result<Option<Capture>, Str
                 return None;
             }
             Some(Message {
+                branch: None,
+                replies: Vec::new(),
                 sender: e["speakerDisplayName"].as_str().filter(|s| !s.is_empty()).unwrap_or("Unknown").to_string(),
                 from_address: None,
                 to: None,
@@ -664,6 +1031,7 @@ pub fn parse_transcript(body: &Value, ev: &Event) -> Result<Option<Capture>, Str
     }
     let start_local = ev.start.with_timezone(&Local);
     Ok(Some(Capture::Teams(Thread {
+        continues: None,
         url: "https://teams.microsoft.com/".to_string(),
         title: ev.subject.clone(),
         kind: Some("transcript".into()),
@@ -688,12 +1056,16 @@ pub fn my_name(s: &SignIn) -> String {
     s.tokens.values().find_map(|t| auth::claims(&t.token)["name"].as_str().map(str::to_string)).unwrap_or_default()
 }
 
+/// The local calendar day (`YYYY-MM-DD`) a message came on.
+pub fn local_day(t: DateTime<Utc>) -> String {
+    t.with_timezone(&Local).format("%Y-%m-%d").to_string()
+}
+
 /// Groups messages by their local calendar day (`YYYY-MM-DD`).
 pub fn by_local_day(msgs: &[ChatMessage]) -> std::collections::BTreeMap<String, Vec<ChatMessage>> {
     let mut map: std::collections::BTreeMap<String, Vec<ChatMessage>> = std::collections::BTreeMap::new();
     for m in msgs {
-        let day = m.time.with_timezone(&Local).format("%Y-%m-%d").to_string();
-        map.entry(day).or_default().push(m.clone());
+        map.entry(local_day(m.time)).or_default().push(m.clone());
     }
     map
 }
@@ -739,7 +1111,7 @@ mod tests {
             path: Some("sources/Email. Attachment. Orbit App proposal - 2026-10-24.pdf".into()),
             ..Default::default()
         }]];
-        match thread_capture(&mail, &files).unwrap() {
+        match thread_capture(&mail, &files, None).unwrap() {
             Capture::Outlook(th) => assert_eq!(th.messages[0].attachments, files[0]),
             _ => panic!("expected an Outlook capture"),
         }
@@ -771,6 +1143,89 @@ mod tests {
         }
     }
 
+    fn chat_page(ids: std::ops::Range<i64>, older: Option<&str>) -> ChatPage {
+        let start: DateTime<Utc> = "2026-10-01T00:00:00Z".parse().unwrap();
+        let messages = ids
+            .map(|i| ChatMessage {
+                id: i.to_string(),
+                sender: "Maya".into(),
+                body: format!("message {i}"),
+                time: start + chrono::Duration::minutes(i),
+                files: vec![],
+                pictures: vec![],
+            })
+            .collect();
+        ChatPage { messages, older: older.map(str::to_string) }
+    }
+
+    #[test]
+    fn a_chat_is_read_back_page_by_page_until_enough() {
+        // Three pages, newest first: 40..60, then 20..41 (one message again), then 0..20.
+        let older = |link: &str| match link {
+            "p2" => Some(chat_page(20..41, Some("p3"))),
+            "p3" => Some(chat_page(0..20, None)),
+            _ => None,
+        };
+        let ids = |m: &[ChatMessage]| m.iter().map(|m| m.id.parse::<i64>().unwrap()).collect::<Vec<_>>();
+
+        // Never enough: the whole chat, oldest first, the repeated message once, nothing left unread.
+        let (all, more) = page_back(chat_page(40..60, Some("p2")), 10, older, |_, _| false);
+        assert_eq!(ids(&all), (0..60).collect::<Vec<_>>());
+        assert!(!more);
+
+        // Enough after the second page: the third is left, and the caller is told.
+        let mut asked = Vec::new();
+        let (some, more) = page_back(chat_page(40..60, Some("p2")), 10, older, |m, pages| {
+            asked.push((m.len(), pages));
+            pages == 2
+        });
+        assert_eq!(ids(&some), (20..60).collect::<Vec<_>>());
+        assert!(more);
+        assert_eq!(asked, [(20, 1), (40, 2)]);
+
+        // The cap on pages stops it too, as does a page that can't be read.
+        assert_eq!(page_back(chat_page(40..60, Some("p2")), 2, older, |_, _| false).0.len(), 40);
+        assert!(page_back(chat_page(40..60, Some("p2")), 1, older, |_, _| false).1);
+        let (kept, more) = page_back(chat_page(40..60, Some("gone")), 10, older, |_, _| false);
+        assert_eq!((kept.len(), more), (20, true));
+
+        // One page with nothing before it: all there is.
+        assert_eq!(page_back(chat_page(0..5, None), 10, older, |_, _| false), (chat_page(0..5, None).messages, false));
+    }
+
+    #[test]
+    fn a_chat_pages_link_to_the_one_before_is_read() {
+        let msg = json!({"id": "1", "messagetype": "Text", "content": "hi", "imdisplayname": "Maya", "originalarrivaltime": "2026-10-24T09:00:00.000Z"});
+        let link = "https://chat.example/v1/users/ME/conversations/c/messages?syncState=abc";
+        let page = parse_page(&json!({"messages": [msg], "_metadata": {"backwardLink": link}}));
+        assert_eq!((page.messages.len(), page.older.as_deref()), (1, Some(link)));
+        assert_eq!(parse_page(&json!({"messages": [msg], "_metadata": {}})).older, None);
+        // An empty page is the chat's start, link or no link.
+        assert_eq!(parse_page(&json!({"messages": [], "_metadata": {"backwardLink": link}})).older, None);
+    }
+
+    #[test]
+    fn a_long_mail_thread_is_read_page_by_page() {
+        let first = "https://outlook.office.com/api/v2.0/me/messages?$top=2";
+        let next = "https://outlook.office.com/api/v2.0/me/messages?$top=2&$skip=2";
+        let mut asked = Vec::new();
+        let mut get = |u: &str| {
+            asked.push(u.to_string());
+            Ok(match u {
+                u if u == first => json!({"value": [{"Id": "1"}, {"Id": "2"}], "@odata.nextLink": next}),
+                u if u == next => json!({"value": [{"Id": "3"}]}),
+                _ => return Err("not a page".to_string()),
+            })
+        };
+        let pages = paged(first, 10, &mut get).unwrap();
+        assert_eq!(pages.iter().map(|p| p["value"].as_array().unwrap().len()).sum::<usize>(), 3);
+        // The cap on pages holds, and a link that leaves Outlook isn't followed.
+        assert_eq!(paged(first, 1, &mut get).unwrap().len(), 1);
+        let mut away = |_: &str| Ok(json!({"value": [], "@odata.nextLink": "https://elsewhere.example/more"}));
+        assert_eq!(paged(first, 10, &mut away).unwrap().len(), 1);
+        assert_eq!(asked, [first, next, first]);
+    }
+
     #[test]
     fn parses_chat_messages_and_skips_system_events() {
         let body = json!({"messages": [
@@ -790,8 +1245,8 @@ mod tests {
         let conv = Conv { id: "19:x@unq.gbl.spaces".into(), topic: String::new(), kind: ConvKind::OneOnOne };
         let t = "2026-10-24T09:00:00Z".parse().unwrap();
         let msgs = vec![
-            ChatMessage { id: "1".into(), sender: "Maya".into(), body: "hi".into(), time: t, files: vec![] },
-            ChatMessage { id: "2".into(), sender: "Me Myself".into(), body: "hello".into(), time: t, files: vec![] },
+            ChatMessage { id: "1".into(), sender: "Maya".into(), body: "hi".into(), time: t, files: vec![], pictures: vec![] },
+            ChatMessage { id: "2".into(), sender: "Me Myself".into(), body: "hello".into(), time: t, files: vec![], pictures: vec![] },
         ];
         let cap = chat_capture(&conv, &msgs, "Me Myself", "https://teams.microsoft.com", "2026-10-24", "Maya").unwrap();
         match &cap {
@@ -813,7 +1268,14 @@ mod tests {
     fn a_one_on_one_day_where_only_i_wrote_still_names_the_partner() {
         let conv = Conv { id: "19:x@unq.gbl.spaces".into(), topic: String::new(), kind: ConvKind::OneOnOne };
         let t = "2026-10-14T16:00:00Z".parse().unwrap();
-        let msgs = vec![ChatMessage { id: "1".into(), sender: "Me Myself".into(), body: "any update?".into(), time: t, files: vec![] }];
+        let msgs = vec![ChatMessage {
+            id: "1".into(),
+            sender: "Me Myself".into(),
+            body: "any update?".into(),
+            time: t,
+            files: vec![],
+            pictures: vec![],
+        }];
         let cap = chat_capture(&conv, &msgs, "Me Myself", "https://teams.microsoft.com", "2026-10-14", "Marnus Freeman").unwrap();
         match cap {
             Capture::Teams(th) => assert_eq!(th.title, "Marnus Freeman", "falls back to the partner"),
@@ -861,7 +1323,7 @@ mod tests {
         assert_eq!(mail[0].from_address, "lena@acme.example");
         assert_eq!(mail[0].body, "Point one\nPoint two");
         assert!(!mail[0].has_attachments);
-        match thread_capture(&mail, &[]).unwrap() {
+        match thread_capture(&mail, &[], None).unwrap() {
             Capture::Outlook(th) => {
                 assert_eq!(th.title, "Re: Roadmap", "titled by the latest message");
                 assert_eq!(th.messages.len(), 2, "the whole thread, incl. the reply");
@@ -879,6 +1341,38 @@ mod tests {
         let e2 = json!({"skypeTeamsData": "{\"cid\":\"19:meeting_XYZ@thread.v2\"}"});
         assert_eq!(meeting_thread_id(&e2).as_deref(), Some("19:meeting_XYZ@thread.v2"));
         assert_eq!(meeting_thread_id(&json!({})), None);
+    }
+
+    #[test]
+    fn a_picture_only_message_in_a_meeting_chat_does_not_refuse_the_transcript() {
+        // A picture pasted alone into a meeting's chat has no text: the picture stands in for it, as in
+        // other chats, or the capture check refuses the whole transcript on every pass.
+        let pic = ChatMessage {
+            id: "1".into(),
+            sender: "Maya".into(),
+            body: String::new(),
+            time: "2026-11-25T07:10:00Z".parse().unwrap(),
+            files: vec![],
+            pictures: vec![ChatPicture {
+                object: "0-weu-d1-abc".into(),
+                path: Some("sources/Teams. Picture. Steerco - 2026-11-25.png".into()),
+                ..Default::default()
+            }],
+        };
+        let mut messages = vec![divider("Meeting transcript", "What was said:")];
+        messages.extend(meeting_chat_messages(&[pic]));
+        let cap = Capture::Teams(Thread {
+            continues: None,
+            url: "https://teams.microsoft.com/".into(),
+            title: "Steerco".into(),
+            kind: Some("transcript".into()),
+            messages,
+            meeting_date: Some("2026-11-25".into()),
+            meeting_start: Some("09:00".into()),
+        });
+        assert_eq!(cap.check(), Ok(()));
+        let (_, text) = brainstead_core::webcapture::render(&cap, Utc::now(), "2026-11-25");
+        assert!(text.contains("![[sources/Teams. Picture. Steerco - 2026-11-25.png|Picture]]"), "{text}");
     }
 
     #[test]
@@ -919,5 +1413,176 @@ mod tests {
         let multiday = Event { end: "2026-10-27T12:00:00Z".parse().unwrap(), ..ev.clone() };
         let err = parse_transcript(&json!({"value": [item("2026-10-26T12:00:00Z")]}), &multiday).unwrap_err();
         assert!(err.contains("2026-10-26") && err.contains("2026-10-24"), "{err}");
+    }
+}
+
+#[cfg(test)]
+mod branch_tests {
+    use super::*;
+
+    /// A message `mins` after 09:00 on 2 Oct, its index the thread's header plus `path` (one 5-byte
+    /// step per reply, each step's first byte its number).
+    fn mail(id: &str, from: &str, to: &str, mins: i64, path: &[u8]) -> Mail {
+        let mut index = vec![1u8; 22];
+        for &p in path {
+            index.extend([p, 0, 0, 0, 0]);
+        }
+        Mail {
+            id: id.into(),
+            conversation_id: "c".into(),
+            subject: "Re: Launch".into(),
+            from: from.into(),
+            from_address: String::new(),
+            to: to.into(),
+            received: chrono::DateTime::parse_from_rfc3339("2026-10-02T09:00:00Z").unwrap().with_timezone(&Utc)
+                + chrono::Duration::minutes(mins),
+            body: format!("{from} says {id}"),
+            web_link: String::new(),
+            has_attachments: false,
+            index,
+        }
+    }
+
+    #[test]
+    fn reads_the_index_outlook_gives() {
+        use base64::Engine;
+        let v = base64::engine::general_purpose::STANDARD.encode([7u8; 27]);
+        let m = serde_json::json!({"SingleValueExtendedProperties": [{"PropertyId": "Binary 0x71", "Value": v}]});
+        assert_eq!(conversation_index(&m), vec![7u8; 27]);
+        // Not a ConversationIndex's shape, or none: nothing.
+        let odd = base64::engine::general_purpose::STANDARD.encode([7u8; 25]);
+        assert!(conversation_index(&serde_json::json!({"SingleValueExtendedProperties": [{"PropertyId": "Binary 0x71", "Value": odd}]}))
+            .is_empty());
+        assert!(conversation_index(&serde_json::json!({})).is_empty());
+    }
+
+    #[test]
+    fn a_forked_thread_is_written_branch_by_branch() {
+        // Maya starts; Lena and Jonas both reply to her; Maya answers Lena; Sam answers Jonas.
+        let msgs = vec![
+            mail("a", "Maya", "Lena, Jonas", 0, &[]),
+            mail("b", "Lena", "Maya", 10, &[1]),
+            mail("c", "Jonas", "Maya, Sam", 20, &[2]),
+            mail("d", "Maya", "Lena", 30, &[1, 1]),
+            mail("e", "Sam", "Jonas", 40, &[2, 1]),
+        ];
+        let b = branched(&msgs);
+        let order: Vec<&str> = b.iter().map(|(i, _)| msgs[*i].id.as_str()).collect();
+        assert_eq!(order, ["a", "b", "d", "c", "e"]);
+        assert_eq!(b[0].1.as_deref(), Some("Branch 1"));
+        let second = b[3].1.as_deref().unwrap();
+        assert!(second.starts_with("Branch 2: replies to Maya's message of ") && second.ends_with(", to Maya, Sam"), "{second}");
+        assert_eq!(b[4].1.as_deref(), Some(second));
+
+        let (_, text) = brainstead_core::webcapture::render(&thread_capture(&msgs, &[], None).unwrap(), Utc::now(), "2026-10-02");
+        let heads: Vec<&str> = text.lines().filter(|l| l.starts_with("##")).collect();
+        assert_eq!(heads[0], "## Branch 1");
+        assert!(heads[1].starts_with("### Maya — "), "{heads:?}");
+        assert!(heads[4].starts_with("## Branch 2: replies to Maya"), "{heads:?}");
+        assert!(heads[5].starts_with("### Jonas — "), "{heads:?}");
+        assert!(text.contains("Sam says e"));
+    }
+
+    #[test]
+    fn a_thread_under_a_new_subject_links_back_to_the_one_it_continues() {
+        let old = vec![mail("a", "Maya", "Lena", 0, &[]), mail("b", "Lena", "Maya", 10, &[1])];
+        // Lena's reply to b under a new subject: Outlook gives it a new ConversationId, but its index
+        // still starts with the old thread's header.
+        let new = vec![mail("c", "Lena", "Maya", 20, &[1, 1]), mail("d", "Maya", "Lena", 30, &[1, 1, 1])];
+        let mut st = super::super::state::State::default();
+        st.mark_thread("old", "sources/emails/Email. Thread. Launch - 2026-10-02.md", 2);
+        st.mark_header("old", &thread_header(&old).unwrap());
+        assert_eq!(replies_into(&old), None, "a thread that starts fresh replies into nothing");
+        let h = replies_into(&new).unwrap();
+        assert_eq!(st.continued("old", &h), None, "not itself");
+        let c = st.continued("new", &h);
+        assert_eq!(c.as_deref(), Some("Email. Thread. Launch - 2026-10-02"));
+        let (_, text) = brainstead_core::webcapture::render(&thread_capture(&new, &[], c).unwrap(), Utc::now(), "2026-10-02");
+        assert!(text.contains("**Continues:** [[Email. Thread. Launch - 2026-10-02]]"), "{text}");
+    }
+
+    #[test]
+    fn a_fork_inside_a_fork_gets_its_own_branch() {
+        let msgs = vec![
+            mail("a", "Maya", "Lena", 0, &[]),
+            mail("b", "Lena", "Maya", 10, &[1]),
+            mail("c", "Maya", "Lena", 20, &[1, 1]),
+            mail("d", "Jonas", "Lena", 30, &[1, 2]),
+        ];
+        let b = branched(&msgs);
+        let order: Vec<&str> = b.iter().map(|(i, _)| msgs[*i].id.as_str()).collect();
+        assert_eq!(order, ["a", "b", "c", "d"]);
+        assert!(b[3].1.as_deref().unwrap().starts_with("Branch 2: replies to Lena's message of"), "{b:?}");
+    }
+
+    #[test]
+    fn a_thread_that_never_forked_or_has_no_index_is_as_before() {
+        let line = vec![mail("a", "Maya", "Lena", 0, &[]), mail("b", "Lena", "Maya", 10, &[1]), mail("c", "Maya", "Lena", 20, &[1, 1])];
+        assert!(branched(&line).iter().all(|(_, b)| b.is_none()));
+        let mut forked = vec![mail("a", "Maya", "Lena", 0, &[]), mail("b", "Lena", "Maya", 10, &[1]), mail("c", "Jonas", "Maya", 20, &[2])];
+        forked[2].index.clear();
+        assert_eq!(branched(&forked), vec![(0, None), (1, None), (2, None)]);
+        let (_, text) = brainstead_core::webcapture::render(&thread_capture(&line, &[], None).unwrap(), Utc::now(), "2026-10-02");
+        assert!(!text.contains("Branch") && text.contains("\n## Maya — "), "{text}");
+    }
+}
+
+#[cfg(test)]
+mod sent_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn keeps_the_threads_of_mail_the_user_sent() {
+        let page = json!({"value": [
+            {"ConversationId": "c1", "From": {"EmailAddress": {"Address": "Lena@Acme.example"}}},
+            {"ConversationId": "c2", "From": {"EmailAddress": {"Address": "maya@acme.example"}}},
+            {"ConversationId": "c1", "From": {"EmailAddress": {"Address": "lena@acme.example"}}},
+            {"ConversationId": "c3", "From": {"EmailAddress": {"Address": "lena@acme.example"}}},
+            {"ConversationId": "", "From": {"EmailAddress": {"Address": "lena@acme.example"}}}
+        ]});
+        assert_eq!(sent_by(&page, "lena@acme.example"), vec!["c1", "c3"]);
+        // Not knowing the user's address takes every thread in the window.
+        assert_eq!(sent_by(&page, ""), vec!["c1", "c2", "c3"]);
+    }
+
+    #[test]
+    fn reads_the_users_address_from_the_mail_sign_in() {
+        use base64::Engine;
+        let enc = |v: &Value| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(serde_json::to_vec(v).unwrap());
+        let jwt = format!("{}.{}.sig", enc(&json!({"alg": "RS256"})), enc(&json!({"upn": "Lena@Acme.example", "name": "Lena"})));
+        let mut s = SignIn::default();
+        s.tokens.insert(Service::Outlook.key().into(), auth::Token { token: jwt, expires: 0 });
+        assert_eq!(my_address(&s), "lena@acme.example");
+        assert_eq!(my_address(&SignIn::default()), "");
+    }
+
+    #[test]
+    fn finds_pictures_pasted_into_a_chat_message_and_keeps_a_picture_only_message() {
+        let html = concat!(
+            r#"<p>The slide for Thursday</p><p><img itemtype="http://schema.skype.com/AMSImage" alt="image" "#,
+            r#"src="https://eu-api.asm.skype.com/v1/objects/0-weu-d1-abc123/views/imgo?v=1&amp;x=2" width="250"></p>"#,
+            r#"<img src='https://eu-prod.asyncgw.teams.microsoft.com/v1/objects/0-neu-d4-def/views/imgpsh_fullsize_anim'>"#,
+            r#"<img src="https://eu-api.asm.skype.com/v1/objects/0-weu-d1-abc123/views/imgt1">"#,
+            r#"<img itemtype="http://schema.skype.com/Emoji" src="https://statics.teams.cdn.office.net/evergreen-assets/smile.png">"#,
+            r#"<img src="https://evil.example/v1/objects/0-x/views/imgo">"#,
+        );
+        let pics = chat_pictures(html);
+        assert_eq!(
+            pics.iter().map(|p| p.url.as_str()).collect::<Vec<_>>(),
+            vec![
+                "https://eu-api.asm.skype.com/v1/objects/0-weu-d1-abc123/views/imgo",
+                "https://eu-prod.asyncgw.teams.microsoft.com/v1/objects/0-neu-d4-def/views/imgo",
+            ],
+            "Teams' picture store only, each once, full size; emoji and other hosts left out"
+        );
+        let body = json!({"messages": [{
+            "id": "1", "messagetype": "RichText/Html", "imdisplayname": "Maya",
+            "originalarrivaltime": "2026-11-23T09:00:00Z",
+            "content": "<p><img src=\"https://eu-api.asm.skype.com/v1/objects/0-weu-d1-abc/views/imgo\"></p>"
+        }]});
+        let msgs = parse_messages(&body);
+        assert_eq!(msgs.len(), 1, "a message that's only a picture is kept");
+        assert_eq!(msgs[0].pictures[0].object, "0-weu-d1-abc");
     }
 }

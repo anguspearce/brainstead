@@ -5,7 +5,7 @@ screens: [trash]
 order: 17
 summary: Files moved to the vault's Trash, to put back or delete for good.
 ---
-Trashed files go to the vault's `.trash` folder, not the system's Trash or Recycle Bin, and stay there until you empty it. Sync clients and other apps that use the folder see them too.
+Trashed files go to the vault's `.trash` folder, not the system's Trash or Recycle Bin, and stay there until you empty it. Sync clients and other apps that use the folder see them too. While the vault is read-only, a banner says so and Restore, **Delete forever** and **Empty the Trash** are greyed out.
 
 ## Move a file to the Trash
 Right-click a file in a list and choose **Move to the Trash**. For an open note, it's also on the ⋯ menu, the **Note** menu and `⌘K` (**Move this note to the Trash**). A message offers **Undo**. A Teams transcript's links are first pointed at its meeting note, when it has one, so no page is left linking to a missing file.
@@ -23,7 +23,7 @@ Newest deletions come first. Each row shows the layer, name, the folder it **Was
 ## Put files back
 **Restore** on a row puts the file back where it was. To restore several, tick them (the header box ticks all) and click **Restore** above the list.
 
-If another file now has the old path, the row says so; **Restore as…** restores to a path you type.
+If another file now has the old path, the row says so; **Restore as…** restores to a path you type. A restore never replaces a file: if one turns up at that path meanwhile, the restore is refused and asks for another name.
 
 An assistant's restores are listed in [Changes](app:review) with **Revert**; one into `Templates/`, or of a note with code that runs, waits there for you to accept.
 

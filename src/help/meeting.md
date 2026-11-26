@@ -5,7 +5,7 @@ screens: [meeting]
 order: 21
 summary: Turn a Teams meeting transcript in your sources into a meeting or 1-1 note.
 ---
-The AI writes a meeting or 1-1 note from a Teams transcript in `sources/`, using your meeting template. Open this screen from **Tools › Meeting notes** in the sidebar or on [Sources](app:sources), or from ⌘K.
+The AI writes a meeting or 1-1 note from a Teams transcript in `sources/`, using your meeting template. Open this screen from **Meeting notes** under Assistant in the sidebar or on [Sources](app:sources), or from ⌘K.
 
 **Make and ingest a meeting note** (**Make a meeting note** when ingesting a made note is off in [Settings › AI assistants](app:settings/assistants)) does it all in one step when Brainstead is sure of the note's type, name and date and no note of that name exists yet: it writes the note, ingests it and moves the transcript to the Trash. Otherwise it opens this screen at the question. Start it from:
 
@@ -52,7 +52,7 @@ The note is made in the vault, listed in [Changes](app:review) with Revert. Brai
 
 Turn either step off in [Settings › AI assistants](app:settings/assistants), under Meeting notes. With both off, Brainstead asks after each note: tick what you want and click **Go**, or **Neither**.
 
-A note held in Changes isn't in the vault yet, so the offer comes when you (or an assistant) accept it there. A note is held when a scheduled run's note failed a check, or when it adds code that runs, such as a `dataviewjs` block.
+A note held in Changes isn't in the vault yet, so the offer comes when you (or an assistant) accept it there. A note is held when a scheduled run's note failed a check, or when it adds or changes code that runs, such as a `dataviewjs` block.
 
 An assistant can list the transcripts as **Show** does and draft a note of any of the four types when you ask. Like **Make the note**, it needs a name and a date (the transcript's topic and today's date don't count), and won't draft a note that exists already or is being drafted; for a note that exists already it can do **Ingest the existing note** instead. A note drafted by an assistant nobody is watching is ingested the same way, with changes that fail a check held for you.
 

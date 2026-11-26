@@ -45,7 +45,7 @@ static WIKILINK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(!?)\\?\[\\?\[(
 
 /// Tags as markdown vault editors read them: `#` then letters, digits, `_`, `-` and `/` for nesting, with at
 /// least one character that isn't a digit, after the start of the line or a space or bracket.
-static TAG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?:^|[\s(\[,;])#([\p{L}\p{N}_\-/]+)").unwrap());
+pub(crate) static TAG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?:^|[\s(\[,;])#([\p{L}\p{N}_\-/]+)").unwrap());
 
 /// The key a link target and a file name are compared by: NFC, lower case, the base name without
 /// `.md` or `.txt` (other extensions stay, so `![[pic.png]]` never resolves to a note called pic).

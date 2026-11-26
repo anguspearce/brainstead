@@ -13,7 +13,8 @@ import { openDoc } from "../nav";
 import { useVaultVersion } from "../state";
 import { reportEditError } from "../taskModel";
 import { toast } from "../Toast";
-import { TopBar } from "../TopBar";
+import { ReadOnlyBanner, TopBar } from "../TopBar";
+import { settings, useStore } from "../store";
 import { ago, Dialog, fmtBytes, LayerTag, SearchBox, Seg, Squeeze } from "../ui";
 import { errText } from "./actions";
 import { folderOf } from "./filename";
@@ -113,6 +114,7 @@ export function TrashScreen() {
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   });
+  const readOnly = !!useStore(settings).readOnly;
   const count = (l: Layer) => (rows ?? []).filter((r) => r.layer === l).length;
 
   const restore = async (es: TrashEntry[]) => {
@@ -166,17 +168,26 @@ export function TrashScreen() {
                 l,
                 `${LABEL[l]}s`,
                 `Only the ${LABEL[l].toLowerCase()}s in the Trash`,
-                ` · ${count(l)}`,
+                ` ${count(l)}`,
               ]),
           ]}
         />
-        <span title={rows?.length ? "Delete everything in the Trash for good; asks first" : "The Trash is already empty"}>
-          <button type="button" className="btn" disabled={!rows?.length} onClick={() => setConfirm({ what: "empty" })}>
+        <span
+          title={
+            readOnly
+              ? "The vault is read-only, so the Trash can't be emptied"
+              : rows?.length
+                ? "Delete everything in the Trash for good; asks first"
+                : "The Trash is already empty"
+          }
+        >
+          <button type="button" className="btn" disabled={readOnly || !rows?.length} onClick={() => setConfirm({ what: "empty" })}>
             <Icon name="trash" size={14} />
             <Squeeze full={`Empty the Trash${total ? ` · frees ${fmtBytes(total)}` : ""}`} tight="Empty the Trash" />
           </button>
         </span>
       </TopBar>
+      {readOnly && <ReadOnlyBanner blocks="nothing here can be restored or deleted" />}
       <div className="body trash">
         {!!rows?.length && (
           <div className="ftools">
@@ -204,6 +215,7 @@ export function TrashScreen() {
               type="button"
               className="btn sm"
               title="Put the selected files back where they were"
+              disabled={readOnly}
               onClick={() => void restore(picked)}
             >
               <Icon name="back" size={12} />
@@ -213,6 +225,7 @@ export function TrashScreen() {
               type="button"
               className="btn sm danger"
               title="Delete the selected files for good; asks first"
+              disabled={readOnly}
               onClick={() => setConfirm({ what: "delete", ids: picked.map((r) => r.id) })}
             >
               <Icon name="x" size={12} />
@@ -330,19 +343,27 @@ export function TrashScreen() {
                         type="button"
                         className="btn sm"
                         title="Put it back under a different path, since its old one is taken"
+                        disabled={readOnly}
                         onClick={() => setConfirm({ what: "restore-as", entry: r })}
                       >
                         Restore as…
                       </button>
                     ) : (
                       <>
-                        <button type="button" className="btn sm ghost" title="Put it back where it was" onClick={() => void restore([r])}>
+                        <button
+                          type="button"
+                          className="btn sm ghost"
+                          title="Put it back where it was"
+                          disabled={readOnly}
+                          onClick={() => void restore([r])}
+                        >
                           Restore
                         </button>
                         <button
                           type="button"
                           className="btn sm ghost"
                           title="Put it back under a different path"
+                          disabled={readOnly}
                           onClick={() => setConfirm({ what: "restore-as", entry: r })}
                         >
                           Restore as…

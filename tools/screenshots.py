@@ -138,6 +138,83 @@ def env(data=DEMO / "data"):
     return {**os.environ, "HOME": str(DEMO / "Home"), "USERPROFILE": str(DEMO / "Home"), "BRAINSTEAD_DATA": str(data)}
 
 
+def demo_sync_activity(data):
+    """Sync passes (src-tauri/src/sync/log.rs) and ingest runs (src-tauri/src/ingest.rs) over the
+    last hours, for Activity › Sync & ingest and the menu-bar window's line."""
+    now = datetime.datetime.now().replace(microsecond=0)
+
+    def at(minutes):
+        return (now - datetime.timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%S")
+
+    day = now.strftime("%Y-%m-%d")
+    maya, lena = f"sources/Teams. Chat. Maya Chen - {day}.md", f"sources/Slack. Chat. Lena Ortiz - {day}.md"
+    thread, launch = f"sources/Email. Thread. Orbit App soft launch - {day}.md", f"sources/Teams. Chat. Launch crew - {day}.md"
+    passes = [
+        {
+            "at": at(4),
+            "backfill": False,
+            "added": [launch],
+            "toppedUp": [maya],
+            "problems": [],
+            "blocked": None,
+            "repeats": 0,
+            "last": None,
+        },
+        {
+            "at": at(48),
+            "backfill": False,
+            "added": [],
+            "toppedUp": [],
+            "problems": ["Slack isn't signed in: open Slack in the browser with the Slack extension loaded."],
+            "blocked": None,
+            "repeats": 3,
+            "last": at(33),
+        },
+        {
+            "at": at(95),
+            "backfill": False,
+            "added": [maya, lena, thread],
+            "toppedUp": [],
+            "problems": [],
+            "blocked": None,
+            "repeats": 0,
+            "last": None,
+        },
+    ]
+    (data / "sync-log.json").write_text(json.dumps({"lastPass": at(4), "passes": passes}, indent=2))
+    runs = data / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+
+    def step(name, status):
+        return {"name": name, "status": status, "detail": "", "ms": 0}
+
+    for i, (source, started, status, pages, extra) in enumerate(
+        [
+            (launch, at(3), "running", [], {"steps": [step("Read the source", "done"), step("Write the wiki pages", "running")]}),
+            (thread, at(90), "done", ["wiki/entities/Orbit App.md", "wiki/initiatives/Orbit launch.md"], {}),
+            (lena, at(91), "done", [], {"trashed": True}),
+            (maya, at(93), "failed", [], {"error": "The assistant stopped answering after 10 minutes, so the ingest was stopped."}),
+        ]
+    ):
+        r = {
+            "id": f"demo-sync-{i}",
+            "kind": "ingest",
+            "source": source,
+            "started": started,
+            "finished": None if status == "running" else started,
+            "model": "claude:sonnet",
+            "status": status,
+            "steps": [],
+            "proposals": [],
+            "dropped": [],
+            "pages": pages,
+            "error": None,
+            "trigger": None,
+        }
+        r.update(extra)
+        (runs / f"{r['id']}.json").write_text(json.dumps(r, indent=2))
+
+
 def make_demo():
     shutil.rmtree(DEMO, ignore_errors=True)
     vault = DEMO / "Home" / "Notes"
@@ -225,7 +302,7 @@ def make_demo():
         "- Wrote up the [[Meeting. Orbit App Steerco - 2026-09-30|steerco]] actions.\n\n"
         "### Still open\n\n- Lena's comms plan is waiting on the launch date.\n"
     )
-    # Log lines quoting tasks, whose fields Activity draws as icons, for the `activity` scene.
+    # Log lines quoting tasks, whose fields Changes › All draws as icons, for the `review` scene.
     log = vault / "log.md"
     head, rest = log.read_text().split("\n## ", 1)
     log.write_text(
@@ -275,6 +352,7 @@ def make_demo():
     }
     (DEMO / "data" / "find").mkdir(parents=True)
     (DEMO / "data" / "find" / "state.json").write_text(json.dumps(find, indent=2))
+    demo_sync_activity(DEMO / "data")
     # Two notes in the Trash, as Brainstead's own delete leaves them (core/src/trash.rs).
     trashed = [
         ("Idea. Team offsite - 2026-09-12.md", "note", "# Team offsite\n\nA day at the lake.\n", "2026-10-01T15:20:00.000Z"),

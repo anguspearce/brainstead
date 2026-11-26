@@ -2,9 +2,10 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// A list of tasks you can work: tick, right-click for due and defer dates, drag to reorder (in
+// A list of tasks you can work: tick, click a chip to change its field, right-click or ⋯ for its menu, drag to reorder (in
 // manual lists). Used by Tasks, Today and the task blocks in documents.
 
+import { UpdateForm } from "./UpdateBox";
 import moment from "moment";
 import { askWith } from "./askState";
 import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -43,7 +44,7 @@ import { keyLabel } from "./platform";
 
 export const taskKey = (t: TaskRow) => `${t.path}:${t.line}`;
 
-/** A task's text with its inline markdown shown: `code`, **bold**, *italic*, [[links]] as their label,
+/** A task's text with its inline markdown shown: `code`, **bold**, *italic*, [[links]] as their label (a project's link as the project's name, as its chip shows it),
  *  an image as its alt text, and the links of src/md/refs.ts: `[label](url)` as its label (which may
  *  hold code and bold), a bare URL as its domain and a reference key (Settings › Notes › Reference
  *  links) as itself, each a link that opens in the browser. `plain` draws them as text in the link's
@@ -63,12 +64,14 @@ export function TaskText({ text, plain = false }: { text: string; plain?: boolea
           return <b key={i}>{draw(n.children, false)}</b>;
         case "em":
           return <i key={i}>{draw(n.children, false)}</i>;
-        case "wiki":
+        case "wiki": {
+          const [target, alias] = n.inner.split("|");
           return (
             <span key={i} className="tlinkword">
-              {n.label}
+              {alias ?? projectName(target.split("#")[0])}
             </span>
           );
+        }
         case "image":
           return <Fragment key={i}>{n.alt}</Fragment>;
         case "a":
@@ -99,17 +102,13 @@ export function TaskText({ text, plain = false }: { text: string; plain?: boolea
   return <>{draw(tree, true)}</>;
 }
 
-function dueChip(due: string, done: boolean) {
+/** A due date on a row: its words (Today, Tomorrow, a date), colour and tooltip. */
+function dueLook(due: string, done: boolean) {
   const n = daysUntil(due);
   const tip = n < 0 ? `Overdue by ${-n} day${n === -1 ? "" : "s"}` : n === 0 ? "Due today" : n === 1 ? "Due tomorrow" : `Due in ${n} days`;
   const tone = done ? "" : n < 0 ? "red" : n <= 3 ? "amber" : "";
   const text = n === 0 ? "Today" : n === 1 ? "Tomorrow" : n === -1 ? "Yesterday" : fmtShortDate(due);
-  return (
-    <span className={`chip ${tone}`} title={`${tip} · ${due}\n${taskDate("due").explain}`}>
-      <Icon name={taskDate("due").icon} size={11} />
-      {text}
-    </span>
-  );
+  return { tip: `${tip} · ${due}\n${taskDate("due").explain}`, tone, text };
 }
 
 /** An ⓘ beside a task attribute's name, whose tooltip says what the attribute means. */
@@ -155,58 +154,141 @@ const HIDE_NAME: Record<string, string> = {
   onCompletion: "on completion",
 };
 
+/** Where a row's chip opens its field's picker: the field, and the chip to place the picker by. */
+export type OnField = (f: TaskField, at: DOMRect) => void;
+
+/** The line's fields a chip can change: its dates and priority. */
+const EDITABLE: Partial<Record<string, TaskField>> = {
+  due: "due",
+  scheduled: "scheduled",
+  start: "start",
+  created: "created",
+  priority: "priority",
+};
+
+/** A row's chip: a button opening its field's picker where the list can edit (onField), else plain. */
+function Chip({
+  field,
+  onField,
+  className,
+  title,
+  hint = "Click to change it",
+  children,
+}: {
+  field?: TaskField;
+  onField?: OnField;
+  className: string;
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  if (!field || !onField)
+    return (
+      <span className={className} title={title}>
+        {children}
+      </span>
+    );
+  return (
+    <button
+      type="button"
+      className={`${className} ed`}
+      title={`${title}\n${hint}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onField(field, e.currentTarget.getBoundingClientRect());
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 /** Every field on the task's line as a chip, none as its emoji. Created shows only in the
- *  Tasks screen's detail pane, unless a query block asks for it. */
-export function FieldChips({ t, display }: { t: TaskRow; display?: TaskDisplay }) {
+ *  Tasks screen's detail pane, unless a query block asks for it. With onField, its dates and
+ *  priority are buttons that open their picker. */
+export function FieldChips({ t, display, onField }: { t: TaskRow; display?: TaskDisplay; onField?: OnField }) {
   const parts = taskFieldsOf(t.text);
   return (
     <>
       {parts.map((p, i) => {
         const id = p.field.id;
         if (display ? display.hidden.has(HIDE_NAME[id]) : id === "created") return null;
-        if (id === "due" && !display?.short) return <span key={i}>{dueChip(p.value, t.done)}</span>;
+        if (id === "due" && !display?.short) {
+          const d = dueLook(p.value, t.done);
+          return (
+            <Chip key={i} field="due" onField={onField} className={`chip f-due ${d.tone}`} title={d.tip}>
+              <Icon name={taskDate("due").icon} size={11} />
+              {d.text}
+            </Chip>
+          );
+        }
         const shown = fieldValue(p, fmtShortDate);
         const faint = id === "done" || id === "created" || id === "cancelled" || id === "id" || id === "onCompletion";
         return (
-          <span key={i} className={`chip ${faint ? "faint" : ""} f-${id}`} title={fieldTip(p, shown)}>
+          <Chip
+            key={i}
+            field={EDITABLE[id]}
+            onField={onField}
+            className={`chip ${faint ? "faint" : ""} f-${id}`}
+            title={fieldTip(p, shown)}
+          >
             <Icon name={fieldIcon(p)} size={11} />
             {!display?.short && shown}
-          </span>
+          </Chip>
         );
       })}
     </>
   );
 }
 
-/** A task's contexts, effort and project as chips (stage 6). */
-export function GtdChips({ t, project = true }: { t: TaskRow; project?: boolean }) {
+/** A task's contexts, effort and project as chips (stage 6). With onField each opens its picker;
+ *  the project's offers to open the project too. */
+export function GtdChips({ t, project = true, onField }: { t: TaskRow; project?: boolean; onField?: OnField }) {
   return (
     <>
       {(t.contexts ?? []).map((c) => (
-        <span key={c} className="chip ctx" title={`Context: where or how it can be done (#context/${c})`}>
+        <Chip key={c} field="context" onField={onField} className="chip ctx" title={`Context: where or how it can be done (#context/${c})`}>
           @{c}
-        </span>
+        </Chip>
       ))}
       {t.effortMin != null && (
-        <span className="chip faint" title={`Effort: about ${fmtEffort(t.effortMin)} ([effort:: ${t.effort}])`}>
+        <Chip
+          field="effort"
+          onField={onField}
+          className="chip faint f-effort"
+          title={`Effort: about ${fmtEffort(t.effortMin)} ([effort:: ${t.effort}])`}
+        >
           <Icon name="stopwatch" size={11} />
           {fmtEffort(t.effortMin)}
-        </span>
+        </Chip>
       )}
-      {project && t.project && (
-        <button
-          type="button"
-          className="chip proj"
-          title="Its project: open it on the Projects screen"
-          onClick={(e) => {
-            e.stopPropagation();
-            nav.go({ screen: "projects", path: t.project! });
-          }}
-        >
-          <Icon name="project" size={11} />
-          {projectName(t.project)}
-        </button>
-      )}
+      {project &&
+        t.project &&
+        (onField ? (
+          <Chip
+            field="project"
+            onField={onField}
+            className="chip proj"
+            title={`Project: ${projectName(t.project)}`}
+            hint="Click to open the project or change it"
+          >
+            <Icon name="project" size={11} />
+            {projectName(t.project)}
+          </Chip>
+        ) : (
+          <button
+            type="button"
+            className="chip proj"
+            title="Its project: open it on the Projects screen"
+            onClick={(e) => {
+              e.stopPropagation();
+              nav.go({ screen: "projects", path: t.project! });
+            }}
+          >
+            <Icon name="project" size={11} />
+            {projectName(t.project)}
+          </button>
+        ))}
     </>
   );
 }
@@ -240,269 +322,120 @@ const PRIORITY_CHOICES: [PriorityName, string][] = [
   ["highest", "Highest"],
 ];
 
-/** A task's menu: its editor (TaskEditor) in a popover by the row. */
-function TaskMenu({ t, at, onClose }: { t: TaskRow; at: DOMRect; onClose: () => void }) {
-  // Two columns when the window can take them beside the row; one on a narrow window.
-  const wide = window.innerWidth >= 600;
+/** A field the row's chips, the ⋯ menu's More… and the task pane each edit, with the same quick
+ *  picks from the sections below, so the three can't drift. */
+export type TaskField = TaskDateKind | "priority" | "context" | "effort" | "project";
+
+/** What a row's + offers, when the task has none of it (created is on nearly every task, so it's in More…). */
+const ADDABLE: { f: TaskField; label: string; icon: string }[] = [
+  { f: "due", label: "Due date", icon: taskDate("due").icon },
+  { f: "scheduled", label: "Defer until", icon: taskDate("scheduled").icon },
+  { f: "start", label: "Start date", icon: taskDate("start").icon },
+  { f: "priority", label: "Priority", icon: "priority" },
+  { f: "context", label: "Context", icon: "tag" },
+  { f: "effort", label: "Effort", icon: "stopwatch" },
+  { f: "project", label: "Project", icon: "project" },
+];
+const hasField = (t: TaskRow, f: TaskField) =>
+  f === "priority"
+    ? priorityOf(t) !== "none"
+    : f === "context"
+      ? !!t.contexts?.length
+      : f === "effort"
+        ? t.effortMin != null
+        : f === "project"
+          ? !!t.project
+          : !!valueOf(t, f);
+
+/** One date with its quick picks, Pick… (a calendar, onPick) and Clear. */
+function DateSection({ t, kind, done, onPick }: { t: TaskRow; kind: TaskDateKind; done: () => void; onPick: (k: TaskDateKind) => void }) {
+  const d = taskDate(KIND_DATE[kind]);
+  const v = valueOf(t, kind);
+  const today = localToday();
+  const set = (day: string | null) => {
+    done();
+    void setTaskDate(t, kind, day);
+  };
   return (
-    <Popover anchor={at} onClose={onClose} width={wide ? 540 : 276}>
-      <TaskEditor t={t} onClose={onClose} wide={wide} menu />
-    </Popover>
+    <div className="mdate">
+      <div className="mlabel" title={d.explain}>
+        <Icon name={d.icon} size={14} />
+        {v ? `${HEAD[kind][0]} ${fmtShortDate(v)}` : HEAD[kind][1]}
+        <span className="kbd">{d.shorthand}</span>
+      </div>
+      <div className="qchips">
+        {QUICK[kind].map((w) => (
+          <button
+            key={w}
+            type="button"
+            className="chip f"
+            title={`Set the ${DATE_NAME[kind]} to ${fmtShortDate(resolveDateWord(w, today) ?? today)}`}
+            onClick={() => set(resolveDateWord(w, today))}
+          >
+            {wordLabel(w)}
+          </button>
+        ))}
+        <button type="button" className="chip f" title={`Pick the ${DATE_NAME[kind]} from a calendar`} onClick={() => onPick(kind)}>
+          Pick…
+        </button>
+        {v && (
+          <button
+            type="button"
+            className="chip f"
+            aria-label={`Clear ${HEAD[kind][0].toLowerCase()} date`}
+            title={`Remove the ${DATE_NAME[kind]}`}
+            onClick={() => set(null)}
+          >
+            <Icon name="x" size={11} />
+            Clear
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
-/** Everything that can be changed about a task: its dates with quick picks, priority, context,
- *  effort and project, rename, in progress, waiting, cancel, its note and delete. The task menu
- *  shows it in a popover (`menu`, closing after each change); the Tasks screen's pane shows the
- *  same, so the two can't drift. */
-export function TaskEditor({ t, onClose, wide, menu }: { t: TaskRow; onClose: () => void; wide: boolean; menu?: boolean }) {
-  const item = menu ? "menuitem" : undefined;
-  const [pick, setPick] = useState<TaskDateKind | null>(null);
-  // Renaming: its words in a box at the top of the menu, ↩ to keep them, Esc to go back. Only where
-  // the words are on the line once, so its dates and tags stay as they are (as the task pane does).
-  const [renaming, setRenaming] = useState(false);
-  const words = taskLabel(t.text);
-  const canRename = !!retitled(t.lineText, words, words || "x");
-  // Start and created are folded away unless it has a start date (nearly every task has a created
-  // date, stamped on capture, so that alone doesn't open them).
-  const [more, setMore] = useState(!!t.start);
-  const today = localToday();
-  const set = (kind: TaskDateKind, d: string | null) => {
-    onClose();
-    void setTaskDate(t, kind, d);
-  };
-  const section = (kind: TaskDateKind) => {
-    const d = taskDate(KIND_DATE[kind]);
-    const v = valueOf(t, kind);
-    return (
-      <div key={kind} className="mdate">
-        <div className="mlabel" title={d.explain}>
-          <Icon name={d.icon} size={14} />
-          {v ? `${HEAD[kind][0]} ${fmtShortDate(v)}` : HEAD[kind][1]}
-          <span className="kbd">{d.shorthand}</span>
-        </div>
-        <div className="qchips">
-          {QUICK[kind].map((w) => (
-            <button
-              key={w}
-              type="button"
-              className="chip f"
-              title={`Set the ${DATE_NAME[kind]} to ${fmtShortDate(resolveDateWord(w, today) ?? today)}`}
-              onClick={() => set(kind, resolveDateWord(w, today))}
-            >
-              {wordLabel(w)}
-            </button>
-          ))}
-          <button type="button" className="chip f" title={`Pick the ${DATE_NAME[kind]} from a calendar`} onClick={() => setPick(kind)}>
-            Pick…
-          </button>
-          {v && (
-            <button
-              type="button"
-              className="chip f"
-              aria-label={`Clear ${HEAD[kind][0].toLowerCase()} date`}
-              title={`Remove the ${DATE_NAME[kind]}`}
-              onClick={() => set(kind, null)}
-            >
-              <Icon name="x" size={11} />
-              Clear
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  };
+function PrioritySection({ t, done }: { t: TaskRow; done: () => void }) {
   return (
-    <div className={`menu tmenu${wide ? " wide" : ""}${menu ? "" : " inpane"}`} role={menu ? "menu" : undefined}>
-      {pick ? (
-        <DatePicker value={valueOf(t, pick)} label={HEAD[pick][1]} onPick={(d) => set(pick, d)} onCancel={() => setPick(null)} />
-      ) : renaming ? (
-        <div className="mrename">
-          <div className="mlabel">
-            <Icon name="pencil" size={14} />
-            Rename task
-          </div>
-          <input
-            className="pin"
-            autoFocus
-            defaultValue={words}
-            aria-label="The task's words"
-            onFocus={(e) => e.currentTarget.select()}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                const to = e.currentTarget.value;
-                onClose();
-                void retitleTask(t, words, to);
-              } else if (e.key === "Escape") {
-                e.stopPropagation();
-                setRenaming(false);
-              }
-            }}
-          />
-          <span className="faint small">{keyLabel("↩")} to rename; its dates and tags stay as they are.</span>
-        </div>
-      ) : (
-        <>
-          {/* Two columns where the window has room: dates, then the task's fields; its actions below. */}
-          <div className="tmcols">
-            <div className="tmcol">
-              {section("due")}
-              {section("scheduled")}
-              {more ? (
-                <>
-                  {section("start")}
-                  {section("created")}
-                </>
-              ) : (
-                <button
-                  type="button"
-                  role={item}
-                  className="faint"
-                  title="Show the start and created dates too"
-                  onClick={() => setMore(true)}
-                >
-                  <Icon name="chevdown" size={14} />
-                  More dates…
-                </button>
-              )}
-              <div className="sep" />
-              <div className="mlabel" title={TASK_FIELDS.priority.explain}>
-                <Icon name="priority" size={14} />
-                Priority
-              </div>
-              <div className="qchips">
-                {PRIORITY_CHOICES.map(([p, label]) => (
-                  <button
-                    key={p}
-                    type="button"
-                    className={`chip f ${priorityOf(t) === p ? "on" : ""}`}
-                    aria-pressed={priorityOf(t) === p}
-                    title={p === "none" ? "Remove the priority" : `Set the priority to ${label.toLowerCase()}`}
-                    onClick={() => {
-                      onClose();
-                      void changeTask(t, { priority: p });
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="tmcol">
-              <GtdMenu t={t} onClose={onClose} />
-            </div>
-          </div>
-          {/* Its words and state; a done task it can't rename has none of these, so no empty group. */}
-          {(canRename || !t.done || t.status === "-") && <div className="sep" />}
-          <div className="tmacts">
-            {canRename && (
-              <button type="button" role={item} title="Change the task's words (its dates and tags stay)" onClick={() => setRenaming(true)}>
-                <Icon name="pencil" size={14} />
-                Rename…
-              </button>
-            )}
-            {t.status !== "/" && !t.done && (
-              <button
-                type="button"
-                role={item}
-                title="Mark it as started but not finished"
-                onClick={() => (onClose(), void changeTask(t, "start"))}
-              >
-                <Icon name="in-progress" size={14} />
-                Mark in progress
-              </button>
-            )}
-            {!t.done && (
-              <button
-                type="button"
-                role={item}
-                title={
-                  t.tags.includes("waiting-for") ? "Remove the waiting-for tag" : "Tag it waiting-for, so it shows on the Waiting for list"
-                }
-                onClick={() => (onClose(), void changeTask(t, "waiting"))}
-              >
-                <Icon name="waiting" size={14} />
-                {t.tags.includes("waiting-for") ? "No longer waiting for it" : "Waiting for someone"}
-              </button>
-            )}
-            {t.status === "-" || t.status === "/" ? (
-              <button
-                type="button"
-                role={item}
-                title={t.status === "-" ? "Make the cancelled task open again" : "Mark it as not started"}
-                onClick={() => (onClose(), void changeTask(t, "reopen"))}
-              >
-                <Icon name="refresh" size={14} />
-                {t.status === "-" ? "Reopen" : "Back to to-do"}
-              </button>
-            ) : (
-              !t.done && (
-                <button
-                  type="button"
-                  role={item}
-                  title="Mark it cancelled; it stays in its note"
-                  onClick={() => (onClose(), void changeTask(t, "cancel"))}
-                >
-                  <Icon name="cancelled" size={14} />
-                  Cancel task
-                </button>
-              )
-            )}
-          </div>
-          <div className="sep" />
+    <>
+      <div className="mlabel" title={TASK_FIELDS.priority.explain}>
+        <Icon name="priority" size={14} />
+        Priority
+      </div>
+      <div className="qchips">
+        {PRIORITY_CHOICES.map(([p, label]) => (
           <button
+            key={p}
             type="button"
-            role={item}
-            title={`Open the note this task is in${t.heading ? `, at ${t.heading}` : ""}`}
+            className={`chip f ${priorityOf(t) === p ? "on" : ""}`}
+            aria-pressed={priorityOf(t) === p}
+            title={p === "none" ? "Remove the priority" : `Set the priority to ${label.toLowerCase()}`}
             onClick={() => {
-              onClose();
-              openDoc(t.path, t.heading ? { anchor: t.heading } : {});
+              done();
+              void changeTask(t, { priority: p });
             }}
           >
-            <Icon name="note" size={14} />
-            Open {t.title}
+            {label}
           </button>
-          <div className="sep" />
-          <button
-            type="button"
-            role={item}
-            className="danger"
-            title={keyLabel("Takes the line out of its note; ⌘Z puts it back")}
-            onClick={() => (onClose(), void changeTask(t, "delete"))}
-          >
-            <Icon name="trash" size={14} />
-            Delete task
-          </button>
-        </>
-      )}
-    </div>
+        ))}
+      </div>
+    </>
   );
 }
 
 const EFFORTS = ["5m", "15m", "30m", "1h", "2h", "4h"];
 const COMMON_CONTEXTS = ["calls", "computer", "errands", "office", "personal"];
 
-/** The task menu's GTD part: context, effort and project. */
-function GtdMenu({ t, onClose }: { t: TaskRow; onClose: () => void }) {
+function ContextSection({ t, done }: { t: TaskRow; done: () => void }) {
   const all = useAllTasks();
-  const projects = useProjects();
-  const [typing, setTyping] = useState<"context" | "project" | null>(null);
+  const [typing, setTyping] = useState(false);
   const [q, setQ] = useState("");
   const mine = t.contexts ?? [];
   const known = [...new Set([...mine, ...(all ? contextsInUse(all) : []), ...COMMON_CONTEXTS])].slice(0, 8);
-  const run = (c: Parameters<typeof setTaskGtd>[1]) => {
-    onClose();
-    void setTaskGtd(t, c);
+  const toggle = (c: string) => {
+    done();
+    void setTaskGtd(t, { contexts: mine.includes(c) ? mine.filter((x) => x !== c) : [...mine, c] });
   };
-  const toggle = (c: string) => run({ contexts: mine.includes(c) ? mine.filter((x) => x !== c) : [...mine, c] });
-  const active = (projects ?? []).filter((p) => p.status === "active" || p.path === t.project);
-  // The menu's few: its own project first, then those with the newest tasks (by created date).
-  const latest = new Map<string, string>();
-  for (const x of all ?? []) if (x.project && (x.created ?? "") > (latest.get(x.project) ?? "")) latest.set(x.project, x.created ?? "");
-  const recent = [...active].sort(
-    (a, b) => +(b.path === t.project) - +(a.path === t.project) || (latest.get(b.path) ?? "").localeCompare(latest.get(a.path) ?? ""),
-  );
-  const matching = active.filter((p) => !q || p.name.toLowerCase().includes(q.toLowerCase())).slice(0, 6);
   return (
     <>
       <div className="mlabel" title="Where or how it can be done, written as #context/name">
@@ -523,7 +456,7 @@ function GtdMenu({ t, onClose }: { t: TaskRow; onClose: () => void }) {
             @{c}
           </button>
         ))}
-        {typing === "context" ? (
+        {typing ? (
           <input
             className="qin"
             autoFocus
@@ -536,11 +469,22 @@ function GtdMenu({ t, onClose }: { t: TaskRow; onClose: () => void }) {
             }}
           />
         ) : (
-          <button type="button" className="chip f" title="Type a new context to add" onClick={() => (setTyping("context"), setQ(""))}>
+          <button type="button" className="chip f" title="Type a new context to add" onClick={() => (setTyping(true), setQ(""))}>
             Other…
           </button>
         )}
       </div>
+    </>
+  );
+}
+
+function EffortSection({ t, done }: { t: TaskRow; done: () => void }) {
+  const run = (effort: string | null) => {
+    done();
+    void setTaskGtd(t, { effort });
+  };
+  return (
+    <>
       <div className="mlabel" title="About how long it takes, written as [effort:: 15m]">
         <Icon name="stopwatch" size={14} />
         {t.effortMin != null ? `Effort ${fmtEffort(t.effortMin)}` : "Effort"}
@@ -553,30 +497,58 @@ function GtdMenu({ t, onClose }: { t: TaskRow; onClose: () => void }) {
             type="button"
             className={`chip f ${t.effort === e ? "on" : ""}`}
             title={`Set the effort to about ${fmtEffort(effortMinutes(e)!)}`}
-            onClick={() => run({ effort: e })}
+            onClick={() => run(e)}
           >
             {fmtEffort(effortMinutes(e)!)}
           </button>
         ))}
         {t.effort && (
-          <button
-            type="button"
-            className="chip f"
-            aria-label="Clear effort"
-            title="Remove the effort"
-            onClick={() => run({ effort: null })}
-          >
+          <button type="button" className="chip f" aria-label="Clear effort" title="Remove the effort" onClick={() => run(null)}>
             <Icon name="x" size={11} />
             Clear
           </button>
         )}
       </div>
+    </>
+  );
+}
+
+function ProjectSection({ t, done }: { t: TaskRow; done: () => void }) {
+  const all = useAllTasks();
+  const projects = useProjects();
+  const [typing, setTyping] = useState(false);
+  const [q, setQ] = useState("");
+  const run = (project: string | null) => {
+    done();
+    void setTaskGtd(t, { project });
+  };
+  const active = (projects ?? []).filter((p) => p.status === "active" || p.path === t.project);
+  // The few shown: its own project first, then those with the newest tasks (by created date).
+  const latest = new Map<string, string>();
+  for (const x of all ?? []) if (x.project && (x.created ?? "") > (latest.get(x.project) ?? "")) latest.set(x.project, x.created ?? "");
+  const recent = [...active].sort(
+    (a, b) => +(b.path === t.project) - +(a.path === t.project) || (latest.get(b.path) ?? "").localeCompare(latest.get(a.path) ?? ""),
+  );
+  const matching = active.filter((p) => !q || p.name.toLowerCase().includes(q.toLowerCase())).slice(0, 6);
+  const choice = (p: { path: string; name: string }) => (
+    <button
+      key={p.path}
+      type="button"
+      className={`chip f pname ${t.project === p.path ? "on" : ""}`}
+      title={t.project === p.path ? `Already part of ${p.name}` : `Make it part of the project ${p.name}`}
+      onClick={() => run(p.path)}
+    >
+      {p.name}
+    </button>
+  );
+  return (
+    <>
       <div className="mlabel" title="The project it moves forward: a link to its Project. note">
         <Icon name="project" size={14} />
         {t.project ? `Project ${projectName(t.project)}` : "Project"}
       </div>
       <div className="qchips">
-        {typing === "project" ? (
+        {typing ? (
           <>
             <input
               className="qin"
@@ -586,34 +558,14 @@ function GtdMenu({ t, onClose }: { t: TaskRow; onClose: () => void }) {
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
-            {matching.map((p) => (
-              <button
-                key={p.path}
-                type="button"
-                className={`chip f pname ${t.project === p.path ? "on" : ""}`}
-                title={t.project === p.path ? `Already part of ${p.name}` : `Make it part of the project ${p.name}`}
-                onClick={() => run({ project: p.path })}
-              >
-                {p.name}
-              </button>
-            ))}
+            {matching.map(choice)}
             {!matching.length && <span className="faint small">No active project matches.</span>}
           </>
         ) : (
           <>
-            {recent.slice(0, 3).map((p) => (
-              <button
-                key={p.path}
-                type="button"
-                className={`chip f pname ${t.project === p.path ? "on" : ""}`}
-                title={t.project === p.path ? `Already part of ${p.name}` : `Make it part of the project ${p.name}`}
-                onClick={() => run({ project: p.path })}
-              >
-                {p.name}
-              </button>
-            ))}
+            {recent.slice(0, 3).map(choice)}
             {active.length > 0 && (
-              <button type="button" className="chip f" title="Search all active projects" onClick={() => (setTyping("project"), setQ(""))}>
+              <button type="button" className="chip f" title="Search all active projects" onClick={() => (setTyping(true), setQ(""))}>
                 Find…
               </button>
             )}
@@ -627,19 +579,327 @@ function GtdMenu({ t, onClose }: { t: TaskRow; onClose: () => void }) {
           </span>
         )}
         {t.project && t.projectFrom !== "member" && (
-          <button
-            type="button"
-            className="chip f"
-            aria-label="Clear project"
-            title="Take it out of its project"
-            onClick={() => run({ project: null })}
-          >
+          <button type="button" className="chip f" aria-label="Clear project" title="Take it out of its project" onClick={() => run(null)}>
             <Icon name="x" size={11} />
             Clear
           </button>
         )}
       </div>
     </>
+  );
+}
+
+/** One field's section, as a chip's picker, More… and the pane show it. */
+function FieldSection({ t, f, done, onPick }: { t: TaskRow; f: TaskField; done: () => void; onPick: (k: TaskDateKind) => void }) {
+  if (f === "priority") return <PrioritySection t={t} done={done} />;
+  if (f === "context") return <ContextSection t={t} done={done} />;
+  if (f === "effort") return <EffortSection t={t} done={done} />;
+  if (f === "project") return <ProjectSection t={t} done={done} />;
+  return <DateSection t={t} kind={f} done={done} onPick={onPick} />;
+}
+
+/** Pick… on a date: the calendar shown in place of the fields until a day is picked or it's cancelled. */
+function useDatePick(t: TaskRow, done: () => void) {
+  const [pick, setPick] = useState<TaskDateKind | null>(null);
+  const picker = pick ? (
+    <DatePicker
+      value={valueOf(t, pick)}
+      label={HEAD[pick][1]}
+      onPick={(d) => {
+        setPick(null);
+        done();
+        void setTaskDate(t, pick, d);
+      }}
+      onCancel={() => setPick(null)}
+    />
+  ) : null;
+  return [picker, setPick] as const;
+}
+
+/** The task's words in a box: ↩ to keep them, Esc to go back. Only where the words are on the
+ *  line once (canRename), so its dates and tags stay as they are. */
+function RenameBox({ t, done, onBack }: { t: TaskRow; done: () => void; onBack: () => void }) {
+  const words = taskLabel(t.text);
+  return (
+    <div className="mrename">
+      <div className="mlabel">
+        <Icon name="pencil" size={14} />
+        Rename task
+      </div>
+      <input
+        className="pin"
+        autoFocus
+        defaultValue={words}
+        aria-label="The task's words"
+        onFocus={(e) => e.currentTarget.select()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            const to = e.currentTarget.value;
+            done();
+            void retitleTask(t, words, to);
+          } else if (e.key === "Escape") {
+            e.stopPropagation();
+            onBack();
+          }
+        }}
+      />
+      <span className="faint small">{keyLabel("↩")} to rename; its dates and tags stay as they are.</span>
+    </div>
+  );
+}
+
+const canRename = (t: TaskRow) => {
+  const words = taskLabel(t.text);
+  return !!retitled(t.lineText, words, words || "x");
+};
+
+/** The task's verbs: update, rename, in progress, waiting for, cancel; More… (the menu's fields); its note; delete.
+ *  `lead`: fields above them (the pane), so a line before them. */
+function TaskActions({
+  t,
+  done,
+  item,
+  lead,
+  onRename,
+  onMore,
+  onUpdate,
+}: {
+  t: TaskRow;
+  done: () => void;
+  item?: string;
+  lead?: boolean;
+  onRename: () => void;
+  onMore?: () => void;
+  /** Update…: say what's happened, for an assistant to apply (src/updates.ts). */
+  onUpdate?: () => void;
+}) {
+  const rename = canRename(t);
+  // A done task it can't rename has none of its state verbs, so no empty group.
+  const any = rename || !t.done || t.status === "-";
+  return (
+    <>
+      {lead && any && <div className="sep" />}
+      {onUpdate && !t.done && (
+        <button
+          type="button"
+          role={item}
+          title="Say what's happened (“Maya has replied”) and an assistant applies it in the background: done, a new date, a follow-up"
+          onClick={onUpdate}
+        >
+          <Icon name="zap" size={14} />
+          Update…
+        </button>
+      )}
+      {rename && (
+        <button type="button" role={item} title="Change the task's words (its dates and tags stay)" onClick={onRename}>
+          <Icon name="pencil" size={14} />
+          Rename…
+        </button>
+      )}
+      {t.status !== "/" && !t.done && (
+        <button type="button" role={item} title="Mark it as started but not finished" onClick={() => (done(), void changeTask(t, "start"))}>
+          <Icon name="in-progress" size={14} />
+          Mark in progress
+        </button>
+      )}
+      {!t.done && (
+        <button
+          type="button"
+          role={item}
+          title={t.tags.includes("waiting-for") ? "Remove the waiting-for tag" : "Tag it waiting-for, so it shows on the Waiting for list"}
+          onClick={() => (done(), void changeTask(t, "waiting"))}
+        >
+          <Icon name="waiting" size={14} />
+          {t.tags.includes("waiting-for") ? "No longer waiting for it" : "Waiting for someone"}
+        </button>
+      )}
+      {t.status === "-" || t.status === "/" ? (
+        <button
+          type="button"
+          role={item}
+          title={t.status === "-" ? "Make the cancelled task open again" : "Mark it as not started"}
+          onClick={() => (done(), void changeTask(t, "reopen"))}
+        >
+          <Icon name="refresh" size={14} />
+          {t.status === "-" ? "Reopen" : "Back to to-do"}
+        </button>
+      ) : (
+        !t.done && (
+          <button
+            type="button"
+            role={item}
+            title="Mark it cancelled; it stays in its note"
+            onClick={() => (done(), void changeTask(t, "cancel"))}
+          >
+            <Icon name="cancelled" size={14} />
+            Cancel task
+          </button>
+        )
+      )}
+      {onMore && (
+        <>
+          {any && <div className="sep" />}
+          <button type="button" role={item} title="Its dates, priority, context, effort and project" onClick={onMore}>
+            <Icon name="list" size={14} />
+            More…
+            <Icon name="chevright" size={14} className="mend" />
+          </button>
+        </>
+      )}
+      {(lead || any || onMore) && <div className="sep" />}
+      <button
+        type="button"
+        role={item}
+        title={`Open the note this task is in${t.heading ? `, at ${t.heading}` : ""}`}
+        onClick={() => {
+          done();
+          openDoc(t.path, t.heading ? { anchor: t.heading } : {});
+        }}
+      >
+        <Icon name="note" size={14} />
+        Open {t.title}
+      </button>
+      <div className="sep" />
+      <button
+        type="button"
+        role={item}
+        className="danger"
+        title={keyLabel("Takes the line out of its note; ⌘Z puts it back")}
+        onClick={() => (done(), void changeTask(t, "delete"))}
+      >
+        <Icon name="trash" size={14} />
+        Delete task
+      </button>
+    </>
+  );
+}
+
+/** What a task's popover shows: the ⋯ menu's verbs, its More… (every field), a row's + (fields
+ *  it hasn't got), renaming, or one field's picker (a chip). */
+export type TaskPopView = "menu" | "more" | "add" | "rename" | "update" | TaskField;
+
+/** A task's popover by its row: the ⋯ menu, a chip's picker or the row's +. Closes after each change. */
+function TaskPop({ t, at, view: first, onClose }: { t: TaskRow; at: DOMRect; view: TaskPopView; onClose: () => void }) {
+  const [view, setView] = useState<TaskPopView>(first);
+  const [picker, setPick] = useDatePick(t, onClose);
+  // More… in two columns when the window can take them beside the row; one on a narrow window.
+  const wide = window.innerWidth >= 600 && view === "more" && !picker;
+  const width = wide ? 540 : view === "menu" || view === "add" ? 250 : view === "update" ? 360 : 290;
+  let body: React.ReactNode;
+  if (picker) body = picker;
+  else if (view === "rename") body = <RenameBox t={t} done={onClose} onBack={() => setView("menu")} />;
+  else if (view === "update") body = <UpdateForm target={{ kind: "task", task: t }} onClose={onClose} />;
+  else if (view === "menu")
+    body = (
+      <TaskActions
+        t={t}
+        done={onClose}
+        item="menuitem"
+        onRename={() => setView("rename")}
+        onMore={() => setView("more")}
+        onUpdate={() => setView("update")}
+      />
+    );
+  else if (view === "more")
+    body = (
+      <div className="tmcols">
+        <div className="tmcol">
+          {(["due", "scheduled", "start", "created"] as const).map((k) => (
+            <DateSection key={k} t={t} kind={k} done={onClose} onPick={setPick} />
+          ))}
+        </div>
+        <div className="tmcol">
+          <PrioritySection t={t} done={onClose} />
+          <ContextSection t={t} done={onClose} />
+          <EffortSection t={t} done={onClose} />
+          <ProjectSection t={t} done={onClose} />
+        </div>
+      </div>
+    );
+  else if (view === "add") {
+    const left = ADDABLE.filter((a) => !hasField(t, a.f));
+    body = (
+      <>
+        <div className="mhead faint small">Add to this task</div>
+        {left.map((a) => (
+          <button key={a.f} type="button" role="menuitem" title={`Set its ${a.label.toLowerCase()}`} onClick={() => setView(a.f)}>
+            <Icon name={a.icon} size={14} />
+            {a.label}
+          </button>
+        ))}
+        {!left.length && <div className="mhead faint small">It has every field: click a chip to change one.</div>}
+      </>
+    );
+  } else
+    body = (
+      <>
+        {view === "project" && t.project && (
+          <>
+            <button
+              type="button"
+              role="menuitem"
+              title="Open the project on the Projects screen"
+              onClick={() => {
+                onClose();
+                nav.go({ screen: "projects", path: t.project! });
+              }}
+            >
+              <Icon name="project" size={14} />
+              Open {projectName(t.project)}
+            </button>
+            <div className="sep" />
+          </>
+        )}
+        <FieldSection t={t} f={view} done={onClose} onPick={setPick} />
+      </>
+    );
+  return (
+    <Popover anchor={at} onClose={onClose} width={width}>
+      <div className={`menu tmenu${wide ? " wide" : ""}`} role="menu">
+        {body}
+      </div>
+    </Popover>
+  );
+}
+
+/** Everything that can be changed about a task, in one column: the Tasks screen's pane. The same
+ *  sections and verbs as a row's chips and its ⋯ menu, so they can't drift. */
+export function TaskEditor({ t }: { t: TaskRow }) {
+  const done = () => {};
+  const [picker, setPick] = useDatePick(t, done);
+  const [renaming, setRenaming] = useState(false);
+  // Start and created are folded away unless it has a start date (nearly every task has a created
+  // date, stamped on capture, so that alone doesn't open them).
+  const [more, setMore] = useState(!!t.start);
+  return (
+    <div className="menu tmenu inpane">
+      {picker ??
+        (renaming ? (
+          <RenameBox t={t} done={() => setRenaming(false)} onBack={() => setRenaming(false)} />
+        ) : (
+          <>
+            <DateSection t={t} kind="due" done={done} onPick={setPick} />
+            <DateSection t={t} kind="scheduled" done={done} onPick={setPick} />
+            {more ? (
+              <>
+                <DateSection t={t} kind="start" done={done} onPick={setPick} />
+                <DateSection t={t} kind="created" done={done} onPick={setPick} />
+              </>
+            ) : (
+              <button type="button" className="faint" title="Show the start and created dates too" onClick={() => setMore(true)}>
+                <Icon name="chevdown" size={14} />
+                More dates…
+              </button>
+            )}
+            <div className="sep" />
+            <PrioritySection t={t} done={done} />
+            <ContextSection t={t} done={done} />
+            <EffortSection t={t} done={done} />
+            <ProjectSection t={t} done={done} />
+            <TaskActions t={t} done={done} lead onRename={() => setRenaming(true)} />
+          </>
+        ))}
+    </div>
   );
 }
 
@@ -687,7 +947,8 @@ export function TaskList({
    *  (taskModel's withHiddenRows). */
   every?: TaskRow[];
 }) {
-  const [menu, setMenu] = useState<{ t: TaskRow; at: DOMRect } | null>(null);
+  // The task's popover: its ⋯ menu, a chip's picker or the row's +.
+  const [menu, setMenu] = useState<{ t: TaskRow; at: DOMRect; view: TaskPopView } | null>(null);
   // The keyboard's row where nothing else keeps a selection (Today); the Tasks screen's is `selected`.
   const [cursor, setCursor] = useState<string | null>(null);
   // While dragging: the list in its new order, shown until the vault reloads it.
@@ -697,16 +958,31 @@ export function TaskList({
   useEffect(() => {
     setOrder(null);
   }, [rows]);
-  // Screenshot mode: a task's menu open (scene.ts `taskMenu`), once its row is there.
+  // Screenshot mode: a task's menu open (scene.ts `taskMenu`, `path:line`, or `path:line|view` for
+  // More…, the row's + or a chip's picker), once its row is there.
   useEffect(() => {
-    const want = document.documentElement.dataset.taskMenu;
+    const [want, view = "menu"] = (document.documentElement.dataset.taskMenu ?? "").split("|");
     const t = want ? rows.find((r) => taskKey(r) === want) : null;
-    const btn = t && list.current?.querySelector<HTMLElement>(`li[data-key="${CSS.escape(want!)}"] .tmore`);
+    const row = t && list.current?.querySelector<HTMLElement>(`li[data-key="${CSS.escape(want)}"]`);
+    const btn =
+      row &&
+      (row.querySelector<HTMLElement>(
+        view === "add"
+          ? ".tadd"
+          : view === "menu" || view === "more"
+            ? ".tmore"
+            : `.ed.${{ context: "ctx", project: "proj" }[view] ?? `f-${view}`}`,
+      ) ??
+        row.querySelector<HTMLElement>(".tmore"));
     if (!t || !btn) return;
     delete document.documentElement.dataset.taskMenu;
-    setMenu({ t, at: btn.getBoundingClientRect() });
+    setMenu({ t, at: btn.getBoundingClientRect(), view: view as TaskPopView });
   }, [rows]);
   const shown = order ?? rows;
+  const onField =
+    (t: TaskRow): OnField =>
+    (view, at) =>
+      setMenu({ t, at, view });
 
   const startDrag = (e: React.PointerEvent, t: TaskRow) => {
     if (!manual || e.button !== 0) return;
@@ -817,10 +1093,16 @@ export function TaskList({
                 onSelect ? (selected === k && onDeselect ? onDeselect() : onSelect(t)) : keys && setCursor(cursor === k ? null : k)
               }
               onContextMenu={(e) => {
+                // Text selected in the row keeps the system menu, for Copy.
+                const sel = window.getSelection();
+                if (sel?.toString() && sel.anchorNode && e.currentTarget.contains(sel.anchorNode)) {
+                  e.stopPropagation();
+                  return;
+                }
                 // The task's menu only, not also the note's around it (a task query or Dataview in a note).
                 e.preventDefault();
                 e.stopPropagation();
-                setMenu({ t, at: new DOMRect(e.clientX, e.clientY, 0, 0) });
+                setMenu({ t, at: new DOMRect(e.clientX, e.clientY, 0, 0), view: "menu" });
               }}
             >
               {manual && (
@@ -854,7 +1136,7 @@ export function TaskList({
                   <RowTitle t={t} />
                 </div>
                 <div className="ts">
-                  <FieldChips t={t} display={display} />
+                  <FieldChips t={t} display={display} onField={onField(t)} />
                   {display?.urgency && (
                     <span
                       className="chip faint"
@@ -863,7 +1145,7 @@ export function TaskList({
                       {urgencyOf(t).toFixed(2)}
                     </span>
                   )}
-                  <GtdChips t={t} project={!hideProject} />
+                  <GtdChips t={t} project={!hideProject} onField={onField(t)} />
                   {!display?.hidden.has("tags") &&
                     t.tags
                       .filter((g) => !g.startsWith("context/") && !hideTags?.includes(g))
@@ -888,15 +1170,28 @@ export function TaskList({
                   )}
                 </div>
               </div>
+              <button
+                type="button"
+                className="ibtn tadd"
+                aria-label="Add a field"
+                title="Add a due or defer date, priority, context, effort or project"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenu({ t, at: e.currentTarget.getBoundingClientRect(), view: "add" });
+                }}
+              >
+                <Icon name="plus" size={14} />
+              </button>
+              {/* Beside ⋯, not after the + that shows only on hover. */}
               {rowAction?.(t)}
               <button
                 type="button"
                 className="ibtn tmore"
                 aria-label="Task actions"
-                title="Dates, priority, context and more for this task"
+                title="Update, rename, waiting for, in progress, cancel, open its note or delete; More… for its fields"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setMenu({ t, at: e.currentTarget.getBoundingClientRect() });
+                  setMenu({ t, at: e.currentTarget.getBoundingClientRect(), view: "menu" });
                 }}
               >
                 <Icon name="more" size={14} />
@@ -905,7 +1200,7 @@ export function TaskList({
           );
         })}
       </ul>
-      {menu && <TaskMenu t={menu.t} at={menu.at} onClose={() => setMenu(null)} />}
+      {menu && <TaskPop key={`${taskKey(menu.t)}|${menu.view}`} t={menu.t} at={menu.at} view={menu.view} onClose={() => setMenu(null)} />}
     </>
   );
 }

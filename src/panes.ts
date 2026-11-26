@@ -93,7 +93,7 @@ const listCol = (key: string, heading: string, def: number): PaneSpec =>
 
 /** The screens' panes, by key. A screen's left list is --pane-left or --pane-list and its right-hand
  *  panel --pane-side, set on the screen's root (the .body element) so the stylesheet's breakpoints
- *  stay the default. The tables' columns (the Trash, Activity's log, Doc check's register) are on
+ *  stay the default. The tables' columns (the Trash, Doc check's register) are on
  *  their tables, `<table>.<column>`, and so are the list tables' (Notes, Wiki, Sources, Templates,
  *  by the column's key in its table); each table has one flexible column, with no key, that takes
  *  the rest and gives way as the others are dragged. All are here, so the settings tool knows every
@@ -114,7 +114,6 @@ export const PANES = {
   "changes.list": left("--pane-list", "the list of changes", 400, 260, 720),
   "today.side": right("--pane-side", "the right rail", 320, 240, 560),
   "health.side": right("--pane-side", "the side column", 380, 260, 640),
-  "activity.side": right("--pane-side", "the side column", 380, 260, 640),
   "sources.side": right("--pane-side", "the ingest runs", 360, 260, 640),
   "graph.side": right("--pane-side", "the graph's pane", 300, 220, 560),
   "note.side": right("--pane-side", "the note's Linked from pane", 280, 200, 480),
@@ -126,27 +125,24 @@ export const PANES = {
   "trash.folder": col("--col-folder", "Was in", 220, 80, 480, "right"),
   "trash.deleted": col("--col-deleted", "Deleted", 110, 70, 240, "right"),
   "trash.size": col("--col-size", "Size", 72, 50, 160, "right"),
-  "activity.when": col("--col-when", "When", 150, 80, 320, "left"),
-  "activity.time": col("--col-time", "Time", 64, 48, 160, "left"),
-  "activity.action": col("--col-action", "Action", 120, 72, 320, "right"),
   "register.version": col("--col-version", "Version", 100, 60, 240, "right"),
   "register.status": col("--col-status", "Status", 110, 72, 240, "right"),
   "register.file": col("--col-file", "File", 200, 80, 480, "right"),
   "notes.type": listCol("type", "Type", 110),
   "notes.date": listCol("date", "Date", 96),
-  "notes.mtime": listCol("mtime", "Modified", 110),
+  "notes.mtime": listCol("mtime", "Modified", 120),
   "notes.size": listCol("size", "Size", 76),
   "wiki.type": listCol("type", "Type", 110),
   "wiki.sources": listCol("sources", "Sources", 72),
   "wiki.health": listCol("health", "Health", 96),
   "wiki.tags": listCol("tags", "Tags", 200),
-  "wiki.mtime": listCol("mtime", "Modified", 110),
+  "wiki.mtime": listCol("mtime", "Modified", 120),
   "sources.kind": listCol("kind", "Kind", 64),
-  "sources.ingested": listCol("ingested", "Status", 88),
+  "sources.ingested": listCol("ingested", "Status", 100),
   "sources.path": listCol("path", "Folder", 90),
-  "sources.mtime": listCol("mtime", "Modified", 110),
+  "sources.mtime": listCol("mtime", "Modified", 120),
   "sources.size": listCol("size", "Size", 76),
-  "templates.mtime": listCol("mtime", "Modified", 110),
+  "templates.mtime": listCol("mtime", "Modified", 120),
   "templates.size": listCol("size", "Size", 76),
 } satisfies Record<string, PaneSpec>;
 
@@ -176,8 +172,7 @@ const PANE_WHERE: Record<string, string> = {
   projects: "Projects",
   changes: "Changes",
   today: "Today",
-  health: "Knowledge health",
-  activity: "Activity",
+  health: "Wiki health",
   sources: "Sources",
   graph: "Graph",
   note: "A note",

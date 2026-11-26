@@ -12,7 +12,20 @@ vi.mock("@tauri-apps/api/core", () => ({
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 
 import type { InboxItem } from "./api";
-import { choiceGroups, doneNow, eachItem, eachSaid, inboxChoices, inboxItemKind, leadChoice, suggestKind } from "./inboxActions";
+import {
+  withReference,
+  actionTaskText,
+  choiceGroups,
+  doneNow,
+  eachItem,
+  eachSaid,
+  inboxChoices,
+  inboxItemKind,
+  leadChoice,
+  makeTask,
+  settleInboxItem,
+  suggestKind,
+} from "./inboxActions";
 import table from "../tests/fixtures/inbox-choices.json";
 
 const item = (lineText: string): InboxItem =>
@@ -37,6 +50,68 @@ describe("Done now in the Inbox", () => {
   });
 });
 
+const action = (owner: "me" | "delegated", initiative = "Orbit launch"): InboxItem => ({
+  kind: "action",
+  path: `wiki/initiatives/${initiative}.md`,
+  line: 12,
+  lineText: "- Book the room [delegated:: Maya] [status:: open] [due:: 2026-11-01] ^a-2",
+  text: "Book the room",
+  stamp: "2026-11-01",
+  action: {
+    id: "a-2",
+    initiative,
+    owner,
+    person: owner === "me" ? null : "Maya",
+    due: "2026-11-01",
+    since: null,
+    overdue: true,
+    quotes: [],
+  },
+});
+
+describe("an initiative's action in the Inbox", () => {
+  it("leads with a task for the user's own and a waiting-for for a delegated one", () => {
+    expect([inboxChoices(action("me")), leadChoice(action("me"))]).toEqual([
+      ["next", "todo", "waiting", "someday", "done", "move", "delete"],
+      "next",
+    ]);
+    expect([inboxChoices(action("delegated")), leadChoice(action("delegated"))]).toEqual([
+      ["waiting", "next", "todo", "someday", "done", "move", "delete"],
+      "waiting",
+    ]);
+    expect(inboxItemKind(action("delegated"))).toEqual({ icon: "waiting", label: "Waiting for Maya, overdue" });
+  });
+
+  it("becomes a task naming whose it is and linking the action, shown as its initiative", () => {
+    expect(actionTaskText(action("delegated"))).toBe("Maya: Book the room [[Orbit launch#^a-2|Orbit launch]]");
+    expect(actionTaskText(action("me", "Unfiled"))).toBe("Book the room [[Unfiled#^a-2|Unfiled]]");
+  });
+
+  it("accepted, makes the task and marks the action with where it went; dropped or done, marks it", async () => {
+    invoke.mockClear();
+    await settleInboxItem(
+      action("delegated"),
+      "- [ ] Maya: Book the room #waiting-for 📅 2026-11-01",
+      "Project. Orbit App launch.md",
+      "Waiting for",
+    );
+    expect(invoke.mock.calls.map((c) => c[0])).toEqual(["project_add_task", "initiative_action_set"]);
+    expect(invoke.mock.calls[1][1]).toMatchObject({
+      path: "wiki/initiatives/Orbit launch.md",
+      line: 12,
+      change: { task: "[[Project. Orbit App launch]]" },
+    });
+    invoke.mockClear();
+    await settleInboxItem(action("me"), "- [ ] Book the room #context/calls");
+    expect(invoke.mock.calls.map((c) => c[0])).toEqual(["task_add", "initiative_action_set"]);
+    expect(invoke.mock.calls[1][1]).toMatchObject({ change: { task: "[[Me. To Do List]]" } });
+    invoke.mockClear();
+    await settleInboxItem(action("me"), null);
+    await doneNow(action("me"));
+    expect(invoke.mock.calls.map((c) => (c[1] as { change: unknown }).change)).toEqual([{ status: "dropped" }, { status: "done" }]);
+  });
+});
+
 describe("each kind of Inbox item's choices", () => {
   const cap = (path: string) => ({ kind: "capture", path, line: 0, text: "", lineText: "", stamp: null }) as InboxItem;
   it("leads a transcript with its meeting note, with the source actions and keeping or trashing it", () => {
@@ -48,27 +123,27 @@ describe("each kind of Inbox item's choices", () => {
   it("lets a thread be answered and waited on, but not another capture", () => {
     const mail = cap("sources/Email. Thread. Re Launch - 2026-10-02.md");
     const doc = cap("sources/Orbit App plan.pdf");
-    expect(inboxChoices(mail)).toEqual(["reply", "ingest", "ask", "next", "project", "waiting", "someday", "reference", "delete"]);
-    expect(inboxChoices(doc)).toEqual(["ingest", "ask", "next", "project", "someday", "reference", "delete"]);
+    expect(inboxChoices(mail)).toEqual(["reply", "ingest", "ask", "next", "todo", "project", "waiting", "someday", "reference", "delete"]);
+    expect(inboxChoices(doc)).toEqual(["ingest", "ask", "next", "todo", "project", "someday", "reference", "delete"]);
     expect([leadChoice(mail), leadChoice(doc)]).toEqual(["reply", "ingest"]);
     expect([suggestKind(mail), suggestKind(doc)]).toEqual(["thread", "capture"]);
   });
   it("gives a thought or task every choice but the capture ones", () => {
     const t = { kind: "task", path: "To Do.md", line: 3, text: "Call Maya", lineText: "- [ ] Call Maya", stamp: null } as InboxItem;
-    expect(inboxChoices(t)).toEqual(["next", "project", "waiting", "done", "someday", "reference", "delete"]);
+    expect(inboxChoices(t)).toEqual(["next", "todo", "project", "waiting", "done", "someday", "reference", "delete"]);
     expect(suggestKind(t)).toBe("task");
   });
   it("groups them as GTD asks: does it need doing? Ask is in neither", () => {
     const mail = cap("sources/Email. Thread. Re Launch - 2026-10-02.md");
     expect(choiceGroups(mail)).toEqual({
-      doing: ["reply", "next", "project", "waiting"],
+      doing: ["reply", "next", "todo", "project", "waiting"],
       notDoing: ["ingest", "someday", "reference", "delete"],
       ask: true,
     });
     const t = cap("sources/Teams. Transcript. Steerco - 2026-10-02.md");
     expect(choiceGroups(t)).toEqual({ doing: [], notDoing: ["meeting", "ingest", "reference", "delete"], ask: true });
     const task = { kind: "task", path: "To Do.md", line: 3, text: "Call Maya", lineText: "- [ ] Call Maya", stamp: null } as InboxItem;
-    expect(choiceGroups(task).doing).toEqual(["next", "project", "waiting", "done"]);
+    expect(choiceGroups(task).doing).toEqual(["next", "todo", "project", "waiting", "done"]);
   });
   it("knows a source's type in a subfolder of sources/ too, by its name", () => {
     expect(suggestKind(cap("sources/emails/Email. Steerco minutes - 2026-09-28.md"))).toBe("thread");
@@ -87,6 +162,7 @@ describe("each kind of Inbox item's choices", () => {
     expect(icon("sources/Teams. Transcript. Steerco - 2026-10-02.md")).toBe("mic");
     expect(icon("sources/emails/Email. Thread. Re Launch - 2026-10-02.md")).toBe("mail");
     expect(icon("sources/Teams. Chat. Standup - 2026-10-03.md")).toBe("chat");
+    expect(inboxItemKind(cap("sources/slack/Slack. Chat. Lena - 2026-11-16.md"))).toEqual({ icon: "chat", label: "Slack conversation" });
     expect(
       ["Plan.docx", "Plan.PDF", "Deck.pptx", "Budget.xlsx", "Board.png", "Minutes.md", "Data.zip"].map((f) => icon(`sources/${f}`)),
     ).toEqual(["file-word", "file-pdf", "slides", "sheet", "image", "note", "source"]);
@@ -106,5 +182,65 @@ describe("a choice for several ticked items", () => {
     expect(eachSaid("Kept in Sources", 2, ["Plan: the file changed since it was read"])).toBe(
       "2 done, 1 failed: Plan: the file changed since it was read",
     );
+  });
+});
+
+describe("filing as reference", () => {
+  it("adds the bullet after a blank line and leaves the note's own ending alone", () => {
+    expect(withReference("# Note\n", "A fact")).toBe("# Note\n\n- A fact\n");
+    expect(withReference("# Note", "A fact")).toBe("# Note\n\n- A fact\n");
+    expect(withReference("# Note\n\n\n", "two\nlines")).toBe("# Note\n\n\n- two lines\n");
+    expect(withReference("# Note\r\n", "A fact")).toBe("# Note\r\n\r\n- A fact\r\n");
+    expect(withReference("", "A fact")).toBe("- A fact\n");
+  });
+});
+
+describe("an Inbox item made a task", () => {
+  const task: InboxItem = {
+    ...action("me"),
+    kind: "task",
+    path: "Me. To Do List.md",
+    line: 6,
+    lineText: "- [ ] Book the room",
+    action: undefined,
+  };
+  const thought: InboxItem = { ...task, kind: "thought", path: "Me. Scratchpad.md", block: "## 2026-11-01 09:00\nBook the room" };
+  /** `invoke` with the item's removal failing, and the undo stack's top labelled `top`. */
+  const failing = (top: string) =>
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "inbox_remove_thought" || cmd === "initiative_action_set") throw { code: "stale", message: "It changed." };
+      if (cmd === "undo_peek") return { label: top };
+      return { line: 0, lineText: "", undo: "Added “Book the room” to the To Do list" };
+    });
+  const calls = () => invoke.mock.calls.map((c) => c[0]);
+
+  it("moves a To Do list task to To Do in one write", async () => {
+    invoke.mockClear();
+    await makeTask(task, "- [ ] Book the room");
+    expect(invoke.mock.calls).toEqual([["inbox_task_to_todo", { line: 6, lineText: "- [ ] Book the room", text: "Book the room" }]]);
+  });
+
+  it("takes the task back when the item can't then leave the Inbox, and says why", async () => {
+    invoke.mockClear();
+    failing("Added “Book the room” to the To Do list");
+    await expect(makeTask(thought, "Book the room")).rejects.toMatchObject({ message: "It changed." });
+    expect(calls()).toEqual(["todo_add_task", "inbox_remove_thought", "undo_peek", "undo"]);
+    invoke.mockClear();
+    await expect(settleInboxItem(thought, "- [ ] Book the room")).rejects.toMatchObject({ message: "It changed." });
+    expect(calls()).toEqual(["task_add", "inbox_remove_thought", "undo_peek", "undo"]);
+    invoke.mockClear();
+    await expect(settleInboxItem(action("me"), "- [ ] Book the room", "Project. Orbit App launch.md")).rejects.toMatchObject({
+      message: "It changed.",
+    });
+    expect(calls()).toEqual(["project_add_task", "initiative_action_set", "undo_peek", "undo"]);
+  });
+
+  it("leaves the undo alone when something else was done since", async () => {
+    invoke.mockClear();
+    failing("Renamed a note");
+    await expect(makeTask(thought, "Book the room")).rejects.toMatchObject({ message: "It changed." });
+    expect(calls()).toEqual(["todo_add_task", "inbox_remove_thought", "undo_peek"]);
+    invoke.mockReset();
+    invoke.mockImplementation(async () => ({ line: 0, lineText: "", undo: "Done" }));
   });
 });

@@ -4,7 +4,7 @@
 
 // The vault at a glance: pie charts of notes and wiki pages by type and by tag, and the files the
 // most others link to. Activity shows the notes' and the most linked, in a column right of the log;
-// Knowledge health the wiki's, in its side column.
+// Wiki health the wiki's, in its side column.
 // A slice, or its row in the legend, opens the list it counts: Notes or the Wiki filtered to that
 // type, the Wiki at that tag, or a search for a note tag. Five slices at most, then Other; each in
 // its type's or tag's own colour (src/tones.ts), as a type pill's dot and the Graph show it.
@@ -113,57 +113,7 @@ export function Pie({ title, slices, unit }: { title: string; slices: Slice[]; u
   );
 }
 
-const notesOfType = (t: string) => nav.go({ screen: "notes", view: { "notes:type": t } });
 const wikiOf = (tag: string | null, type: string | null) => nav.go({ screen: "wiki", view: { "wiki:tag": tag, "wiki:type": type } });
-const searchTag = (tag: string) => nav.go({ screen: "search", view: { "search:q": `tag:${tag}` } });
-
-/** Activity's card: notes by type and by tag, and the most linked notes and wiki pages. */
-export function VaultGlance({ g }: { g: Glance }) {
-  const types = fold(g.noteTypes, (n) => ({
-    label: "Other",
-    tip: `${fmtCount(n)} ${n === 1 ? "note" : "notes"} of another type or none: show them`,
-    open: () => notesOfType("other"),
-  }));
-  const tags = fold(g.noteTags, (n, rest) => ({
-    label: `${fmtCount(rest)} other tags`,
-    tip: `${fmtCount(n)} uses of ${fmtCount(rest)} other tags`,
-  }));
-  return (
-    <div className="card glance stacked">
-      <Pie
-        title="Notes by type"
-        unit={["note", "notes"]}
-        slices={[
-          ...types.top.map((c) => ({
-            key: c.name,
-            tone: tonesOf(g).noteType.get(c.name.toLowerCase()),
-            label: c.name,
-            n: c.n,
-            tip: `${fmtCount(c.n)} ${c.n === 1 ? "note" : "notes"} of type ${c.name}: show them`,
-            open: () => notesOfType(c.name),
-          })),
-          ...(types.other ? [types.other] : []),
-        ]}
-      />
-      <Pie
-        title="Notes by tag"
-        unit={["tag use", "tag uses"]}
-        slices={[
-          ...tags.top.map((c) => ({
-            key: c.name,
-            tone: tonesOf(g).tag.get(c.name.toLowerCase()),
-            label: `#${c.name}`,
-            n: c.n,
-            tip: `${fmtCount(c.n)} ${c.n === 1 ? "note" : "notes"} tagged #${c.name}: search for them`,
-            open: () => searchTag(c.name),
-          })),
-          ...(tags.other ? [tags.other] : []),
-        ]}
-      />
-      <MostLinked rows={g.mostLinked} />
-    </div>
-  );
-}
 
 function MostLinked({ rows }: { rows: Glance["mostLinked"] }) {
   return (
@@ -187,7 +137,8 @@ function MostLinked({ rows }: { rows: Glance["mostLinked"] }) {
   );
 }
 
-/** Knowledge health's card: wiki pages by type and by tag. */
+/** Wiki health's card: wiki pages by type and by tag, and the most linked notes and wiki pages.
+ *  The one place the vault's pie charts show (D-20261119-04). */
 export function WikiGlance({ g }: { g: Glance }) {
   const types = fold(g.wikiTypes, (n) => ({
     label: "Other",
@@ -230,6 +181,7 @@ export function WikiGlance({ g }: { g: Glance }) {
           ...(tags.other ? [tags.other] : []),
         ]}
       />
+      <MostLinked rows={g.mostLinked} />
     </div>
   );
 }

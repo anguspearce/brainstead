@@ -2,8 +2,8 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Quick capture: one box, Task or Thought (Tab switches). A task goes under "#### Other" in the
-// To Do list and a thought to the Scratchpad, as the previous app writes them. `due: mon` and
+// Quick capture: one box, Task or Scratchpad note (Tab switches). A task goes under "#### Other"
+// in the To Do list and a note (a thought, in the code) to the Scratchpad, as the previous app writes them. `due: mon` and
 // `defer: +3d` become dates; `due:` alone opens a date picker; [[ and # complete from the vault.
 
 import { useEffect, useRef, useState } from "react";
@@ -258,12 +258,12 @@ export function CaptureBox({
             narrow
               ? kind === "task"
                 ? "Capture a task"
-                : "Capture a thought"
+                : "Capture a Scratchpad note"
               : kind === "task"
                 ? adds
                   ? `Capture a task; it gets ${adds}`
                   : "Capture a task — [[ to link, # to tag, due: mon"
-                : "Capture a thought for the Scratchpad"
+                : "Capture a note for the Scratchpad"
           }
           aria-label="Capture"
           spellCheck
@@ -313,14 +313,10 @@ export function CaptureBox({
               role="radio"
               aria-checked={kind === k}
               className={kind === k ? "on" : ""}
-              title={
-                k === "task"
-                  ? "Capture as a task on the To Do list (Tab switches)"
-                  : "Capture as a thought in the Scratchpad (Tab switches)"
-              }
+              title={k === "task" ? "Capture a task for the To Do list (Tab switches)" : "Capture a note for the Scratchpad (Tab switches)"}
               onClick={() => setKind(k)}
             >
-              {k === "task" ? "Task" : "Thought"}
+              {k === "task" ? "Task" : "Scratchpad note"}
             </button>
           ))}
         </div>

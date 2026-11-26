@@ -2,19 +2,25 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Teams and Outlook sync: reads the user's own chats, meeting transcripts, Inbox mail and calendar
+//! The sync (Settings › Sync). Teams and Outlook: reads the user's own chats, meeting transcripts, Inbox mail and calendar
 //! and writes them into `sources/` through the same path the capture extensions use, so the Inbox
 //! and "Ingest new sources as they arrive" work unchanged (D-20261025-01, D-20261025-02). The
 //! sign-in is handed over by the Teams extension while a Teams tab is open (`auth`); macOS and Windows
-//! now. Everything the sync reads is the user's own, and it only ever reads.
+//! now. Everything the sync reads is the user's own, and it only ever reads. Draft reply's Put in
+//! Outlook and Put in Teams (`reply`) leave a reply there unsent; nothing here ever sends.
 
 pub mod api;
 pub mod attachments;
 pub mod auth;
 pub mod fetch;
 pub mod html;
+pub mod log;
+pub mod pictures;
 pub mod pull;
+pub mod reply;
 pub mod run;
+pub mod skips;
+pub mod slack;
 pub mod state;
 
 use reqwest::blocking::Client;
@@ -31,18 +37,40 @@ pub fn client() -> Client {
 
 /// Takes the sign-in a Teams-extension handover carried (`auth::from_handover`) and keeps it. Called
 /// from the native host when the extension hands over.
-pub fn accept_handover(v: &serde_json::Value) -> Result<(), String> {
-    let sign_in = auth::from_handover(v).ok_or("The Teams sign-in handover had no live sign-in to use.")?;
-    let old = auth::load();
-    auth::store(&auth::keep_rejected(auth::keep_missing(sign_in, old.clone()), old.as_ref()))
+pub fn accept_handover(v: &serde_json::Value) -> Result<Vec<String>, String> {
+    auth::changing(|| {
+        let old = auth::load();
+        let refused = old.as_ref().map(|o| o.rejected.clone()).unwrap_or_default();
+        let sign_in = auth::from_handover_avoiding(v, &refused).ok_or("The Teams sign-in handover had no live sign-in to use.")?;
+        let s = auth::keep_rejected(auth::keep_missing(sign_in, old.clone()), old.as_ref());
+        auth::store(&s)?;
+        Ok(still_refused(&s, &[auth::Service::Spaces, auth::Service::Substrate, auth::Service::Csa]))
+    })
 }
 
 /// Takes the mail token an Outlook-extension handover carried and keeps it with the rest of the
 /// sign-in (D-20261028-02).
-pub fn accept_mail_handover(v: &serde_json::Value) -> Result<(), String> {
-    let old = auth::load();
-    let sign_in = auth::with_mail_handover(old.clone(), v).ok_or("The Outlook tab had no live mail sign-in to use.")?;
-    auth::store(&auth::keep_rejected(sign_in, old.as_ref()))
+pub fn accept_mail_handover(v: &serde_json::Value) -> Result<Vec<String>, String> {
+    auth::changing(|| {
+        let old = auth::load();
+        let sign_in = match auth::with_mail_handover(old.clone(), v) {
+            Some(s) => s,
+            // Only the token Microsoft turned down: the tab needs a fresh one.
+            None if old.as_ref().is_some_and(|o| o.rejected.contains_key(auth::Service::Outlook.key())) => {
+                return Ok(vec![auth::Service::Outlook.what().to_string()]);
+            }
+            None => return Err("The Outlook tab had no live mail sign-in to use.".into()),
+        };
+        let s = auth::keep_rejected(sign_in, old.as_ref());
+        auth::store(&s)?;
+        Ok(still_refused(&s, &[auth::Service::Outlook]))
+    })
+}
+
+/// Which of `of` are still turned down after a handover (the tab gave only the token Microsoft
+/// refused): the extension reloads the tab so the page fetches fresh ones (D-20261124-03).
+fn still_refused(s: &auth::SignIn, of: &[auth::Service]) -> Vec<String> {
+    of.iter().filter(|svc| s.rejected.contains_key(svc.key())).map(|svc| svc.what().to_string()).collect()
 }
 
 /// A meeting for the Today screen (dates as RFC 3339 strings, so no extra chrono features are needed).
@@ -65,13 +93,32 @@ pub fn sync_sign_in_state() -> auth::SignInState {
 /// The user signs out of the sync (Settings): forgets the sign-in.
 #[tauri::command]
 pub fn sync_sign_out() -> Result<(), String> {
-    auth::forget()
+    auth::forget_teams()
 }
 
-/// Runs one sync pass now (Settings › "Sync now").
+/// Forgets the Outlook mail sign-in only (Settings › Sync › Outlook › Sign out).
 #[tauri::command]
-pub async fn sync_now() -> run::Report {
-    tauri::async_runtime::spawn_blocking(|| run::run_once(&platform::data_dir())).await.unwrap_or_default()
+pub fn sync_sign_out_outlook() -> Result<(), String> {
+    auth::forget_mail()
+}
+
+/// Runs one sync pass now (Settings › "Sync now"), or with `from` (`YYYY-MM-DD`) a back-fill from
+/// that day (Settings › Sync › Fetch again, D-20261118-23).
+#[tauri::command]
+pub async fn sync_now(app: tauri::AppHandle, from: Option<String>) -> Result<run::Report, String> {
+    let from = match from.as_deref().map(str::trim).filter(|f| !f.is_empty()) {
+        Some(f) => {
+            let d = chrono::NaiveDate::parse_from_str(f, "%Y-%m-%d").map_err(|_| format!("{f} isn't a date (YYYY-MM-DD)."))?;
+            if d > chrono::Local::now().date_naive() {
+                return Err("The day to fetch from is in the future.".into());
+            }
+            Some(d)
+        }
+        None => None,
+    };
+    let report = tauri::async_runtime::spawn_blocking(move || run::run_from(&platform::data_dir(), from)).await.unwrap_or_default();
+    run::tell_replied(&app, &report);
+    Ok(report)
 }
 
 /// On-demand pull for an assistant: gather the chats, mail and transcripts about `query` over the
@@ -94,6 +141,23 @@ pub async fn sync_pull(query: Option<String>, days: Option<u32>, kinds: Option<V
     })
     .await
     .unwrap_or_default()
+}
+
+/// Draft reply's Put in Outlook / Put in Teams (D-20261120-05): the reply, unsent, as an Outlook
+/// draft on the thread or typed into the Teams chat's box by the Teams extension, and the link
+/// opened in the browser. Never sends.
+#[tauri::command]
+pub async fn reply_place(path: String, text: String) -> Result<reply::Placed, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let data = platform::data_dir();
+        let s = crate::settings::load(&data.join("settings.json"));
+        let vault = s.vault_path.as_deref().filter(|p| !p.trim().is_empty()).ok_or("No vault is open.")?;
+        let placed = reply::place(&data, std::path::Path::new(vault), &path, &text, chrono::Utc::now().timestamp())?;
+        platform::open_in_chrome(&placed.url)?;
+        Ok(placed)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// A channel the user can choose to sync (Settings): its id and name.

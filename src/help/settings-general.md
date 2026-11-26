@@ -3,7 +3,7 @@ title: Settings › General
 kind: screen
 screens: [settings, settings/general]
 order: 30
-summary: The switch-over checklist, the menu bar and opening at login, the quick capture shortcut, your name and the app's appearance.
+summary: The switch-over checklist, the menu bar and opening at login, the quick capture shortcut, notifications, your name and the app's appearance.
 ---
 General holds the settings that affect the whole app. Open Settings with `⌘,`.
 
@@ -11,8 +11,8 @@ General holds the settings that affect the whole app. Open Settings with `⌘,`.
 **Moving over from another notes app** lists what's left before you stop using another app on the same vault. It shows only when that app's `scripts/` folder is in the vault. Brainstead ticks some items itself:
 
 - **Brainstead can write to the vault**: read-only is off in [Settings › Vault](app:settings/vault).
-- **Brainstead runs the daily and weekly summaries**: on in [Settings › Jobs & schedule](app:settings/jobs).
-- **Your tools that start sessions are listed** (optional): so the daily summary doesn't count them as your work. See the [Jobs & schedule help](help:settings-jobs).
+- **Brainstead runs the daily and weekly summaries**: on in [Settings › Automations](app:settings/jobs).
+- **Your tools that start sessions are listed** (optional): so the daily summary doesn't count them as your work. See the [Automations help](help:settings-jobs).
 - **The Outlook extension captures here** and **The Teams extension captures here**: a capture has arrived from each.
 - **The other app's skills and scripts are retired**: its skills (`.claude/skills`) and scripts (`scripts/`) let an agent write to the vault directly, bypassing [Changes](help:review). Once **The other app is stopped** is ticked, **Retire them** copies your name corrections out, then:
   - moves both folders to the [Trash](app:trash), where you can restore them;
@@ -27,10 +27,21 @@ You tick the rest yourself: the other app's summaries off, its browser extension
 - **Only in the menu bar when the window is closed** takes Brainstead out of the Dock when you close its window. It only appears while **Show in the menu bar** is on, and an assistant can't turn it on otherwise.
 - **Open at login** starts Brainstead when you log in. It only appears for the installed app, not one run from a folder. It's the same switch as in the menu-bar window and, on a Mac, System Settings › General › Login Items; on Windows it adds Brainstead to your startup apps. If macOS asks you to approve it, System Settings opens there; until you do, it shows as off.
 
-- **Offer Getting started when Brainstead opens** (on by default) shows a welcome with **Open Getting Started** each time the app opens on a vault. Ticking **Don't ask me again** in it turns this off. The guides are always in the help: press `?` and click **Getting started**.
+- **Offer Getting started when Brainstead opens** (on by default) shows a welcome with **Open Getting started** each time the app opens on a vault. Ticking **Don't ask me again** in it turns this off. The guides are always in the help: press `?` and click **Getting started**.
 
 What the two together do is in [The menu bar](help:menubar).
 
+
+## Notifications
+**Notifications** says when Brainstead notifies you:
+
+- **Only when it needs me** (the default): an ingest or summary that failed, a capture that was refused, a capture you clicked in a browser extension, the sync's sign-in gone stale or signed out (once, until it's fixed and goes again), and a settings file that had to be put back or couldn't be read.
+- **All**: those, and every synced chat, email thread or Slack conversation, every ingest done, each summary written and the daily check.
+- **Off**: none.
+
+If Brainstead can't read its settings file when it starts (another program is holding it), it starts with the defaults and says so. No setting is saved until it can read the file, so nothing in it is lost: a change you make meanwhile is refused with the reason, and once the file can be read your own settings come back in its place.
+
+Teams, Outlook and Slack already tell you about new messages, so by default Brainstead doesn't repeat them. What the sync brought in and what each ingest did is always in [Activity › Sync & ingest](help:activity). An assistant can change this with the `settings` tool (`notifications`: `needs_me`, `all` or `off`).
 ## Change the quick capture shortcut
 The [Quick capture](help:capture) shortcut has a default, shown on its button (Ctrl+Shift+Space on Windows). Click the shortcut button and press the new keys, including at least one modifier. `Esc` or a click elsewhere keeps the old one. **Reset to ⌃⌥Space** puts it back. If macOS won't take a shortcut, a message says why. An assistant can change it when you ask, with the same checks.
 
@@ -49,7 +60,10 @@ On Windows, scrollbars stay out of sight until the pointer is over a list or pag
 ## Make everything bigger or smaller
 **Interface size** changes everything in the window together, from 80% to 150% in steps of 10: the sidebar, lists, buttons, popovers, dialogs and the text of notes. **Smaller** and **Bigger** step it and the window follows at once; **Reset to 100%** puts it back. `⇧⌘=` and `⇧⌘-` do the same from any screen and `⇧⌘0` puts it back to 100%; on a Mac the **View** menu has the same three. A note's [Text size](help:note) (`⌘=` `⌘-` `⌘0`, 12 to 24 px) is separate and comes on top: 120% with 18 px text shows a 21.6 px body. The quick capture and menu-bar windows are sized to what they hold and stay at 100%. The size is kept for this computer, not in the vault, so each machine has its own. An assistant can read and change it when you ask (`interfaceSize`, a percentage).
 
+## The sidebar as icons
+Under **Sidebar**, **Icons only on a wide window** and **Icons only on a narrow window (1100 px or less)** choose whether the sidebar is a rail of icons at each width; a narrow window has it on to start with. `⌘\`, the button at the top of the sidebar and **Toggle Sidebar** on the View menu switch the one for the width the window is at, so a narrow window's choice never changes a wide one's. Interface size counts: at a bigger size the window is narrower for this. Kept for this computer, not in the vault. An assistant can read and change them when you ask (`sidebarRail.wide`, `sidebarRail.narrow`).
+
 ## Resize the panes
-Drag the line between two panes, or the edge of a column heading, to make it wider or narrower: the sidebar, each screen's list and right-hand pane, and the columns of every table (Notes, Wiki, Sources, Templates, Trash, Activity's log and Doc check's register). The line turns the accent colour under the pointer. A double-click, or `↩` when the line has the focus, puts a pane back; `←` and `→` move it 8 px, `⇧←` and `⇧→` 40 px, and `Home` and `End` take it to its least and greatest width. In a table one column (**Title**, **Name**, **Item** or **Document**) takes the rest; a column before it resizes by its heading's right edge, one after it by its left edge. Panes never cover one another: in a narrow window or beside a wide sidebar the middle pane gives way first, down to a least width of its own, then panes at their usual widths, then the ones you dragged. A wider sidebar lays a screen out as a narrower window would. **Pane widths** here says how many are resized, and **Reset pane widths** puts every one back.
+Drag the line between two panes, or the edge of a column heading, to make it wider or narrower: the sidebar, each screen's list and right-hand pane, and the columns of every table (Notes, Wiki, Sources, Templates, Trash and Doc check's register). The line turns the accent colour under the pointer. A double-click, or `↩` when the line has the focus, puts a pane back; `←` and `→` move it 8 px, `⇧←` and `⇧→` 40 px, and `Home` and `End` take it to its least and greatest width. In a table one column (**Title**, **Name** or **Document**) takes the rest; the others resize by their heading's left edge. Panes never cover one another: in a narrow window or beside a wide sidebar the middle pane gives way first, down to a least width of its own, then panes at their usual widths, then the ones you dragged. A wider sidebar lays a screen out as a narrower window would. **Pane widths** here says how many are resized, and **Reset pane widths** puts every one back.
 
 **Lock pane widths** keeps the sidebar and the screens' panes as they are, and **Lock column widths** every table's columns: their lines are hidden and ignore the pointer and keys. A lock keeps the widths you set, and **Reset pane widths** still works. Widths and locks are kept for this computer, not in the vault. An assistant can read and change them when you ask: the screen fits a width it sets to the room, so it never covers another pane, and while a lock is on it's told which one to turn off.

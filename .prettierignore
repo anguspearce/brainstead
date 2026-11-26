@@ -10,3 +10,4 @@ tools/
 package-lock.json
 .claude/settings.local.json
 .claude/worktrees/
+.impeccable/

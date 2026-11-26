@@ -88,6 +88,58 @@ pub async fn fixname_apply(app: AppHandle, req: Request, rows: Vec<Row>) -> Res<
     .await
 }
 
+/// One note an assistant's fix changes, as a change to submit to Changes.
+#[derive(Debug, Serialize)]
+pub struct NoteChange {
+    pub page: String,
+    pub instruction: brainstead_core::changes::Instruction,
+}
+
+/// Notes worked out as whole texts (page, before, after), as changes for Changes. `updated:` moves
+/// to `today` where the page has one, as the write through Changes moves its modification time
+/// (the screens' own fixes keep both).
+pub fn note_changes(planned: Vec<(String, String, String)>, today: &str) -> Vec<NoteChange> {
+    planned
+        .into_iter()
+        .map(|(page, before, after)| {
+            let after = proposals::bump_updated(&before, &after, today);
+            NoteChange { page, instruction: brainstead_core::changes::from_texts(Some(&before), &after) }
+        })
+        .collect()
+}
+
+/// An assistant's Fix name (the MCP's fix_name): what `fixname_apply` would write to the ticked
+/// notes, worked out and not written. The window submits them to Changes, so they're recorded,
+/// held by its rules and can be reverted, as every change an assistant makes is.
+#[tauri::command]
+pub async fn fixname_changes(app: AppHandle, req: Request, rows: Vec<Row>) -> Res<Vec<NoteChange>> {
+    blocking(move || {
+        let root = root(&app)?;
+        let today = chrono::Local::now().date_naive().to_string();
+        Ok(note_changes(fixname::planned(&root, &req, &rows)?, &today))
+    })
+    .await
+}
+
+/// Remembers the correction and nothing else, once an assistant's fix is made through Changes:
+/// the corrections file is the app's own, not a note. One undo. False when it's remembered already.
+#[tauri::command]
+pub async fn fixname_remember(app: AppHandle, req: Request) -> Res<bool> {
+    blocking(move || {
+        writable(&app.state::<AppState>())?;
+        let root = root(&app)?;
+        let subs = brainstead_core::names::path(&crate::platform::data_dir());
+        let changes = fixname::apply(&root, &subs, &req, &[])?;
+        let Some(c) = changes.first() else { return Ok(false) };
+        let label = format!("Remembered the correction “{}” → “{}”", req.wrong, req.right);
+        let file = FileUndo { path: brainstead_core::names::UNDO_NAME.to_string(), before: c.before.clone(), version: c.version.clone() };
+        app.state::<UndoStack>().push(UndoEntry::files(label, vec![file]));
+        written(&app, std::slice::from_ref(&c.path));
+        Ok(true)
+    })
+    .await
+}
+
 // ── The staged ingest ─────────────────────────────────────────────────────────
 
 use brainstead_core::claims::Kept;
@@ -116,7 +168,8 @@ pub struct Step {
 #[serde(rename_all = "camelCase")]
 pub struct Run {
     pub id: String,
-    /// ingest, or meeting (a note from a transcript).
+    /// ingest, actions (an ingest for actions and decisions only, of a source the wiki already
+    /// has: D-20261118-23), or meeting (a note from a transcript).
     #[serde(default = "ingest_kind")]
     pub kind: String,
     /// For a meeting note: its type, name and date.
@@ -153,6 +206,17 @@ pub struct Run {
     /// line is written as that one applies, before the run on disk lists any.
     #[serde(default)]
     pub planned: usize,
+    /// A chat day it found nothing in, moved to the Trash (a change with Revert).
+    #[serde(default)]
+    pub trashed: bool,
+    /// The source's versions it read: as it was, and as its name fixes left it. Once it's done,
+    /// the source isn't changed since it was cited while it's still one of them (D-20261120-08).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub read_versions: Vec<String>,
+    /// A synced thread's messages it read (`core_ingest::message_keys`), noted once it's done so
+    /// the next ingest marks the new ones (D-20261120-09).
+    #[serde(skip)]
+    pub read_messages: Option<Vec<String>>,
 }
 
 fn ingest_kind() -> String {
@@ -184,10 +248,29 @@ fn runs_dir() -> PathBuf {
     crate::platform::data_dir().join("runs")
 }
 
-fn save_run(r: &Run) {
+/// Held across each read-then-write of a run's file: the worker saves its own copy while
+/// `take_log`, on whichever thread applies a change, marks the one on disk.
+static RUN_FILES: Mutex<()> = Mutex::new(());
+
+fn write_run(r: &Run) {
     let _ = std::fs::create_dir_all(runs_dir());
     if let Ok(j) = serde_json::to_vec_pretty(r) {
         let _ = brainstead_core::write::write_atomic(&runs_dir().join(format!("{}.json", r.id)), &j, false);
+    }
+}
+
+/// Whether a run is saved as logged. `take_log` marks the run on disk only, and the worker's own
+/// copy never hears of it, so a save of that copy keeps the mark: one `log.md` line per ingest.
+fn logged_kept(r: &Run, on_disk: Option<&Run>) -> bool {
+    r.logged || on_disk.is_some_and(|d| d.logged)
+}
+
+fn save_run(r: &Run) {
+    let _files = crate::lock(&RUN_FILES);
+    if logged_kept(r, load_run(&r.id).as_ref()) && !r.logged {
+        write_run(&Run { logged: true, ..r.clone() });
+    } else {
+        write_run(r);
     }
 }
 
@@ -200,12 +283,16 @@ pub fn load_run(id: &str) -> Option<Run> {
 
 /// The `log.md` line for a run's first accepted page; None after that (one line per ingest).
 pub fn take_log(id: &str) -> Option<String> {
-    let mut r = load_run(id)?;
-    if r.logged {
-        return None;
-    }
-    r.logged = true;
-    save_run(&r);
+    let r = {
+        let _files = crate::lock(&RUN_FILES);
+        let mut r = load_run(id)?;
+        if r.logged {
+            return None;
+        }
+        r.logged = true;
+        write_run(&r);
+        r
+    };
     let link = brainstead_core::lint::name_of(&r.source).trim_end_matches(".md").to_string();
     let n = r.proposals.len().max(r.planned);
     let summary = format!("{n} page change{}", if n == 1 { "" } else { "s" });
@@ -279,6 +366,20 @@ pub async fn ingest_runs() -> Res<Vec<Run>> {
 pub fn ingest_stop(app: AppHandle, id: String) {
     app.state::<Stops>().0.lock().unwrap().insert(id.clone());
     app.state::<std::sync::Arc<crate::ask::Running>>().cancel(&id);
+    // One still waiting is stopped now, on disk too, so a restart before its turn doesn't take it again.
+    let waiting = {
+        let mut q = crate::lock(&QUEUE);
+        q.0.iter().position(|r| r.id == id).map(|i| q.0.remove(i))
+    };
+    if let Some(mut r) = waiting {
+        r.status = "stopped".into();
+        r.finished = Some(proposals::now_local());
+        r.error = Some("Stopped before it started.".into());
+        for s in r.steps.iter_mut() {
+            s.status = "skipped".into();
+        }
+        emit(&app, &r);
+    }
 }
 
 /// The runs waiting, and whether a worker is taking them: every ingest and meeting note goes
@@ -343,22 +444,88 @@ fn enqueue(app: &AppHandle, runs: Vec<Run>) {
             emit(&app, &r);
             continue;
         }
-        run(&app, &mut r);
+        // A panic (a parser on odd input) ends this run, not the queue: the worker goes on to
+        // the next, and the run is failed so the next start doesn't take it again.
+        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&app, &mut r))).is_err() {
+            crate::applog!("ingest {}: panicked on {}", r.id, r.source);
+            panicked(&mut r);
+            emit(&app, &r);
+        }
     });
 }
 
-/// Runs left "queued" or "running" by an app that closed (or a request that failed half way):
-/// marked stopped at start, as nothing will take them.
-pub fn settle_stale() {
-    for mut r in all_runs().into_iter().filter(|r| r.status == "queued" || r.status == "running") {
+/// A run whose thread panicked: failed, so it isn't left "running" and resumed at the next start.
+fn panicked(r: &mut Run) {
+    r.status = "failed".into();
+    r.finished = Some(proposals::now_local());
+    r.error = Some("Brainstead stopped this run because something went wrong; its log has the details (Settings › About).".into());
+    for s in r.steps.iter_mut().filter(|s| s.status == "waiting" || s.status == "running") {
+        s.status = "skipped".into();
+    }
+}
+
+/// What happens at start to a run an earlier session left "queued" or "running" (the app closed, or
+/// was restarted, with runs waiting): one that hadn't begun making its changes is taken again from
+/// the start, so a long queue survives a restart; one that was making them, or that waited longer
+/// than [`RESUME_DAYS`], is stopped, so nothing is made twice.
+fn left_over(r: &Run, today: chrono::NaiveDate) -> Option<Run> {
+    if r.status != "queued" && r.status != "running" {
+        return None;
+    }
+    let making = r.steps.last().is_some_and(|s| s.status != "waiting");
+    let started = chrono::NaiveDate::parse_from_str(r.started.get(..10).unwrap_or(""), "%Y-%m-%d").ok();
+    let fresh = started.is_some_and(|d| (today - d).num_days() <= RESUME_DAYS);
+    let mut r = r.clone();
+    if making || !fresh {
         r.status = "stopped".into();
         r.finished = Some(proposals::now_local());
-        r.error = Some("Brainstead closed before it finished.".into());
+        r.error = Some(
+            if making { "Brainstead closed while it was making its changes." } else { "Brainstead closed before it finished." }.into(),
+        );
         for s in r.steps.iter_mut().filter(|s| s.status == "waiting" || s.status == "running") {
             s.status = "skipped".into();
         }
-        save_run(&r);
+    } else {
+        r.status = "queued".into();
+        r.error = None;
+        r.dropped.clear();
+        r.pages.clear();
+        for s in r.steps.iter_mut() {
+            *s = Step { name: s.name.clone(), status: "waiting".into(), detail: String::new(), ms: 0 };
+        }
     }
+    Some(r)
+}
+
+/// A run left waiting longer than this many days is stopped at start rather than taken again.
+const RESUME_DAYS: i64 = 7;
+
+/// At start: the runs an earlier session left waiting are queued again, once the vault is open (it
+/// opens a moment after start); those that can't be (see [`left_over`]) are marked stopped.
+pub fn resume_stale(app: &AppHandle) {
+    let today = chrono::Local::now().date_naive();
+    let mut again = Vec::new();
+    for r in all_runs().iter().filter_map(|r| left_over(r, today)) {
+        if r.status == "queued" {
+            again.push(r);
+        } else {
+            save_run(&r);
+        }
+    }
+    if again.is_empty() {
+        return;
+    }
+    crate::applog!("ingest: taking {} run(s) left waiting by the last session", again.len());
+    let app = app.clone();
+    std::thread::spawn(move || {
+        for _ in 0..120 {
+            if app.state::<VaultService>().root().is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+        enqueue(&app, again);
+    });
 }
 
 /// Ingests these sources (or notes) one after another, in the background, oldest first, after
@@ -366,24 +533,45 @@ pub fn settle_stale() {
 /// `unattended`: an assistant session nobody is watching asked, so its changes are treated as a
 /// scheduled run's.
 #[tauri::command]
-pub fn ingest_start(app: AppHandle, paths: Vec<String>, unattended: Option<bool>) -> Res<Vec<String>> {
-    ingest_start_for(&app, paths, unattended.unwrap_or(false).then_some("scheduled"), None)
+/// `mode`: `actions` reads each source for its actions and decisions only; `auto` does that for a
+/// source a wiki page already cites and a full ingest for the rest; a full ingest when left out.
+pub async fn ingest_start(app: AppHandle, paths: Vec<String>, unattended: Option<bool>, mode: Option<String>) -> Res<Vec<String>> {
+    // Off the main thread: `auto` asks the index, whose lock the watcher can hold for a while.
+    blocking(move || {
+        let actions = match mode.as_deref() {
+            None | Some("full") => vec![false; paths.len()],
+            Some("actions") => vec![true; paths.len()],
+            Some("auto") => app
+                .state::<VaultService>()
+                .with_index(|ix, _| ix.ingested(&paths).map_err(|e| e.to_string()))
+                .map_err(|e| EditError::from(format!("Couldn't tell which sources the wiki has: {e}")))?,
+            Some(m) => return Err(EditError::from(format!("{m} isn't an ingest mode: full, actions or auto."))),
+        };
+        queue_ingests(&app, paths, &actions, unattended.unwrap_or(false).then_some("scheduled"), None)
+    })
+    .await
 }
 
 /// [`ingest_start`] for a job: its trigger, and the group its changes go in.
 pub fn ingest_start_for(app: &AppHandle, paths: Vec<String>, trigger: Option<&str>, group: Option<&str>) -> Res<Vec<String>> {
+    let full = vec![false; paths.len()];
+    queue_ingests(app, paths, &full, trigger, group)
+}
+
+/// Queues an ingest of each path; one whose `actions` is true reads it for actions and decisions only.
+fn queue_ingests(app: &AppHandle, paths: Vec<String>, actions: &[bool], trigger: Option<&str>, group: Option<&str>) -> Res<Vec<String>> {
     let app = app.clone();
     let root = root(&app)?;
     let model = crate::ask::job_model(&app, "ingest", trigger == Some("scheduled"));
     let mut runs = Vec::new();
-    for p in paths {
+    for (i, p) in paths.into_iter().enumerate() {
         brainstead_core::trash::safe_rel(&p).map_err(EditError::from)?;
         if !root.join(&p).is_file() {
             return Err(brainstead_core::write::WriteError::NotFound(format!("{p} isn't in the vault.")).into());
         }
         let r = Run {
             id: proposals::new_id(),
-            kind: ingest_kind(),
+            kind: if actions.get(i).copied().unwrap_or(false) { "actions".into() } else { ingest_kind() },
             note: None,
             source: p,
             started: proposals::now_local(),
@@ -399,6 +587,9 @@ pub fn ingest_start_for(app: &AppHandle, paths: Vec<String>, trigger: Option<&st
             error: None,
             logged: false,
             planned: 0,
+            trashed: false,
+            read_versions: Vec::new(),
+            read_messages: None,
         };
         runs.push(r);
     }
@@ -453,7 +644,22 @@ fn run(app: &AppHandle, r: &mut Run) {
     let now = proposals::now_local();
     r.finished = Some(now);
     match result {
-        Ok(()) => r.status = "done".into(),
+        Ok(()) => {
+            r.status = "done".into();
+            // Read in full, its actions taken: out of the Inbox (D-20261118-09).
+            if r.kind == "ingest" || r.kind == "actions" {
+                crate::gtd::ingested(&r.source);
+                if let Err(e) = brainstead_core::lint::note_read_at(&crate::platform::data_dir(), &r.source, &r.read_versions) {
+                    crate::applog!("ingest: couldn't note the version of {} read: {e}", r.source);
+                }
+                if let Some(keys) = &r.read_messages {
+                    if let Err(e) = core_ingest::note_read_messages(&crate::platform::data_dir(), &r.source, keys) {
+                        crate::applog!("ingest: couldn't note the messages of {} read: {e}", r.source);
+                    }
+                }
+                trash_if_quiet(app, r);
+            }
+        }
         Err(e) if stopped(r) => {
             r.status = "stopped".into();
             r.error = Some(e);
@@ -468,15 +674,52 @@ fn run(app: &AppHandle, r: &mut Run) {
     }
     emit(app, r);
     let link = brainstead_core::lint::name_of(&r.source).to_string();
-    let _ = tauri_plugin_notification::NotificationExt::notification(app)
-        .builder()
-        .title("Ingest")
-        .body(match r.status.as_str() {
-            "done" => format!("{link}: {} change{} to review", r.proposals.len(), if r.proposals.len() == 1 { "" } else { "s" }),
-            "stopped" => format!("{link}: stopped"),
-            _ => format!("{link}: {}", r.error.clone().unwrap_or_default()),
-        })
-        .show();
+    // Only a failure needs the user; the rest is in Activity › Sync & ingest.
+    let need = if r.status == "failed" { crate::notify::Need::You } else { crate::notify::Need::News };
+    let body = match r.status.as_str() {
+        "done" => format!("{link}: {} change{}, in Changes", r.proposals.len(), if r.proposals.len() == 1 { "" } else { "s" }),
+        "stopped" => format!("{link}: stopped"),
+        _ => format!("{link}: {}", r.error.clone().unwrap_or_default()),
+    };
+    crate::notify::show(app, need, "Ingest", &body);
+}
+
+/// A day of a Teams or Slack chat whose ingest found nothing (no page change, no action or
+/// decision, nothing a check dropped) goes to the Trash, as a change in Changes with Revert, so
+/// Sources keeps only what the wiki or an initiative rests on (D-20261118-29). It doesn't count
+/// towards skipping the chat; a day that gains messages later comes back as a new source.
+fn quiet_chat_day(r: &Run) -> bool {
+    let name = brainstead_core::lint::name_of(&r.source);
+    let chat_day = name.starts_with("Teams. Chat. ") || name.starts_with("Slack. Chat. ");
+    chat_day && r.planned == 0 && r.dropped.is_empty()
+}
+
+fn trash_if_quiet(app: &AppHandle, r: &mut Run) {
+    if !quiet_chat_day(r) {
+        return;
+    }
+    let origin = Origin {
+        kind: "ingest".into(),
+        chat: Some(r.id.clone()),
+        label: Some(format!("Ingest of {}", brainstead_core::lint::name_of(&r.source))),
+        run: Some(r.group.clone().unwrap_or_else(|| r.id.clone())),
+        trigger: r.trigger.clone(),
+    };
+    let s = crate::changes::Submit::new(
+        &r.source,
+        proposals::Kind::Trash,
+        "Moved to the Trash: nothing in it for the wiki or your initiatives",
+        "A chat day its ingest found nothing in.",
+        origin,
+        brainstead_core::changes::Instruction::Trash,
+    );
+    match crate::changes::submit(app, s) {
+        Ok(o) => {
+            r.proposals.push(o.id);
+            r.trashed = true;
+        }
+        Err(e) => crate::applog!("ingest {}: {} not trashed: {}", r.id, r.source, e.message()),
+    }
 }
 
 /// Marks step `i` running, runs `f`, records how it went.
@@ -544,6 +787,10 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
             Ok((Source { rel: r.source.clone(), text: SourceText::Parts(x) }, d))
         }
     })?;
+    r.read_versions = match &source.text {
+        SourceText::Text(t) => vec![brainstead_core::write::version(t.as_bytes())],
+        _ => std::fs::read(&abs).map(|b| vec![brainstead_core::write::version(&b)]).unwrap_or_default(),
+    };
     if stopped(r) {
         return Err("Stopped.".into());
     }
@@ -583,6 +830,7 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
         if o.applied {
             on_disk = None;
         }
+        r.read_versions.push(brainstead_core::write::version(fixed.as_bytes()));
         source.text = SourceText::Text(fixed);
         let done = if o.applied { "made" } else { "held in Changes" };
         Ok(((), format!("{} {done} ({what})", plural(changes.len(), "correction"))))
@@ -593,7 +841,11 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
         SourceText::Text(t) => t.clone(),
         SourceText::Parts(x) | SourceText::Image(x) => x.text(),
     };
+    let actions_only = r.kind == "actions";
     let pages = step(app, r, 2, |r| {
+        if actions_only {
+            return Ok((vec![], "Not needed: its actions and decisions only".into()));
+        }
         let m = brainstead_core::names::mentions(&body, &wiki_pages(&root));
         let pages: Vec<(String, String)> =
             m.iter().filter_map(|m| std::fs::read_to_string(root.join(&m.page)).ok().map(|t| (m.page.clone(), t))).collect();
@@ -607,11 +859,28 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
         return Err("Stopped.".into());
     }
 
-    // 4. The model.
+    // 4. The model, told the user's initiatives so it can take the source's actions into them.
     let model = r.model.clone();
+    let tracking = core_ingest::Tracking::read(&root, owner(app));
+    // A synced thread read before: its new messages are marked, the earlier ones cut down.
+    let seen = match &source.text {
+        SourceText::Text(t) if brainstead_core::lint::is_synced_thread(&r.source) => {
+            r.read_messages = Some(core_ingest::message_keys(t));
+            core_ingest::read_messages(&crate::platform::data_dir(), &r.source)
+        }
+        _ => None,
+    };
+    let since = seen.as_ref().and_then(|seen| match &source.text {
+        SourceText::Text(t) => core_ingest::since_seen(t, seen),
+        _ => None,
+    });
     let answer = step(app, r, 3, |r| {
         let today = chrono::Local::now().format("%A %-d %B %Y").to_string();
-        let prompt = core_ingest::prompt(&source, &pages, &brainstead_core::catalogue::render(&root), &today);
+        let catalogue = if actions_only { String::new() } else { brainstead_core::catalogue::render(&root) };
+        let mut prompt = core_ingest::prompt_since(&source, &pages, &catalogue, &today, &tracking, seen.as_ref());
+        if actions_only {
+            prompt.push_str(core_ingest::ACTIONS_ONLY);
+        }
         let system = brainstead_core::ask::system_prompt(&crate::ask::today(), false);
         let images: Vec<PathBuf> = picture.iter().cloned().collect();
         let out = crate::ask::run_with_images(app, Job::Ingest, &r.id, &prompt, &model, None, &system, None, &images, &mut |_| {});
@@ -621,9 +890,17 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
         if let Some(e) = out.error {
             return Err(e);
         }
-        let a = core_ingest::parse_answer(&out.text)?;
+        let mut a = core_ingest::parse_answer(&out.text)?;
+        if actions_only {
+            // Its pages are in the wiki already: whatever page changes came anyway are left out.
+            a.pages.clear();
+            a.summary = None;
+        }
         let n = a.pages.len() + usize::from(a.summary.is_some());
-        Ok((a, format!("{} drafted", plural(n, "page change"))))
+        let found = a.actions.len() + a.decisions.len();
+        let also = if found > 0 { format!(", {}", plural(found, "action or decision")) } else { String::new() };
+        let from = since.as_ref().map_or(String::new(), |s| format!(", from {} new since the last ingest", plural(s.new, "message")));
+        Ok((a, format!("{} drafted{also}{from}", plural(n, "page change"))))
     })?;
     if stopped(r) {
         return Err("Stopped.".into());
@@ -651,7 +928,8 @@ fn steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -> Result
         };
         let citing = summary_sources(&root);
         let check = core_ingest::SummaryCheck { citing: &citing, taken: &taken };
-        let (planned, dropped) = core_ingest::plan(&source, &answer, read, resolve, &check, &today, core_ingest::page_budget(pages.len()));
+        let planned = core_ingest::plan(&source, &answer, read, resolve, &check, &today, core_ingest::page_budget(pages.len()));
+        let (planned, dropped) = core_ingest::plan_tracking(&source, &answer, &tracking, read, &r.id, &today, planned);
         let d = format!("{} kept, {} dropped", planned.len(), dropped.len());
         r.dropped = dropped;
         Ok((planned, d))
@@ -903,6 +1181,9 @@ pub fn meeting_draft(app: AppHandle, items: Vec<(String, NoteSpec)>, unattended:
             error: None,
             logged: false,
             planned: 0,
+            trashed: false,
+            read_versions: Vec::new(),
+            read_messages: None,
         };
         runs.push(r);
     }
@@ -981,6 +1262,96 @@ fn meeting_steps(app: &AppHandle, r: &mut Run, stopped: &dyn Fn(&Run) -> bool) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_assistants_fix_is_worked_out_as_changes_not_written() {
+        let before = "---\nupdated: 2026-10-01\n---\n# Orbit App\n\nLenna leads it.\n\nAcme pays.\n";
+        let after = before.replace("Lenna", "Lena");
+        let out = note_changes(vec![("wiki/entities/Orbit App.md".into(), before.into(), after)], "2026-11-20");
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].page, "wiki/entities/Orbit App.md");
+        // Run on the page as it is, the instruction makes the fix, with `updated:` moved to today.
+        let made = out[0].instruction.text(&out[0].page, Some(before)).unwrap();
+        assert_eq!(made, before.replace("Lenna", "Lena").replace("2026-10-01", "2026-11-20"));
+        // Not the whole page: lines edited since elsewhere on it are kept.
+        assert!(matches!(out[0].instruction, brainstead_core::changes::Instruction::Replace { .. }));
+    }
+
+    fn run(status: &str, started: &str, steps: &[&str]) -> Run {
+        Run {
+            id: "r1".into(),
+            kind: ingest_kind(),
+            note: None,
+            source: "sources/a.md".into(),
+            started: started.into(),
+            finished: None,
+            model: "m".into(),
+            status: status.into(),
+            steps: steps.iter().map(|s| Step { name: "x".into(), status: (*s).into(), detail: "d".into(), ms: 1 }).collect(),
+            proposals: vec![],
+            trigger: None,
+            group: None,
+            dropped: vec![],
+            pages: vec![],
+            error: None,
+            logged: false,
+            planned: 0,
+            trashed: false,
+            read_versions: Vec::new(),
+            read_messages: None,
+        }
+    }
+
+    #[test]
+    fn a_logged_run_stays_logged_when_the_worker_saves_its_copy() {
+        let worker = run("running", "2026-11-18 23:10", &["running"]);
+        let on_disk = Run { logged: true, ..worker.clone() };
+        assert!(logged_kept(&worker, Some(&on_disk)));
+        assert!(!logged_kept(&worker, Some(&worker)));
+        assert!(!logged_kept(&worker, None));
+        assert!(logged_kept(&on_disk, None));
+    }
+
+    #[test]
+    fn a_run_that_panicked_is_failed_and_not_taken_again() {
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 11, 19).unwrap();
+        let mut r = run("running", "2026-11-18 23:10", &["running", "waiting"]);
+        assert!(left_over(&r, today).is_some());
+        panicked(&mut r);
+        assert_eq!(r.status, "failed");
+        assert!(r.steps.iter().all(|s| s.status == "skipped"));
+        assert!(left_over(&r, today).is_none());
+    }
+
+    #[test]
+    fn only_a_chat_day_nothing_came_of_is_trashed() {
+        let mut r = run("done", "2026-11-18 23:10", &["done"]);
+        r.source = "sources/Slack. Chat. Jonas - 2026-11-16.md".into();
+        assert!(quiet_chat_day(&r));
+        r.planned = 1;
+        assert!(!quiet_chat_day(&r));
+        r.planned = 0;
+        r.dropped.push(Dropped { page: "wiki/entities/Jonas.md".into(), reason: "quote not found".into() });
+        assert!(!quiet_chat_day(&r));
+        r.dropped.clear();
+        r.source = "sources/Email. Thread. Launch - 2026-11-16.md".into();
+        assert!(!quiet_chat_day(&r));
+    }
+
+    #[test]
+    fn a_run_left_waiting_is_taken_again_unless_it_was_making_its_changes_or_is_old() {
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 11, 19).unwrap();
+        let again = left_over(&run("running", "2026-11-18 23:10", &["done", "running", "waiting"]), today).unwrap();
+        assert_eq!(again.status, "queued");
+        assert!(again.steps.iter().all(|s| s.status == "waiting" && s.detail.is_empty()));
+        assert_eq!(left_over(&run("queued", "2026-11-18 23:10", &["waiting", "waiting"]), today).unwrap().status, "queued");
+        let making = left_over(&run("running", "2026-11-18 23:10", &["done", "running"]), today).unwrap();
+        assert_eq!(making.status, "stopped");
+        assert_eq!(making.error.as_deref(), Some("Brainstead closed while it was making its changes."));
+        assert_eq!(left_over(&run("queued", "2026-11-01 09:00", &["waiting"]), today).unwrap().status, "stopped");
+        assert!(left_over(&run("done", "2026-11-18 23:10", &["done"]), today).is_none());
+    }
+
     use brainstead_core::proposals::Quote;
 
     #[test]

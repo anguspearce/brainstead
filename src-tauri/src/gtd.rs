@@ -66,7 +66,10 @@ pub async fn inbox_list(app: AppHandle) -> Res<Vec<InboxItem>> {
 pub fn inbox_items(app: &AppHandle) -> Result<Vec<InboxItem>, String> {
     let svc = app.state::<VaultService>();
     let root = svc.root().ok_or("No vault is open.")?;
-    let mut out = captures(&svc, &root);
+    // Initiatives' actions first: the signal the captures were ingested for (D-20261118-12).
+    let today = chrono::Local::now().date_naive().to_string();
+    let mut out = inbox::actions(&root, &today);
+    out.extend(captures(&svc, &root));
     out.extend(inbox::items(&root));
     Ok(out)
 }
@@ -101,15 +104,27 @@ fn edit_done(file: &Path, f: impl FnOnce(&mut Vec<String>) -> bool) -> Result<()
     Ok(())
 }
 
-/// Marks `path` clarified, newest first, keeping the last 1000.
+/// Marks `path` clarified, newest first.
 fn mark_done(file: &Path, path: &str) -> Result<(), EditError> {
     edit_done(file, |done| {
         if !done.iter().any(|p| p == path) {
             done.insert(0, path.to_string());
-            done.truncate(1000);
+            cap_done(done);
         }
         true
     })
+}
+
+/// Keeps every source and the newest 1000 of the rest. A source stays for good: this list is all
+/// that keeps one read but cited by no page out of the Inbox, however long ago it was clarified.
+fn cap_done(done: &mut Vec<String>) {
+    let mut others = 0;
+    done.retain(|p| {
+        p.starts_with("sources/") || {
+            others += 1;
+            others <= 1000
+        }
+    });
 }
 
 /// A capture is in the Inbox while its file is there, no wiki page cites it, and it hasn't been
@@ -141,7 +156,7 @@ fn captures(svc: &VaultService, root: &Path) -> Vec<InboxItem> {
             let stamp = chrono::DateTime::parse_from_rfc3339(when)
                 .ok()
                 .map(|t| t.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M").to_string());
-            InboxItem { kind: "capture", text: stem(&path), path, line: 0, line_text: c.what, stamp, block: None }
+            InboxItem { kind: "capture", text: stem(&path), path, line: 0, line_text: c.what, stamp, block: None, action: None }
         })
         .collect();
     // Every other source no wiki page cites and not yet clarified here: a file dropped or imported
@@ -159,7 +174,16 @@ fn captures(svc: &VaultService, root: &Path) -> Vec<InboxItem> {
     out.extend(others.into_iter().map(|f| {
         let stamp =
             chrono::DateTime::from_timestamp_millis(f.mtime).map(|t| t.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M").to_string());
-        InboxItem { kind: "capture", text: stem(&f.path), line_text: what_file(&f.path).into(), path: f.path, line: 0, stamp, block: None }
+        InboxItem {
+            kind: "capture",
+            text: stem(&f.path),
+            line_text: what_file(&f.path).into(),
+            path: f.path,
+            line: 0,
+            stamp,
+            block: None,
+            action: None,
+        }
     }));
     out
 }
@@ -192,10 +216,83 @@ fn forget_done(file: &Path, path: &str) -> Result<(), EditError> {
     })
 }
 
+/// The captures clarified (or ingested) from the Inbox: their paths.
+pub fn clarified() -> Vec<String> {
+    captures_done()
+}
+
+/// A source an ingest finished with: it leaves the Inbox whether or not a page cites it now, as its
+/// actions are on its initiatives (D-20261118-09). Kept in Sources.
+pub fn ingested(path: &str) {
+    if let Err(e) = mark_done(&captures_done_file(), path) {
+        crate::applog!("inbox: couldn't mark {path} ingested: {}", e.message());
+    }
+    if let Err(e) = edit_done(&sources_read_file(), |read| {
+        if read.iter().any(|p| p == path) {
+            return false;
+        }
+        read.push(path.to_string());
+        true
+    }) {
+        crate::applog!("inbox: couldn't note {path} read: {}", e.message());
+    }
+}
+
+/// The sources an ingest has read, whatever came of them, for Wiki health: one read with nothing
+/// in it worth citing isn't "not yet ingested" (D-20261118-28). Every one, not capped like the
+/// Inbox's list; started from that list the first time, as its ingested sources were read.
+fn sources_read_file() -> PathBuf {
+    crate::platform::data_dir().join("sources-read.json")
+}
+
+pub fn sources_read() -> std::collections::HashSet<String> {
+    let f = sources_read_file();
+    if !f.exists() {
+        let seed: Vec<String> = captures_done().into_iter().filter(|p| p.starts_with("sources/")).collect();
+        let _ = brainstead_core::write::write_atomic(&f, &serde_json::to_vec(&seed).unwrap_or_default(), false);
+    }
+    read_done(&f).into_iter().collect()
+}
+
 /// A capture clarified in the Inbox (made a task, ingested or kept): it leaves the Inbox.
 #[tauri::command]
 pub async fn inbox_capture_done(path: String) -> Res<()> {
     writing(move || mark_done(&captures_done_file(), &path)).await
+}
+
+/// An initiative action's line after `edit` (its status, the task it became), without writing it:
+/// the MCP's clarify_inbox sends it as a change, the Inbox writes it with `initiative_action_set`.
+#[tauri::command]
+pub fn initiative_action_line(line_text: String, edit: brainstead_core::initiatives::ActionEdit) -> Res<String> {
+    brainstead_core::initiatives::with_action_line(&line_text, &edit).map_err(invalid)
+}
+
+/// Changes an initiative action's line in place, as the Inbox does when it's accepted, done or
+/// dropped (D-20261118-12); ⌘Z undoes it.
+#[tauri::command]
+pub async fn initiative_action_set(
+    app: AppHandle,
+    path: String,
+    line: usize,
+    line_text: String,
+    change: brainstead_core::initiatives::ActionEdit,
+) -> Res<Edited> {
+    writing(move || {
+        if !brainstead_core::initiatives::is_initiative(&path) {
+            return Err(invalid(format!("Not an initiative: {path}")));
+        }
+        let verb = match (change.status, change.task.as_deref()) {
+            (Some(brainstead_core::initiatives::Status::Done), _) => "Marked done",
+            (Some(brainstead_core::initiatives::Status::Dropped), _) => "Dropped",
+            (_, Some(t)) if !t.is_empty() => "Made a task of",
+            _ => "Changed",
+        };
+        // An action is a plain list item, not a task: edited as any line is.
+        crate::edits::edit_any_line(&app, &path, line, &line_text, verb, |l| {
+            brainstead_core::initiatives::with_action_line(l, &change).map_err(write::WriteError::Invalid)
+        })
+    })
+    .await
 }
 
 /// Sets a task's `#context/…` tags (none clears them).
@@ -439,9 +536,134 @@ pub async fn inbox_move_task(
     .await
 }
 
+/// The Inbox's Task: `text` as a task at the end of the To Do list's To Do, with nothing more to
+/// set, so it's off the Inbox (which reads only Other). ⌘Z undoes it.
+#[tauri::command]
+pub async fn todo_add_task(app: AppHandle, text: String) -> Res<Edited> {
+    writing(move || {
+        writable(&app.state::<AppState>())?;
+        let svc = app.state::<VaultService>();
+        let root = root(&svc)?;
+        let t = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        if t.is_empty() {
+            return Err(invalid("Nothing to add.".into()));
+        }
+        let item = format!("- [ ] {t}");
+        let abs = root.join(inbox::TODO_LIST);
+        let (i, ch) = write::add_task_under_todo(&abs, inbox::TODO_TASKS, &item)?;
+        let label = format!("Added “{}” to the To Do list", task_label(&item));
+        let undo = push_files(&app, &root, label, std::slice::from_ref(&ch));
+        written(&app, &[abs]);
+        Ok(Edited { line: i, line_text: item, undo: Some(undo) })
+    })
+    .await
+}
+
+/// The Inbox's Task for a task already on the To Do list (under Other): its line leaves Other and
+/// `text` is added at the top of To Do in one write, so a failure leaves the task where it was.
+/// ⌘Z undoes it.
+#[tauri::command]
+pub async fn inbox_task_to_todo(app: AppHandle, line: usize, line_text: String, text: String) -> Res<Edited> {
+    writing(move || {
+        writable(&app.state::<AppState>())?;
+        let svc = app.state::<VaultService>();
+        let root = root(&svc)?;
+        let t = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        if t.is_empty() {
+            return Err(invalid("Nothing to add.".into()));
+        }
+        let item = format!("- [ ] {t}");
+        let abs = root.join(inbox::TODO_LIST);
+        let (i, ch) = write::move_task_under_todo(&abs, line, &line_text, inbox::TODO_TASKS, &item)?;
+        let label = format!("Added “{}” to the To Do list", task_label(&item));
+        let undo = push_files(&app, &root, label, std::slice::from_ref(&ch));
+        written(&app, &[abs]);
+        Ok(Edited { line: i, line_text: item, undo: Some(undo) })
+    })
+    .await
+}
+
+/// The initiatives, for Move to…'s list: (name, path, status), A to Z.
+#[tauri::command]
+pub async fn initiatives_list(app: AppHandle) -> Res<Vec<(String, String, String)>> {
+    crate::blocking(move || {
+        let root = root(&app.state::<VaultService>())?;
+        let mut v: Vec<_> = brainstead_core::initiatives::all(&root).into_iter().map(|i| (i.name, i.path, i.status)).collect();
+        v.sort_by_key(|x| x.0.to_lowercase());
+        Ok(v)
+    })
+    .await
+}
+
+/// Moves an initiative's action, whole, to another initiative's Actions (D-20261118-26), as the
+/// Inbox's and the page's Move to… do; its task's link follows it. ⌘Z undoes it.
+#[tauri::command]
+pub async fn initiative_action_move(app: AppHandle, path: String, line: usize, line_text: String, to: String) -> Res<String> {
+    writing(move || {
+        writable(&app.state::<AppState>())?;
+        let svc = app.state::<VaultService>();
+        let root = root(&svc)?;
+        if !brainstead_core::initiatives::is_initiative(&path) || !brainstead_core::initiatives::is_initiative(&to) {
+            return Err(EditError::from("Both pages must be initiatives.".to_string()));
+        }
+        let (from_abs, to_abs) = (vault_path(&svc, &path)?, vault_path(&svc, &to)?);
+        let id = line_text.trim_end().rsplit(' ').next().and_then(|w| w.strip_prefix('^')).unwrap_or("").to_string();
+        if id.is_empty() {
+            return Err(EditError::from("The action has no id (^a-…) to move it by.".to_string()));
+        }
+        let mut chs = write::rewrite_pair(&from_abs, &to_abs, |a, b| {
+            let lines: Vec<String> = a.lines().map(str::to_string).collect();
+            if write::find_line(&lines, line, &line_text).is_none() {
+                return Err(write::WriteError::Stale(
+                    "This action changed in the file since it was shown. It's been reloaded; try again.".into(),
+                ));
+            }
+            brainstead_core::initiatives::move_action(a, b, &id).map_err(write::WriteError::Invalid)
+        })?
+        .to_vec();
+        // The task made from it links it by page: pointed at the new one.
+        let (from_name, to_name) = (brainstead_core::filename::stem(&path).to_string(), brainstead_core::filename::stem(&to).to_string());
+        let task_note = brainstead_core::initiatives::parse(&path, &chs[0].before.clone().unwrap_or_default())
+            .actions
+            .into_iter()
+            .find(|a| a.id == id)
+            .and_then(|a| a.task)
+            .and_then(|t| {
+                let name = t.trim().trim_start_matches("[[").trim_end_matches("]]").split(['|', '#']).next()?.trim().to_string();
+                svc.with_index(|ix, _| brainstead_core::names::resolve(ix, &name)).ok()?.exact.map(|(p, _)| p)
+            });
+        if let Some(note) = task_note {
+            let abs = root.join(&note);
+            if let Ok(src) = std::fs::read_to_string(&abs) {
+                if let Some(new) = brainstead_core::initiatives::relink_task(&src, &from_name, &to_name, &id) {
+                    write::write_atomic(&abs, new.as_bytes(), false)?;
+                    chs.push(FileChange { path: abs, version: write::version(new.as_bytes()), before: Some(src) });
+                }
+            }
+        }
+        let label = format!("Moved an action to {to_name}");
+        push_files(&app, &root, label.clone(), &chs);
+        let paths: Vec<PathBuf> = chs.iter().map(|c| c.path.clone()).collect();
+        written(&app, &paths);
+        Ok(label)
+    })
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_clarified_source_is_never_dropped_from_the_list() {
+        let mut done: Vec<String> = (0..1200).map(|n| format!("sources/Email. Acme {n}.md")).collect();
+        done.extend((0..1100).map(|n| format!("Inbox/{n}.md")));
+        cap_done(&mut done);
+        assert_eq!(done.iter().filter(|p| p.starts_with("sources/")).count(), 1200);
+        let others: Vec<_> = done.iter().filter(|p| !p.starts_with("sources/")).collect();
+        assert_eq!(others.len(), 1000);
+        assert_eq!((others[0].as_str(), others[999].as_str()), ("Inbox/0.md", "Inbox/999.md"));
+    }
 
     #[test]
     fn marking_done_and_forgetting_at_once_lose_neither() {
@@ -466,5 +688,27 @@ mod tests {
         let done = read_done(&file);
         assert!((0..16).all(|n| done.contains(&format!("sources/{n}.md"))), "{done:?}");
         assert!(!done.contains(&"sources/restored.md".to_string()));
+    }
+
+    /// The Inbox's Task for a To Do list task: the line leaves Other and lands in To Do in one
+    /// write. A line that has changed since is refused with the file untouched: the task is never
+    /// removed without being added.
+    #[test]
+    fn an_inbox_task_moves_to_to_do_in_one_write() {
+        let t = tempfile::tempdir().unwrap();
+        let p = t.path().join(inbox::TODO_LIST);
+        let src = "#### To Do\n\n- [ ] Ring Maya\n\n#### Other\n\n- [ ] Book the room\n- [ ] Pay Acme\n";
+        std::fs::write(&p, src).unwrap();
+        let stale = write::move_task_under_todo(&p, 6, "- [ ] Book a room", inbox::TODO_TASKS, "- [ ] Book the room 📅 2026-11-01");
+        assert!(matches!(stale, Err(write::WriteError::Stale(_))));
+        assert_eq!(std::fs::read_to_string(&p).unwrap(), src);
+        let (i, ch) =
+            write::move_task_under_todo(&p, 6, "- [ ] Book the room", inbox::TODO_TASKS, "- [ ] Book the room 📅 2026-11-01").unwrap();
+        assert_eq!(i, 2);
+        assert_eq!(ch.before.as_deref(), Some(src));
+        assert_eq!(
+            std::fs::read_to_string(&p).unwrap(),
+            "#### To Do\n\n- [ ] Book the room 📅 2026-11-01\n- [ ] Ring Maya\n\n#### Other\n\n- [ ] Pay Acme\n"
+        );
     }
 }

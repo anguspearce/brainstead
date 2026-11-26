@@ -27,15 +27,14 @@ pub struct Waiting {
     ready: Mutex<bool>,
 }
 
-/// How long the window may take over one request. Runs answer as soon as they've started.
-const WINDOW_TIMEOUT: Duration = Duration::from_secs(120);
-
 /// Starts the heartbeat and the request loop. Not in a screenshot demo.
 pub fn start(app: AppHandle) {
     let dir = wire::dir(&platform::data_dir());
     for d in [dir.join(wire::REQUESTS), dir.join(wire::REPLIES)] {
         let _ = std::fs::create_dir_all(d);
     }
+    // What an earlier run left behind is never carried out now.
+    wire::clear_stale(&dir);
     let alive = dir.join(wire::ALIVE);
     std::thread::spawn(move || loop {
         let _ = wire::write_alive(&alive, std::process::id());
@@ -56,7 +55,55 @@ pub fn start(app: AppHandle) {
     });
 }
 
+/// One copy at a time on the shared app data folder (D-20261118-22). A dev build that starts while
+/// the installed app runs (an assistant's Brainstead tools open it when no copy is up) asks it to
+/// quit, as its menu's Quit does (unsaved edits asked about first), and waits for it, so the two
+/// never sync, run jobs or hold the extensions' helper side by side. The installed app started
+/// while a dev build runs steps aside at once. False when this copy should not start.
+pub fn one_copy(app: &AppHandle) -> bool {
+    let data = platform::data_dir();
+    let me = std::process::id();
+    let Some((pid, dev)) = wire::other_alive(&data, me) else { return true };
+    if !cfg!(debug_assertions) {
+        if dev {
+            crate::applog!("startup: a dev build (pid {pid}) is running on this data; this copy doesn't start");
+            use tauri_plugin_notification::NotificationExt;
+            let _ = app
+                .notification()
+                .builder()
+                .title("Brainstead is already running")
+                .body("A development build of Brainstead is open, so this copy closed.")
+                .show();
+            return false;
+        }
+        return true;
+    }
+    if dev {
+        return true;
+    }
+    crate::applog!("startup: the installed app (pid {pid}) is running; asking it to quit");
+    let req = Request { id: wire::new_id(), action: STEP_ASIDE.into(), args: Value::Null, chat: None, model: None };
+    // An installed app from before this rule doesn't know the request: quit it as its Dock menu would.
+    if !wire::ask(&data, &req, Duration::from_secs(5)).ok {
+        platform::quit_other_copy(pid);
+    }
+    let t0 = Instant::now();
+    while t0.elapsed() < Duration::from_secs(60) && wire::other_alive(&data, me).is_some_and(|(p, d)| p == pid && !d) {
+        std::thread::sleep(Duration::from_millis(300));
+    }
+    true
+}
+
+/// What a dev build asks the installed app when it starts: quit.
+const STEP_ASIDE: &str = "app.step_aside";
+
 fn handle(app: &AppHandle, req: &Request) -> Reply {
+    if req.action == STEP_ASIDE {
+        crate::applog!("a dev build started: quitting so only one copy runs");
+        crate::tray::show_main(app);
+        let _ = app.emit_to("main", "quit-requested", "unasked");
+        return Reply { ok: true, result: Value::Null, error: None };
+    }
     let waiting = app.state::<Waiting>();
     // The window may still be loading when the app was opened for this request.
     let start = Instant::now();
@@ -72,7 +119,8 @@ fn handle(app: &AppHandle, req: &Request) -> Reply {
         waiting.senders.lock().unwrap().remove(&req.id);
         return Reply::err("Couldn't reach Brainstead's window.");
     }
-    let r = rx.recv_timeout(WINDOW_TIMEOUT).unwrap_or_else(|_| {
+    // Longer for an action that waits on a model (the list is the server's too: core's bridge).
+    let r = rx.recv_timeout(wire::window_timeout(&req.action, &req.args)).unwrap_or_else(|_| {
         Reply::err("Brainstead took too long to answer. The action may still have happened: check before trying again.")
     });
     waiting.senders.lock().unwrap().remove(&req.id);

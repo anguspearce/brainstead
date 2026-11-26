@@ -7,7 +7,7 @@
 // menu.
 
 import { iconizeEmoji } from "./md/fieldEmoji";
-import { plainSegments, plainText } from "./md/plainText";
+import { dropLeadingHeading, plainSegments, plainText } from "./md/plainText";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { api, FileSummary, Layer, SearchHit } from "./api";
 import { FileMenu, useFileMenu } from "./FileMenu";
@@ -94,6 +94,7 @@ export function FileList<T extends FileSummary>({
   table,
   defaultSort,
   filters,
+  banner,
   empty,
   placeholder,
   group,
@@ -106,6 +107,8 @@ export function FileList<T extends FileSummary>({
   table: ListTable;
   defaultSort: [string, 1 | -1];
   filters?: ReactNode;
+  /** A quiet line between the toolbar and the table (the Wiki list's safe fixes). */
+  banner?: ReactNode;
   empty?: ReactNode;
   placeholder: string;
   group?: Grouping<T>;
@@ -293,6 +296,7 @@ export function FileList<T extends FileSummary>({
           {rows !== null && ` · ${fmtBytes(shownBytes)}`}
         </span>
       </div>
+      {banner}
       <div
         className={`ftable ${groups ? "grouped" : ""}`}
         ref={(el) => {
@@ -374,12 +378,13 @@ export function FileList<T extends FileSummary>({
 /** A search hit's passage, with the matched words marked. */
 export function Snippet({ hit }: { hit?: SearchHit }) {
   if (!hit?.snippet.length) return null;
+  const segs = dropLeadingHeading(plainSegments(hit.snippet), hit.heading ? plainText(hit.heading) : "");
+  // A passage that was all code (a template's Templater tags) shows nothing rather than its leftovers.
+  if (!segs.some((s) => s.text.trim())) return null;
   return (
     <div className="snip">
       {hit.heading && <span className="snh">{plainText(hit.heading)} · </span>}
-      {plainSegments(hit.snippet).map((s, i) =>
-        s.hit ? <mark key={i}>{iconizeEmoji(s.text)}</mark> : <span key={i}>{iconizeEmoji(s.text)}</span>,
-      )}
+      {segs.map((s, i) => (s.hit ? <mark key={i}>{iconizeEmoji(s.text)}</mark> : <span key={i}>{iconizeEmoji(s.text)}</span>))}
     </div>
   );
 }

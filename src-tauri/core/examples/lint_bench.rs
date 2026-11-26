@@ -2,7 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Times Knowledge health's checks over a vault, read-only:
+//! Times Wiki health's checks over a vault, read-only:
 //! `cargo run --release -p brainstead-core --example lint_bench -- <vault>`.
 
 fn main() {

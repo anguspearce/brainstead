@@ -11,6 +11,10 @@ A chat's `<date>` is the day it was captured. A transcript's is the meeting's da
 
 From there, Ingest on the Sources screen folds it into the wiki.
 
+## Put in Teams (Draft reply)
+
+Brainstead's Draft reply has **Put in Teams** for a chat the sync brought in. Brainstead keeps the reply under a one-time key and opens the chat's link in Chrome with `brainstead-reply=<key>` on it. `background.js` sees that link start to load, collects the reply for the key from Brainstead's helper (`reply-draft`, which the helper answers once, for ten minutes, and only to this extension), and once the tab has loaded runs `reply-fill.js`'s `fill` in it. That waits until Teams shows the chat's message box and the page shows the reply's own chat is the one open (the address, or the chat list's selected item, names its conversation id), and pastes the reply in. If Teams shows any other chat (slow to open the link, or an expired sign-in losing its route), nothing is typed. The reply goes in as HTML (a paste, then an HTML edit), so its paragraphs keep their gaps; an editor that takes only typing gets it a paragraph at a time with line breaks between, never a new paragraph, which Teams can take as Send. **It never sends**: the reply waits in the box for you to check and press Send. A box that already has something typed in it is left alone. When the reply can't go in, the toolbar icon shows `!` and its tooltip says why. Brainstead copied the reply too, so you can paste it instead. Needs 1.2.0 or later; 1.2.1 or later checks the chat before typing.
+
 ## Why this exists
 
 Microsoft Graph isn't available, so this extension runs in your already signed-in Teams tab and hands the visible conversation to Brainstead on click: no continuous scraping, no second login, no API.
@@ -23,7 +27,7 @@ It's the [Outlook capture](../outlook-capture/README.md) extension ported to Tea
 2. Chrome → `chrome://extensions` → switch on **Developer mode**.
 3. **Load unpacked** → choose this folder (`extensions/teams-capture/`). Settings › Capture extensions has a Reveal in Finder button for it (Show in Explorer on Windows).
 4. Pin the extension to the toolbar.
-5. For the Teams and Outlook sync: Chrome → Settings › Performance → **Always keep these sites active** → add `teams.cloud.microsoft` and `teams.microsoft.com` (and the Outlook addresses, for mail: see the Outlook extension's README). Energy Saver (on by default on battery) otherwise freezes the background Teams tab, and a frozen tab can't hand the sign-in over.
+5. For the sync: Chrome → Settings › Performance → **Always keep these sites active** → add `teams.cloud.microsoft` and `teams.microsoft.com` (and the Outlook addresses, for mail: see the Outlook extension's README). Energy Saver (on by default on battery) otherwise freezes the background Teams tab, and a frozen tab can't hand the sign-in over.
 
 The manifest carries a fixed public key, so the extension's ID is the same on every computer, and Brainstead's helper accepts only that ID (Chrome checks it against the helper's manifest). There's nothing to copy or paste.
 

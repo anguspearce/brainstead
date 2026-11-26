@@ -63,6 +63,11 @@ describe("GTD formats", () => {
 
   it("keeps the formats out of a task's label", () => {
     expect(taskLabel("Call Lena #context/calls [effort:: 15m] [[Project. Orbit App launch]]")).toBe("Call Lena");
+    expect(taskLabel("Call Lena [[Project. Orbit App launch]] #context/calls")).toBe("Call Lena");
+    // A project link inside the sentence stays, and so does the one after it, so the words read.
+    expect(taskLabel("Ask about posters for [[Project. Orbit App launch|the launch]] and [[Project. Hub migration]]")).toBe(
+      "Ask about posters for [[Project. Orbit App launch|the launch]] and [[Project. Hub migration]]",
+    );
   });
 
   it("flags active projects with nothing next or gone quiet", () => {

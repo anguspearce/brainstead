@@ -9,6 +9,7 @@
 // suggestion from the model is only shown until you accept it.
 
 import { ask as askChats, askedFromInbox } from "./askState";
+import { UpdateBox } from "./UpdateBox";
 import { nav, openDoc, useViewState } from "./nav";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { sampleSuggestion, sceneInboxSuggest } from "./scene";
@@ -28,13 +29,14 @@ import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
 import { askQuote, TopBar } from "./TopBar";
 import { reviewWeek } from "./Weekly";
-import { Dialog, LayerTag, Squeeze, TableBand } from "./ui";
+import { Dialog, LayerTag, TableBand } from "./ui";
 import { Markdown } from "./md/Markdown";
 import { settings, useStore } from "./store";
 import { useVaultVersion } from "./state";
 import { followThrough, isTranscriptPath, makeMeetingNotes } from "./meetingFlow";
 import { TaskText } from "./TaskList";
 import {
+  actionTaskText,
   appendAsReference,
   doneNow,
   eachItem,
@@ -43,13 +45,18 @@ import {
   inboxChoices,
   inboxItemKind,
   leadChoice,
+  makeTask,
   newReferenceNote,
   settleInboxItem,
   suggestKind,
   trashCapture,
 } from "./inboxActions";
 import { keyLabel } from "./platform";
+import { MoveAction } from "./MoveAction";
+import { isStrayKey } from "./strayKeys";
 import { usePanes } from "./PaneResizer";
+import { SuggestButton, SuggestChip, SuggestionRow } from "./Suggestions";
+import { BookmarksBand } from "./skills/Triage";
 import { PANES } from "./panes";
 
 export { unclarified } from "./gtd";
@@ -105,12 +112,18 @@ function ItemTitle({ text, plain = false }: { text: string; plain?: boolean }) {
 const itemText = (i: InboxItem) => (i.kind === "task" ? i.text : i.text).trim();
 /** The list's bands, in the order shown (and J / K follow): where each item came from. */
 const SOURCES: { kind: InboxItem["kind"]; label: string; icon: string; tip: string }[] = [
+  {
+    kind: "action",
+    label: "Actions",
+    icon: "tasks",
+    tip: "your actions on your initiatives, and ones you delegated that are past their due date",
+  },
   { kind: "capture", label: "Captures", icon: "source", tip: "captured from Outlook or Teams, or added to Sources and not yet ingested" },
   { kind: "thought", label: "Scratchpad", icon: "note", tip: "on the Scratchpad" },
   { kind: "task", label: "To Do list › Other", icon: "tasks", tip: "under Other on the To Do list" },
 ];
-/** The items to clarify in the order the list shows them, band by band (Captures, Scratchpad, To Do
- *  list › Other), so Suggest for all asks about the same first 20 (an assistant's list_inbox too). */
+/** The items to clarify in the order the list shows them, band by band (Actions, Captures, Scratchpad,
+ *  To Do list › Other), so the top bar's Suggest asks about the same first 20 (an assistant's list_inbox too). */
 export function inboxRows(raw: InboxItem[]): InboxItem[] {
   const open = raw.filter(unclarified);
   return SOURCES.flatMap((g) => open.filter((i) => i.kind === g.kind));
@@ -120,55 +133,111 @@ export function inboxRows(raw: InboxItem[]): InboxItem[] {
 export const bandOf = (i: InboxItem) => SOURCES.find((g) => g.kind === i.kind)!.label;
 
 /** What a row says under its text; its band already says where it came from. */
-const rowNote = (i: InboxItem) => (i.kind === "capture" ? [i.lineText, i.stamp].filter(Boolean).join(" · ") : (i.stamp ?? ""));
+const actionNote = (i: InboxItem) => {
+  const a = i.action;
+  if (!a) return "";
+  const who = a.owner === "delegated" ? `waiting for ${a.person ?? "someone"}${!a.due && a.since ? ` since ${a.since}` : ""}` : "";
+  const due = a.due ? `${a.overdue ? "overdue since" : "due"} ${a.due}` : "";
+  return [a.initiative, who, due].filter(Boolean).join(" · ");
+};
+const rowNote = (i: InboxItem) =>
+  i.kind === "capture" ? [i.lineText, i.stamp].filter(Boolean).join(" · ") : i.kind === "action" ? actionNote(i) : (i.stamp ?? "");
 const sourceOf = (i: InboxItem) =>
-  i.kind === "thought" ? `Scratchpad · ${i.stamp ?? ""}` : i.kind === "capture" ? `${i.lineText} · ${i.stamp ?? ""}` : "To Do list · Other";
+  i.kind === "thought"
+    ? `Scratchpad · ${i.stamp ?? ""}`
+    : i.kind === "capture"
+      ? `${i.lineText} · ${i.stamp ?? ""}`
+      : i.kind === "action"
+        ? `Initiative · ${actionNote(i)}`
+        : "To Do list · Other";
 /** A Teams meeting transcript, which becomes a meeting note: Suggest needn't ask about it. */
 const isTranscript = (i: InboxItem) => i.kind === "capture" && isTranscriptPath(i.path);
+/** Suggest doesn't ask about a transcript (it becomes a meeting note) or an action (already clarified
+ *  by its ingest: it's a task, a waiting-for, done or dropped). */
+const unsuggested = (i: InboxItem) => isTranscript(i) || i.kind === "action";
 
 /** Each choice's key, label and tip for one item (what `inboxChoices` gives it, in that order). */
-const CHOICE: Record<string, { key: string; label: (i: InboxItem) => string; tip: (i: InboxItem) => string }> = {
-  // A capture's source actions, named as Sources names them (src/sourceActions.ts).
-  meeting: { key: SOURCE_ACTION.meeting.key, label: () => SOURCE_ACTION.meeting.label(false), tip: () => SOURCE_ACTION.meeting.tip(false) },
-  reply: { key: SOURCE_ACTION.reply.key, label: () => SOURCE_ACTION.reply.label(false), tip: () => SOURCE_ACTION.reply.tip(false) },
-  ingest: {
-    key: SOURCE_ACTION.ingest.key,
-    label: () => SOURCE_ACTION.ingest.label(false),
-    tip: () => `${SOURCE_ACTION.ingest.tip(false)}, and take it out of the Inbox`,
-  },
-  ask: {
-    key: SOURCE_ACTION.ask.key,
-    label: () => SOURCE_ACTION.ask.label(false),
-    tip: () => `${SOURCE_ACTION.ask.tip(false)}; it stays in the Inbox`,
-  },
-  next: { key: "N", label: () => "Next action", tip: () => "Make it a next action; you set its project, context and due date first" },
-  project: { key: "P", label: () => "New project", tip: () => "Start a new project from it" },
-  waiting: { key: "W", label: () => "Waiting for", tip: () => "Make it a task tagged waiting-for, to chase later" },
-  done: { key: "2", label: () => "Done now (under 2 min)", tip: () => "It takes two minutes: do it now, and this marks it done" },
-  someday: { key: "S", label: () => "Someday / maybe", tip: () => "Park it as a task tagged someday-maybe" },
-  reference: {
-    key: "R",
-    label: (i) => (i.kind === "capture" ? "Keep in Sources" : "File as reference"),
-    tip: (i) =>
-      i.kind === "capture"
-        ? "Keep the capture in Sources and take it out of the Inbox"
-        : "Add it as a bullet to the end of a note you pick",
-  },
-  delete: {
-    key: "⌫",
-    label: (i) => (i.kind === "capture" ? "Move to the Trash" : "Delete"),
-    tip: (i) => (i.kind === "capture" ? "Move the captured file to the vault’s Trash" : keyLabel("Delete it from the Inbox; ⌘Z undoes")),
-  },
+/** Each choice's key is its name's first letter where it can be: unique among the choices one item
+ *  shows (Done and Draft a reply never meet, nor Move to… and a meeting note). */
+const CHOICE: Record<string, { key: string | ((i: InboxItem) => string); label: (i: InboxItem) => string; tip: (i: InboxItem) => string }> =
+  {
+    // A capture's source actions, named as Sources names them (src/sourceActions.ts).
+    meeting: {
+      key: SOURCE_ACTION.meeting.key,
+      label: () => SOURCE_ACTION.meeting.label(false),
+      tip: () => SOURCE_ACTION.meeting.tip(false),
+    },
+    reply: { key: SOURCE_ACTION.reply.key, label: () => SOURCE_ACTION.reply.label(false), tip: () => SOURCE_ACTION.reply.tip(false) },
+    ingest: {
+      key: SOURCE_ACTION.ingest.key,
+      label: () => SOURCE_ACTION.ingest.label(false),
+      tip: () => `${SOURCE_ACTION.ingest.tip(false)}, and take it out of the Inbox`,
+    },
+    ask: {
+      key: SOURCE_ACTION.ask.key,
+      label: () => SOURCE_ACTION.ask.label(false),
+      tip: () => `${SOURCE_ACTION.ask.tip(false)}; it stays in the Inbox`,
+    },
+    todo: {
+      key: "T",
+      label: () => "To Do",
+      tip: (i) =>
+        i.kind === "action"
+          ? "Put it on the To Do list as it is, due date and all, with nothing to fill in (Next action asks for a project or context)"
+          : "Put it on the To Do list as it is, with nothing to fill in (Next action asks for a project or context)",
+    },
+    move: {
+      key: "M",
+      label: () => "Move to…",
+      tip: () => "Move the action to another initiative, with its quotes; it stays in the Inbox",
+    },
+    next: { key: "N", label: () => "Next action", tip: () => "Make it a next action; you set its project, context and due date first" },
+    project: { key: "P", label: () => "New project", tip: () => "Start a new project from it" },
+    waiting: { key: "W", label: () => "Waiting for", tip: () => "Make it a task tagged waiting-for, to chase later" },
+    done: {
+      key: "D",
+      label: (i) => (i.kind === "action" ? "Done" : "Done now (under 2 min)"),
+      tip: (i) =>
+        i.kind === "action"
+          ? keyLabel("It's done already, or takes two minutes: mark the action done on its initiative; ⌘Z undoes")
+          : "It takes two minutes: do it now, and this marks it done",
+    },
+    someday: { key: "S", label: () => "Someday / maybe", tip: () => "Park it as a task tagged someday-maybe" },
+    reference: {
+      key: (i) => (i.kind === "capture" ? "K" : "F"),
+      label: (i) => (i.kind === "capture" ? "Keep in Sources" : "File as reference"),
+      tip: (i) =>
+        i.kind === "capture"
+          ? "Keep the capture in Sources and take it out of the Inbox"
+          : "Add it as a bullet to the end of a note you pick",
+    },
+    delete: {
+      key: "⌫",
+      label: (i) => (i.kind === "capture" ? "Move to the Trash" : i.kind === "action" ? "Drop" : "Delete"),
+      tip: (i) =>
+        i.kind === "capture"
+          ? "Move the captured file to the vault’s Trash"
+          : i.kind === "action"
+            ? keyLabel("It isn't happening: mark the action dropped on its initiative; ⌘Z undoes")
+            : keyLabel("Delete it from the Inbox; ⌘Z undoes"),
+    },
+  };
+
+/** A choice's key for this item. */
+const keyOf = (b: string, i: InboxItem) => {
+  const k = CHOICE[b].key;
+  return typeof k === "function" ? k(i) : k;
 };
 
 /** The choices that can be made for several ticked items at once, in order. */
-const BULK = ["meeting", "ingest", "done", "someday", "reference", "delete"];
+const BULK = ["meeting", "ingest", "todo", "done", "someday", "reference", "delete"];
 const BULK_LABEL: Record<string, (n: number, caps: boolean) => [string, string, string]> = {
   meeting: (n) => ["M", followThrough().ingest ? `Make and ingest ${n} meeting notes` : `Make ${n} meeting notes`, meetingTip(n)],
   ingest: (n) => ["I", `Ingest ${n} into the wiki`, "Have the AI read each into the wiki and take it out of the Inbox"],
-  done: (n) => ["2", `Mark ${n} done`, "Each took two minutes: done, and out of the Inbox"],
+  todo: (n) => ["T", `Put ${n} on the To Do list`, "Put each on the To Do list as it is, with nothing to fill in"],
+  done: (n) => ["D", `Mark ${n} done`, "Each took two minutes: done, and out of the Inbox"],
   someday: (n) => ["S", `Move ${n} to Someday / maybe`, "Park each as a task tagged someday-maybe"],
-  reference: (n) => ["R", `Keep ${n} in Sources`, "Keep the captures in Sources and take them out of the Inbox"],
+  reference: (n) => ["K", `Keep ${n} in Sources`, "Keep the captures in Sources and take them out of the Inbox"],
   delete: (n, caps) => [
     "⌫",
     caps ? `Move ${n} to the Trash` : `Delete ${n}`,
@@ -190,6 +259,7 @@ export function bulkChoices(ps: InboxItem[]) {
 }
 /** What a choice made for several items says, once done. */
 const DONE_ALL: Record<string, string> = {
+  task: "Made tasks on the To Do list",
   ingest: "Ingesting: their changes are listed in Changes",
   done: "Done, and out of the Inbox",
   someday: "Moved to Someday / maybe",
@@ -197,7 +267,8 @@ const DONE_ALL: Record<string, string> = {
   delete: "Deleted",
 };
 /** What a capture becomes as a task, by default: a follow-up linking the file. */
-const startText = (i: InboxItem) => (i.kind === "capture" ? `Follow up on [[${i.text}]]` : itemText(i));
+const startText = (i: InboxItem) =>
+  i.kind === "capture" ? `Follow up on [[${i.text}]]` : i.kind === "action" ? actionTaskText(i) : itemText(i);
 
 export function InboxScreen() {
   const panes = usePanes({ "inbox.left": PANES["inbox.left"] }, { minFlex: 320 });
@@ -208,14 +279,27 @@ export function InboxScreen() {
   const items = useMemo(() => inboxRows(raw ?? []), [raw]);
   const [sel, setSel] = useViewState<string | null>("inbox:sel", null);
   const [form, setForm] = useState<{ mode: "next" | "waiting"; c: Clarified } | null>(null);
+  // Update…'s box, at its button (src/UpdateBox.tsx).
+  const [upd, setUpd] = useState<DOMRect | null>(null);
+  const updBtn = useRef<HTMLButtonElement>(null);
   const [filing, setFiling] = useState(false);
   const [making, setMaking] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
   const [sugg, setSugg] = useState<Record<string, ClarifySuggestion>>({});
   const [thinking, setThinking] = useState(false);
-  const [done, setDone] = useState(0);
+  // Asked this visit (or a suggestion skipped): the button is Suggest again.
+  const [asked, setAsked] = useState(false);
+  // Every item seen in the Inbox this visit: one that has left it, however (clarified here, ingested
+  // by a run, cleared by an assistant), counts as done, so the total holds still while the count climbs.
+  const [seen, setSeen] = useState<string[]>([]);
   // A capture by its file: two captures can share a line and the start of their text (two Teams
   // transcripts did), and then both rows were chosen at once.
-  const key = (i: InboxItem) => (i.kind === "capture" ? `capture:${i.path}` : `${i.kind}:${i.line}:${i.lineText.slice(0, 40)}`);
+  const key = (i: InboxItem) =>
+    i.kind === "capture"
+      ? `capture:${i.path}`
+      : i.kind === "action"
+        ? `action:${i.path}:${i.action?.id ?? i.line}`
+        : `${i.kind}:${i.line}:${i.lineText.slice(0, 40)}`;
   // Ticked to act on together; clicking a row chooses it alone.
   const [checked, setChecked] = useState<string[]>([]);
   const toggle = (k: string) =>
@@ -262,7 +346,7 @@ export function InboxScreen() {
   const cur = items[idx] ?? null;
   // Screenshots: the open item shows a sample suggestion, as Suggest would make.
   useEffect(() => {
-    if (!sceneInboxSuggest.get() || !cur || isTranscript(cur)) return;
+    if (!sceneInboxSuggest.get() || !cur || unsuggested(cur)) return;
     const id = key(cur);
     setSugg((m) => (m[id] ? m : { ...m, [id]: sampleSuggestion(id) }));
   }, [cur]);
@@ -280,7 +364,6 @@ export function InboxScreen() {
   const active = (projects ?? []).filter((p) => p.status === "active");
 
   const after = (msg: string) => {
-    setDone((n) => n + 1);
     setForm(null);
     setFiling(false);
     const next = items[idx + 1] ?? items[idx - 1] ?? null;
@@ -303,7 +386,8 @@ export function InboxScreen() {
 
   const outcome = (i: InboxItem, s: ClarifySuggestion | { becomes: string; text?: string; project?: string | null }) => {
     const proj = s.project ? (active.find((p) => p.name.toLowerCase() === s.project!.toLowerCase())?.path ?? null) : null;
-    const base: Clarified = { text: s.text || startText(i), project: proj };
+    // An action's due date comes with it.
+    const base: Clarified = { text: s.text || startText(i), project: proj, ...(i.action?.due ? { due: i.action.due } : {}) };
     const full = "context" in s ? { ...base, context: s.context, effort: s.effort, due: s.due } : base;
     switch (s.becomes) {
       case "next":
@@ -329,6 +413,10 @@ export function InboxScreen() {
         return act(() => doneNow(i), "Done, and out of the Inbox");
       case "someday":
         return act(() => settle(i, taskLine({ ...full, tag: "someday-maybe" }), proj, "Next actions"), "Moved to Someday / maybe");
+      case "move":
+        return setMoving(true);
+      case "todo":
+        return act(() => makeTask(i, base.text), "Put on the To Do list");
       case "reference":
         if (i.kind === "capture") return act(() => captureDone(i.path), "Kept in Sources");
         return setFiling(true);
@@ -355,6 +443,7 @@ export function InboxScreen() {
     const one = (i: InboxItem): Promise<unknown> => {
       if (b === "ingest" || b === "reference") return captureDone(i.path);
       if (b === "done") return doneNow(i);
+      if (b === "todo") return makeTask(i, startText(i));
       if (b === "someday") return settle(i, taskLine({ text: startText(i), project: null, tag: "someday-maybe" }), null, "Next actions");
       if (i.kind === "capture") return trashCapture(i.path);
       return settle(i, null);
@@ -366,7 +455,6 @@ export function InboxScreen() {
     eachItem(order, one)
       .then(({ ok, failed }) => {
         const gone = new Set(ok.map(key));
-        setDone((d) => d + ok.length);
         setChecked((c) => c.filter((k) => !gone.has(k)));
         toast(
           eachSaid(
@@ -386,7 +474,7 @@ export function InboxScreen() {
   // Keys: the choices, J / K between items, ↩ the suggestion; with several ticked, their choices.
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (!cur || form || filing || making || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!cur || form || filing || making || moving || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       // Its meeting note under way: J / K still move, nothing acts on it.
       if (busy(cur) && !many && !["j", "k", "ArrowDown", "ArrowUp"].includes(e.key)) return;
       if ((e.target as HTMLElement)?.closest?.("input, textarea, [contenteditable]")) return;
@@ -394,18 +482,21 @@ export function InboxScreen() {
         const c = bulkChoices(picked).find(([k]) => (k === "⌫" ? "Backspace" : k.toLowerCase()) === e.key);
         if (!c) return;
         e.preventDefault();
-        if (!e.repeat) actAll(picked, c[1]);
+        // Typing meant for somewhere else (a password prompt, the window just back in front) acts on nothing.
+        if (!e.repeat && !isStrayKey(e)) actAll(picked, c[1]);
         return;
       }
-      const s = isTranscript(cur) ? undefined : sugg[key(cur)];
+      const s = unsuggested(cur) ? undefined : sugg[key(cur)];
       const map: Record<string, string> = Object.fromEntries(
-        inboxChoices(cur).map((b) => [CHOICE[b].key === "⌫" ? "Backspace" : CHOICE[b].key.toLowerCase(), b]),
+        inboxChoices(cur).map((b) => [keyOf(b, cur) === "⌫" ? "Backspace" : keyOf(b, cur).toLowerCase(), b]),
       );
-      if (e.key === "j" || e.key === "ArrowDown") setSel(key(items[Math.min(items.length - 1, idx + 1)]));
+      if (e.key === "u" && !map.u && !busy(cur) && updBtn.current) {
+        if (!e.repeat && !isStrayKey(e)) setUpd(updBtn.current.getBoundingClientRect());
+      } else if (e.key === "j" || e.key === "ArrowDown") setSel(key(items[Math.min(items.length - 1, idx + 1)]));
       else if (e.key === "k" || e.key === "ArrowUp") setSel(key(items[Math.max(0, idx - 1)]));
       else if ((e.key === "Enter" && s) || map[e.key]) {
         // A held key repeats: it acts once, and not again while that action is still under way.
-        if (!e.repeat && !inFlight.current) outcome(cur, e.key === "Enter" && s ? s : { becomes: map[e.key] });
+        if (!e.repeat && !inFlight.current && !isStrayKey(e)) outcome(cur, e.key === "Enter" && s ? s : { becomes: map[e.key] });
       } else return;
       e.preventDefault();
     };
@@ -415,6 +506,7 @@ export function InboxScreen() {
 
   const suggest = (which: InboxItem[]) => {
     setThinking(true);
+    setAsked(true);
     api
       .clarifySuggest(
         which.map((i) => ({ id: key(i), kind: suggestKind(i), text: itemText(i) })),
@@ -435,9 +527,22 @@ export function InboxScreen() {
       .finally(() => setThinking(false));
   };
 
-  const total = items.length + done;
+  const keys = items.map(key);
+  const keyList = keys.join("\n");
+  useEffect(() => {
+    const now = keyList ? keyList.split("\n") : [];
+    setSeen((s) => (now.every((k) => s.includes(k)) ? s : [...new Set([...s, ...now])]));
+  }, [keyList]);
+  const total = new Set([...seen, ...keys]).size;
+  const done = total - items.length;
   // What Suggest asks about: not transcripts, whose choice is the meeting note.
-  const askable = items.filter((i) => !isTranscript(i));
+  const askable = items.filter((i) => !unsuggested(i));
+  // The items with a suggestion waiting: the chip counts them and goes to the next one.
+  const suggested = askable.filter((i) => sugg[key(i)]);
+  const nextSuggested = () => {
+    const after = suggested.find((i) => items.indexOf(i) > idx) ?? suggested[0];
+    if (after) setSel(key(after));
+  };
   return (
     <main className="main">
       <TopBar
@@ -451,34 +556,27 @@ export function InboxScreen() {
       >
         {total > 0 && (
           <>
-            <span className="faint small wprog">{items.length ? `Item ${idx + 1} of ${items.length}` : "All clear"}</span>
+            {/* What's been clarified this visit, of all there was: where the open item sits isn't progress
+                (items arriving above it moved it, and the bar with it). */}
+            <span className="faint small wprog">{items.length ? `${done} of ${total} done` : "All clear"}</span>
             <span className="pbar">
               <i style={{ width: `${(done / total) * 100}%` }} />
             </span>
           </>
         )}
-        <span
+        <SuggestChip n={suggested.length} busy={thinking} onToggle={nextSuggested} />
+        <SuggestButton
+          big
+          again={asked}
+          busy={thinking}
+          disabled={!askable.length}
           title={
-            thinking
-              ? "The AI is working on its suggestions"
-              : askable.length
-                ? `Ask the AI what ${askable.length > 20 ? "the first 20 items" : "each item"} should become (a transcript is a meeting note, so it isn't asked about); nothing changes until you choose`
-                : "Nothing in the Inbox to ask about"
+            askable.length
+              ? `Ask the AI what ${askable.length > 20 ? "the first 20 items" : "each item"} should become (a transcript is a meeting note, so it isn't asked about); nothing changes until you choose`
+              : "Nothing in the Inbox to ask about"
           }
-        >
-          <button type="button" className="btn" disabled={!askable.length || thinking} onClick={() => suggest(askable.slice(0, 20))}>
-            <Icon name="cpu" size={14} />
-            {thinking ? (
-              "Thinking…"
-            ) : (
-              <Squeeze
-                full={askable.length > 20 ? "Suggest for all (first 20)" : "Suggest for all"}
-                tight="Suggest for all"
-                narrow="Suggest"
-              />
-            )}
-          </button>
-        </span>
+          onClick={() => suggest(askable.slice(0, 20))}
+        />
       </TopBar>
       <div className="body inbox" {...panes.root}>
         {panes.resizers}
@@ -486,8 +584,8 @@ export function InboxScreen() {
           {raw === null && <p className="faint pad">Loading…</p>}
           {raw && !items.length && (
             <p className="faint pad">
-              Nothing to clarify. Thoughts captured to the Scratchpad, tasks under Other on the To Do list, and emails and Teams chats
-              captured from the browser land here.
+              Nothing to clarify. Notes captured to the Scratchpad, tasks under Other on the To Do list, and emails and Teams chats captured
+              from the browser land here.
             </p>
           )}
           {SOURCES.map((g) => {
@@ -562,6 +660,7 @@ export function InboxScreen() {
               </div>
             );
           })}
+          <BookmarksBand />
         </div>
         <div className="iopen">
           {many ? (
@@ -599,7 +698,11 @@ export function InboxScreen() {
                 <Icon name={inboxItemKind(cur).icon} size={16} />
                 {sourceOf(cur)}
               </span>
-              {cur.kind === "capture" ? <CaptureBody item={cur} /> : <ItemBody text={itemText(cur)} />}
+              {cur.kind === "capture" ? (
+                <CaptureBody item={cur} />
+              ) : (
+                <ItemBody text={cur.kind === "action" ? actionBody(cur) : itemText(cur)} />
+              )}
               {progress(cur) && (
                 <div className={`doc-banner ${progress(cur)!.busy ? "" : "warn"}`} role="status">
                   {progress(cur)!.busy ? <span className="spin" /> : <Icon name="info" size={14} />}
@@ -613,21 +716,23 @@ export function InboxScreen() {
                   </span>
                 </div>
               )}
-              {isTranscript(cur) ? null : sugg[key(cur)] ? (
-                <SuggestionCard s={sugg[key(cur)]} onAccept={busy(cur) ? undefined : () => outcome(cur, sugg[key(cur)])} />
+              {unsuggested(cur) ? null : sugg[key(cur)] ? (
+                <SuggestionCard
+                  s={sugg[key(cur)]}
+                  onAccept={busy(cur) ? undefined : (text) => outcome(cur, text ? { ...sugg[key(cur)], text } : sugg[key(cur)])}
+                  onSkip={() => {
+                    const k = key(cur);
+                    setSugg((m) => Object.fromEntries(Object.entries(m).filter(([x]) => x !== k)));
+                    setAsked(true);
+                  }}
+                />
               ) : (
-                <span
-                  title={
-                    thinking
-                      ? "The AI is working on its suggestions"
-                      : "Ask the AI what this item should become; nothing changes until you choose"
-                  }
-                >
-                  <button type="button" className="btn sm" disabled={thinking} onClick={() => suggest([cur])}>
-                    <Icon name="cpu" size={12} />
-                    {thinking ? "Thinking…" : "Suggest"}
-                  </button>
-                </span>
+                <SuggestButton
+                  again={asked}
+                  busy={thinking}
+                  title="Ask the AI what this item should become; nothing changes until you choose"
+                  onClick={() => suggest([cur])}
+                />
               )}
               {!busy(cur) && (
                 // GTD's question, does it need doing? The choices that make it a task or a reply, and
@@ -651,11 +756,11 @@ export function InboxScreen() {
                                 key={b}
                                 type="button"
                                 className={`key ${b === leadChoice(cur) && !sugg[key(cur)] ? "rec" : ""}`}
-                                title={`${c.tip(cur)} (${c.key})`}
+                                title={`${c.tip(cur)} (${keyOf(b, cur)})`}
                                 onClick={() => outcome(cur, { becomes: b })}
                               >
                                 <span className="grow">{c.label(cur)}</span>
-                                <span className="kbd">{c.key}</span>
+                                <span className="kbd">{keyOf(b, cur)}</span>
                               </button>
                             );
                           })}
@@ -664,17 +769,32 @@ export function InboxScreen() {
                     ))}
                 </div>
               )}
-              {!busy(cur) && choiceGroups(cur).ask && (
-                <button
-                  type="button"
-                  className="btn sm ghost iask"
-                  title={`${CHOICE.ask.tip(cur)} (${CHOICE.ask.key})`}
-                  onClick={() => outcome(cur, { becomes: "ask" })}
-                >
-                  <Icon name="ask" size={13} />
-                  {CHOICE.ask.label(cur)}
-                  <span className="kbd">{CHOICE.ask.key}</span>
-                </button>
+              {!busy(cur) && (
+                <div className="iasks">
+                  {choiceGroups(cur).ask && (
+                    <button
+                      type="button"
+                      className="btn sm ghost iask"
+                      title={`${CHOICE.ask.tip(cur)} (${keyOf("ask", cur)})`}
+                      onClick={() => outcome(cur, { becomes: "ask" })}
+                    >
+                      <Icon name="ask" size={13} />
+                      {CHOICE.ask.label(cur)}
+                      <span className="kbd">{keyOf("ask", cur)}</span>
+                    </button>
+                  )}
+                  <button
+                    ref={updBtn}
+                    type="button"
+                    className="btn sm ghost iask"
+                    title="Say what's happened (“Lena has already replied to Maya”) and an assistant applies it in the background (U)"
+                    onClick={(e) => setUpd(e.currentTarget.getBoundingClientRect())}
+                  >
+                    <Icon name="pencil" size={13} />
+                    Update…
+                    <span className="kbd">U</span>
+                  </button>
+                </div>
               )}
             </>
           ) : (
@@ -688,6 +808,7 @@ export function InboxScreen() {
           )}
         </div>
       </div>
+      {upd && cur && <UpdateBox target={{ kind: "inbox", item: cur }} at={upd} onClose={() => setUpd(null)} />}
       {form && cur && (
         <ClarifyForm
           mode={form.mode}
@@ -705,6 +826,9 @@ export function InboxScreen() {
             )
           }
         />
+      )}
+      {moving && cur?.kind === "action" && (
+        <MoveAction path={cur.path} line={cur.line} lineText={cur.lineText} onClose={() => setMoving(false)} />
       )}
       {filing && cur && (
         <FileAsReference item={cur} onClose={() => setFiling(false)} onDone={(to) => act(() => settle(cur, null), `Filed in ${to}`)} />
@@ -795,6 +919,9 @@ function CaptureBody({ item }: { item: InboxItem }) {
 }
 
 /** The open item: its first line as the title, the rest drawn as markdown at reading size. */
+/** An action's text, then the quotes it came from (the header above says where it is). */
+const actionBody = (i: InboxItem) => [i.text.trim(), "", ...(i.action?.quotes ?? []).map((q) => `> ${q}`)].join("\n");
+
 function ItemBody({ text }: { text: string }) {
   const root = useStore(settings).vaultPath ?? "";
   const [first, ...rest] = text.split("\n");
@@ -822,38 +949,46 @@ const LABEL: Record<string, string> = {
   reply: "a reply",
 };
 
-/** What the AI suggests the item becomes, first, with Accept (↩): one press does it. */
-function SuggestionCard({ s, onAccept }: { s: ClarifySuggestion; onAccept?: () => void }) {
+/** Suggestions whose words Edit can change first: what the item becomes when it's a task or a project. */
+const WORDED = new Set(["next", "waiting", "project", "someday", "todo"]);
+
+/** What the AI suggests the item becomes, first, as the one suggestion component's row
+ *  (src/Suggestions.tsx): Accept (↩) does it in one press, Edit changes its words first, Skip drops
+ *  the suggestion and leaves the item. */
+function SuggestionCard({ s, onAccept, onSkip }: { s: ClarifySuggestion; onAccept?: (text?: string) => void; onSkip: () => void }) {
+  const what = LABEL[s.becomes] ?? s.becomes;
   return (
     <div className="card isugg">
-      <div className="isugg-head">
-        <div className="grow">
-          <div className="isugg-what">
-            <Icon name="cpu" size={13} />
-            Suggested: {LABEL[s.becomes] ?? s.becomes}
-          </div>
-          {s.text && s.becomes !== "delete" && <div className="isugg-text">{s.text}</div>}
-        </div>
-        {onAccept && (
-          <button
-            type="button"
-            className="btn pri"
-            title={`Do what the AI suggests: ${LABEL[s.becomes] ?? s.becomes} (↩)`}
-            onClick={onAccept}
-          >
-            Accept
-            <span className="kbd">{keyLabel("↩")}</span>
-          </button>
-        )}
-      </div>
-      {(s.project || s.context || s.effort || s.due) && (
-        <div className="isugg-meta">
-          {s.project && <span>{s.project}</span>}
-          {s.context && <span>@{s.context}</span>}
-          {s.effort && effortMinutes(s.effort) !== null && <span>{fmtEffort(effortMinutes(s.effort)!)}</span>}
-          {s.due && <span>Due {fmtShortDate(s.due)}</span>}
-        </div>
-      )}
+      <SuggestionRow
+        id={s.id}
+        enterKey
+        text={
+          <>
+            <div className="isugg-what">
+              <Icon name="cpu" size={13} />
+              Suggested: {what}
+            </div>
+            {s.text && s.becomes !== "delete" && <div className="isugg-text">{s.text}</div>}
+          </>
+        }
+        detail={
+          (s.project || s.context || s.effort || s.due) && (
+            <span className="isugg-meta">
+              {s.project && <span>{s.project}</span>}
+              {s.context && <span>@{s.context}</span>}
+              {s.effort && effortMinutes(s.effort) !== null && <span>{fmtEffort(effortMinutes(s.effort)!)}</span>}
+              {s.due && <span>Due {fmtShortDate(s.due)}</span>}
+            </span>
+          )
+        }
+        accept={onAccept && { title: `Do what the AI suggests: ${what}`, run: (e) => onAccept(e?.text) }}
+        edit={
+          onAccept && WORDED.has(s.becomes)
+            ? { title: "Change the words before doing it", fields: [{ key: "text", label: "The words", value: s.text }] }
+            : undefined
+        }
+        skip={{ title: "Drop the suggestion; the item stays in the Inbox to clarify yourself", run: onSkip }}
+      />
       {s.why && <p className="isugg-why">{s.why}</p>}
     </div>
   );

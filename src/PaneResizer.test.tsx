@@ -23,14 +23,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Activity's log: When before the flexible Item column, Action after it. */
+/** The Trash's table: the flexible Name column, then Type and Size after it. */
 function Log() {
-  const cols = usePanes({ "activity.when": PANES["activity.when"], "activity.action": PANES["activity.action"] }, { mode: "column" });
+  const cols = usePanes({ "trash.type": PANES["trash.type"], "trash.size": PANES["trash.size"] }, { mode: "column" });
   return (
     <div data-testid="log" {...cols.root}>
-      <span>When{cols.resizer("activity.when")}</span>
-      <span>Item</span>
-      <span>Action{cols.resizer("activity.action")}</span>
+      <span>Name</span>
+      <span>Type{cols.resizer("trash.type")}</span>
+      <span>Size{cols.resizer("trash.size")}</span>
     </div>
   );
 }
@@ -46,25 +46,22 @@ const stored = () => settings.get().paneWidths ?? {};
 describe("a table's column dividers", () => {
   it("sit on the edge away from the flexible column, so each follows the pointer", () => {
     render(<Log />);
-    expect(divider("When").dataset.edge).toBe("end");
-    expect(divider("Action").dataset.edge).toBe("start");
-    // When is left of Item: its right edge moves right with the pointer, so it widens.
-    act(() => drag(divider("When"), 40));
-    expect(stored()["activity.when"]).toBe(PANES["activity.when"].def + 40);
-    // Action is right of Item, stacked against the table's right edge: its left edge moves right
+    expect(divider("Type").dataset.edge).toBe("start");
+    expect(divider("Size").dataset.edge).toBe("start");
+    // Type is right of Name, stacked against the table's right edge: its left edge moves right
     // with the pointer, so it narrows, and widens as it's dragged left.
-    act(() => drag(divider("Action"), 30));
-    expect(stored()["activity.action"]).toBe(PANES["activity.action"].def - 30);
-    act(() => drag(divider("Action"), -50));
-    expect(stored()["activity.action"]).toBe(PANES["activity.action"].def - 30 + 50);
-    expect(screen.getByTestId("log").style.getPropertyValue("--col-action")).toBe(`${PANES["activity.action"].def + 20}px`);
+    act(() => drag(divider("Type"), 20));
+    expect(stored()["trash.type"]).toBe(PANES["trash.type"].def - 20);
+    act(() => drag(divider("Type"), -50));
+    expect(stored()["trash.type"]).toBe(PANES["trash.type"].def - 20 + 50);
+    expect(screen.getByTestId("log").style.getPropertyValue("--col-type")).toBe(`${PANES["trash.type"].def + 30}px`);
   });
 
   it("are one per column, each named for its own", () => {
     render(<Log />);
     expect(screen.getAllByRole("separator").map((s) => s.getAttribute("aria-label"))).toEqual([
-      "Resize the When column",
-      "Resize the Action column",
+      "Resize the Type column",
+      "Resize the Size column",
     ]);
   });
 });
@@ -248,21 +245,19 @@ describe("a breakpoint", () => {
 describe("a divider's keys and locks", () => {
   it("moves with the arrows the way they point, Shift further", () => {
     render(<Log />);
-    fireEvent.keyDown(divider("When"), { key: "ArrowRight" });
-    expect(stored()["activity.when"]).toBe(PANES["activity.when"].def + 8);
-    fireEvent.keyDown(divider("When"), { key: "ArrowLeft", shiftKey: true });
-    expect(stored()["activity.when"]).toBe(PANES["activity.when"].def + 8 - 40);
-    // Action's divider is its left edge: → moves it right, so Action narrows.
-    fireEvent.keyDown(divider("Action"), { key: "ArrowRight" });
-    expect(stored()["activity.action"]).toBe(PANES["activity.action"].def - 8);
+    // Type's divider is its left edge: → moves it right, so Type narrows; ← widens it.
+    fireEvent.keyDown(divider("Type"), { key: "ArrowRight" });
+    expect(stored()["trash.type"]).toBe(PANES["trash.type"].def - 8);
+    fireEvent.keyDown(divider("Type"), { key: "ArrowLeft", shiftKey: true });
+    expect(stored()["trash.type"]).toBe(PANES["trash.type"].def - 8 + 40);
   });
 
   it("goes to the column's least on Home and its most on End", () => {
     render(<Log />);
-    fireEvent.keyDown(divider("When"), { key: "Home" });
-    expect(stored()["activity.when"]).toBe(PANES["activity.when"].min);
-    fireEvent.keyDown(divider("When"), { key: "End" });
-    expect(stored()["activity.when"]).toBe(PANES["activity.when"].max);
+    fireEvent.keyDown(divider("Type"), { key: "Home" });
+    expect(stored()["trash.type"]).toBe(PANES["trash.type"].min);
+    fireEvent.keyDown(divider("Type"), { key: "End" });
+    expect(stored()["trash.type"]).toBe(PANES["trash.type"].max);
   });
 
   it("are reached by Tab left to right", () => {
@@ -281,46 +276,46 @@ describe("a divider's keys and locks", () => {
   it("puts the column back on Enter or a double-click, and keeps Enter from the screen's own keys", () => {
     const screenKeys = vi.fn();
     window.addEventListener("keydown", screenKeys);
-    settings.update({ paneWidths: { "activity.when": 200, "activity.action": 200 } });
+    settings.update({ paneWidths: { "trash.type": 150, "trash.size": 100 } });
     render(<Log />);
-    fireEvent.keyDown(divider("When"), { key: "Enter" });
-    expect(stored()).toEqual({ "activity.action": 200 });
+    fireEvent.keyDown(divider("Type"), { key: "Enter" });
+    expect(stored()).toEqual({ "trash.size": 100 });
     expect(screenKeys).not.toHaveBeenCalled();
-    act(() => void fireEvent.doubleClick(divider("Action")));
+    act(() => void fireEvent.doubleClick(divider("Size")));
     expect(settings.get().paneWidths).toBeUndefined();
-    expect(screen.getByTestId("log").style.getPropertyValue("--col-action")).toBe("");
+    expect(screen.getByTestId("log").style.getPropertyValue("--col-size")).toBe("");
     window.removeEventListener("keydown", screenKeys);
   });
 
   it("keeps a drag within the room the table has, its flexible column keeping its least", () => {
-    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(600);
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(480);
     render(<Log />);
-    // 600px less Action's 120 and the flexible column's 240 leaves When 240, under its 320 maximum.
-    act(() => drag(divider("When"), 200));
-    expect(stored()["activity.when"]).toBe(600 - PANES["activity.action"].def - MIN_FLEX);
+    // 480px less Size's 72 and the flexible column's 240 leaves Type 168, under its 200 maximum.
+    act(() => drag(divider("Type"), -200));
+    expect(stored()["trash.type"]).toBe(480 - PANES["trash.size"].def - MIN_FLEX);
     vi.restoreAllMocks();
   });
 
   it("leaves resize mode when its divider goes mid-drag", () => {
     render(<Log />);
-    fireEvent.pointerDown(divider("When"), { button: 0, clientX: 500, pointerId: 1 });
-    fireEvent.pointerMove(divider("When"), { clientX: 560, pointerId: 1 });
+    fireEvent.pointerDown(divider("Type"), { button: 0, clientX: 500, pointerId: 1 });
+    fireEvent.pointerMove(divider("Type"), { clientX: 440, pointerId: 1 });
     expect(document.body.classList.contains("presizing")).toBe(true);
-    expect(screen.getByTestId("log").style.getPropertyValue("--col-when")).toBe(`${PANES["activity.when"].def + 60}px`);
+    expect(screen.getByTestId("log").style.getPropertyValue("--col-type")).toBe(`${PANES["trash.type"].def + 60}px`);
     // An assistant locks the columns while the pointer is still down: the width dragged, never
     // kept, goes with the divider.
     act(() => settings.update({ resizeLocks: { columns: true } }));
     expect(screen.queryAllByRole("separator")).toEqual([]);
     expect(document.body.classList.contains("presizing")).toBe(false);
-    expect(screen.getByTestId("log").style.getPropertyValue("--col-when")).toBe("");
+    expect(screen.getByTestId("log").style.getPropertyValue("--col-type")).toBe("");
     expect(settings.get().paneWidths).toBeUndefined();
   });
 
   it("draws no dividers for a locked type, and still shows the widths kept", () => {
-    settings.update({ paneWidths: { "activity.when": 200 }, resizeLocks: { columns: true } });
+    settings.update({ paneWidths: { "trash.type": 150 }, resizeLocks: { columns: true } });
     render(<Log />);
     expect(screen.queryAllByRole("separator")).toEqual([]);
-    expect(screen.getByTestId("log").style.getPropertyValue("--col-when")).toBe("200px");
+    expect(screen.getByTestId("log").style.getPropertyValue("--col-type")).toBe("150px");
     // The panes lock is another type's: the columns' dividers come back.
     act(() => settings.update({ resizeLocks: { panes: true } }));
     expect(screen.getAllByRole("separator")).toHaveLength(2);

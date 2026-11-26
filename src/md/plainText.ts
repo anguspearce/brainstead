@@ -13,7 +13,8 @@ const ON = "",
 export function plainText(md: string): string {
   return (
     md
-      // Templater code, and a block cut off before its end.
+      // Templater code, a block whose start the snippet cut off, and one cut off before its end.
+      .replace(/^(?:(?!<%)[\s\S])*?-?%>/, "")
       .replace(/<%[\s\S]*?%>/g, "")
       .replace(/<%[\s\S]*$/, "")
       // Inline fields: [effort:: 3] and (due:: 2026-10-01).
@@ -59,5 +60,30 @@ export function plainSegments(segs: { text: string; hit: boolean }[]): { text: s
     } else cur += ch;
   }
   if (cur) out.push({ text: cur, hit });
+  return out;
+}
+
+/** A passage that opens with its own heading's words ("Current state The steerco…" under "… ›
+ *  Current state") drops them: the heading already shows above or before it. */
+export function dropLeadingHeading(segs: { text: string; hit: boolean }[], heading: string): { text: string; hit: boolean }[] {
+  const last = heading.split(" › ").pop()?.trim() ?? "";
+  if (!last) return segs;
+  const text = segs.map((s) => s.text).join("");
+  const lead = text.match(/^\s*/)?.[0].length ?? 0;
+  if (!text.startsWith(last, lead)) return segs;
+  const rest = text.slice(lead + last.length);
+  // Only a whole repeat: "Status" mustn't eat the start of "Statusline".
+  if (rest && !/^[\s:.\-–—·]/.test(rest)) return segs;
+  let cut = lead + last.length + (rest.match(/^[\s:.\-–—·]*/)?.[0].length ?? 0);
+  if (cut >= text.length) return segs;
+  const out: { text: string; hit: boolean }[] = [];
+  for (const s of segs) {
+    if (cut >= s.text.length) {
+      cut -= s.text.length;
+      continue;
+    }
+    out.push(cut ? { text: s.text.slice(cut), hit: s.hit } : s);
+    cut = 0;
+  }
   return out;
 }

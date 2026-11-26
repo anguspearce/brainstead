@@ -13,6 +13,8 @@ const ok: SyncSignIn = {
   rejected: [],
   extensionOutdated: null,
   extensionShipped: "1.1.16",
+  teams: true,
+  outlook: true,
 };
 
 describe("syncStatus", () => {
@@ -32,5 +34,18 @@ describe("syncStatus", () => {
     expect(syncStatus({ ...ok, stale: ["chats"] }).text).toContain("Keep Teams open");
     expect(syncStatus({ ...ok, rejected: ["mail"] }).text).toContain("Signed out: mail");
     expect(syncStatus({ ...ok, extensionOutdated: "1.1.7" }).text).toContain("version 1.1.7");
+  });
+
+  it("speaks only of the services switched on, each with its own tab", () => {
+    const mailOnly = { teams: false, mail: true };
+    expect(syncStatus({ ...ok, stale: ["chats", "transcripts"], teams: false }, mailOnly)).toEqual({
+      tone: "ok",
+      text: "Outlook connected.",
+    });
+    expect(syncStatus({ ...ok, outlook: false, stale: ["mail"] }, mailOnly)).toEqual({
+      tone: "off",
+      text: "Outlook: not signed in. Open Outlook in Chrome so the extension hands the sign-in over.",
+    });
+    expect(syncStatus({ ...ok, stale: ["mail"], outlook: false }, { teams: true, mail: false }).text).toBe("Teams connected.");
   });
 });

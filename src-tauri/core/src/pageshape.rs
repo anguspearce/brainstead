@@ -979,9 +979,10 @@ fn kept_lines(old: &str, new: &str, report: &Report) -> Vec<String> {
     out
 }
 
-/// The wiki pages that have the shape: entities and concepts (summaries are left as they are).
+/// The wiki pages that have the shape: entities, concepts and initiatives (summaries are left as
+/// they are).
 pub fn shaped(rel: &str) -> bool {
-    (rel.starts_with("wiki/entities/") || rel.starts_with("wiki/concepts/")) && rel.ends_with(".md")
+    (rel.starts_with("wiki/entities/") || rel.starts_with("wiki/concepts/") || rel.starts_with("wiki/initiatives/")) && rel.ends_with(".md")
 }
 
 /// One page's dry run: what reshaping it would do.
@@ -1014,7 +1015,7 @@ pub fn survey(root: &std::path::Path) -> Vec<(PageResult, Option<String>)> {
 }
 
 /// Every Tracker note of the vault at `root`, reshaped in memory to the tracker shape, as
-/// `survey` does the wiki's pages. Kept apart from `survey`, so Knowledge health and Reshape
+/// `survey` does the wiki's pages. Kept apart from `survey`, so Wiki health and Reshape
 /// pages' run over every page leave notes alone; they're reshaped when named.
 pub fn survey_trackers(root: &std::path::Path) -> Vec<(PageResult, Option<String>)> {
     let mut pages: Vec<String> = vault_files(root).into_iter().filter(|f| is_tracker(f)).collect();
@@ -1055,7 +1056,7 @@ pub fn one(path: &str, text: &str, sources: &Sources) -> (PageResult, Option<Str
     (PageResult { path: path.to_string(), in_shape, auto, report }, (new != text).then_some(new))
 }
 
-/// The Knowledge health item for a page not in the shape: safe when Reshape pages can do it by
+/// The Wiki health item for a page not in the shape: safe when Reshape pages can do it by
 /// itself; else why it needs the user.
 pub fn item(path: &str, text: &str, sources: &Sources) -> Option<crate::lint::Item> {
     let (r, _) = one(path, text, sources);
@@ -1266,8 +1267,13 @@ pub fn with_topic(page: &str, heading: &str, content: &str) -> Result<String, St
         Kind::Topical => {}
         _ => return Err(format!("“{h}” isn't a topical section: use current_state or entry for it.")),
     }
-    if parse(page).sections.iter().any(|s| name(s.heading) == name(h)) {
-        return crate::proposals::patched(page, &crate::proposals::Patch::Section { section: h.to_string(), content: content.to_string() });
+    // The page's own heading goes to the patch, which matches it as written: `## Risks:` is
+    // found by "Risks" here, and must be replaced, not joined by a second `## Risks`.
+    if let Some(s) = parse(page).sections.iter().find(|s| name(s.heading) == name(h)) {
+        return crate::proposals::patched(
+            page,
+            &crate::proposals::Patch::Section { section: s.heading.to_string(), content: content.to_string() },
+        );
     }
     Ok(insert_sections(page, &format!("## {h}\n\n{}\n", content.trim()), &[Kind::Timeline, Kind::Closing]))
 }
@@ -1306,10 +1312,7 @@ pub fn drift_line(results: &[PageResult]) -> String {
     }
     let auto = out.iter().filter(|r| r.auto && r.report.broken.is_empty()).count();
     let n = out.len();
-    format!(
-        "{n} wiki page{} not in the page shape ({auto} Reshape pages can do by itself, in Knowledge health)",
-        if n == 1 { "" } else { "s" }
-    )
+    format!("{n} wiki page{} not in the page shape ({auto} Reshape pages can do by itself, in Wiki health)", if n == 1 { "" } else { "s" })
 }
 
 /// The page with its Current state's text `text`: replaced when it has one, else put after the opening.
@@ -1989,6 +1992,9 @@ mod tests {
         let new = with_topic(&page, "Architecture", "Built on Hub 2.").unwrap();
         assert!(new.contains("## Architecture\n\nBuilt on Hub 2.\n\n## Timeline"));
         assert!(with_topic(&page, "See also", "x").is_err() && with_topic(&page, "2 Oct 2026 — x", "x").is_err());
+        // A heading with a trailing colon is the same section: replaced, not added again.
+        let new = with_topic("# Orbit App\n\n## Risks:\n\n- Old.\n\n## Timeline\n", "Risks", "- Pen test.").unwrap();
+        assert_eq!(new, "# Orbit App\n\n## Risks:\n\n- Pen test.\n\n## Timeline\n");
         let new = with_current_state_text(&page, "Launch on 5 December.").unwrap();
         assert!(new.contains("## Current state\n\nLaunch on 5 December.\n\n## Architecture"));
         let (bare, _) = reshape(&fixture("dated-only"), &is_source);
@@ -2022,7 +2028,7 @@ mod tests {
         let drifted = format!("{page}\n\n## 5 Oct 2026 — Sync\n\nScope agreed [[Meeting. Orbit App Sync - 2026-10-05]].\n");
         let (r, new) = one("wiki/entities/Orbit App.md", &drifted, &sources);
         assert!(!r.in_shape && r.auto, "{r:?}");
-        assert_eq!(drift_line(&[ok, r]), "1 wiki page not in the page shape (1 Reshape pages can do by itself, in Knowledge health)");
+        assert_eq!(drift_line(&[ok, r]), "1 wiki page not in the page shape (1 Reshape pages can do by itself, in Wiki health)");
         let new = new.unwrap();
         assert!(new.contains("## Timeline\n\n### 2026-10-05 — Sync\nSource: [[Meeting. Orbit App Sync - 2026-10-05]]"), "{new}");
         assert!(in_shape(&new, &|t| sources.is_source(t)));

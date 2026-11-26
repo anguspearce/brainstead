@@ -26,6 +26,9 @@ export interface Chat extends SavedChat {
   review?: boolean;
   /** A message you might send next, offered in the box after an answer. */
   suggestion?: string | null;
+  /** A chat Brainstead started for you in the background (an Update…): it keeps its title and
+   *  offers no next message. */
+  job?: "update";
 }
 
 export const CLI_LABEL: Record<CliName, string> = {
@@ -203,7 +206,7 @@ export function fromSaved(c: SavedChat): Chat {
 
 /** What Rust saves: the chat without what only lives while it's open. */
 export function toSaved(c: Chat): SavedChat {
-  const { streaming: _s, status: _st, looked: _l, busy: _b, queue: _q, unread: _u, review: _r, suggestion: _n, ...saved } = c;
+  const { streaming: _s, status: _st, looked: _l, busy: _b, queue: _q, unread: _u, review: _r, suggestion: _n, job: _j, ...saved } = c;
   return saved;
 }
 
@@ -364,6 +367,14 @@ export async function openSaved(filename: string) {
 }
 
 /** Sends a message, or queues it while the chat is answering. */
+/** A chat in its own tab, started in the background: the tab you're on stays selected. */
+export function backgroundChat(title: string, prompt: string, model: string, job: "update"): string {
+  const c = { ...blankChat(model), title, job };
+  setChats((cs) => [...cs, c], ask.get().active);
+  start(c.id, prompt);
+  return c.id;
+}
+
 export function send(id: string, text: string) {
   const t = text.trim();
   if (!t) return;
@@ -390,6 +401,7 @@ function start(id: string, text: string) {
     suggestion: null,
   }));
   const c = ask.get().chats.find((x) => x.id === id)!;
+  if (c.review) following.add(id);
   api
     .askSend(id, text, c.model ?? DEFAULT_MODEL, sessionOf(c), c.effort ?? null)
     .then(() => sent.add(id))
@@ -398,6 +410,10 @@ function start(id: string, text: string) {
 
 /** The chats whose turn Rust has started, so it knows how the turn stands (recover). */
 const sent = new Set<string>();
+/** A scheduled run's chats whose turn under way is a message of yours, not the run itself: it ends
+ *  as any chat's does (ask-done, recover), where the run's own turn ends with review-done. */
+const following = new Set<string>();
+const ownTurn = (c: Chat) => !c.review || following.has(c.id);
 
 /** Stop: the CLI is stopped, and a chat whose answer had already ended without the window hearing
  *  of it finishes at once. */
@@ -421,6 +437,7 @@ export async function recover(id: string) {
 async function finish(d: AskDone) {
   const before = ask.get().chats.find((c) => c.id === d.chatId);
   sent.delete(d.chatId);
+  following.delete(d.chatId);
   // Each turn ends once: an ask-done that arrives after recover has finished it is ignored.
   if (!before?.busy) return;
   try {
@@ -430,18 +447,21 @@ async function finish(d: AskDone) {
     update(d.chatId, (c) => ({ ...c, busy: false, streaming: null, status: null }));
     return;
   }
-  await save(d.chatId);
   const c = ask.get().chats.find((x) => x.id === d.chatId);
   if (!c) return;
+  // The next queued message goes now, before the save is awaited: the chat is never idle in
+  // between, so a message sent in that gap queues behind it and can't start a second turn.
+  const [next, ...rest] = c.queue;
+  if (next !== undefined) {
+    update(c.id, (x) => ({ ...x, queue: rest }));
+    start(c.id, next);
+  }
+  await save(d.chatId);
   // After the first exchange, a proper title.
   const users = c.transcript.filter((i) => i.role === "user");
   const answer = c.transcript.find((i) => i.role === "assistant");
-  if (users.length === 1 && answer && !c.review) void retitle(c.id, users[0].text, answer.text);
-  if (c.queue.length) {
-    const [next, ...rest] = c.queue;
-    update(c.id, (x) => ({ ...x, queue: rest }));
-    start(c.id, next);
-  } else if (!c.review && !d.error) void suggest(c.id);
+  if (users.length === 1 && answer && !c.review && !c.job) void retitle(c.id, users[0].text, answer.text);
+  if (next === undefined && !c.review && !c.job && !d.error) void suggest(c.id);
 }
 
 /** The pairs of question and answer in a transcript, oldest first. */
@@ -556,13 +576,14 @@ export async function startAsk(): Promise<() => void> {
   offs.push(
     await api.onAskDone((d) => {
       // A review run's turn is finished and saved by Rust (review-done).
-      if (ask.get().chats.find((c) => c.id === d.chatId)?.review) return;
+      const c = ask.get().chats.find((c) => c.id === d.chatId);
+      if (c && !ownTurn(c)) return;
       void finish(d);
     }),
   );
   // A missed ask-done doesn't leave a chat answering for ever.
   const recovering = setInterval(() => {
-    for (const c of ask.get().chats) if (c.busy && !c.review) void recover(c.id);
+    for (const c of ask.get().chats) if (c.busy && ownTurn(c)) void recover(c.id);
   }, 5000);
   offs.push(() => clearInterval(recovering), followEffortSettings());
   // A scheduled review opens as a tab while it runs, without taking you to Ask, at its job's effort.
@@ -586,12 +607,21 @@ export async function startAsk(): Promise<() => void> {
   );
   offs.push(
     await api.onReviewDone(async (r) => {
-      if (!r.filename) return update(r.chatId, (c) => ({ ...c, busy: false, streaming: null, status: null }));
-      try {
-        const saved = fromSaved(await api.chatRead(r.filename));
-        update(r.chatId, () => ({ ...saved, id: r.chatId, review: true, unread: !seeing(r.chatId) }));
-      } catch {
-        update(r.chatId, (c) => ({ ...c, busy: false }));
+      if (!r.filename) update(r.chatId, (c) => ({ ...c, busy: false, streaming: null, status: null }));
+      else
+        try {
+          const saved = fromSaved(await api.chatRead(r.filename));
+          // What was typed while it ran is still queued, not lost with the old copy of the chat.
+          update(r.chatId, (c) => ({ ...saved, id: r.chatId, review: true, unread: !seeing(r.chatId), queue: c.queue }));
+        } catch {
+          update(r.chatId, (c) => ({ ...c, busy: false }));
+        }
+      // The run is over: the first message queued behind it goes now.
+      const c = ask.get().chats.find((x) => x.id === r.chatId);
+      if (c && !c.busy && c.queue.length) {
+        const [next, ...rest] = c.queue;
+        update(c.id, (x) => ({ ...x, queue: rest }));
+        start(c.id, next);
       }
     }),
   );

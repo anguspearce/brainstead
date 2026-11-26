@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { ChangeRow, LintReport, TrashEntry } from "./api";
 import { filedPage } from "./Ask";
+import { wikiHealth } from "./Lists";
 import {
   byRun,
   changeMatches,
@@ -16,6 +17,8 @@ import {
   IGNORE_ALL,
   claimsByPage,
   decisions,
+  IN_INBOX,
+  issueClass,
   fixWithAskPrompt,
   held,
   originLabel,
@@ -95,7 +98,7 @@ describe("changes", () => {
 
   it("says where a change came from", () => {
     expect(originLabel(row({}))).toBe("Ask");
-    expect(originLabel(row({ origin: { kind: "lint" } }))).toBe("Knowledge health");
+    expect(originLabel(row({ origin: { kind: "lint" } }))).toBe("Wiki health");
     expect(originLabel(row({ origin: { kind: "chat", label: "Terminal session" } }))).toBe("Terminal session");
     expect(originLabel(row({ origin: { kind: "review", label: "daily-summary 2026-10-02" } }))).toBe("Daily summary 2026-10-02");
     expect(originLabel(row({ origin: { kind: "review", label: "weekly-summary 2026-W40" } }))).toBe("Weekly summary 2026-W40");
@@ -104,13 +107,42 @@ describe("changes", () => {
   });
 });
 
-describe("knowledge health", () => {
+describe("wiki health", () => {
   it("counts what needs a decision, leaving out stale pages and safe fixes", () => {
     expect(decisions(report)).toBe(1);
     expect(decisions(null)).toBe(0);
+    // Sources not yet ingested wait in Inbox › Captures: counted there, not here too.
+    const pending = {
+      id: "uningested-sources",
+      title: "Sources not yet ingested",
+      classic: true,
+      items: [{ text: "sources/A.md", page: "sources/A.md", safe: false }],
+    };
+    expect(decisions({ ...report, checks: [...report.checks, pending] })).toBe(1);
+    expect([...IN_INBOX]).toEqual(["uningested-sources"]);
     expect(safeFixes(report)).toEqual([
       { check: "missing-crossrefs", page: "wiki/entities/Northwind.md", name: "Orbit App", detail: undefined },
     ]);
+  });
+
+  it("badges a wiki page only for what needs a decision", () => {
+    expect(issueClass("missing-crossrefs", { text: "", safe: true })).toBe("safe");
+    expect(issueClass("stale-pages", { text: "", safe: false })).toBe("advisory");
+    expect(issueClass("uningested-sources", { text: "", safe: false })).toBe("inbox");
+    expect(issueClass("changed-sources", { text: "", safe: false })).toBe("decide");
+    const none = new Set<string>();
+    // A safe fix and a page worth a look are muted, not amber; a held change and a changed source are.
+    expect(wikiHealth("wiki/entities/Northwind.md", none, report)).toBe("safe");
+    expect(wikiHealth("wiki/entities/Orbit App.md", none, report)).toBe("look");
+    expect(wikiHealth("wiki/entities/Orbit App.md", new Set(["wiki/entities/Orbit App.md"]), report)).toBe("held");
+    const changed = {
+      id: "changed-sources",
+      title: "Sources changed since they were cited",
+      classic: false,
+      items: [{ text: "sources/A.md", page: "sources/A.md", pages: ["wiki/entities/Northwind.md"], safe: false }],
+    };
+    expect(wikiHealth("wiki/entities/Northwind.md", none, { ...report, checks: [...report.checks, changed] })).toBe("stale");
+    expect(wikiHealth("wiki/entities/Acme.md", none, report)).toBe("ok");
   });
 
   it("asks Ask about the issues that need judgement only", () => {

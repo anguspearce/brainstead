@@ -40,6 +40,9 @@ vi.mock("mermaid", () => ({ default: { initialize: vi.fn(), render: vi.fn(async 
 
 import { imageSource, Markdown } from "./Markdown";
 import { nav } from "../nav";
+import { vaultVersion } from "../state";
+import { invoke } from "@tauri-apps/api/core";
+import { act } from "react";
 import { ErrorBoundary } from "../ErrorBoundary";
 import { settings } from "../store";
 
@@ -48,6 +51,18 @@ afterEach(cleanup);
 const md = (content: string, q?: string) => render(<Markdown content={content} path="Note.md" root="/vault" q={q} />);
 
 describe("Markdown", () => {
+  it("doesn't draw the note afresh when something else in the vault changes", async () => {
+    const { container } = md("See [[Orbit App]].\n\n![[diagram.png]]\n");
+    await waitFor(() => expect(container.querySelector("a.wl:not(.pending)")).toBeTruthy());
+    const link = container.querySelector("a.wl");
+    const calls = vi.mocked(invoke).mock.calls.filter(([c]) => c === "links_resolve").length;
+    // A sync writing a file somewhere else in the vault.
+    act(() => vaultVersion.set({ n: vaultVersion.get().n + 1, changes: { changed: ["sources/x.md"], removed: [] } }));
+    await waitFor(() => expect(vi.mocked(invoke).mock.calls.filter(([c]) => c === "links_resolve").length).toBeGreaterThan(calls));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(container.querySelector("a.wl")).toBe(link);
+  });
+
   it("links wikilinks, marks ghost links and follows headings", async () => {
     const { container } = md("See [[Orbit App]], [[OA|the app]], [[Orbit App#Current state]] and [[Nowhere]].");
     await waitFor(() => expect(container.querySelector("a.ghost")).toBeTruthy());
@@ -63,6 +78,24 @@ describe("Markdown", () => {
     expect(container.textContent).not.toContain("rank-1024");
     expect(container.querySelector("#top-heading")).toBeTruthy();
     expect(container.querySelector('[id="^q3"]')?.textContent).toBe("Para with a block.");
+  });
+
+  it("takes a list item's block id off its own line when a list is nested under it", () => {
+    const { container } = md('- Send pricing [owner:: me] ^a-3f9c\n  - "a quote"\n- Plain ^a-1\n');
+    const li = container.querySelector('[id="^a-3f9c"]');
+    expect(li).toBeTruthy();
+    expect(container.textContent).not.toContain("^a-3f9c");
+    expect(container.textContent).not.toContain("^a-1");
+    expect(li?.querySelector("li")?.textContent).toContain("a quote");
+  });
+
+  it("shows inline fields as labels, a linked name still a link, and not in code", () => {
+    const { container } = md("- Book legal [delegated:: [[Lena]]] [status:: open] ^a-1\n\n`[due:: 2026-01-01]`\n");
+    const fields = [...container.querySelectorAll(".mdfield")];
+    expect(fields.map((f) => f.getAttribute("data-field"))).toEqual(["delegated", "status"]);
+    expect(fields[1].textContent).toBe("status open");
+    expect(fields[0].querySelector("a")?.textContent).toBe("Lena");
+    expect(container.querySelector("code")?.textContent).toBe("[due:: 2026-01-01]");
   });
 
   it("folds the system note", () => {

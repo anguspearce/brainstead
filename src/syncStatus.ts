@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // What the Teams and Outlook sign-in's state means, in words: for the top bar's dot (SyncDot), the
-// Settings Sign-in card and the MCP sync get, so all three say the same thing.
+// Settings Teams and Outlook cards and the MCP sync get, so all three say the same thing.
 
 import type { SyncSignIn } from "./api";
 
@@ -20,20 +20,32 @@ export function extensionOutdatedText(s: Pick<SyncSignIn, "extensionOutdated" | 
 }
 
 /** The top bar's summary: connected, something needing attention, or not signed in. */
-export function syncStatus(s: SyncSignIn | null): { tone: "ok" | "warn" | "off"; text: string } {
-  if (!s?.signedIn) {
+/** Whether Outlook mail syncs: its own switch, or before there was one, Teams'. */
+export const mailOn = (s: { syncEnabled?: boolean; syncOutlook?: boolean }) => s.syncOutlook ?? !!s.syncEnabled;
+
+/** What Teams covers, as the sign-in state names it; mail is Outlook's. */
+const TEAMS_PARTS = ["chats", "transcripts", "channel list"];
+
+/** The sync's status for the dot: about only the services switched on (Teams, Outlook mail). */
+export function syncStatus(s: SyncSignIn | null, on = { teams: true, mail: true }): { tone: "ok" | "warn" | "off"; text: string } {
+  const names = [on.teams && "Teams", on.mail && "Outlook"].filter(Boolean).join(" and ");
+  const live = (on.teams && s?.teams !== false && s?.signedIn) || (on.mail && s?.outlook !== false && s?.signedIn);
+  if (!s?.signedIn || !live) {
     return {
       tone: "off",
-      text: "Teams and Outlook: not signed in. Open Teams and Outlook in Chrome so the extensions hand the sign-in over.",
+      text: `${names}: not signed in. Open ${names} in Chrome so the extension${on.teams && on.mail ? "s hand" : " hands"} the sign-in over.`,
     };
   }
+  const mine = (x: string) => (x === "mail" ? on.mail : on.teams && TEAMS_PARTS.includes(x));
+  const rejected = s.rejected.filter(mine);
+  const stale = s.stale.filter(mine);
   const problems: string[] = [];
-  if (s.rejected.length) problems.push(rejectedText(s.rejected));
-  if (s.stale.length) {
-    const open = s.stale.every((x) => x === "mail") ? "Outlook" : s.stale.includes("mail") ? "Teams and Outlook" : "Teams";
-    problems.push(`Gone stale: ${s.stale.join(", ")}. Keep ${open} open in Chrome.`);
+  if (rejected.length) problems.push(rejectedText(rejected));
+  if (stale.length) {
+    const open = stale.every((x) => x === "mail") ? "Outlook" : stale.includes("mail") ? "Teams and Outlook" : "Teams";
+    problems.push(`Gone stale: ${stale.join(", ")}. Keep ${open} open in Chrome.`);
   }
-  if (s.handedOver && s.extensionOutdated !== null) problems.push(extensionOutdatedText(s));
+  if (on.teams && s.handedOver && s.extensionOutdated !== null) problems.push(extensionOutdatedText(s));
   if (problems.length) return { tone: "warn", text: problems.join(" ") };
-  return { tone: "ok", text: "Teams and Outlook connected." };
+  return { tone: "ok", text: `${names} connected.` };
 }

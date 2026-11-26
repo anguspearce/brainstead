@@ -65,6 +65,29 @@ pub(crate) fn block_bounds(lines: &[&str], heading: &str) -> Option<(usize, usiz
     Some((start, end.unwrap_or(lines.len())))
 }
 
+/// A block with nothing under its heading line that would end it (`block_bounds`): a `## ` heading
+/// inside it goes down a level and a `---` rule is left out. Otherwise the next run would replace
+/// only the part above it and leave the rest behind, once more each time.
+fn one_block(block: &str) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut dropped = false;
+    for (i, l) in block.split('\n').enumerate() {
+        let t = l.trim();
+        if i > 0 && t == SEPARATOR {
+            dropped = true;
+            continue;
+        }
+        // The blank line after a rule goes with it when one came before it too.
+        let gap = dropped && t.is_empty() && out.last().is_some_and(|p| p.trim().is_empty());
+        dropped = false;
+        if gap {
+            continue;
+        }
+        out.push(if i > 0 && t.starts_with("## ") { l.replacen("## ", "### ", 1) } else { l.to_string() });
+    }
+    out.join("\n").trim_end_matches('\n').to_string()
+}
+
 /// The part of a weekly block the user writes at the end of the guided weekly review.
 pub const YOUR_REVIEW: &str = "### Your review";
 
@@ -90,6 +113,7 @@ pub fn upsert(text: &str, heading: &str, block: &str, header: Option<&str>) -> (
     if !block.trim_start().starts_with(heading.trim()) {
         block = format!("{}\n\n{block}", heading.trim());
     }
+    let block = one_block(&block);
 
     if text.trim().is_empty() {
         let mut parts: Vec<String> = header.map(system_note).into_iter().collect();
@@ -99,6 +123,7 @@ pub fn upsert(text: &str, heading: &str, block: &str, header: Option<&str>) -> (
 
     let lines: Vec<&str> = text.split('\n').collect();
     if let Some((start, end)) = block_bounds(&lines, heading) {
+        let mut block = block;
         // The old block's trailing blank lines go with it; carry the gap across (at least one line
         // when anything follows) so re-runs neither close it nor widen it.
         if let Some(mine) = your_review(&lines[start..end]) {
@@ -146,7 +171,8 @@ pub fn log_insert(text: &str, entry: &str) -> String {
         (&text[..m.end()], &text[m.end()..])
     } else if let Some(rest) = text.strip_prefix("---") {
         let cut = match rest.find("\n---").map(|i| i + 3) {
-            Some(end) => text[end + 1..].find('\n').map_or(0, |i| end + 1 + i + 1),
+            // With no newline after the closing `---`, the frontmatter is the whole file.
+            Some(end) => text[end + 1..].find('\n').map_or(text.len(), |i| end + 1 + i + 1),
             None => 0,
         };
         (&text[..cut], &text[cut..])
@@ -238,6 +264,23 @@ mod tests {
     }
 
     #[test]
+    fn a_block_with_a_rule_or_a_heading_in_it_is_replaced_whole() {
+        let h = "## Daily summary 2026-10-01";
+        let file = "> note\n\n## Daily summary 2026-09-30\n\nPrev.\n";
+        let block = "## Daily summary 2026-10-01\n\nFirst.\n\n---\n\n## Orbit App\n\nSecond.\n---\nThird.";
+        let (once, how) = upsert(file, h, block, None);
+        assert_eq!(how, Upsert::Prepended);
+        assert_eq!(
+            once,
+            "> note\n\n## Daily summary 2026-10-01\n\nFirst.\n\n### Orbit App\n\nSecond.\nThird.\n\n---\n\n## Daily summary 2026-09-30\n\nPrev.\n"
+        );
+        // Run again: the same file, with no tail left over from the first.
+        assert_eq!(upsert(&once, h, block, None), (once.clone(), Upsert::Replaced));
+        let (other, _) = upsert(&once, h, "## Daily summary 2026-10-01\n\nShort.", None);
+        assert_eq!(other, "> note\n\n## Daily summary 2026-10-01\n\nShort.\n\n---\n\n## Daily summary 2026-09-30\n\nPrev.\n");
+    }
+
+    #[test]
     fn log_matches_log_append_py() {
         let now = NaiveDateTime::parse_from_str("2026-10-02 07:15", "%Y-%m-%d %H:%M").unwrap();
         let want = fixture::expected("log.json");
@@ -249,6 +292,8 @@ mod tests {
             assert_eq!(log_insert(s(&c["text"]), &entry), s(&want["inserts"][name]), "{name}");
         }
         assert_eq!(log_insert("# Log\r\n\r\nolder\r\n", "## e"), "# Log\r\n\r\n## e\r\nolder\r\n");
+        // Frontmatter that ends the file with no newline: the entry goes below it.
+        assert_eq!(log_insert("---\ntitle: Log\n---", "## e"), "---\ntitle: Log\n---\n\n## e\n");
     }
 
     #[test]

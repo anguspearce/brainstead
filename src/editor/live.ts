@@ -20,7 +20,7 @@ import { iconSvg } from "../icons";
 import { IMAGE_EXT, imageSize, imgTag, parseWikilink, setImageWidth, wikiLabel } from "../md/wikilinks";
 import { chipOf, FIELD_RE, splitTaskFields } from "../taskFields";
 import type { EditorHooks } from "./Editor";
-import { frontmatterEnd, frontmatterKeys, toggledLine } from "./text";
+import { frontmatterEnd, frontmatterKeys, tickChange, tickedText } from "./text";
 import { isMod, keyLabel } from "../platform";
 import { refPatterns, tokenize } from "../md/refs";
 import { settings } from "../store";
@@ -628,9 +628,9 @@ function clicks(hooks: EditorHooks) {
         const pos = view.posAtDOM(el);
         const l = view.state.doc.lineAt(pos);
         const done = !el.classList.contains("on");
-        const next = toggledLine(l.text, done, hooks.today?.() ?? new Date().toISOString().slice(0, 10));
+        const next = tickedText(l.text, done, hooks.today?.() ?? new Date().toISOString().slice(0, 10));
         if (next !== l.text && view.state.facet(EditorView.editable))
-          view.dispatch({ changes: { from: l.from, to: l.to, insert: next }, userEvent: "input.tick" });
+          view.dispatch({ changes: tickChange(view.state.doc, l, next), userEvent: "input.tick" });
         e.preventDefault();
         return true;
       }

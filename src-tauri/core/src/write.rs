@@ -140,12 +140,205 @@ pub fn rename(from: &Path, to: &Path) -> std::io::Result<()> {
     retry_held(|| fs::rename(from, to), held_open, std::thread::sleep)
 }
 
+/// Moves `from` to `to` only when nothing is at `to`, failing with `AlreadyExists` otherwise. The
+/// check and the move are one step, so two renames to one name, or sync dropping a file there
+/// meanwhile, never overwrite a note. Tried again while another program has the file open, as
+/// `rename` is.
+///
+/// What remains a check and then a rename, where a file arriving in between is replaced: a folder
+/// on a volume with no exclusive rename (some network shares, FAT and exFAT on macOS; anywhere but
+/// macOS and Windows), and a file on such a volume when it has no hard links either.
+pub fn rename_new(from: &Path, to: &Path) -> std::io::Result<()> {
+    retry_held(|| rename_no_replace(from, to), held_open, std::thread::sleep)
+}
+
+/// Where the volume can't do it in one step: a check, then a rename. Windows always can.
+#[cfg(any(not(windows), test))]
+fn checked_rename(from: &Path, to: &Path) -> std::io::Result<()> {
+    if fs::symlink_metadata(to).is_ok() {
+        return Err(std::io::ErrorKind::AlreadyExists.into());
+    }
+    fs::rename(from, to)
+}
+
+/// A hard link fails when the name is taken, so linking then unlinking is a move that can't replace.
+/// Files only: a folder can't be hard-linked. If the old name can't be removed the new one is, so
+/// the file isn't left under both.
+#[cfg(not(windows))]
+fn link_then_unlink(from: &Path, to: &Path) -> std::io::Result<()> {
+    fs::hard_link(from, to)?;
+    fs::remove_file(from).inspect_err(|_| {
+        let _ = fs::remove_file(to);
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn rename_no_replace(from: &Path, to: &Path) -> std::io::Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+    let c = |p: &Path| std::ffi::CString::new(p.as_os_str().as_bytes()).map_err(|_| std::io::Error::from(std::io::ErrorKind::InvalidInput));
+    let (a, b) = (c(from)?, c(to)?);
+    // SAFETY: both are NUL-terminated strings that outlive the call.
+    if unsafe { libc::renamex_np(a.as_ptr(), b.as_ptr(), libc::RENAME_EXCL) } == 0 {
+        return Ok(());
+    }
+    let e = std::io::Error::last_os_error();
+    if e.raw_os_error() != Some(libc::ENOTSUP) {
+        return Err(e);
+    }
+    // Some volumes (network shares, FAT) have no exclusive rename. A hard link is still one step
+    // there, for a file; a folder gets the check and the rename.
+    if fs::symlink_metadata(from).is_ok_and(|m| m.is_dir()) {
+        return checked_rename(from, to);
+    }
+    match link_then_unlink(from, to) {
+        // No hard links on this volume either.
+        Err(e) if matches!(e.raw_os_error(), Some(libc::EPERM | libc::ENOTSUP | libc::EOPNOTSUPP)) => checked_rename(from, to),
+        r => r,
+    }
+}
+
+#[cfg(windows)]
+fn rename_no_replace(from: &Path, to: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    let wide = |p: &Path| p.as_os_str().encode_wide().chain([0]).collect::<Vec<u16>>();
+    let mv = |from: &Path, to: &Path| {
+        let (a, b) = (wide(from), wide(to));
+        // No flags, so not MOVEFILE_REPLACE_EXISTING: a file at `to` fails the move.
+        // SAFETY: both are NUL-terminated strings that outlive the call.
+        if unsafe { windows_sys::Win32::Storage::FileSystem::MoveFileExW(a.as_ptr(), b.as_ptr(), 0) } != 0 {
+            return Ok(());
+        }
+        Err(std::io::Error::last_os_error())
+    };
+    match mv(from, to) {
+        // ERROR_PATH_NOT_FOUND, ERROR_FILENAME_EXCED_RANGE: a path too long for this call as it
+        // stands. Its extended-length form is taken, and the move is still one step.
+        Err(e) if matches!(e.raw_os_error(), Some(3 | 206)) => mv(&extended(from)?, &extended(to)?),
+        r => r,
+    }
+}
+
+/// A path in its extended-length form, which has no 260-character limit: `\\?\C:\…` for `C:\…`
+/// and `\\?\UNC\server\share\…` for `\\server\share\…`. Made absolute first, since that form is
+/// taken literally (no `/`, `.` or `..`).
+#[cfg(windows)]
+fn extended(p: &Path) -> std::io::Result<std::path::PathBuf> {
+    use std::path::{Component, Prefix};
+    let abs = std::path::absolute(p)?;
+    let mut parts = abs.components();
+    let mut out = match parts.next() {
+        Some(Component::Prefix(pre)) => match pre.kind() {
+            Prefix::Disk(_) => {
+                let mut s = std::ffi::OsString::from(r"\\?\");
+                s.push(pre.as_os_str());
+                s
+            }
+            Prefix::UNC(server, share) => {
+                let mut s = std::ffi::OsString::from(r"\\?\UNC\");
+                s.push(server);
+                s.push(r"\");
+                s.push(share);
+                s
+            }
+            // Already in that form, or a device path.
+            _ => return Ok(abs),
+        },
+        _ => return Ok(abs),
+    };
+    // What's left starts at the root: `\dir\file`.
+    out.push(parts.as_path());
+    Ok(out.into())
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+fn rename_no_replace(from: &Path, to: &Path) -> std::io::Result<()> {
+    match link_then_unlink(from, to) {
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Err(e),
+        Err(_) => checked_rename(from, to),
+        r => r,
+    }
+}
+
+/// Whether two paths are one file: on a disk that ignores case, a name and its other spelling.
+pub(crate) fn same_file(a: &Path, b: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        matches!((fs::metadata(a), fs::metadata(b)), (Ok(x), Ok(y)) if x.dev() == y.dev() && x.ino() == y.ino())
+    }
+    #[cfg(not(unix))]
+    {
+        matches!((crate::paths::canonical(a), crate::paths::canonical(b)), (Ok(x), Ok(y)) if x == y)
+    }
+}
+
+/// Gives the temporary file the old file's creation time and extended attributes (Finder tags,
+/// where it came from), which a file swapped in for it would otherwise lose. As far as it can: a
+/// save never fails for these.
+#[cfg(target_os = "macos")]
+fn keep_attributes(old: &Path, meta: &fs::Metadata, new: &fs::File) {
+    use std::os::macos::fs::FileTimesExt;
+    use std::os::unix::ffi::OsStrExt;
+    use xattr::FileExt;
+    extern "C" {
+        // <xattr_flags.h>: whether an attribute of this name goes with the file for this purpose.
+        fn xattr_preserve_for_intent(name: *const libc::c_char, intent: libc::c_uint) -> libc::c_int;
+    }
+    // XATTR_OPERATION_INTENT_SAVE: a save that replaces the file, so attributes that describe the
+    // old content (a sync provider's own) are left behind.
+    const SAVE: libc::c_uint = 2;
+    for name in xattr::list(old).into_iter().flatten() {
+        let Ok(c) = std::ffi::CString::new(name.as_bytes()) else { continue };
+        // SAFETY: `c` is a NUL-terminated string that outlives the call.
+        if unsafe { xattr_preserve_for_intent(c.as_ptr(), SAVE) } != 1 {
+            continue;
+        }
+        if let Ok(Some(v)) = xattr::get(old, &name) {
+            let _ = new.set_xattr(&name, &v);
+        }
+    }
+    if let Ok(t) = meta.created() {
+        let _ = new.set_times(fs::FileTimes::new().set_created(t));
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn keep_attributes(_: &Path, _: &fs::Metadata, _: &fs::File) {}
+
+/// Clears out what a crash left in a vault: deletes this app's temporary files
+/// (`.brainstead-<pid>-<n>.tmp`) more than a minute old, so they don't sync to every device, and
+/// returns the vault-relative paths of any `.rename-<pid>` files, each a note caught halfway
+/// through a change of case, for the user to name again. Those are never deleted. For a vault
+/// that's writable only: the caller checks.
+pub fn sweep_leftovers(root: &Path) -> Vec<String> {
+    let old = |e: &walkdir::DirEntry| {
+        e.metadata()
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.elapsed().ok())
+            .is_some_and(|d| d > std::time::Duration::from_secs(60))
+    };
+    let mut renames = Vec::new();
+    for e in walkdir::WalkDir::new(root).into_iter().flatten().filter(|e| e.file_type().is_file()) {
+        let name = e.file_name().to_string_lossy();
+        if name.starts_with(".brainstead-") && name.ends_with(".tmp") {
+            if old(&e) {
+                let _ = fs::remove_file(e.path());
+            }
+        } else if name.strip_prefix(".rename-").is_some_and(|pid| !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit())) {
+            renames.extend(crate::vault::rel_of(root, e.path()));
+        }
+    }
+    renames.sort();
+    renames
+}
+
 static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Writes through a temporary file in the same folder and a rename, so a crash never leaves half
 /// a file: the data is flushed to disk before the rename. A symlink is written through to the
-/// file it points at, and the file keeps its permissions. With `keep_mtime`, the old
-/// modification time is put back afterwards.
+/// file it points at, and the file keeps its permissions and, on macOS, its creation time and
+/// extended attributes. With `keep_mtime`, the old modification time is put back afterwards.
 pub fn write_atomic(path: &Path, data: &[u8], keep_mtime: bool) -> Result<()> {
     use std::io::Write;
     let target;
@@ -167,6 +360,7 @@ pub fn write_atomic(path: &Path, data: &[u8], keep_mtime: bool) -> Result<()> {
         f.write_all(data)?;
         if let Some(m) = &meta {
             f.set_permissions(m.permissions())?;
+            keep_attributes(path, m, &f);
         }
         f.sync_all()?;
         drop(f);
@@ -300,6 +494,16 @@ pub fn find_line(lines: &[String], line: usize, expected: &str) -> Option<usize>
 /// Edits one task line: finds it (as `find_line`), applies `f`, and writes the file if the line
 /// changed. Returns the line number and the line as written.
 pub fn edit_task(path: &Path, line: usize, expected: &str, f: impl FnOnce(&str) -> String) -> Result<(usize, String)> {
+    edit_line_where(path, line, expected, true, f)
+}
+
+/// Changes one line, found as `edit_task` finds it, whatever the line is: an initiative's action,
+/// which is a plain list item, not a task (D-20261118-08), or a line an undo puts back.
+pub fn edit_line(path: &Path, line: usize, expected: &str, f: impl FnOnce(&str) -> String) -> Result<(usize, String)> {
+    edit_line_where(path, line, expected, false, f)
+}
+
+fn edit_line_where(path: &Path, line: usize, expected: &str, task: bool, f: impl FnOnce(&str) -> String) -> Result<(usize, String)> {
     let l = lock(path);
     let _g = l.lock().unwrap();
     check_conflict_copies(path)?;
@@ -310,8 +514,8 @@ pub fn edit_task(path: &Path, line: usize, expected: &str, f: impl FnOnce(&str) 
     };
     let (mut lines, eol, trailing) = split_lines(&text);
     let i = find_line(&lines, line, expected)
-        .ok_or_else(|| WriteError::Stale("This task changed in the file since it was shown. It's been reloaded; try again.".into()))?;
-    if parse_line(&lines[i], i).is_none() {
+        .ok_or_else(|| WriteError::Stale("This line changed in the file since it was shown. It's been reloaded; try again.".into()))?;
+    if task && parse_line(&lines[i], i).is_none() {
         return Err(WriteError::Stale("That line isn't a task any more.".into()));
     }
     let new = f(&lines[i]);
@@ -322,10 +526,18 @@ pub fn edit_task(path: &Path, line: usize, expected: &str, f: impl FnOnce(&str) 
     Ok((i, new))
 }
 
+/// The lines either side of a task as `replace_task` found it (None at the top or the end of the
+/// file): where a deleted task goes back to.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Around {
+    pub before: Option<String>,
+    pub after: Option<String>,
+}
+
 /// Replaces one task line with `new` (none, to delete it; two, for a recurring task's next
 /// occurrence beside the done one), found as `edit_task` finds it, in one atomic write that keeps
-/// the modification time. Returns where the task was.
-pub fn replace_task(path: &Path, line: usize, expected: &str, new: &[String]) -> Result<usize> {
+/// the modification time. Returns where the task was, and the lines either side of it.
+pub fn replace_task(path: &Path, line: usize, expected: &str, new: &[String]) -> Result<(usize, Around)> {
     let l = lock(path);
     let _g = l.lock().unwrap();
     check_conflict_copies(path)?;
@@ -343,28 +555,43 @@ pub fn replace_task(path: &Path, line: usize, expected: &str, new: &[String]) ->
     if new.iter().any(|n| n.contains('\n') || n.contains('\r')) {
         return Err(WriteError::Invalid("A task is one line.".into()));
     }
+    let around = Around { before: i.checked_sub(1).map(|p| lines[p].clone()), after: lines.get(i + 1).cloned() };
     lines.splice(i..=i, new.iter().cloned());
     write_atomic(path, join_lines(&lines, &eol, trailing).as_bytes(), true)?;
-    Ok(i)
+    Ok((i, around))
 }
 
 /// Undoes `replace_task`: the lines it wrote, found at `line` (or once elsewhere), become `before`
-/// again. Stale when they've changed since.
-pub fn restore_task(path: &Path, line: usize, written: &[String], before: &str) -> Result<()> {
+/// again. Stale when they've changed since. A deleted task left no lines to find, so it goes back
+/// between the lines that were `around` it, at `line` if they still meet there, else at the one
+/// place they do; stale when they meet nowhere, or in several places, or weren't recorded.
+pub fn restore_task(path: &Path, line: usize, written: &[String], before: &str, around: Option<&Around>) -> Result<()> {
     let l = lock(path);
     let _g = l.lock().unwrap();
     check_conflict_copies(path)?;
     let text = fs::read_to_string(path).map_err(io)?;
     let (mut lines, eol, trailing) = split_lines(&text);
     let n = written.len();
-    let at = |i: usize| i + n <= lines.len() && lines[i..i + n].iter().zip(written).all(|(a, b)| normalise(a) == normalise(b));
+    let stale = || WriteError::Stale("That line has changed since, so it can't be undone.".into());
+    let same = |now: Option<&String>, then: &Option<String>| match (now, then) {
+        (Some(a), Some(b)) => normalise(a) == normalise(b),
+        (None, None) => true,
+        _ => false,
+    };
+    let at = |i: usize| match (n, around) {
+        // Without the lines around it, any line number would do: lines added above since would put
+        // the task under another heading.
+        (0, None) => false,
+        (0, Some(a)) => i <= lines.len() && same(i.checked_sub(1).and_then(|p| lines.get(p)), &a.before) && same(lines.get(i), &a.after),
+        _ => i + n <= lines.len() && lines[i..i + n].iter().zip(written).all(|(a, b)| normalise(a) == normalise(b)),
+    };
     let i = if at(line) {
         line
     } else {
-        let mut hits = (0..=lines.len().saturating_sub(n)).filter(|&i| n > 0 && at(i));
+        let mut hits = (0..=lines.len().saturating_sub(n)).filter(|&i| at(i));
         match (hits.next(), hits.next()) {
             (Some(i), None) => i,
-            _ => return Err(WriteError::Stale("That line has changed since, so it can't be undone.".into())),
+            _ => return Err(stale()),
         }
     };
     lines.splice(i..i + n, [before.to_string()]);
@@ -614,7 +841,17 @@ pub fn capture_thought(path: &Path, text: &str, stamp: &str) -> Result<String> {
 pub fn with_thought(src: &str, text: &str, stamp: &str) -> (String, String) {
     let eol = split_lines(src).1.new_line();
     let at = pinned_header_len(src);
-    let block = format!("## {stamp}{eol}{eol}{}{eol}{eol}", text.trim().replace("\r\n", "\n").replace('\n', eol));
+    let text = text.trim().replace("\r\n", "\n");
+    // A level 1 or 2 heading in the thought would end its block there (inbox.rs), so the rest
+    // would be left behind when it's clarified: its `#` is escaped, and it stays as text.
+    let body: Vec<String> = crate::markdown::lines(&text, 0)
+        .iter()
+        .map(|l| match crate::markdown::heading(l.text) {
+            Some((n, _)) if n <= 2 && !l.code => l.text.replacen('#', "\\#", 1),
+            _ => l.text.to_string(),
+        })
+        .collect();
+    let block = format!("## {stamp}{eol}{eol}{}{eol}{eol}", body.join(eol));
     (format!("{}{block}{}", &src[..at], &src[at..]), block)
 }
 
@@ -789,6 +1026,65 @@ pub fn append_under(lines: &mut Vec<String>, name: &str, item: &str) -> usize {
     }
 }
 
+/// Adds `item` at the top of the To Do list's `name` section, whatever its level (the To Do list's
+/// headings are `####`): above its first list item, or after what the section holds (a query) when
+/// it has none. With no such heading, one is made just above Other, at Other's level (or at the end,
+/// `## name`, with no Other either). Returns the item's line.
+pub fn append_under_todo(lines: &mut Vec<String>, name: &str, item: &str) -> usize {
+    let code = code_lines(lines);
+    let level = |i: usize| if code.get(i).copied().unwrap_or(false) { None } else { heading(&lines[i]) };
+    let named = |want: &str| (0..lines.len()).find_map(|i| level(i).filter(|(_, t)| t.eq_ignore_ascii_case(want)).map(|(n, _)| (i, n)));
+    let Some((h, n)) = named(name.trim()) else {
+        let Some((o, n)) = named("Other") else { return append_under(lines, name, item) };
+        let marks = "#".repeat(n);
+        lines.splice(o..o, [format!("{marks} {}", name.trim()), String::new(), item.to_string(), String::new()]);
+        return o + 2;
+    };
+    let end = (h + 1..lines.len()).find(|&i| level(i).is_some_and(|(m, _)| m <= n)).unwrap_or(lines.len());
+    let listed = (h + 1..end).find(|&i| !code.get(i).copied().unwrap_or(false) && LIST_ITEM.is_match(&lines[i]));
+    if let Some(first) = listed {
+        lines.insert(first, item.to_string());
+        return first;
+    }
+    match (h + 1..end).rev().find(|&i| !lines[i].trim().is_empty()) {
+        Some(last) => {
+            lines.splice(last + 1..last + 1, [String::new(), item.to_string()]);
+            last + 2
+        }
+        None => {
+            let mut fill = vec![String::new(), item.to_string()];
+            if end < lines.len() {
+                fill.push(String::new());
+            }
+            lines.splice(h + 1..end, fill);
+            h + 2
+        }
+    }
+}
+
+/// A list item's line: `- …`, `* …`, `+ …` or `1. …`, indented or not.
+static LIST_ITEM: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*(?:[-*+]|\d+[.)])\s").unwrap());
+
+/// Adds a task line at the top of the To Do list's `name` section ([`append_under_todo`]).
+pub fn add_task_under_todo(path: &Path, name: &str, task_line: &str) -> Result<(usize, FileChange)> {
+    one_task_line(task_line)?;
+    rewrite(path, |lines| Ok(append_under_todo(lines, name, task_line)))
+}
+
+/// Moves a task within the To Do list to the top of its `name` section, as `new_line`: its old
+/// line (found as `edit_task` finds it) goes and the new one is added in one write, so a failure
+/// leaves the task where it was. Returns the task's new line and the change.
+pub fn move_task_under_todo(path: &Path, line: usize, expected: &str, name: &str, new_line: &str) -> Result<(usize, FileChange)> {
+    one_task_line(new_line)?;
+    rewrite(path, |lines| {
+        let i = find_line(lines, line, expected)
+            .filter(|&i| parse_line(&lines[i], i).is_some())
+            .ok_or_else(|| WriteError::Stale("This task changed in the file since it was shown. It's been reloaded; try again.".into()))?;
+        lines.remove(i);
+        Ok(append_under_todo(lines, name, new_line))
+    })
+}
+
 fn one_task_line(task_line: &str) -> Result<()> {
     if task_line.contains(['\n', '\r']) || parse_line(task_line, 0).is_none() {
         return Err(WriteError::Invalid("That isn't one task line.".into()));
@@ -906,6 +1202,32 @@ pub fn move_task(from: &Path, line: usize, expected: &str, to: &Path, name: &str
     ))
 }
 
+/// Rewrites two notes together: `f` gets their texts and gives what they become. Both are written,
+/// or neither (the first is put back when the second fails).
+pub fn rewrite_pair(a: &Path, b: &Path, f: impl FnOnce(&str, &str) -> Result<(String, String)>) -> Result<[FileChange; 2]> {
+    if a == b {
+        return Err(WriteError::Invalid("Both are the same note.".into()));
+    }
+    let (la, lb) = (lock(a), lock(b));
+    let (first, second) = if a < b { (&la, &lb) } else { (&lb, &la) };
+    let _g1 = first.lock().unwrap();
+    let _g2 = second.lock().unwrap();
+    check_conflict_copies(a)?;
+    check_conflict_copies(b)?;
+    let (src_a, src_b) = (read_note(a)?, read_note(b)?);
+    let (new_a, new_b) = f(&src_a, &src_b)?;
+    write_atomic(b, new_b.as_bytes(), false)?;
+    if let Err(e) = write_atomic(a, new_a.as_bytes(), false) {
+        write_atomic(b, src_b.as_bytes(), false)
+            .map_err(|r| WriteError::Io(format!("{e}; and putting {} back failed too: {r}", b.display())))?;
+        return Err(e);
+    }
+    Ok([
+        FileChange { path: a.to_path_buf(), version: version(new_a.as_bytes()), before: Some(src_a) },
+        FileChange { path: b.to_path_buf(), version: version(new_b.as_bytes()), before: Some(src_b) },
+    ])
+}
+
 /// Undoes whole-file changes: each file goes back to its text before (a file the change created
 /// is deleted), but only when every one of them is still as the change left it. All or none.
 pub fn restore_files(changes: &[FileChange]) -> Result<()> {
@@ -952,7 +1274,7 @@ pub fn save_file(path: &Path, content: &str, base: &str) -> Result<String> {
     save_file_as(path, content, base, false)
 }
 
-/// `save_file`, keeping the file's modification time when `keep_mtime`: for Knowledge health's
+/// `save_file`, keeping the file's modification time when `keep_mtime`: for Wiki health's
 /// safe fixes, which shouldn't make a page look newly written.
 pub fn save_file_as(path: &Path, content: &str, base: &str, keep_mtime: bool) -> Result<String> {
     let l = lock(path);
@@ -1224,24 +1546,136 @@ mod tests {
             "- [ ] trash 🔁 every Sunday 📅 2021-05-02".to_string(),
             "- [x] trash 🔁 every Sunday 📅 2021-04-25 ✅ 2021-04-24".to_string(),
         ];
-        let i = replace_task(&p, 1, "- [ ] trash 🔁 every Sunday 📅 2021-04-25", &lines).unwrap();
+        let (i, _) = replace_task(&p, 1, "- [ ] trash 🔁 every Sunday 📅 2021-04-25", &lines).unwrap();
         assert_eq!(i, 1);
         assert_eq!(
             fs::read_to_string(&p).unwrap(),
             "# H\r\n- [ ] trash 🔁 every Sunday 📅 2021-05-02\r\n- [x] trash 🔁 every Sunday 📅 2021-04-25 ✅ 2021-04-24\r\n- [ ] other\r\n"
         );
-        restore_task(&p, 1, &lines, "- [ ] trash 🔁 every Sunday 📅 2021-04-25").unwrap();
+        restore_task(&p, 1, &lines, "- [ ] trash 🔁 every Sunday 📅 2021-04-25", None).unwrap();
         assert_eq!(fs::read_to_string(&p).unwrap(), src);
         // Deleted on completion, then put back.
-        replace_task(&p, 2, "- [ ] other", &[]).unwrap();
+        let (_, around) = replace_task(&p, 2, "- [ ] other", &[]).unwrap();
+        assert_eq!(around, Around { before: Some("- [ ] trash 🔁 every Sunday 📅 2021-04-25".into()), after: None });
         assert_eq!(fs::read_to_string(&p).unwrap(), "# H\r\n- [ ] trash 🔁 every Sunday 📅 2021-04-25\r\n");
-        restore_task(&p, 2, &[], "- [ ] other").unwrap();
+        restore_task(&p, 2, &[], "- [ ] other", Some(&around)).unwrap();
         assert_eq!(fs::read_to_string(&p).unwrap(), src);
         // Stale once the written lines have changed.
         replace_task(&p, 2, "- [ ] other", &["- [-] other ❌ 2026-10-02".into()]).unwrap();
         fs::write(&p, "# H\n- [ ] changed\n").unwrap();
-        assert!(matches!(restore_task(&p, 2, &["- [-] other ❌ 2026-10-02".into()], "- [ ] other"), Err(WriteError::Stale(_))));
+        assert!(matches!(restore_task(&p, 2, &["- [-] other ❌ 2026-10-02".into()], "- [ ] other", None), Err(WriteError::Stale(_))));
         assert!(matches!(replace_task(&p, 1, "- [ ] a\nb", &["x\ny".into()]), Err(WriteError::Stale(_))));
+    }
+
+    #[test]
+    fn a_deleted_task_goes_back_between_the_lines_it_was_between() {
+        let src = "# Orbit App\n- [ ] Call Maya\n- [ ] Book the room\n- [ ] Send the notes\n\n# Acme\n\n```\ncode\n```\n";
+        let (_d, p) = temp("A.md", src);
+        let (i, around) = replace_task(&p, 2, "- [ ] Book the room", &[]).unwrap();
+        assert_eq!((i, around.before.as_deref(), around.after.as_deref()), (2, Some("- [ ] Call Maya"), Some("- [ ] Send the notes")));
+        // Lines added above since: it goes back beside its neighbours, not at the old line number.
+        let gone = fs::read_to_string(&p).unwrap();
+        fs::write(&p, format!("# Lena\n- [ ] Plan the week\n\n{gone}")).unwrap();
+        restore_task(&p, i, &[], "- [ ] Book the room", Some(&around)).unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), format!("# Lena\n- [ ] Plan the week\n\n{src}"));
+        // Its neighbours no longer meet anywhere: nothing is written.
+        let (i, around) = replace_task(&p, 5, "- [ ] Book the room", &[]).unwrap();
+        let apart = "# Orbit App\n- [ ] Call Maya\n\n# Acme\n- [ ] Send the notes\n";
+        fs::write(&p, apart).unwrap();
+        assert!(matches!(restore_task(&p, i, &[], "- [ ] Book the room", Some(&around)), Err(WriteError::Stale(_))));
+        // They meet in two places, neither at its line: not guessed.
+        fs::write(&p, "intro\nmore\n- [ ] Call Maya\n- [ ] Send the notes\n\n- [ ] Call Maya\n- [ ] Send the notes\n").unwrap();
+        assert!(matches!(restore_task(&p, 0, &[], "- [ ] Book the room", Some(&around)), Err(WriteError::Stale(_))));
+        // An undo remembered before the neighbours were kept can't be placed.
+        fs::write(&p, src).unwrap();
+        assert!(matches!(restore_task(&p, 2, &[], "- [ ] Book the room", None), Err(WriteError::Stale(_))));
+        assert_eq!(fs::read_to_string(&p).unwrap(), src);
+        // The only line of a note comes back to an empty one.
+        let (_d2, q) = temp("B.md", "- [ ] Call Maya\n");
+        let (i, around) = replace_task(&q, 0, "- [ ] Call Maya", &[]).unwrap();
+        assert_eq!(around, Around::default());
+        restore_task(&q, i, &[], "- [ ] Call Maya", Some(&around)).unwrap();
+        assert_eq!(fs::read_to_string(&q).unwrap().trim_end(), "- [ ] Call Maya");
+    }
+
+    #[test]
+    fn a_move_never_replaces_a_file() {
+        let d = tempfile::tempdir().unwrap();
+        let (a, b, c) = (d.path().join("A.md"), d.path().join("B.md"), d.path().join("C.md"));
+        fs::write(&a, "a").unwrap();
+        fs::write(&b, "b").unwrap();
+        assert_eq!(rename_new(&a, &b).unwrap_err().kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!((fs::read_to_string(&a).unwrap(), fs::read_to_string(&b).unwrap()), ("a".into(), "b".into()));
+        rename_new(&a, &c).unwrap();
+        assert!(!a.exists());
+        assert_eq!(fs::read_to_string(&c).unwrap(), "a");
+        assert_eq!(checked_rename(&c, &b).unwrap_err().kind(), std::io::ErrorKind::AlreadyExists);
+        assert!(same_file(&b, &b) && !same_file(&b, &c) && !same_file(&b, &a));
+        // The step for a volume with no exclusive rename: a hard link, then the old name removed.
+        #[cfg(not(windows))]
+        {
+            assert_eq!(link_then_unlink(&c, &b).unwrap_err().kind(), std::io::ErrorKind::AlreadyExists);
+            assert_eq!((fs::read_to_string(&c).unwrap(), fs::read_to_string(&b).unwrap()), ("a".into(), "b".into()));
+            let e = d.path().join("E.md");
+            link_then_unlink(&c, &e).unwrap();
+            assert!(!c.exists());
+            assert_eq!(fs::read_to_string(&e).unwrap(), "a");
+            // A name taken by a folder, or by a link that leads nowhere, is taken too.
+            let (dir, dangling) = (d.path().join("Folder"), d.path().join("Dangling.md"));
+            fs::create_dir(&dir).unwrap();
+            std::os::unix::fs::symlink(d.path().join("nowhere"), &dangling).unwrap();
+            assert_eq!(link_then_unlink(&e, &dir).unwrap_err().kind(), std::io::ErrorKind::AlreadyExists);
+            assert_eq!(link_then_unlink(&e, &dangling).unwrap_err().kind(), std::io::ErrorKind::AlreadyExists);
+            assert_eq!(fs::read_to_string(&e).unwrap(), "a");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_long_path_is_given_in_its_extended_length_form() {
+        assert_eq!(extended(Path::new(r"C:\Vault\wiki/Orbit App.md")).unwrap(), Path::new(r"\\?\C:\Vault\wiki\Orbit App.md"));
+        assert_eq!(extended(Path::new(r"\\acme\notes\Vault\..\A.md")).unwrap(), Path::new(r"\\?\UNC\acme\notes\A.md"));
+        assert_eq!(extended(Path::new(r"\\?\C:\Vault\A.md")).unwrap(), Path::new(r"\\?\C:\Vault\A.md"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_save_keeps_the_creation_time_and_extended_attributes() {
+        use std::os::macos::fs::FileTimesExt;
+        let (_d, p) = temp("A.md", "one\n");
+        let born = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        fs::File::options().write(true).open(&p).unwrap().set_times(fs::FileTimes::new().set_created(born)).unwrap();
+        xattr::set(&p, "com.apple.metadata:_kMDItemUserTags", b"tags").unwrap();
+        xattr::set(&p, "org.example.note", b"kept").unwrap();
+        write_atomic(&p, b"two\n", true).unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), "two\n");
+        assert_eq!(fs::metadata(&p).unwrap().created().unwrap(), born);
+        assert_eq!(xattr::get(&p, "com.apple.metadata:_kMDItemUserTags").unwrap().as_deref(), Some(&b"tags"[..]));
+        assert_eq!(xattr::get(&p, "org.example.note").unwrap().as_deref(), Some(&b"kept"[..]));
+    }
+
+    #[test]
+    fn sweeps_old_temporary_files_and_reports_half_renamed_notes() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        fs::create_dir_all(r.join("wiki/entities")).unwrap();
+        let aged = |rel: &str| {
+            fs::write(r.join(rel), "x").unwrap();
+            let then = std::time::SystemTime::now() - std::time::Duration::from_secs(600);
+            fs::File::options().write(true).open(r.join(rel)).unwrap().set_modified(then).unwrap();
+        };
+        aged(".brainstead-4242-7.tmp");
+        aged("wiki/entities/.brainstead-4242-8.tmp");
+        aged("wiki/entities/.rename-4242");
+        aged("wiki/entities/Orbit App.md");
+        aged(".rename-notes");
+        // One being written right now stays.
+        fs::write(r.join(".brainstead-4243-0.tmp"), "x").unwrap();
+        assert_eq!(sweep_leftovers(r), vec!["wiki/entities/.rename-4242".to_string()]);
+        assert!(!r.join(".brainstead-4242-7.tmp").exists() && !r.join("wiki/entities/.brainstead-4242-8.tmp").exists());
+        for kept in [".brainstead-4243-0.tmp", "wiki/entities/.rename-4242", "wiki/entities/Orbit App.md", ".rename-notes"] {
+            assert!(r.join(kept).exists(), "{kept}");
+        }
     }
 
     #[test]

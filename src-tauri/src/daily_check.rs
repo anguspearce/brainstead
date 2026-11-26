@@ -2,7 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! the daily check (stage 7b; Settings › Jobs & schedule): contradictions for the pages that
+//! the daily check (stage 7b; Settings › Automations): contradictions for the pages that
 //! changed, `index.md`'s catalogue brought up to date, and the wiki pages not in the page shape
 //! counted. Off until switched on; at the time
 //! set, or on waking when the time passed while asleep or closed (the reviews' "most recent
@@ -94,6 +94,11 @@ pub fn progress(doing: &str, contra: &str) -> f32 {
 
 fn path() -> std::path::PathBuf {
     crate::platform::data_dir().join("daily-check.json")
+}
+
+/// The changed sources the daily check has ingested again, by path, with the version that was.
+pub fn refreshed() -> std::collections::BTreeMap<String, String> {
+    load().refreshed
 }
 
 fn load() -> State {
@@ -205,11 +210,31 @@ pub fn start_scheduler(app: &AppHandle) {
 /// Its changes, and those of the ingests and contradiction check it starts, are one group in
 /// Changes.
 fn run(app: &AppHandle, trigger: Option<&str>) {
-    let group = format!("daily-check-{}", now().format("%Y%m%d%H%M%S"));
-    let mut st = load();
-    if st.running {
+    // One at a time: Run now and the scheduler's tick are two threads, and the file alone is a
+    // check-then-set either could pass. The file is kept for what the screens show.
+    if RUNNING.swap(true, std::sync::atomic::Ordering::SeqCst) {
         return;
     }
+    // A panic ends the check, not the scheduler's thread, and never leaves it "running".
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| check(app, trigger))).is_err() {
+        crate::applog!("daily check: panicked");
+        save(&State {
+            running: false,
+            doing: String::new(),
+            summary: "Stopped: something went wrong; the log has the details".into(),
+            ..load()
+        });
+        let _ = app.emit("daily-check-changed", ());
+    }
+    RUNNING.store(false, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Whether a daily check is going in this process.
+static RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn check(app: &AppHandle, trigger: Option<&str>) {
+    let group = format!("daily-check-{}", now().format("%Y%m%d%H%M%S"));
+    let mut st = load();
     st.running = true;
     st.doing = "contradictions".into();
     save(&st);
@@ -239,14 +264,20 @@ fn run(app: &AppHandle, trigger: Option<&str>) {
     }
 
     // Sources changed since the pages citing them: ingested again, when switched on (Settings ›
-    // Jobs & schedule), so the pages catch up. The runs go on in the background, applying or
+    // Automations), so the pages catch up. The runs go on in the background, applying or
     // queueing their changes like any ingest. A source is tried once per version: a run that
     // changed nothing isn't repeated every day.
     let refresh = app.state::<AppState>().settings.lock().unwrap().ui.get("refreshStale").and_then(|v| v.as_bool()).unwrap_or(false);
     if refresh && !stopped() {
         step("refresh");
+        // Health's changed sources and the synced threads it leaves to this step.
         let changed: Vec<String> = crate::knowledge::run_lint(app)
-            .map(|r| r.checks.into_iter().filter(|c| c.id == "changed-sources").flat_map(|c| c.items).filter_map(|i| i.page).collect())
+            .map(|r| {
+                let mut v: Vec<String> =
+                    r.checks.into_iter().filter(|c| c.id == "changed-sources").flat_map(|c| c.items).filter_map(|i| i.page).collect();
+                v.extend(r.waiting);
+                v
+            })
             .unwrap_or_default();
         let root = app.state::<VaultService>().root();
         let mut tried = load().refreshed;
@@ -280,7 +311,7 @@ fn run(app: &AppHandle, trigger: Option<&str>) {
         did.push(index_md(app, trigger, &group));
     }
 
-    // Pages edited out of the page shape elsewhere: reported, for Knowledge health's Reshape pages.
+    // Pages edited out of the page shape elsewhere: reported, for Wiki health's Reshape pages.
     if !stopped() {
         if let Some(root) = app.state::<VaultService>().root() {
             step("shape");
@@ -295,14 +326,14 @@ fn run(app: &AppHandle, trigger: Option<&str>) {
     st.summary = did.join("; ");
     save(&st);
     let _ = app.emit("daily-check-changed", ());
-    let _ = tauri_plugin_notification::NotificationExt::notification(app).builder().title("Daily check").body(&st.summary).show();
+    crate::notify::show(app, crate::notify::Need::News, "Daily check", &st.summary);
 }
 
 fn plural(n: usize, one: &str) -> String {
     format!("{n} {one}{}", if n == 1 { "" } else { "s" })
 }
 
-/// Knowledge health's Add them to index.md, on Orphan pages: the catalogue brought up to date now,
+/// Wiki health's Add them to index.md, on Orphan pages: the catalogue brought up to date now,
 /// rather than at the next daily check, so every wiki page is linked from it. What happened.
 #[tauri::command]
 pub async fn catalogue_update(app: AppHandle) -> Result<String, String> {

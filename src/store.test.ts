@@ -39,4 +39,18 @@ describe("SettingsStore", () => {
     await st.commit({ vaultPath: "/v" });
     expect(write).not.toHaveBeenCalled();
   });
+
+  it("goes back to what Rust has when it refuses a change, so later changes still save", async () => {
+    const write = vi.fn(async (s: Settings) => {
+      if (s.excluded.includes("a/b")) throw new Error("A folder name can't have a slash.");
+      return s;
+    });
+    const st = new SettingsStore(write, 0);
+    st.loadFrom(DEFAULT_SETTINGS);
+    await st.commit({ excluded: ["a/b"] });
+    expect(st.get().excluded).toEqual(DEFAULT_SETTINGS.excluded);
+    await st.commit({ theme: "dark" });
+    expect(write.mock.calls[1][0]).toMatchObject({ theme: "dark", excluded: DEFAULT_SETTINGS.excluded });
+    expect(st.get().theme).toBe("dark");
+  });
 });

@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use brainstead_core::index::Changes;
 use brainstead_core::vault::Vault;
+use brainstead_core::watch::Batch;
 use brainstead_core::{Index, IndexStats};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
@@ -21,7 +22,64 @@ pub struct Status {
     pub state: &'static str,
     pub vault_path: Option<String>,
     pub error: Option<String>,
+    /// Something wrong that leaves the vault usable ("ready"): the folder can't be watched.
+    pub warning: Option<String>,
+    /// Notes a crash left halfway through a change of case, by vault-relative path
+    /// (`.rename-<pid>` files): hidden from the index, so Settings › Vault names them.
+    pub half_renamed: Vec<String>,
     pub stats: IndexStats,
+}
+
+/// Shown in Settings › Vault while the folder can't be watched.
+const UNWATCHED: &str = "Changes made in other apps aren't showing: the folder can't be watched. Brainstead tries again every minute.";
+
+/// How often a watcher that couldn't start is tried again.
+const REWATCH_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// The status once the vault is indexed. One that can't be watched is still ready, with a warning.
+fn ready_status(vault_path: String, stats: IndexStats, watched: bool, half_renamed: Vec<String>) -> Status {
+    Status {
+        state: "ready",
+        vault_path: Some(vault_path),
+        error: None,
+        warning: (!watched).then(|| UNWATCHED.to_string()),
+        half_renamed,
+        stats,
+    }
+}
+
+/// The `.rename-<pid>` files in a vault, by vault-relative path, sorted: what
+/// `brainstead_core::write::sweep_leftovers` returns, found without deleting anything, for a
+/// read-only vault. The name rule is that function's; a test keeps the two in step.
+fn half_renamed(root: &std::path::Path) -> Vec<String> {
+    let mut found = Vec::new();
+    let mut dirs = vec![root.to_path_buf()];
+    while let Some(dir) = dirs.pop() {
+        for e in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+            // The entry's own type: a link to a folder isn't followed, as the sweep doesn't.
+            let Ok(kind) = e.file_type() else { continue };
+            if kind.is_dir() {
+                dirs.push(e.path());
+            } else if kind.is_file() {
+                let name = e.file_name();
+                let pid = name.to_string_lossy().strip_prefix(".rename-").map(str::to_owned);
+                if pid.is_some_and(|pid| !pid.is_empty() && pid.bytes().all(|b| b.is_ascii_digit())) {
+                    found.extend(brainstead_core::vault::rel_of(root, &e.path()));
+                }
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+/// The parts of an open vault the watcher keeps current.
+#[derive(Clone)]
+struct Kept {
+    vault: Vault,
+    index: Arc<Mutex<Index>>,
+    assets: Arc<Mutex<Option<Arc<brainstead_core::assets::Assets>>>>,
+    usage: Arc<Mutex<brainstead_core::usage::Usage>>,
 }
 
 struct Open {
@@ -31,7 +89,15 @@ struct Open {
     assets: Arc<Mutex<Option<Arc<brainstead_core::assets::Assets>>>>,
     /// What every file in the vault folder takes, kept current by the watcher.
     usage: Arc<Mutex<brainstead_core::usage::Usage>>,
+    /// Notes left halfway through a rename, found as the vault opened (`Status::half_renamed`).
+    half_renamed: Vec<String>,
     _watcher: Option<brainstead_core::watch::Watcher>,
+}
+
+impl Open {
+    fn kept(&self) -> Kept {
+        Kept { vault: self.vault.clone(), index: self.index.clone(), assets: self.assets.clone(), usage: self.usage.clone() }
+    }
 }
 
 #[derive(Default)]
@@ -89,16 +155,31 @@ impl VaultService {
             .name("vault-open".into())
             .spawn(move || {
                 let svc = app.state::<VaultService>();
-                let opened = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| open(&app, &path, excluded, rebuild)))
-                    .unwrap_or_else(|p| Err(format!("Indexing the vault stopped on an error: {}", panic_text(&p))));
+                // One open at a time: a Rebuild index during the first index waits for it rather
+                // than syncing the same index.db beside it. One superseded while it waited (or
+                // before it touches the index) stops there; its status is ignored below.
+                let current = || *crate::lock(&svc.generation) == gen;
+                let opened = {
+                    let _one = crate::lock(&OPENING);
+                    if !current() {
+                        return;
+                    }
+                    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| open(&app, &path, excluded, rebuild, &current)))
+                        .unwrap_or_else(|p| Err(format!("Indexing the vault stopped on an error: {}", panic_text(&p))))
+                };
                 match opened {
                     Ok(o) => {
                         let stats = crate::lock(&o.index).stats().unwrap_or_default();
                         let (index, vault) = (o.index.clone(), o.vault.clone());
+                        let unwatched = o._watcher.is_none().then(|| o.kept());
+                        let left = o.half_renamed.clone();
                         if *crate::lock(&svc.generation) == gen {
                             *crate::lock(&svc.open) = Some(o);
                         }
-                        svc.set_status(&app, gen, Status { state: "ready", vault_path: Some(path), error: None, stats });
+                        svc.set_status(&app, gen, ready_status(path, stats, unwatched.is_none(), left));
+                        if let Some(kept) = unwatched {
+                            rewatch(&app, gen, kept);
+                        }
                         read_images(&app, gen, &index, &vault);
                     }
                     Err(e) => {
@@ -167,7 +248,10 @@ impl VaultService {
     }
 }
 
-fn open(app: &AppHandle, path: &str, excluded: Vec<String>, rebuild: bool) -> Result<Open, String> {
+/// Held by the "vault-open" thread across [`open`], so two never index at once.
+static OPENING: Mutex<()> = Mutex::new(());
+
+fn open(app: &AppHandle, path: &str, excluded: Vec<String>, rebuild: bool, current: &dyn Fn() -> bool) -> Result<Open, String> {
     let root = PathBuf::from(path);
     // Reading the folder is what Full Disk Access (or the folder's own permission) allows.
     std::fs::read_dir(&root).map_err(|e| match e.kind() {
@@ -189,41 +273,112 @@ fn open(app: &AppHandle, path: &str, excluded: Vec<String>, rebuild: bool) -> Re
     // takes a while, and the vault would wait for it. What's kept by content hash is used now.
     ix.set_text_cache(brainstead_core::extract::TextCache::new(text_dir(), Some(crate::platform::pdf_text)));
     let root_s = root.to_string_lossy().to_string();
+    // A newer open is waiting: the index is left to it.
+    if !current() {
+        return Err("Another open took over.".into());
+    }
     if rebuild || ix.meta("vault_root")?.as_deref() != Some(root_s.as_str()) {
         ix.clear()?;
         ix.set_meta("vault_root", &root_s)?;
     }
     // Excluded folders changed since last time: drop what's now excluded (sync removes what walk no longer finds).
     ix.sync(&vault)?;
+    // The whole vault has just been read: the kept texts of files that have gone or changed go
+    // too, and, in a vault that may be written to, what a crash left behind.
+    if let Err(e) = ix.prune_text(&text_dir()) {
+        crate::applog!("text cache: {e}");
+    }
+    // A read-only vault is only looked at: nothing in it is deleted.
+    let half_renamed = if crate::lock(&app.state::<crate::AppState>().settings).read_only {
+        half_renamed(&root)
+    } else {
+        brainstead_core::write::sweep_leftovers(&root)
+    };
+    for left in &half_renamed {
+        crate::applog!("a note was left halfway through a rename: {left} (rename it back by hand)");
+    }
     ix.set_text_cache(text_cache());
     let index = Arc::new(Mutex::new(ix));
     let assets: Arc<Mutex<Option<Arc<brainstead_core::assets::Assets>>>> = Default::default();
     let usage = Arc::new(Mutex::new(brainstead_core::usage::Usage::scan(&vault)));
-    let watcher = {
-        let (index, vault, app, assets, usage) = (index.clone(), vault.clone(), app.clone(), assets.clone(), usage.clone());
-        let text = text_cache();
-        brainstead_core::watch::watch(&root, move |paths| {
-            // A file that makes the parser panic is logged and skipped with its batch; the watcher
-            // and the app carry on (the index's transaction rolls back as the panic unwinds).
-            let batch = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                *crate::lock(&assets) = None;
-                crate::lock(&usage).update(&vault, &paths);
-                // PDF, Office and image text is read before the index is locked, so the window's calls
-                // don't wait on it; the update then finds it kept by content hash.
-                extract_ahead(&text, &paths);
-                crate::lock(&index).update(&vault, &paths)
-            }));
-            match batch {
-                Ok(Ok(ch)) if !ch.is_empty() => changed(&app, &index, ch),
-                Ok(Ok(_)) => {}
-                Ok(Err(e)) => crate::applog!("index update: {e}"),
-                Err(p) => crate::applog!("index update panicked on {} file(s), first {:?}: {}", paths.len(), paths.first(), panic_text(&p)),
+    let open = Open { vault, index, assets, usage, half_renamed, _watcher: None };
+    // A watcher that can't start leaves the vault open, with a warning; `start` keeps trying.
+    let watcher = start_watch(app, &open.kept()).map_err(|e| crate::applog!("vault watcher: {e}")).ok();
+    Ok(Open { _watcher: watcher, ..open })
+}
+
+/// Watches the vault folder, keeping the index, the usage and the assets current.
+fn start_watch(app: &AppHandle, kept: &Kept) -> Result<brainstead_core::watch::Watcher, String> {
+    let (app, kept) = (app.clone(), kept.clone());
+    let text = text_cache();
+    brainstead_core::watch::watch(&kept.vault.root.clone(), move |batch| watched(&app, &kept, &text, &batch))
+}
+
+/// One batch from the watcher, indexed; the window hears of what changed.
+fn watched(app: &AppHandle, kept: &Kept, text: &brainstead_core::extract::TextCache, batch: &Batch) {
+    // A file that makes the parser panic is logged and skipped with its batch; the watcher
+    // and the app carry on (the index's transaction rolls back as the panic unwinds).
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| reindex(kept, text, batch))) {
+        Ok(Ok(ch)) if !ch.is_empty() => changed(app, &kept.index, ch),
+        Ok(Ok(_)) => {}
+        Ok(Err(e)) => crate::applog!("index update: {e}"),
+        Err(p) => match batch {
+            Batch::Paths(paths) => {
+                crate::applog!("index update panicked on {} file(s), first {:?}: {}", paths.len(), paths.first(), panic_text(&p))
             }
-        })
-        .map_err(|e| crate::applog!("vault watcher: {e}"))
-        .ok()
-    };
-    Ok(Open { vault, index, assets, usage, _watcher: watcher })
+            Batch::Rescan => crate::applog!("index update panicked reading the vault again: {}", panic_text(&p)),
+        },
+    }
+}
+
+/// Brings the index, the usage and the assets up to date with a batch: its paths, or the whole
+/// vault when the watcher missed changes (nothing says which files they were).
+fn reindex(kept: &Kept, text: &brainstead_core::extract::TextCache, batch: &Batch) -> Result<Changes, String> {
+    *crate::lock(&kept.assets) = None;
+    match batch {
+        Batch::Paths(paths) => {
+            crate::lock(&kept.usage).update(&kept.vault, paths);
+            // PDF, Office and image text is read before the index is locked, so the window's calls
+            // don't wait on it; the update then finds it kept by content hash.
+            extract_ahead(text, paths);
+            crate::lock(&kept.index).update(&kept.vault, paths)
+        }
+        Batch::Rescan => {
+            let usage = brainstead_core::usage::Usage::scan(&kept.vault);
+            *crate::lock(&kept.usage) = usage;
+            crate::lock(&kept.index).sync(&kept.vault)
+        }
+    }
+}
+
+/// Tries the watcher again every minute after it couldn't start, until it works or another vault
+/// opens. Once it's watching, the vault is read again for what changed meanwhile and the warning goes.
+fn rewatch(app: &AppHandle, gen: u64, kept: Kept) {
+    let app = app.clone();
+    let spawned = std::thread::Builder::new().name("vault-rewatch".into()).spawn(move || loop {
+        std::thread::sleep(REWATCH_EVERY);
+        let svc = app.state::<VaultService>();
+        let current = || *crate::lock(&svc.generation) == gen;
+        if !current() {
+            return;
+        }
+        let Ok(w) = start_watch(&app, &kept) else { continue };
+        match crate::lock(&svc.open).as_mut() {
+            Some(o) if current() => o._watcher = Some(w),
+            _ => return,
+        }
+        crate::applog!("vault watcher: watching again");
+        watched(&app, &kept, &text_cache(), &Batch::Rescan);
+        if current() {
+            let mut s = crate::lock(&svc.status);
+            s.warning = None;
+            emit_status(&app, &s);
+        }
+        return;
+    });
+    if let Err(e) = spawned {
+        crate::applog!("vault watcher: couldn't start the retry: {e}");
+    }
 }
 
 /// Reads the text of the PDF, Office and image files in a batch into the text cache, outside the index lock.
@@ -276,10 +431,16 @@ pub(crate) fn panic_text(p: &(dyn std::any::Any + Send)) -> String {
 fn changed(app: &AppHandle, index: &Arc<Mutex<Index>>, ch: Changes) {
     let _ = app.emit("vault-changed", &ch);
     crate::knowledge::vault_changed(app);
+    crate::actiontasks::vault_changed(app, &ch.changed);
     let svc = app.state::<VaultService>();
     let stats = crate::lock(index).stats().unwrap_or_default();
+    let root = svc.root();
     let mut s = crate::lock(&svc.status);
     s.stats = stats;
+    // One the user has named again is no longer listed.
+    if let Some(root) = root {
+        s.half_renamed.retain(|rel| root.join(rel).is_file());
+    }
     emit_status(app, &s);
 }
 
@@ -309,5 +470,68 @@ mod tests {
         assert_eq!((s.state, s.vault_path.as_deref()), ("indexing", Some("/vault")));
         let s = VaultService::opening(None).status();
         assert_eq!((s.state, s.vault_path), ("none", None));
+    }
+
+    /// A vault whose folder can't be watched is still ready, with a warning to show.
+    #[test]
+    fn an_unwatched_vault_is_ready_with_a_warning() {
+        let s = ready_status("/vault".into(), IndexStats::default(), false, vec![]);
+        assert_eq!((s.state, s.warning.as_deref()), ("ready", Some(UNWATCHED)));
+        let s = ready_status("/vault".into(), IndexStats::default(), true, vec!["wiki/.rename-4242".into()]);
+        assert_eq!((s.state, s.warning), ("ready", None));
+        // What a crash left halfway through a rename is carried for Settings › Vault to name.
+        assert_eq!(s.half_renamed, vec!["wiki/.rename-4242".to_string()]);
+    }
+
+    /// A read-only vault's half-renamed notes are found by the sweep's own name rule, and
+    /// nothing in it is deleted: not even this app's old temporary files.
+    #[test]
+    fn half_renamed_notes_are_found_without_deleting_anything() {
+        let t = tempfile::tempdir().unwrap();
+        let r = t.path();
+        std::fs::create_dir_all(r.join("wiki/entities")).unwrap();
+        let all = [
+            ".brainstead-4243-0.tmp",
+            ".rename-7",
+            ".rename-notes",
+            ".rename-",
+            "wiki/entities/.rename-4242",
+            "wiki/entities/Orbit App.md",
+        ];
+        for f in all {
+            std::fs::write(r.join(f), "x").unwrap();
+        }
+        let found = half_renamed(r);
+        assert_eq!(found, vec![".rename-7".to_string(), "wiki/entities/.rename-4242".to_string()]);
+        assert!(all.iter().all(|f| r.join(f).is_file()));
+        // The same files the sweep reports in a vault that may be written to.
+        assert_eq!(found, brainstead_core::write::sweep_leftovers(r));
+    }
+
+    /// When the watcher missed changes, the whole vault is read again: a note written without a
+    /// path for it in any batch is indexed, and one deleted is dropped.
+    #[test]
+    fn a_rescan_reads_the_whole_vault_again() {
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path().join("vault");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("Gone.md"), "old\n").unwrap();
+        let vault = Vault::new(root.clone(), vec![]);
+        let mut ix = Index::open(&t.path().join("index.db")).unwrap();
+        ix.sync(&vault).unwrap();
+        let kept = Kept {
+            usage: Arc::new(Mutex::new(brainstead_core::usage::Usage::scan(&vault))),
+            vault,
+            index: Arc::new(Mutex::new(ix)),
+            assets: Default::default(),
+        };
+        let text = brainstead_core::extract::TextCache::new(t.path().join("text"), None);
+        std::fs::write(root.join("Orbit App.md"), "new\n").unwrap();
+        std::fs::remove_file(root.join("Gone.md")).unwrap();
+        // A batch of no paths finds neither.
+        assert!(reindex(&kept, &text, &Batch::Paths(vec![])).unwrap().is_empty());
+        let ch = reindex(&kept, &text, &Batch::Rescan).unwrap();
+        assert_eq!((ch.changed, ch.removed), (vec!["Orbit App.md".to_string()], vec!["Gone.md".to_string()]));
+        assert_eq!(crate::lock(&kept.usage).totals().files, 1);
     }
 }

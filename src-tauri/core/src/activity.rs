@@ -5,7 +5,7 @@
 //! The Activity screen's data (§4): `log.md`'s entries newest first, read as the previous app's
 //! `vault-log.ts` read them, and a heatmap of file changes by day (each note, wiki page and source
 //! counted on the day it last changed, in local time). Also the vault at a glance: notes and wiki
-//! pages by type, their top tags, and the most linked files (Activity and Knowledge health).
+//! pages by type, their top tags, and the most linked files (Activity and Wiki health).
 
 use std::collections::BTreeMap;
 use std::sync::LazyLock;

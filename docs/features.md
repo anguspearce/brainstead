@@ -8,9 +8,9 @@ The user guide to Brainstead, a Mac and Windows app for tasks, notes and an [LLM
 |---|---|
 | [Tasks and GTD](tasks.md) | Today, Quick capture, the Inbox, Tasks, Projects, the weekly review, and how tasks are written |
 | [Notes](notes.md) | View, Edit and Source, saving and drafts, queries and callouts, templates, search and ⌘K, the Trash |
-| [The wiki and sources](wiki.md) | Sources and the browser extensions, ingest, Changes, wiki pages, Knowledge health, contradictions, meeting notes and the other tools |
+| [The wiki and sources](wiki.md) | Sources and the browser extensions, the sync (Teams, Outlook and Slack), ingest, Changes, wiki pages and initiatives, Wiki health, contradictions, the graph, meeting notes and the other tools |
 | [Ask and assistants](ask.md) | Chats with Claude Code, Codex, Copilot and Antigravity, or Ollama's local models through Codex, what an assistant can do, Brainstead's tools in a terminal |
-| [Day to day](day-to-day.md) | The menu bar (system tray on Windows), the daily and weekly summaries and the daily check, help, Settings, and what happens in the background |
+| [Day to day](day-to-day.md) | The menu bar (system tray on Windows), the daily brief, the daily and weekly summaries and the daily check, help, Settings, and what happens in the background |
 
 ## Requirements
 
@@ -29,7 +29,7 @@ No vault yet? **Create a new vault** asks for a name and a place, and adds a few
 
 Once the vault is open, a welcome offers **Getting started**: step-by-step guides in the help, beginning with your vault and finding your way around. **Not now** closes it until the next launch; tick **Don't ask me again**, or turn off **Offer Getting started when Brainstead opens** in Settings › General, to stop it. The guides are always in the help: press `?` and click **Getting started**.
 
-Notifications are asked for the first time Brainstead has something to tell you.
+Notifications are asked for the first time Brainstead has something to tell you. By default it only notifies you when something needs you (a failure, a refused capture, a capture you clicked, the sync's sign-in gone stale), not for each synced message or ingest; **Notifications** in Settings › General can make that All or Off.
 
 Moving over from another notes app? When its files are in the vault, the **Moving over from another notes app** checklist at the top of Settings › General lists what's left to do:
 
@@ -46,16 +46,21 @@ Moving over from another notes app? When its files are in the vault, the **Movin
 
 The sidebar, top to bottom:
 
-- **Today**, **Inbox**, **Tasks**, **Projects**, **Weekly review** and **Ask**;
-- the library: **Search**, **Notes**, **Wiki**, **Sources**, **Templates**, **Graph**, then **Tools**, a menu of **Draft reply**, **Meeting notes** and **Compare** (a spinner beside it means one is at work);
+- **Today**, **Inbox**, **Tasks**, **Projects** and **Weekly review**;
+- **Library**: **Search**, **Notes**, **Wiki** and **Sources**;
+- **Assistant**: **Ask**, then the tools, **Draft reply**, **Meeting notes** and **Compare** (a spinner beside one means it's at work);
 - your **Bookmarks**;
-- at the foot, **Changes**, **Knowledge health**, **Activity**, **Trash**, **Settings**, and the index's line (a dot only while it's indexing, or if it failed).
+- at the foot, **Vault**, a fold holding **Wiki health**, **Activity**, **Trash**, **Templates** and **Graph** (shut, it shows their count), then **Changes**, **Settings**, and the index's line (a dot only while it's indexing, or if it failed).
+
+The Inbox's **Bookmarks** band lists the bookmarks to triage and opens Triage on one; Contradictions is a tab of Wiki health. ⌘1 to ⌘0 go to Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki and Sources.
 
 Counts that need you, such as overdue tasks, the Inbox and changes held for you, are in bold.
 
+On a narrow window (1100 px or less, Interface size counted in) the sidebar is a rail of icons: each keeps its badge, its tooltip gives its name, key and count, thin lines part the groups, Bookmarks is one pin listing them beside it, and Vault opens in place. ⌘\ (Ctrl+\ on Windows), the button at the sidebar's top and View › Toggle Sidebar switch it for the width the window is at, each width remembering its own choice, so a wide window can keep the rail too. There, Tasks' task pane slides over the list from the right (Esc or its × puts it away), and when Today's right rail drops under the bands, To process moves above them as a strip.
+
 On Windows, scrollbars stay out of sight until the pointer is over a list or page, or it scrolls; then a thin line shows where you are, and it widens under the pointer to drag. It goes again a second after scrolling stops. Where Windows shows scroll bars all the time (Settings › Accessibility › Visual effects › **Always show scrollbars**), Brainstead shows them all the time too. A Mac keeps its native scrollbars.
 
-Every pane can be dragged wider or narrower by the line between it and the next: the sidebar, each screen's left list and right-hand pane, and the columns of every table (Notes, Wiki, Sources, Templates, Trash, Activity's log, Doc check's register) by their headings' edges (a column after the table's flexible one by its left edge), one flexible column in each taking the rest. A double-click on the line puts the pane back, **Reset pane widths** in Settings › General puts every one back, **Lock pane widths** and **Lock column widths** there stop either type being resized, and the widths are kept per computer ([day-to-day](day-to-day.md#settings)).
+Every pane can be dragged wider or narrower by the line between it and the next: the sidebar, each screen's left list and right-hand pane, and the columns of every table (Notes, Wiki, Sources, Templates, Trash, Doc check's register) by their headings' edges (a column after the table's flexible one by its left edge), one flexible column in each taking the rest. A double-click on the line puts the pane back, **Reset pane widths** in Settings › General puts every one back, **Lock pane widths** and **Lock column widths** there stop either type being resized, and the widths are kept per computer ([day-to-day](day-to-day.md#settings)).
 
 | Keys | What they do |
 |---|---|
@@ -68,6 +73,7 @@ Every pane can be dragged wider or narrower by the line between it and the next:
 | ⌥⌘1 ⌥⌘2 ⌥⌘3 (Ctrl+Shift+1 … 3 on Windows) | View, Edit or Source for the open note |
 | ⌘1 … ⌘9, ⌘0 (Ctrl+1 … 0 on Windows) | Today, Inbox, Tasks, Projects, Weekly review, Ask, Search, Notes, Wiki, Sources |
 | ⌘[ ⌘] | Back, forward |
+| ⌘\ (Ctrl+\ on Windows) | The sidebar as icons, or in full, for the window's width |
 | ⌘Z | Undo the last change |
 | ⇧⌘= ⇧⌘- ⇧⌘0 (Ctrl+Shift+= … on Windows) | Interface size: everything bigger, smaller, or back to 100% |
 | ← → ⇧← ⇧→ ↩ | On a pane's divider (Tab reaches it): move it 8 px, 40 px, or put the pane back |

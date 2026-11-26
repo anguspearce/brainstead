@@ -12,7 +12,7 @@ describe("palette matching", () => {
   it("lists the screens when nothing is typed", () => {
     const r = match(all, "");
     expect(r.every((c) => c.group === "Go to")).toBe(true);
-    expect(r.map((c) => c.label)).toContain("Knowledge health");
+    expect(r.map((c) => c.label)).toContain("Wiki health");
   });
   it("needs every word, and puts labels that start with it first", () => {
     expect(match(all, "set")[0].label).toBe("Settings");

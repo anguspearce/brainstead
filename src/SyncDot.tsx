@@ -4,20 +4,23 @@
 
 // The top bar's Teams and Outlook dot: green when both are handing over a live sign-in, amber when
 // something needs the user (gone stale, signed out, an old extension), grey when not signed in.
-// Shown only while the sync is on. Clicking it opens Settings › Teams and Outlook sync.
+// Shown only while the sync is on. Clicking it opens Settings › Sync.
 
 import { useEffect, useState } from "react";
 import { api, SyncSignIn } from "./api";
 import { nav } from "./nav";
 import { hasSync } from "./platform";
 import { Store, settings, useStore } from "./store";
-import { syncStatus } from "./syncStatus";
+import { mailOn, syncStatus } from "./syncStatus";
 
 /** Screenshot mode: a sign-in state to show instead of the real one (scene.ts `syncDot`). */
 export const sceneSignIn = new Store<SyncSignIn | null>(null);
 
 export function SyncDot() {
-  const on = !!useStore(settings).syncEnabled && hasSync;
+  const st = useStore(settings);
+  const teams = !!st.syncEnabled;
+  const mail = mailOn(st);
+  const on = (teams || mail) && hasSync;
   const scene = useStore(sceneSignIn);
   const [signIn, setSignIn] = useState<SyncSignIn | null>(null);
   useEffect(() => {
@@ -37,13 +40,13 @@ export function SyncDot() {
     };
   }, [on, scene]);
   if (!on) return null;
-  const { tone, text } = syncStatus(scene ?? signIn);
+  const { tone, text } = syncStatus(scene ?? signIn, { teams, mail });
   return (
     <button
       type="button"
       className="ibtn syncdot"
       aria-label={text}
-      title={`${text} Click for Settings › Teams and Outlook sync.`}
+      title={`${text} Click for Settings › Sync.`}
       onClick={() => nav.go({ screen: "settings", pane: "sync" })}
     >
       <span className={`d ${tone}`} />

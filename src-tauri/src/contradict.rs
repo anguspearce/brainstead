@@ -147,7 +147,10 @@ fn run_held(app: &AppHandle, trigger: Option<&str>, group: Option<&str>) -> Last
     let mut l = Last { started: proposals::now_local(), running: true, ..Default::default() };
     save_last(app, &l);
     let group = group.map(String::from).unwrap_or_else(|| format!("contradictions-{}", proposals::new_id()));
-    if let Err(e) = run(app, &mut l, trigger, &group) {
+    // A panic is an error in the run, never a check left "running" until restart.
+    let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(app, &mut l, trigger, &group)))
+        .unwrap_or_else(|_| Err("Something went wrong; Brainstead's log has the details (Settings › About).".into()));
+    if let Err(e) = ran {
         l.error = Some(e);
     }
     l.running = false;
@@ -216,6 +219,8 @@ fn run(app: &AppHandle, l: &mut Last, trigger: Option<&str>, group: &str) -> Res
     l.doing = "Finding clashes".into();
     save_last(app, l);
     let (claims, _) = c::current(&st, &pages);
+    // Every page's claims are cached under its text as it is now: the files of older texts go.
+    st.prune(&pages);
     let claims = c::with_kept(claims, &brainstead_core::claims::all(&root), &pages);
     l.claims = claims.len();
     let idx_pages: Vec<(String, Vec<String>)> = pages.iter().map(|(r, _, a)| (r.clone(), a.clone())).collect();
@@ -408,7 +413,7 @@ pub fn open_contradiction(path: &str) -> bool {
     !c::open_on(path, &all, &v, &fixed()).is_empty()
 }
 
-/// Knowledge health's "Claims with no citation", from the cached claims.
+/// Wiki health's "Claims with no citation", from the cached claims.
 pub fn uncited_check(root: &std::path::Path) -> brainstead_core::lint::Check {
     let pages = c::pages(root);
     let texts: HashMap<String, String> = pages.iter().map(|(r, t, _)| (r.clone(), t.clone())).collect();

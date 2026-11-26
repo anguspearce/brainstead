@@ -2,7 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Knowledge health: the previous app's `scripts/lint_wiki.py` ported check for check, with its
+//! Wiki health: the previous app's `scripts/lint_wiki.py` ported check for check, with its
 //! rules and its wording (the tests compare with the script's own output, frozen in
 //! `tests/fixtures/lint/`), plus three checks of Brainstead's own: possible duplicate pages, stale
 //! pages that others rely on, and sources changed since the pages citing them. It reads the files
@@ -20,15 +20,20 @@ use unicode_normalization::UnicodeNormalization;
 
 use crate::reviews::Zone;
 
-pub(crate) const WIKI_SUBDIRS: [&str; 3] = ["entities", "concepts", "summaries"];
+pub(crate) const WIKI_SUBDIRS: [&str; 4] = ["entities", "concepts", "initiatives", "summaries"];
 const LOG: &str = "log.md";
 /// A wiki page unchanged this long, that other notes link to, is worth a look.
 pub const STALE_DAYS: i64 = 90;
 /// Checks that are worth a look but aren't problems: not counted as needing a decision.
 pub const ADVISORY: [&str; 3] = ["stale-pages", "uncited-claims", "no-current-state"];
+/// Checks whose issues are acted on in the Inbox (Captures), not counted as needing a decision
+/// here as well (D-20261119-04). Kept beside src/knowledge.ts IN_INBOX.
+pub const IN_INBOX: [&str; 1] = ["uningested-sources"];
 const STALE_MIN_BACKLINKS: usize = 3;
 
-pub(crate) static FRONTMATTER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)\A---\n(.*?)\n---\n").unwrap());
+// `\r?\n`: a page saved with Windows line endings has properties too, and a fix must not write
+// into them.
+pub(crate) static FRONTMATTER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?s)\A---\r?\n(.*?)\r?\n---\r?\n").unwrap());
 /// lint_wiki.py's wikilink: the target, without a heading or alias.
 pub(crate) static WIKILINK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\[\[([^\]|#\n]+?)(?:[|#][^\]\n]*)?\]\]").unwrap());
 
@@ -213,6 +218,11 @@ pub struct Report {
     pub sources: usize,
     /// How long the checks took.
     pub ms: u64,
+    /// Synced threads changed since they were cited that the daily check will ingest again
+    /// (Also refresh pages whose sources changed): Changed in Sources, but not a Health issue
+    /// until that ingest has had its go (D-20261120-08). Left empty here; the app fills it.
+    #[serde(default)]
+    pub waiting: Vec<String>,
 }
 
 impl Report {
@@ -220,9 +230,15 @@ impl Report {
         self.checks.iter().find(|c| c.id == id)
     }
     /// Issues Brainstead can't fix on its own. Stale pages and uncited claims are worth a look,
-    /// not problems, so they aren't counted.
+    /// not problems, and sources not yet ingested are the Inbox's, so they aren't counted. The
+    /// same rule as src/knowledge.ts issueClass, which the screens' badges follow.
     pub fn needs_decision(&self) -> usize {
-        self.checks.iter().filter(|c| !ADVISORY.contains(&c.id)).flat_map(|c| &c.items).filter(|i| !i.safe).count()
+        self.checks
+            .iter()
+            .filter(|c| !ADVISORY.contains(&c.id) && !IN_INBOX.contains(&c.id))
+            .flat_map(|c| &c.items)
+            .filter(|i| !i.safe)
+            .count()
     }
     pub fn total(&self) -> usize {
         self.checks.iter().map(|c| c.items.len()).sum()
@@ -235,7 +251,17 @@ pub fn run(root: &Path, today: NaiveDate, dismissed: &HashSet<String>) -> Report
     run_in(root, today, dismissed, Zone::Local)
 }
 
+/// [`run`], told which sources an ingest has read (vault paths): one read with nothing in it worth
+/// citing isn't "not yet ingested" (D-20261118-28).
+pub fn run_read(root: &Path, today: NaiveDate, dismissed: &HashSet<String>, read: &HashSet<String>) -> Report {
+    run_with(root, today, dismissed, Zone::Local, read)
+}
+
 pub(crate) fn run_in(root: &Path, today: NaiveDate, dismissed: &HashSet<String>, zone: Zone) -> Report {
+    run_with(root, today, dismissed, zone, &HashSet::new())
+}
+
+fn run_with(root: &Path, today: NaiveDate, dismissed: &HashSet<String>, zone: Zone, was_read: &HashSet<String>) -> Report {
     let t0 = std::time::Instant::now();
     let files = walk(root);
     let day = |ms: i64| zone.ms_to_local(ms).date();
@@ -305,9 +331,11 @@ pub(crate) fn run_in(root: &Path, today: NaiveDate, dismissed: &HashSet<String>,
     sort(&mut items);
     checks.push(Check { id: "broken-sources", title: "Broken sources", classic: true, ignored: 0, items });
 
-    // 3. Orphans.
+    // 3. Orphans. Not an initiative: it's a list of actions, reached from the Inbox, the brief and
+    // the Wiki's initiative filter, not by links (D-20261118-28).
     let mut items: Vec<Item> = wiki
         .iter()
+        .filter(|(f, _)| !crate::initiatives::is_initiative(&f.rel))
         .filter(|(f, _)| !inbound.contains_key(&lint_key(stem(name_of(&f.rel)))))
         .map(|(f, _)| Item { text: f.rel.clone(), page: Some(f.rel.clone()), ..Default::default() })
         .collect();
@@ -391,7 +419,8 @@ pub(crate) fn run_in(root: &Path, today: NaiveDate, dismissed: &HashSet<String>,
     sort(&mut items);
     checks.push(Check { id: "unlogged-writes", title: "Unlogged writes", classic: true, ignored: 0, items });
 
-    // 7. Uningested sources: files directly in sources/ that no page's sources: names.
+    // 7. Uningested sources: files directly in sources/ that no page's sources: names and no
+    // ingest has read.
     let cited: HashSet<String> = wiki
         .iter()
         .flat_map(|(_, t)| WIKILINK.captures_iter(sources_block(frontmatter_block(t))).map(|c| lint_key(c[1].trim())).collect::<Vec<_>>())
@@ -401,7 +430,7 @@ pub(crate) fn run_in(root: &Path, today: NaiveDate, dismissed: &HashSet<String>,
         .iter()
         .filter(|f| {
             let n = name_of(&f.rel);
-            !n.starts_with('.') && !cited.contains(&lint_key(stem(n))) && !cited.contains(&lint_key(n))
+            !n.starts_with('.') && !cited.contains(&lint_key(stem(n))) && !cited.contains(&lint_key(n)) && !was_read.contains(&f.rel)
         })
         .map(|f| Item { text: f.rel.clone(), page: Some(f.rel.clone()), ..Default::default() })
         .collect();
@@ -459,7 +488,7 @@ pub(crate) fn run_in(root: &Path, today: NaiveDate, dismissed: &HashSet<String>,
     // Brainstead's own. Possible duplicates.
     let mut entries: Vec<(String, Vec<String>)> = Vec::new();
     for (f, text) in &wiki {
-        if !(f.rel.starts_with("wiki/entities/") || f.rel.starts_with("wiki/concepts/")) {
+        if !crate::pageshape::shaped(&f.rel) {
             continue;
         }
         let fm = crate::frontmatter::split(text);
@@ -547,35 +576,87 @@ pub(crate) fn run_in(root: &Path, today: NaiveDate, dismissed: &HashSet<String>,
         .collect();
     checks.push(Check { id: "no-current-state", title: "Pages with no Current state", classic: false, ignored: 0, items });
 
+    // Initiatives' actions and decisions (D-20261118-08): lines that don't read, and quotes that
+    // aren't in the note or source they cite (only those Brainstead has the text of: markdown).
+    // By name, every file of it: a source and its summary page share one (an email thread and
+    // wiki/summaries/ of the same name), and the quote is in the source.
+    let mut texts: HashMap<String, Vec<&String>> = HashMap::new();
+    for (f, t) in md.iter() {
+        texts.entry(lint_key(stem(name_of(&f.rel)))).or_default().push(t);
+    }
+    let mut items = Vec::new();
+    for (f, text) in wiki.iter().filter(|(f, _)| crate::initiatives::is_initiative(&f.rel)) {
+        let i = crate::initiatives::parse(&f.rel, text);
+        let name = stem(name_of(&f.rel));
+        for p in &i.problems {
+            items.push(Item { text: format!("{name}: {}", p.text), page: Some(f.rel.clone()), ..Default::default() });
+        }
+        let quoted = i.actions.iter().map(|a| (&a.text, &a.quotes)).chain(i.decisions.iter().map(|d| (&d.text, &d.quotes)));
+        for (what, quotes) in quoted {
+            for q in quotes {
+                let target = q.source.split('#').next().unwrap_or("").trim();
+                let Some(srcs) = texts.get(&lint_key(name_of(target).trim_end_matches(".md"))) else { continue };
+                if !srcs.iter().any(|src| crate::reviews::prep::quote_in(&q.text, src)) {
+                    items.push(Item {
+                        text: format!("{name}: “{what}” quotes words that aren't in {target}"),
+                        page: Some(f.rel.clone()),
+                        name: Some(target.to_string()),
+                        detail: Some(q.text.clone()),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+    }
+    sort(&mut items);
+    checks.push(Check { id: "initiative-items", title: "Initiative actions and decisions to check", classic: false, ignored: 0, items });
+
     Report {
         checks,
         wiki_pages: wiki.len(),
         sources: files.iter().filter(|f| f.rel.starts_with("sources/")).count(),
         ms: t0.elapsed().as_millis() as u64,
+        waiting: Vec::new(),
     }
 }
 
-/// Files directly in `sources/` that no wiki page's `sources:` names: check 7 alone, without
-/// reading the rest of the vault.
-pub fn pending_sources(root: &Path) -> Vec<String> {
-    let mut cited: HashSet<String> = HashSet::new();
-    for sub in WIKI_SUBDIRS {
-        let Ok(rd) = std::fs::read_dir(root.join("wiki").join(sub)) else { continue };
-        for e in rd.flatten().filter(|e| e.path().extension().is_some_and(|x| x == "md")) {
-            let text = read(&e.path());
-            cited.extend(WIKILINK.captures_iter(sources_block(frontmatter_block(&text))).map(|c| lint_key(c[1].trim())));
+/// The versions of each source an ingest has read (`sources-read-at.json` in the app data
+/// folder, path → versions): the file as read, and as the ingest's name fixes left it.
+pub fn read_at_file(data: &Path) -> PathBuf {
+    data.join("sources-read-at.json")
+}
+
+pub fn read_at(data: &Path) -> BTreeMap<String, Vec<String>> {
+    std::fs::read(read_at_file(data)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+}
+
+/// Notes that an ingest has read `path` at these versions, replacing what it read before.
+pub fn note_read_at(data: &Path, path: &str, versions: &[String]) -> std::io::Result<()> {
+    let mut all = read_at(data);
+    all.insert(path.to_string(), versions.to_vec());
+    let json = serde_json::to_vec(&all).map_err(std::io::Error::other)?;
+    crate::write::write_atomic(&read_at_file(data), &json, false).map_err(|e| std::io::Error::other(e.to_string()))
+}
+
+/// A source an ingest has read as it is now isn't changed since it was cited, even when the
+/// ingest found nothing to add to the pages citing it, so their dates didn't move
+/// (D-20261120-08). Drops those from the changed-sources check.
+pub fn without_read_sources(r: &mut Report, root: &Path, read: &BTreeMap<String, Vec<String>>) {
+    let Some(c) = r.checks.iter_mut().find(|c| c.id == "changed-sources") else { return };
+    c.items.retain(|i| {
+        let Some(p) = i.page.as_deref() else { return true };
+        let Some(seen) = read.get(p) else { return true };
+        match std::fs::read(root.join(p)) {
+            Ok(b) => !seen.contains(&crate::write::version(&b)),
+            Err(_) => true,
         }
-    }
-    let Ok(rd) = std::fs::read_dir(root.join("sources")) else { return vec![] };
-    let mut out: Vec<String> = rd
-        .flatten()
-        .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
-        .filter_map(|e| e.file_name().to_str().map(str::to_string))
-        .filter(|n| !n.starts_with('.') && !cited.contains(&lint_key(stem(n))) && !cited.contains(&lint_key(n)))
-        .map(|n| format!("sources/{n}"))
-        .collect();
-    out.sort();
-    out
+    });
+}
+
+/// A source the sync tops up as its conversation grows: an email thread, a Teams or Slack chat.
+pub fn is_synced_thread(rel: &str) -> bool {
+    let n = name_of(rel);
+    ["Email. Thread. ", "Teams. Chat. ", "Slack. Chat. "].iter().any(|p| n.starts_with(p))
 }
 
 fn sort(items: &mut [Item]) {
@@ -804,6 +885,34 @@ mod tests {
     }
 
     #[test]
+    fn checks_initiatives_actions_and_their_quotes() {
+        let t = tempfile::tempdir().unwrap();
+        let w = |rel: &str, text: &str| {
+            let p = t.path().join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, text).unwrap();
+        };
+        w("sources/Mail. Pricing.md", "Lena: Can you send the revised pricing by Tuesday?\n");
+        // Its summary page has the same name: the quote is still found, in the source.
+        w("wiki/summaries/Mail. Pricing.md", "Lena asked for the revised pricing.\n");
+        w(
+            "wiki/initiatives/Acme renewal.md",
+            "---\ntype: initiative\n---\n# Acme renewal\n\n## Actions\n\n- Send pricing [owner:: me] ^a-1\n  - \"can you send the revised pricing\" — [[Mail. Pricing]]\n- Book legal [status:: open] ^a-2\n  - \"Legal is booked\" — [[Mail. Pricing#Branch 2]]\n",
+        );
+        let r = run_in(t.path(), today(), &HashSet::new(), fixture::zone());
+        let got: Vec<&str> = r.check("initiative-items").unwrap().items.iter().map(|i| i.text.as_str()).collect();
+        // Nothing links to it, and it isn't an orphan: initiatives are reached from the Inbox and the brief.
+        assert!(r.check("orphans").unwrap().items.iter().all(|i| !i.text.contains("initiatives/")));
+        assert_eq!(
+            got,
+            [
+                "Acme renewal: “Book legal” has no owner: add [owner:: me], [delegated:: <name>] or [owner:: <name>]",
+                "Acme renewal: “Book legal” quotes words that aren't in Mail. Pricing",
+            ]
+        );
+    }
+
+    #[test]
     fn reads_a_note_again_once_it_changes() {
         let t = tempfile::tempdir().unwrap();
         let page = t.path().join("wiki/entities/A.md");
@@ -838,6 +947,37 @@ mod tests {
         fixture::set_mtime(&page, "2026-01-20 12:00");
         forget(std::slice::from_ref(&page));
         assert_eq!(stale(t.path()), 0);
+    }
+
+    #[test]
+    fn a_source_read_as_it_is_now_is_not_changed_since_cited() {
+        let t = tempfile::tempdir().unwrap();
+        let data = tempfile::tempdir().unwrap();
+        let src = t.path().join("sources/Email. Thread. Launch - 2026-11-19.md");
+        let page = t.path().join("wiki/entities/Orbit App.md");
+        std::fs::create_dir_all(src.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(page.parent().unwrap()).unwrap();
+        std::fs::write(&page, "---\nsources:\n  - \"[[Email. Thread. Launch - 2026-11-19]]\"\n---\n# Orbit App\n").unwrap();
+        fixture::set_mtime(&page, "2026-11-19 09:00");
+        std::fs::write(&src, "Maya: launch is on the 14th\n").unwrap();
+        fixture::set_mtime(&src, "2026-11-19 10:00");
+        let changed = || {
+            let mut r = run_in(t.path(), today(), &HashSet::new(), fixture::zone());
+            without_read_sources(&mut r, t.path(), &read_at(data.path()));
+            r.check("changed-sources").unwrap().items.len()
+        };
+        assert_eq!(changed(), 1);
+        // An ingest read it as it is, and changed no page: no longer changed.
+        let v = crate::write::version(&std::fs::read(&src).unwrap());
+        note_read_at(data.path(), "sources/Email. Thread. Launch - 2026-11-19.md", &[v]).unwrap();
+        assert_eq!(changed(), 0);
+        // A new message after that read: changed again.
+        std::fs::write(&src, "Maya: launch is on the 14th\nLena: thanks\n").unwrap();
+        fixture::set_mtime(&src, "2026-11-19 11:00");
+        assert_eq!(changed(), 1);
+        assert!(is_synced_thread("sources/Email. Thread. Launch - 2026-11-19.md"));
+        assert!(is_synced_thread("sources/Teams. Chat. Maya - 2026-11-19.md"));
+        assert!(!is_synced_thread("sources/Orbit App brief.md"));
     }
 
     #[test]
@@ -876,9 +1016,13 @@ mod tests {
         assert_eq!(changed[0].page.as_deref(), Some("sources/Roadmap Update 2026-09-18.md"));
         assert_eq!(changed[0].pages, ["wiki/concepts/Role Framework.md", "wiki/entities/Orbit App.md"]);
         let pending: Vec<String> = r.check("uningested-sources").unwrap().items.iter().map(|i| i.text.clone()).collect();
-        assert_eq!(pending_sources(&root), pending);
+        // One an ingest read, with nothing in it worth citing, isn't pending.
+        let read: HashSet<String> = pending.iter().take(1).cloned().collect();
+        let after = run_with(&root, today(), &HashSet::new(), fixture::zone(), &read);
+        assert_eq!(after.check("uningested-sources").unwrap().items.len(), pending.len() - read.len());
         let safe = r.checks.iter().flat_map(|c| &c.items).filter(|i| i.safe).count();
-        assert_eq!(r.needs_decision() + safe + stale.len(), r.total());
+        // Sources not yet ingested are the Inbox's to act on, not counted to decide here too.
+        assert_eq!(r.needs_decision() + safe + stale.len() + pending.len(), r.total());
     }
 
     #[test]
@@ -918,6 +1062,14 @@ mod tests {
         assert_eq!(link_first_mention(fenced, "Orbit App").unwrap(), "```\nOrbit App\n```\n[[Orbit App]]\n");
         // Only in a link's anchor: nothing to link, so the check doesn't list it either.
         assert_eq!(link_first_mention("At the demo ([[Meeting. Demo - 2026-10-02#Questions (Lena Park)]]).\n", "Lena Park"), None);
+        // Windows line endings: the properties are still the properties.
+        let crlf = "---\r\naliases: [Orbit App Mobile]\r\nupdated: 2026-10-02\r\n---\r\nOrbit App ships.\r\n";
+        assert_eq!(fm_field(frontmatter_block(crlf), "updated"), "2026-10-02");
+        assert_eq!(body(crlf), "Orbit App ships.\r\n");
+        assert_eq!(
+            link_first_mention(crlf, "Orbit App").unwrap(),
+            "---\r\naliases: [Orbit App Mobile]\r\nupdated: 2026-10-02\r\n---\r\n[[Orbit App]] ships.\r\n"
+        );
     }
 
     #[test]
@@ -933,6 +1085,7 @@ mod tests {
             }],
             wiki_pages: 2,
             sources: 0,
+            waiting: Vec::new(),
             ms: 0,
         };
         let mut ignored = BTreeMap::from([
@@ -964,7 +1117,7 @@ mod tests {
                 ..Default::default()
             }],
         };
-        let report = |checks: Vec<Check>| Report { checks, wiki_pages: 1, sources: 0, ms: 0 };
+        let report = |checks: Vec<Check>| Report { checks, wiki_pages: 1, sources: 0, ms: 0, waiting: Vec::new() };
         let mut ignored = BTreeMap::from([(ignore_key("uncited-claims", "wiki/Orbit App.md: Launch is on 14 November"), "v1".to_string())]);
         let page = |t: &'static str| move |_: &str| Some(t.to_string());
         // The page changed elsewhere: still ignored.

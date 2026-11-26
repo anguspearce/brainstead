@@ -20,8 +20,8 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 // Interface size zooms the window itself (src/interfaceSize.ts); here there is none.
 vi.mock("@tauri-apps/api/webviewWindow", () => ({ getCurrentWebviewWindow: () => ({ setZoom: vi.fn(async () => {}) }) }));
 
-import type { InboxItem, TaskRow } from "./api";
-import { findTask, Listing, runAction, taskLineOut } from "./mcpActions";
+import type { InboxItem, ReviewRun, TaskRow } from "./api";
+import { clarifyItem, findTask, Listing, renewArgs, runAction, summaryRunLine, taskLineOut } from "./mcpActions";
 import { localToday } from "./md/taskQuery";
 import { settings } from "./store";
 import { focusMode, startFocus } from "./focus";
@@ -333,7 +333,7 @@ describe("MCP actions", () => {
     answers.change_submit = () => ({ id: "c9", applied: true, page: path, flags: [], message: "Moved it to the Trash." });
     calls.length = 0;
     const origin = { kind: "chat", run: "s1", trigger: "scheduled" };
-    expect(await run("inbox.clarify", { item: "capture:1", becomes: "delete", origin })).toBe(
+    expect(await run("inbox.clarify", { item: `capture:${path}`, becomes: "delete", origin })).toBe(
       "Clarified as deleted. Moved it to the Trash.",
     );
     expect(calls.find(([c]) => c === "health_link_ghost")![1]).toMatchObject({ to: "Meeting. Offsite - 2026-10-06.md", unattended: true });
@@ -393,15 +393,33 @@ describe("MCP actions", () => {
       page: "Project. Orbit App launch.md",
       instruction: { op: "add_task", line: "- [ ] ring the venue [[Project. Orbit App launch]] #waiting-for", heading: "Waiting for" },
     });
+    // To Do, as the Inbox's: at the end of the To Do list's To Do as it is, and out of the Inbox, as one change.
+    calls.length = 0;
+    expect(await run("inbox.clarify", { item: "thought:5", becomes: "todo" })).toContain("Clarified as a task on the To Do list.");
+    expect(submitted().map((c) => [c.page, c.instruction])).toEqual([
+      ["Me. Scratchpad.md", { op: "lines", at: 4, old: ["### 2026-10-02 09:00", "Ask Lena about the beta"], new: [] }],
+      ["Me. To Do List.md", { op: "add_task", line: "- [ ] Ask Lena about the beta", heading: "To Do" }],
+    ]);
+    // A capture's task is made, then the capture is marked done.
+    calls.length = 0;
+    await run("inbox.clarify", { item: "capture:sources/Email. Thread. Hi - 2026-10-02.md", becomes: "todo" });
+    expect(submitted().map((c) => c.instruction)).toEqual([
+      { op: "add_task", line: "- [ ] Follow up on [[Email. Thread. Hi - 2026-10-02]]", heading: "To Do" },
+    ]);
+    expect(calls.map(([c]) => c)).toEqual(["inbox_list", "changes_submit_many", "inbox_capture_done"]);
     // A capture: trashed through Changes, and not marked done, so restored it's back in the Inbox.
     calls.length = 0;
-    await run("inbox.clarify", { item: "capture:1", becomes: "delete" });
+    await run("inbox.clarify", { item: "capture:sources/Email. Thread. Hi - 2026-10-02.md", becomes: "delete" });
     expect(calls.map(([c]) => c)).toEqual(["inbox_list", "changes_submit_many"]);
     expect(submitted()[0]).toMatchObject({ kind: "trash", instruction: { op: "trash" } });
     // Held: the capture stays in the Inbox until the user accepts.
     calls.length = 0;
     answers.changes_submit_many = outcomes(false);
-    const out = (await run("inbox.clarify", { item: "capture:1", becomes: "next", context: "office" })) as string;
+    const out = (await run("inbox.clarify", {
+      item: "capture:sources/Email. Thread. Hi - 2026-10-02.md",
+      becomes: "next",
+      context: "office",
+    })) as string;
     expect(calls.some(([c]) => c === "inbox_capture_done")).toBe(false);
     expect(out).toContain("stays in the Inbox");
     await expect(run("inbox.clarify", { item: "task:99", becomes: "next" })).rejects.toThrow(/No Inbox item/);
@@ -417,6 +435,152 @@ describe("MCP actions", () => {
     await expect(run("inbox.clarify", { item: "task:34", becomes: "next", project: "Acme rollout" })).rejects.toThrow(
       /isn't an active project/,
     );
+  });
+
+  it("accepts a weekly suggestion's To Do with the Inbox's own To Do", async () => {
+    const thought: InboxItem = {
+      kind: "thought",
+      path: "Me. Scratchpad.md",
+      line: 4,
+      text: "Ask Lena about the beta",
+      lineText: "### 2026-10-02 09:00",
+      stamp: "2026-10-02 09:00",
+      block: "### 2026-10-02 09:00\nAsk Lena about the beta\n",
+    };
+    const task: InboxItem = {
+      kind: "task",
+      path: "Me. To Do List.md",
+      line: 33,
+      text: "ring the venue",
+      lineText: "- [ ] ring the venue",
+      stamp: null,
+    };
+    answers.todo_add_task = () => ({ line: 0, lineText: "", undo: "Added" });
+    // makeTask's writes: the task at the end of To Do, then the thought out of the Inbox.
+    expect(await clarifyItem(thought, { becomes: "todo" })).toBe("a task on the To Do list");
+    expect(calls).toEqual([
+      ["todo_add_task", { text: "Ask Lena about the beta" }],
+      ["inbox_remove_thought", { line: 4, text: "### 2026-10-02 09:00\nAsk Lena about the beta\n" }],
+    ]);
+    // A task on the To Do list's Other moves in one write, with the text given.
+    calls.length = 0;
+    await clarifyItem(task, { becomes: "todo", text: "Ring the venue" });
+    expect(calls).toEqual([["inbox_task_to_todo", { line: 33, lineText: "- [ ] ring the venue", text: "Ring the venue" }]]);
+  });
+
+  it("clarifies an initiative's action: the task made and the action marked, or done or dropped", async () => {
+    const act: InboxItem = {
+      kind: "action",
+      path: "wiki/initiatives/Orbit launch.md",
+      line: 12,
+      lineText: "- Book the room [delegated:: Maya] [status:: open] [due:: 2026-11-01] ^a-2",
+      text: "Book the room",
+      stamp: "2026-11-01",
+      action: {
+        id: "a-2",
+        initiative: "Orbit launch",
+        owner: "delegated",
+        person: "Maya",
+        due: "2026-11-01",
+        since: null,
+        overdue: true,
+        quotes: [],
+      },
+    };
+    answers.inbox_list = () => [act];
+    answers.projects_list = () => [];
+    answers.initiative_action_line = (a) => `${(a!.lineText as string).replace(" ^a-2", "")} ${JSON.stringify(a!.edit)} ^a-2`;
+    answers.changes_submit_many = outcomes(true);
+    const listed = (await run("inbox.list", {})) as string;
+    expect(listed).toContain("action on Orbit launch, waiting for Maya, overdue since 2026-11-01  (action:a-2)");
+    calls.length = 0;
+    await run("inbox.clarify", { item: "action:a-2", becomes: "waiting" });
+    expect(submitted().map((c) => [c.page, (c.instruction as { op: string }).op])).toEqual([
+      ["Me. To Do List.md", "add_task"],
+      ["wiki/initiatives/Orbit launch.md", "lines"],
+    ]);
+    expect(submitted()[0].instruction).toMatchObject({
+      line: "- [ ] Maya: Book the room [[Orbit launch#^a-2|Orbit launch]] #waiting-for 📅 2026-11-01",
+    });
+    expect(submitted()[1].instruction).toMatchObject({
+      at: 12,
+      old: [act.lineText],
+      new: [expect.stringContaining('{"task":"[[Me. To Do List]]"}')],
+    });
+    // To Do: on the To Do list's To Do as it is, nothing more to set.
+    calls.length = 0;
+    await run("inbox.clarify", { item: "action:a-2", becomes: "todo" });
+    expect(submitted()[0]).toMatchObject({
+      page: "Me. To Do List.md",
+      instruction: { op: "add_task", heading: "To Do", line: "- [ ] Maya: Book the room [[Orbit launch#^a-2|Orbit launch]] 📅 2026-11-01" },
+    });
+    expect(submitted()[1].instruction).toMatchObject({ new: [expect.stringContaining('{"task":"[[Me. To Do List]]"}')] });
+    calls.length = 0;
+    await run("inbox.clarify", { item: "action:a-2", becomes: "delete" });
+    expect(submitted()[0].instruction).toMatchObject({ new: [expect.stringContaining('{"status":"dropped"}')] });
+    await expect(run("inbox.clarify", { item: "action:a-2", becomes: "reference" })).rejects.toThrow(/doesn't offer reference/);
+  });
+
+  it("fetches again from a day, as Settings › Sync's Fetch again does, and lists what it wrote", async () => {
+    answers.sync_now = () => ({
+      chats: 2,
+      mail: 1,
+      transcripts: 0,
+      problems: [],
+      blocked: null,
+      paths: [
+        "sources/Slack. Chat. Lena - 2026-11-10.md",
+        "sources/Email. Thread. Plan - 2026-11-03.md",
+        "sources/Slack. Chat. Lena - 2026-11-10.md",
+      ],
+    });
+    calls.length = 0;
+    const out = (await run("sync", { action: "fetch_again", from: "2026-11-09" })) as string;
+    expect(calls.filter(([c]) => c === "sync_now").map(([, x]) => x)).toEqual([{ from: "2026-11-09" }]);
+    expect(out).toContain("Fetched again from 2026-11-09: 2 chat day(s), 1 email thread(s)");
+    expect(out.match(/Lena - 2026-11-10/g)).toHaveLength(1);
+    await expect(run("sync", { action: "fetch_again", from: "last week" })).rejects.toThrow(/YYYY-MM-DD/);
+  });
+
+  it("ingests for actions only, or chooses by whether the wiki has the source", async () => {
+    answers.ingest_start = () => ["r1"];
+    calls.length = 0;
+    const out = (await run("run.start", { run: "ingest", sources: ["sources/Email. Plan.md"], mode: "auto" })) as string;
+    expect(calls.filter(([c]) => c === "ingest_start").map(([, x]) => (x as { mode: string }).mode)).toEqual(["auto"]);
+    expect(out).toContain("for their actions and decisions only");
+    await expect(run("run.start", { run: "ingest", sources: ["sources/Email. Plan.md"], mode: "some" })).rejects.toThrow(
+      /full, actions or auto/,
+    );
+  });
+
+  it("skips a sender or chat suggested from what the user deletes, or stops suggesting it", async () => {
+    const sugg = [
+      {
+        key: "sender:offers@shop.example",
+        kind: "sender",
+        value: "offers@shop.example",
+        label: "offers@shop.example",
+        deletes: 4,
+        last: "2026-11-18",
+      },
+      { key: "chat:19:abc", kind: "chat", value: "19:abc", label: "Lunch club", deletes: 3, last: "2026-11-17" },
+    ];
+    answers.skip_suggestions = () => ({ suggestions: sugg, chatNames: { "19:abc": "Lunch club" } });
+    settings.update({ syncIgnoreSenders: [], syncIgnoreChats: [] });
+    expect(await run("sync", { action: "suggestions" })).toContain("- Chat Lunch club: deleted 3 times, last on 2026-11-17 · chat:19:abc");
+    calls.length = 0;
+    await run("sync", { action: "accept", key: "chat:19:abc" });
+    expect(settings.get().syncIgnoreChats).toEqual(["19:abc"]);
+    expect(calls.filter(([c]) => c === "skip_suggestion_forget").map(([, x]) => x)).toEqual([{ key: "chat:19:abc" }]);
+    await run("sync", { action: "accept", key: "sender:offers@shop.example" });
+    expect(settings.get().syncIgnoreSenders).toEqual(["offers@shop.example"]);
+    calls.length = 0;
+    await run("sync", { action: "dismiss", key: "sender:offers@shop.example" });
+    expect(calls.filter(([c]) => c === "skip_suggestion_dismiss").map(([, x]) => x)).toEqual([{ key: "sender:offers@shop.example" }]);
+    await expect(run("sync", { action: "accept", key: "sender:nobody" })).rejects.toThrow(/No skip suggestion/);
+    await run("sync", { action: "unskip_chat", id: "19:abc" });
+    expect(settings.get().syncIgnoreChats).toEqual([]);
+    settings.update({ syncIgnoreSenders: undefined, syncIgnoreChats: undefined });
   });
 
   it("makes and changes projects through Changes", async () => {
@@ -508,7 +672,8 @@ describe("MCP actions", () => {
     // As an assistant: the app accepts only a change held for a failed check.
     expect(calls.find(([c]) => c === "change_accept")![1]).toEqual({ id: "c2", assistant: true });
     answers.change_revert = () => ({ ok: false, message: "Its lines have been edited since.", before: "old" });
-    expect(await run("changes", { action: "revert", id: "c1" })).toMatch(/edited since/);
+    // A revert that couldn't be made is an error, not a result that reads as done.
+    await expect(run("changes", { action: "revert", id: "c1" })).rejects.toThrow(/edited since/);
     answers.changes_accept_all = () => ({ done: 2, failed: [] });
     expect(await run("changes", { action: "accept_run", group: "daily-check-1" })).toBe("Accepted 2.");
     expect(calls.find(([c]) => c === "changes_accept_all")![1]).toEqual({ group: "daily-check-1", assistant: true, ids: null });
@@ -548,7 +713,9 @@ describe("MCP actions", () => {
     followUp.set([]);
     accepted = false;
     answers.changes_accept_all = () => ({ done: 0, failed: ["Meeting: the page changed"] });
-    expect(await run("changes", { action: "accept_run", group: "meeting-1" })).toBe("Accepted 0. Couldn't: Meeting: the page changed");
+    await expect(run("changes", { action: "accept_run", group: "meeting-1" })).rejects.toThrow(
+      "None accepted. Couldn't: Meeting: the page changed",
+    );
     expect(followUp.get()).toEqual([]);
   });
 
@@ -574,6 +741,21 @@ describe("MCP actions", () => {
     await run("changes", { action: "revert_run", group: "daily-check-1", query: "orbit" });
     expect(calls.find(([c]) => c === "changes_revert_all")![1]).toEqual({ group: "daily-check-1", ids: ["c"] });
     await expect(run("changes", { action: "reject_run", group: "daily-check-1", query: "maya" })).rejects.toThrow(/No held change/);
+    // A type and a day narrow a run too, as All's chip and day do on the screen.
+    const made = (id: string, kind: string, created: string) => ({ ...row(id, id, "applied"), kind, created });
+    answers.changes_list = () => [
+      made("n1", "new", "2026-10-02T09:00:00"),
+      made("e1", "edit", "2026-10-02T09:05:00"),
+      made("n2", "new", "2026-10-03T09:00:00"),
+    ];
+    calls.length = 0;
+    await run("changes", { action: "revert_run", group: "daily-check-1", type: "create" });
+    expect(calls.find(([c]) => c === "changes_revert_all")![1]).toEqual({ group: "daily-check-1", ids: ["n1", "n2"] });
+    calls.length = 0;
+    await run("changes", { action: "revert_run", group: "daily-check-1", type: "Created", date: "2026-10-03" });
+    expect(calls.find(([c]) => c === "changes_revert_all")![1]).toEqual({ group: "daily-check-1", ids: ["n2"] });
+    await expect(run("changes", { action: "revert_run", group: "daily-check-1", date: "2026-10-09" })).rejects.toThrow(/No applied change/);
+    await expect(run("changes", { action: "revert_run", group: "daily-check-1", type: "summary" })).rejects.toThrow(/The types/);
   });
 
   it("reads and sets how long Changes keeps its history", async () => {
@@ -683,6 +865,7 @@ describe("MCP actions", () => {
       answers.projects_list = () => [];
       answers.tasks_notes = () => [row({})];
       answers.task_toggle = edited;
+      answers.changes_submit_many = outcomes(true);
     });
 
     it("gives the week, the progress and the suggestions still to decide, by step", async () => {
@@ -706,13 +889,163 @@ describe("MCP actions", () => {
       expect(out).not.toContain("Not started");
     });
 
-    it("accepts a suggestion with the screen's undoable action, and keeps it with the progress", async () => {
+    it("accepts a suggestion as a change in Changes, not the screen's direct write, and keeps it with the progress", async () => {
       const out = (await run("weekly.suggestion", { id: "s1", action: "accept" })) as string;
-      expect(out).toMatch(/^Accepted: Ticked/);
-      expect(calls.some(([c]) => c === "task_toggle")).toBe(true);
+      expect(out).toBe("Accepted: Ticked “Call Sam about the launch”. It's recorded in Changes, where the user can revert it.");
+      expect(calls.some(([c]) => c === "task_toggle")).toBe(false);
+      expect(submitted()).toHaveLength(1);
+      expect(submitted()[0]).toMatchObject({
+        page: "Me. To Do List.md",
+        kind: "task",
+        title: "Edit “call sam about the launch”: ticked",
+        reason: "A weekly review suggestion: The launch call happened",
+        origin: { kind: "chat" },
+        instruction: { op: "lines", at: 11, old: ["- [ ] Call Sam about the launch"] },
+      });
       const saved = calls.find(([c]) => c === "weekly_state_write")![1]!.state as typeof state;
       expect(saved.handled).toEqual({ s0: "skipped", s1: "accepted" });
-      expect(saved.log).toEqual(["Added “Book the room”", "Ticked"]);
+      expect(saved.log).toEqual(["Added “Book the room”", "Ticked “Call Sam about the launch”"]);
+    });
+
+    it("makes each task suggestion as the change its own tool makes", async () => {
+      const proj = { name: "Acme rollout", path: "Project. Acme rollout.md", status: "active" };
+      const add = {
+        do: "add",
+        text: "Chase Lena",
+        project: "Acme rollout",
+        context: null,
+        tags: ["waiting-for"],
+        due: null,
+        scheduled: null,
+      };
+      const acts: Record<string, unknown> = {
+        a: add,
+        d: { do: "defer", task, date: "2099-01-09" },
+        w: { do: "waiting", task },
+        m: { do: "someday", task },
+        e: { do: "edit", task, text: "Ring Sam about the launch" },
+      };
+      answers.weekprep_status = () => ({
+        prep: { ...prep, suggestions: Object.entries(acts).map(([id, action]) => ({ id, step: "next", text: id, source: null, action })) },
+        running: false,
+        error: null,
+      });
+      answers.projects_list = () => [proj];
+      answers.change_task_line = (a) => `${a!.line} ⏳ ${(a!.edit as { date: string }).date}`;
+      const made = async (id: string) => {
+        calls.length = 0;
+        await run("weekly.suggestion", { id, action: "accept" });
+        expect(calls.some(([c]) => ["task_add", "project_add_task", "task_set_date", "task_replace", "task_change"].includes(c))).toBe(
+          false,
+        );
+        expect(submitted()).toHaveLength(1);
+        return submitted()[0];
+      };
+      expect(await made("a")).toMatchObject({
+        page: proj.path,
+        instruction: { op: "add_task", line: "- [ ] Chase Lena [[Project. Acme rollout]] #waiting-for", heading: "Waiting for" },
+      });
+      expect(await made("d")).toMatchObject({
+        instruction: { op: "lines", at: 11, new: ["- [ ] Call Sam about the launch ⏳ 2099-01-09"] },
+      });
+      expect(await made("w")).toMatchObject({ instruction: { new: ["- [ ] Call Sam about the launch #waiting-for"] } });
+      expect(await made("m")).toMatchObject({ instruction: { new: ["- [ ] Call Sam about the launch #someday-maybe"] } });
+      expect(await made("e")).toMatchObject({ instruction: { new: ["- [ ] Ring Sam about the launch"] } });
+      // As the screen refuses one that's there already.
+      answers.tasks_notes = () => [row({ tags: ["#waiting-for"] })];
+      answers.weekly_state_read = () => ({ ...state, handled: {} });
+      await expect(run("weekly.suggestion", { id: "w", action: "accept" })).rejects.toThrow(/already waiting/);
+    });
+
+    it("clarifies an Inbox item through Changes as clarify_inbox does, an action's task with its initiative's link", async () => {
+      const thought = {
+        kind: "thought",
+        path: "Me. Scratchpad.md",
+        line: 4,
+        text: "Ask Lena about the beta",
+        lineText: "### 2026-10-02 09:00",
+        stamp: "2026-10-02 09:00",
+        block: "### 2026-10-02 09:00\nAsk Lena about the beta\n",
+      };
+      const act = {
+        kind: "action",
+        path: "wiki/initiatives/Orbit launch.md",
+        line: 12,
+        lineText: "- Book the room [owner:: me] [status:: open] ^a-2",
+        text: "Book the room",
+        stamp: null,
+        action: { id: "a-2", initiative: "Orbit launch", owner: "me", person: null, due: null, since: null, overdue: false, quotes: [] },
+      };
+      const clarify = (item: unknown, becomes: string, context: string | null = null) => ({
+        do: "clarify",
+        item,
+        becomes,
+        text: null,
+        project: null,
+        context,
+        due: null,
+      });
+      answers.weekprep_status = () => ({
+        prep: {
+          ...prep,
+          suggestions: [
+            { id: "t", step: "inbox", text: "A task", source: null, action: clarify(thought, "todo") },
+            { id: "n", step: "inbox", text: "Next", source: null, action: clarify(act, "next", "office") },
+          ],
+        },
+        running: false,
+        error: null,
+      });
+      answers.inbox_list = () => [thought, act];
+      answers.initiative_action_line = (a) => `${a!.lineText} ${JSON.stringify(a!.edit)}`;
+      // To Do: the task added and the thought taken out, as two changes made together; none of makeTask's writes.
+      const out = (await run("weekly.suggestion", { id: "t", action: "accept" })) as string;
+      expect(out).toMatch(/^Accepted: Clarified “Ask Lena about the beta” as a task on the To Do list\. It's recorded in Changes/);
+      expect(calls.some(([c]) => c === "todo_add_task" || c === "inbox_remove_thought" || c === "inbox_task_to_todo")).toBe(false);
+      expect(submitted().map((c) => [c.page, (c.instruction as { op: string }).op])).toEqual([
+        ["Me. Scratchpad.md", "lines"],
+        ["Me. To Do List.md", "add_task"],
+      ]);
+      expect(submitted()[1].instruction).toMatchObject({ line: "- [ ] Ask Lena about the beta", heading: "To Do" });
+      // An action made a next action: its task links back to the initiative, and the action is marked.
+      calls.length = 0;
+      await run("weekly.suggestion", { id: "n", action: "accept" });
+      expect(submitted()[0].instruction).toMatchObject({
+        op: "add_task",
+        line: "- [ ] Book the room [[Orbit launch#^a-2|Orbit launch]] #context/office",
+      });
+      expect(submitted()[1]).toMatchObject({ page: act.path, instruction: { at: 12, old: [act.lineText] } });
+    });
+
+    it("holds an accept when its change is held, and makes it this session's with unattended", async () => {
+      answers.changes_submit_many = outcomes(false);
+      const origin = { kind: "chat", chat: "chat-1", run: "chat-1", trigger: "scheduled" };
+      const out = (await run("weekly.suggestion", { id: "s1", action: "accept", unattended: true, origin })) as string;
+      expect(submitted()[0].origin).toEqual(origin);
+      expect(out).toBe(
+        "Accepted: Held for the user in Changes: Tick “Call Sam about the launch” off as done. It changes or takes out text in your own note. Nothing is changed until they accept it.",
+      );
+      const saved = calls.find(([c]) => c === "weekly_state_write")![1]!.state as typeof state;
+      expect(saved.handled).toEqual({ s0: "skipped", s1: "accepted" });
+      expect(saved.log[1]).toBe("Held for the user in Changes: Tick “Call Sam about the launch” off as done");
+      // Without the server's origin, unattended alone still makes it a scheduled change.
+      calls.length = 0;
+      await run("weekly.suggestion", { id: "s1", action: "accept", unattended: true });
+      expect(submitted()[0].origin).toMatchObject({ kind: "chat", trigger: "scheduled" });
+    });
+
+    it("accepts one with its words changed, as Edit does, and refuses text where there are none", async () => {
+      const add = { do: "add", text: "Book the room", project: null, context: null, tags: [], due: null, scheduled: null };
+      answers.weekprep_status = () => ({
+        prep: { ...prep, suggestions: [...prep.suggestions, { id: "s5", step: "back", text: "You said so", source: null, action: add }] },
+        running: false,
+        error: null,
+      });
+      await run("weekly.suggestion", { id: "s5", action: "accept", text: "Book the big room" });
+      // To the To Do list's Other, as capture's task is.
+      expect(submitted()[0]).toMatchObject({ page: "Me. To Do List.md", instruction: { op: "add_task", line: "- [ ] Book the big room" } });
+      expect(submitted()[0].instruction).not.toHaveProperty("heading");
+      await expect(run("weekly.suggestion", { id: "s1", action: "accept", text: "Something" })).rejects.toThrow(/no words to change/);
     });
 
     it("skips one, and refuses a prompt, one dealt with, or an unknown id", async () => {
@@ -771,6 +1104,23 @@ describe("MCP actions", () => {
     });
   });
 
+  it("names a brief run as Recent runs does, not as a weekly summary", () => {
+    const run = (kind: ReviewRun["kind"], target: string) =>
+      ({
+        id: "r",
+        kind,
+        target,
+        trigger: "schedule",
+        model: "m",
+        startedAt: "2026-11-19T08:26:15",
+        status: "done",
+        file: null,
+      }) as unknown as ReviewRun;
+    expect(summaryRunLine(run("brief", "2026-11-19"), [])).toMatch(/^- Daily brief 2026-11-19 · scheduled/);
+    expect(summaryRunLine(run("daily", "2026-11-18"), [])).toMatch(/^- Daily summary 2026-11-18/);
+    expect(summaryRunLine(run("weekly", "2026-W46"), [])).toMatch(/^- Weekly summary 2026-W46/);
+  });
+
   describe("tools for what the screens do", () => {
     const report = {
       checks: [
@@ -814,7 +1164,7 @@ describe("MCP actions", () => {
       expect(out).toMatch(/\n\nIgnored, so not listed: Orphan pages 2\./);
       expect(out).toMatch(/Stale pages \(1, not counted/);
       expect(out).toMatch(/Acme: updated is old \[safe fix\]/);
-      expect(await run("health.lint", { page: "Lena" })).toMatch(/^Knowledge health for Lena:\n\nOrphan pages \(1; check orphans\)/);
+      expect(await run("health.lint", { page: "Lena" })).toMatch(/^Wiki health for Lena:\n\nOrphan pages \(1; check orphans\)/);
     });
 
     it("gives a missing link's Did you mean and In the Trash as its row does, and no Create for a page in the Trash", async () => {
@@ -1021,9 +1371,9 @@ describe("MCP actions", () => {
 
     it("reads and changes the settings it's allowed, never Read-only", async () => {
       answers.settings_write = (a) => a!.settings;
-      expect(await run("settings")).toMatch(/dailyCheckTime · Settings › Jobs & schedule › Daily check time: "09:00"/);
+      expect(await run("settings")).toMatch(/dailyCheckTime · Settings › Automations › Daily check time: "09:00"/);
       expect(await run("settings", { action: "set", key: "dailyCheckTime", value: "03:30" })).toMatch(/is now "03:30"/);
-      expect(await run("settings")).toMatch(/weeklyReview.day · Settings › Jobs & schedule › Weekly review day: "fri"/);
+      expect(await run("settings")).toMatch(/weeklyReview.day · Settings › Automations › Weekly review day: "fri"/);
       await run("settings", { action: "set", key: "weeklyReview.day", value: "Thursday" });
       expect(await run("settings")).toMatch(/Weekly review day: "thu"/);
       await run("settings", { action: "set", key: "summaries.dailyTime", value: "07:00" });
@@ -1075,7 +1425,7 @@ describe("MCP actions", () => {
     });
 
     it("opens the window on a screen or a note", async () => {
-      expect(await run("open", { screen: "knowledge_health" })).toBe("Brainstead is open on knowledge health.");
+      expect(await run("open", { screen: "wiki_health" })).toBe("Brainstead is open on wiki health.");
       expect(calls.find(([c]) => c === "main_show")![1]).toEqual({ screen: null });
       answers.links_resolve = () => ["wiki/entities/Orbit App.md"];
       expect(await run("open", { page: "[[Orbit App]]" })).toBe("Brainstead is open on Orbit App.");
@@ -1324,8 +1674,8 @@ describe("MCP actions", () => {
     it("says where each setting is, as the screen does", async () => {
       const out = (await run("settings")) as string;
       expect(out).toContain("captureShortcut · Settings › General › Quick capture shortcut");
-      expect(out).toContain("summaries.dailyEnabled · Settings › Jobs & schedule › Daily summary: false");
-      expect(out).toContain("summaries.weeklyEnabled · Settings › Jobs & schedule › Weekly summary: false");
+      expect(out).toContain("summaries.dailyEnabled · Settings › Automations › Daily summary: false");
+      expect(out).toContain("summaries.weeklyEnabled · Settings › Automations › Weekly summary: false");
       expect(out).toContain("logDays · Settings › About › The app's logs › Keep (days: 7, 14, 30 or 90): 14");
     });
 
@@ -1469,11 +1819,57 @@ describe("MCP actions", () => {
         status: "completed",
         done_looks_like: "Live",
       });
+      // Activity's Files by day: the heatmap's days, newest first.
       answers.activity = () => ({
-        log: [{ date: "2026-10-01", time: "09:30", action: "ingest", title: "Orbit", description: "two pages" }],
+        days: [
+          { date: "2026-09-30", notes: 1, wiki: 0, sources: 0 },
+          { date: "2026-10-01", notes: 2, wiki: 1, sources: 1 },
+        ],
       });
-      expect(await run("activity")).toBe("1 entry in log.md, newest first:\n- 2026-10-01 ingest Orbit");
-      expect(await run("activity", { detail: true })).toMatch(/2026-10-01 09:30 ingest Orbit — two pages/);
+      expect(await run("activity")).toBe("2 days files changed on, newest first:\n- 2026-10-01: 4 files\n- 2026-09-30: 1 file");
+      expect(await run("activity", { detail: true })).toMatch(/2026-10-01: 4 files \(2 notes, 1 wiki page, 1 source\)/);
+      // Activity › Sync & ingest: the screen's timeline, its chips as filter.
+      answers.sync_log = () => ({
+        lastPass: "2026-11-19T10:00:00",
+        passes: [
+          {
+            at: "2026-11-19T10:00:00",
+            backfill: false,
+            added: ["sources/Slack. Chat. Lena - 2026-11-19.md"],
+            toppedUp: [],
+            problems: [],
+            blocked: null,
+            repeats: 0,
+            last: null,
+          },
+        ],
+      });
+      answers.ingest_runs = () => [
+        {
+          id: "r1",
+          source: "sources/Slack. Chat. Lena - 2026-11-19.md",
+          started: "2026-11-19T10:01:00",
+          finished: null,
+          model: "m",
+          status: "failed",
+          steps: [],
+          proposals: [],
+          dropped: [],
+          pages: [],
+          error: "Timed out.",
+        },
+      ];
+      const sync = (await run("sync_activity")) as string;
+      expect(sync.split("\n").slice(1)).toEqual([
+        "2 sync passes and ingests, newest first:",
+        "- 2026-11-19 10:01 Ingested Slack. Chat. Lena - 2026-11-19: failed",
+        "- 2026-11-19 10:00 Synced: 1 new",
+      ]);
+      expect(await run("sync_activity", { filter: "failed", detail: true })).toMatch(
+        /failed\n {2}Source: Slack\. Chat\. Lena - 2026-11-19\n {2}Timed out\./,
+      );
+      expect(((await data("sync_activity", { filter: "outlook" })).items as unknown[]).length).toBe(0);
+      await expect(run("sync_activity", { filter: "mail" })).rejects.toThrow(/filter is all, teams, outlook, slack, failed/);
       answers.graph = () => ({
         nodes: [
           { id: "a", title: "A", layer: "wiki", type: "entity", depth: 0, degree: 3 },
@@ -1655,7 +2051,7 @@ describe("MCP actions", () => {
       expect(out).toMatch(/22 items to clarify:\nCaptures:\n- Email\. Hi .*\nScratchpad:\n- Ask Maya .*\nTo Do list › Other:\n- Task 10/);
       const asked = (calls.find(([c]) => c === "clarify_suggest")![1]!.items as { id: string }[]).map((i) => i.id);
       expect(asked).toHaveLength(20);
-      expect(asked.slice(0, 2)).toEqual(["capture:1", "thought:3"]);
+      expect(asked.slice(0, 2)).toEqual(["capture:sources/Email. Hi.md", "thought:3"]);
       expect(((await data("inbox.list")).items as { group: string }[])[0].group).toBe("Captures");
     });
 
@@ -1797,13 +2193,28 @@ describe("MCP actions", () => {
       expect(calls.some(([c]) => c === "update_check")).toBe(true);
     });
 
+    /** fixname_changes answers: each ticked row's file, with the edit the fix makes in it. */
+    const instruction = { op: "replace", edits: [{ find: "Lenna", replace: "Lena" }] };
+    const fixed = (a: Record<string, unknown> | undefined) => (a!.rows as { file: string }[]).map((x) => ({ page: x.file, instruction }));
+
     it("fixes a name only in the files given, as ticking them does", async () => {
       const r = (file: string, action = "rewrite") => ({ file, layer: "note", inFilename: false, count: 1, lines: [], action });
       answers.fixname_plan = () => ({ rows: [r("Idea. A.md"), r("Idea. B.md"), r("Idea. C.md", "guarded")], rightPage: null });
-      answers.fixname_apply = () => "Fixed the name in 1 file.";
-      const args = { written_as: "Lenna", correct_spelling: "Lena", apply: true };
-      await run("fix_name", { ...args, files: ["Idea. B.md"] });
-      const rows = () => (calls.filter(([c]) => c === "fixname_apply").at(-1)![1]!.rows as { file: string }[]).map((x) => x.file);
+      // The app works out what the screen's Fix would write; the tool sends it through Changes.
+      answers.fixname_changes = fixed;
+      answers.changes_submit_many = outcomes(true);
+      answers.fixname_remember = () => true;
+      const origin = { kind: "chat", chat: "t1", trigger: "scheduled" };
+      const args = { written_as: "Lenna", correct_spelling: "Lena", apply: true, origin };
+      const out = await run("fix_name", { ...args, files: ["Idea. B.md"] });
+      // Recorded in Changes as this session's, not written by the screen's own command; the
+      // correction remembered once it's made.
+      expect(calls.some(([c]) => c === "fixname_apply")).toBe(false);
+      expect(submitted()).toMatchObject([
+        { page: "Idea. B.md", kind: "edit", title: "Fix the name “Lenna” → “Lena”", origin, instruction },
+      ]);
+      expect(out).toMatch(/^Fixed “Lenna” → “Lena” in 1 file, each a change in Changes.*The correction is remembered/);
+      const rows = () => (calls.filter(([c]) => c === "fixname_changes").at(-1)![1]!.rows as { file: string }[]).map((x) => x.file);
       expect(rows()).toEqual(["Idea. B.md"]);
       await run("fix_name", args);
       expect(rows()).toEqual(["Idea. A.md", "Idea. B.md"]);
@@ -1813,31 +2224,41 @@ describe("MCP actions", () => {
       // Spelt the same: nothing to fix, as the screen plans nothing.
       await expect(run("fix_name", { written_as: "Lena", correct_spelling: " Lena " })).rejects.toThrow(/spelt the same/);
       // Remember is on unless false, with Where it's from; Files to leave alone go to the plan.
-      const req = () => calls.filter(([c]) => c === "fixname_apply").at(-1)![1]!.req as Record<string, unknown>;
+      const req = () => calls.filter(([c]) => c === "fixname_changes").at(-1)![1]!.req as Record<string, unknown>;
       expect(req()).toMatchObject({ skipSubstitution: false, guards: [], note: "" });
       await run("fix_name", { ...args, files_to_leave_alone: ["Lenna Park", " "], where_its_from: "confirmed in a 1-1" });
       expect(calls.filter(([c]) => c === "fixname_plan").at(-1)![1]!.req).toMatchObject({ guards: ["Lenna Park"] });
       expect(req()).toMatchObject({ skipSubstitution: false, guards: ["Lenna Park"], note: "confirmed in a 1-1" });
+      const remembered = () => calls.filter(([c]) => c === "fixname_remember").length;
+      const before = remembered();
       await run("fix_name", { ...args, remember: false, where_its_from: "x" });
       expect(req()).toMatchObject({ skipSubstitution: true, note: "" });
+      expect(remembered()).toBe(before);
+      // Held (a template among them, or a check failed unattended): nothing made, nothing remembered.
+      answers.changes_submit_many = outcomes(false);
+      expect(await run("fix_name", args)).toMatch(/^Held for the user in Changes.*The correction isn't remembered while they wait\.$/);
+      expect(remembered()).toBe(before);
     });
 
     it("takes Ask about each file: the notes to rewrite start unticked, and the correction is ambiguous", async () => {
       const r = (file: string, action = "rewrite") => ({ file, layer: "note", inFilename: false, count: 1, lines: [], action });
       answers.fixname_plan = () => ({ rows: [r("Idea. A.md"), r("wiki/people/Lena.md", "alias")], rightPage: "wiki/people/Lena.md" });
-      answers.fixname_apply = () => "Fixed the name.";
+      answers.fixname_changes = fixed;
+      answers.changes_submit_many = outcomes(true);
       const args = { written_as: "Lenna", correct_spelling: "Lena", ask_about_each_file: true };
       const out = (await run("fix_name", args)) as string;
       expect(calls.find(([c]) => c === "fixname_plan")![1]!.req).toMatchObject({ ambiguous: true });
       expect(out).toMatch(/would change 1 of the 2 files it's in \(1 more to tick one by one: Ask about each file\)/);
       expect(out).toContain("- Idea. A.md: 1 line · Rewrite · unticked: read it, then give it in files");
       // Applied without files: only what's ticked to start with, the alias; with files, those too.
-      const rows = () => (calls.filter(([c]) => c === "fixname_apply").at(-1)![1]!.rows as { file: string }[]).map((x) => x.file);
+      const rows = () => (calls.filter(([c]) => c === "fixname_changes").at(-1)![1]!.rows as { file: string }[]).map((x) => x.file);
       await run("fix_name", { ...args, apply: true });
       expect(rows()).toEqual(["wiki/people/Lena.md"]);
-      expect(calls.filter(([c]) => c === "fixname_apply").at(-1)![1]!.req).toMatchObject({ ambiguous: true });
+      expect(calls.filter(([c]) => c === "fixname_changes").at(-1)![1]!.req).toMatchObject({ ambiguous: true });
       await run("fix_name", { ...args, apply: true, files: ["Idea. A.md"] });
       expect(rows()).toEqual(["Idea. A.md"]);
+      // The alias is its own change, named for what it does.
+      expect(submitted().map((c) => c.title)).toEqual(["Add “Lenna” as an alias of Lena", "Fix the name “Lenna” → “Lena”"]);
     });
 
     it("previews a name fix as the screen lists it, counting only what will change", async () => {
@@ -1861,7 +2282,81 @@ describe("MCP actions", () => {
       expect(await run("fix_name", { written_as: "Lenna", correct_spelling: "Lena" })).toMatch(
         /would change 0 of the 1 file.*\nNone of them would change/s,
       );
-      expect(calls.some(([c]) => c === "fixname_apply")).toBe(false);
+      expect(calls.some(([c]) => c === "fixname_apply" || c === "fixname_changes")).toBe(false);
+    });
+
+    it("makes Wiki health's safe fixes through Changes, one change a page, a header put back held", async () => {
+      const item = (text: string, page: string) => ({ text, page, safe: true });
+      answers.health_report = () => ({
+        report: {
+          checks: [
+            {
+              id: "stale-dates",
+              title: "Stale dates",
+              items: [item("wiki/entities/Orbit App.md  (updated)", "wiki/entities/Orbit App.md")],
+            },
+            { id: "system-callouts", title: "System notes", items: [item("Me. To Do List.md", "Me. To Do List.md")] },
+          ],
+        },
+        history: [],
+      });
+      const set = { op: "properties", set: [["updated", "2026-11-20"]] };
+      const why = "It puts back the note's system-note header, which other parts of Brainstead rely on.";
+      answers.health_fix_changes = () => [
+        {
+          page: "Me. To Do List.md",
+          title: "Wiki health: system-note header put back",
+          instruction: { op: "page", content: "x" },
+          hold: why,
+        },
+        { page: "wiki/entities/Orbit App.md", title: "Wiki health: updated date", instruction: set, hold: null },
+      ];
+      answers.changes_submit_many = (a) => {
+        const [c] = a!.changes as { page: string; hold: string | null }[];
+        return [{ id: "c1", applied: !c.hold, page: c.page, flags: c.hold ? [c.hold] : [], message: "Changed it." }];
+      };
+      const origin = { kind: "chat", chat: "t1" };
+      const out = (await run("health.fix", { origin })) as string;
+      // Not the screen's own write: each page its own change, so the held one doesn't hold the other.
+      expect(calls.some(([c]) => c === "health_fix")).toBe(false);
+      expect(calls.filter(([c]) => c === "changes_submit_many").map(([, a]) => (a!.changes as unknown[]).length)).toEqual([1, 1]);
+      expect(submitted()).toMatchObject([
+        { page: "Me. To Do List.md", kind: "edit", hold: why, origin },
+        { page: "wiki/entities/Orbit App.md", kind: "edit", instruction: set, hold: null, origin },
+      ]);
+      expect(out).toBe(
+        `Fixed 1 page, each a change in Changes, where the user can revert it. Held for the user in Changes, to accept there: Me. To Do List (${why}).`,
+      );
+      // Only the items named, by their text; one that can't be made is said, the rest still made.
+      calls.length = 0;
+      answers.health_fix_changes = (a) =>
+        (a!.fixes as { page: string }[]).map((f) => ({ page: f.page, title: "Wiki health: updated date", instruction: set, hold: null }));
+      answers.changes_submit_many = () => Promise.reject({ message: "Orbit App changed since it was read." });
+      await expect(run("health.fix", { items: ["wiki/entities/Orbit App.md  (updated)"] })).rejects.toThrow(
+        /None fixed\. Couldn't: Orbit App: Orbit App changed since it was read\./,
+      );
+      expect(calls.find(([c]) => c === "health_fix_changes")![1]!.fixes).toMatchObject([
+        { check: "stale-dates", page: "wiki/entities/Orbit App.md" },
+      ]);
+    });
+
+    it("sends changes that belong together as one batch", async () => {
+      const change = (page: string) => ({
+        page,
+        kind: "edit",
+        title: "Action moved",
+        instruction: { op: "page", content: "x" },
+        origin: { kind: "chat" },
+      });
+      const changes = [change("wiki/initiatives/Orbit launch.md"), change("wiki/initiatives/Acme rollout.md")];
+      answers.changes_submit_many = outcomes(true);
+      expect(await run("change.submit_many", { changes })).toBe(
+        "Changed wiki/initiatives/Orbit launch.md. Revert it in Changes. Changed wiki/initiatives/Acme rollout.md. Revert it in Changes.",
+      );
+      expect(calls.filter(([c]) => c === "changes_submit_many").map(([, a]) => a!.changes)).toEqual([changes]);
+      answers.changes_submit_many = outcomes(false);
+      expect(await run("change.submit_many", { changes })).toMatch(/^Held for the user in Changes/);
+      await expect(run("change.submit_many", { changes: [] })).rejects.toThrow(/No change given/);
     });
 
     it("opens Meeting notes, Draft a reply and Doc check on their file", async () => {
@@ -1880,32 +2375,45 @@ describe("MCP actions", () => {
       await expect(run("open", { screen: "doc_check", document: "Nowhere" })).rejects.toThrow(/no Nowhere in the vault/);
     });
 
-    it("filters Activity by action and by the screen's search", async () => {
-      answers.activity = () => ({
-        log: [
-          { date: "2026-10-02", time: "10:00", action: "trash", title: "Idea. Old", description: "" },
-          { date: "2026-10-01", time: "09:30", action: "ingest", title: "Orbit", description: "two pages" },
-          { date: "2026-09-30", time: "09:00", action: "ingest", title: "Hub Platform", description: "one page" },
-        ],
-      });
-      expect(await run("activity", { action: "ingest" })).toBe(
-        "2 entries in log.md, newest first:\n- 2026-10-01 ingest Orbit\n- 2026-09-30 ingest Hub Platform",
+    it("gives log.md's lines that aren't a change in Changes › All, by type, day and search", async () => {
+      const change = {
+        id: "c1",
+        created: "2026-10-01T09:30:20",
+        origin: { kind: "ingest", run: "r1" },
+        model: null,
+        page: "wiki/entities/Orbit App.md",
+        kind: "edit",
+        title: "Add the launch",
+        reason: "",
+        status: "applied",
+        decided: null,
+        flags: [],
+        warnings: [],
+        group: "ingest-r1",
+        revertable: true,
+      };
+      answers.changes_list = () => [change];
+      answers.vault_log = () => [
+        { date: "2026-10-02", time: "10:00", action: "weekly-review", title: "2026-W40", description: "[[Weekly review 2026-W40]]" },
+        // The ingest's own line: shown once, as the change.
+        { date: "2026-10-01", time: "09:31", action: "ingest", title: "[[Orbit]]", description: "two pages" },
+        { date: "2026-09-30", time: "09:00", action: "ingest", title: "Hub Platform", description: "one page" },
+      ];
+      const all = (await run("changes")) as string;
+      expect(all).toMatch(/^3 changes and log\.md lines: nothing held, then 1 made and 2 other log\.md lines, newest first\./);
+      expect(all).toMatch(
+        /- log\.md 2026-10-02 weekly-review 2026-W40\nRun “[^”]+” \(group ingest-r1\):\n- Add the launch[^\n]*\n- log\.md 2026-09-30 ingest Hub Platform$/,
       );
-      expect(await run("activity", { action: "ingest", query: "two pages" })).toMatch(
-        /^1 entry in log\.md, best match first matching “two pages”, of 2:\n- 2026-10-01 ingest Orbit$/,
+      expect(all).not.toContain("[[Orbit]]");
+      expect(await run("changes", { type: "ingest" })).toMatch(/^2 changes and log\.md lines: nothing held, then 1 made and 1 other/);
+      expect(await run("changes", { type: "Ingested", date: "2026-09-30" })).toMatch(
+        /then 0 made and 1 other log\.md line, newest first on 2026-09-30/,
       );
-      // While searching, Best match (the screen's default) puts every word in the title first; Latest keeps the log's order.
-      expect(await run("activity", { query: "hub" })).toMatch(/best match first matching “hub”, of 3:\n- 2026-09-30 ingest Hub Platform$/);
-      answers.activity = () => ({
-        log: [
-          { date: "2026-10-02", time: "10:00", action: "ingest", title: "Orbit", description: "about the hub" },
-          { date: "2026-10-01", time: "09:30", action: "ingest", title: "Hub Platform", description: "" },
-        ],
-      });
-      expect(await run("activity", { query: "hub" })).toMatch(/:\n- 2026-10-01 ingest Hub Platform\n- 2026-10-02 ingest Orbit$/);
-      expect(await run("activity", { query: "hub", order: "latest" })).toMatch(/newest first.*:\n- 2026-10-02 ingest Orbit\n- 2026-10-01/);
-      await expect(run("activity", { query: "hub", order: "oldest" })).rejects.toThrow(/order is best_match or latest/);
-      await expect(run("activity", { action: "rename" })).rejects.toThrow(/Its actions: ingest\./);
+      expect(await run("changes", { query: "hub" })).toMatch(/^1 change or log\.md line matching “hub”, of 3/);
+      expect(((await data("changes")) as { log: { total: number } }).log.total).toBe(2);
+      expect(await run("changes", { view: "held" })).toBe("Nothing is held for the user.");
+      await expect(run("changes", { type: "rename" })).rejects.toThrow(/The types: ingest, weekly-review\./);
+      await expect(run("changes", { view: "made" })).rejects.toThrow(/view is held or all/);
     });
 
     it("reads and changes the newer settings: login, models, spelling, read aloud and the document look", async () => {
@@ -2000,6 +2508,12 @@ describe("MCP actions", () => {
         "Brainstead 1.0.2 (abc123); its app data folder: /data/Brainstead; its website: https://brainstead.davies.co.za/",
       );
       expect(out).not.toContain("didn't install");
+      // A note a crash left halfway through a rename, as Settings › Vault names it.
+      expect(out).not.toContain("halfway through a rename");
+      answers.vault_status = () => ({ state: "ready", stats, halfRenamed: ["wiki/entities/.rename-4242", ".rename-7"] });
+      const left = (await run("status")) as string;
+      expect(left).toContain("Warning: A note was left halfway through a rename: .rename-4242 in wiki/entities. Rename it back");
+      expect(left).toContain("Warning: A note was left halfway through a rename: .rename-7 in the vault's top folder.");
       answers.vault_status = () => ({ state: "error", error: "The index file is damaged.", stats });
       expect(await run("status")).toContain("Index: Index failed: The index file is damaged.");
       // An update that didn't install, as the update dialog said at this start.
@@ -2102,7 +2616,7 @@ describe("MCP actions", () => {
       expect(await run("settings")).toMatch(/wiki\.tags \(Wiki › the Tags column, 48 to 480, usually 200\)/);
       // Named in the screens' own words: a column by the heading its table draws.
       expect(await run("settings")).toContain("trash.folder (Trash › the Was in column, 80 to 480, usually 220)");
-      expect(await run("settings")).toContain("sources.ingested (Sources › the Status column, 48 to 480, usually 88)");
+      expect(await run("settings")).toContain("sources.ingested (Sources › the Status column, 48 to 480, usually 100)");
       expect(await run("settings", { action: "set", key: "paneWidths.notes.type", value: 72 })).toBe(
         "Settings › General › Appearance › Pane widths › notes.type is now 72 px.",
       );
@@ -2126,7 +2640,7 @@ describe("MCP actions", () => {
       await expect(run("settings", { action: "set", key: "paneWidths.trash.type", value: 120 })).rejects.toThrow(
         "Column widths are locked, so trash.type can't be resized: turn off Lock column widths (resizeLocks.columns) in Settings › General › Appearance › Pane widths first.",
       );
-      await expect(run("settings", { action: "set", key: "paneWidths.activity.when", value: null })).rejects.toThrow(
+      await expect(run("settings", { action: "set", key: "paneWidths.trash.folder", value: null })).rejects.toThrow(
         /Column widths are locked/,
       );
       expect(await run("settings", { action: "set", key: "paneWidths.sidebar", value: 300 })).toBe(
@@ -2147,6 +2661,17 @@ describe("MCP actions", () => {
         "Settings › General › Appearance › Pane widths › trash.type is now 120 px.",
       );
       settings.update({ paneWidths: undefined, resizeLocks: undefined });
+      // The sidebar's icon rail, per width as ⌘\ chooses it; the width the window is at says so.
+      expect(await run("settings")).toMatch(
+        /- sidebarRail\.wide · Settings › General › Appearance › Sidebar › Icons only on a wide window: false \(the window is wide now, so the sidebar is in full\)/,
+      );
+      expect(await run("settings")).toMatch(/- sidebarRail\.narrow · [^\n]*Icons only on a narrow window \(1100 px or less\): true\n/);
+      expect(await run("settings", { action: "set", key: "sidebarRail.wide", value: true })).toBe(
+        "Settings › General › Appearance › Sidebar › Icons only on a wide window is now true.",
+      );
+      expect(settings.get().sidebarRail).toEqual({ wide: true });
+      await run("settings", { action: "set", key: "sidebarRail.wide", value: false });
+      expect(settings.get().sidebarRail).toBeUndefined();
       answers.capture_shortcut_status = () => ["Control+Shift+K", null];
       expect(await run("settings", { action: "set", key: "captureShortcut", value: "shift+control+k" })).toMatch(
         /is now "Control\+Shift\+K", registered with the system/,
@@ -2187,11 +2712,11 @@ describe("MCP actions", () => {
       await expect(run("task.edit", { task: "Me. To Do List.md:12", text: "go", words: "x" })).rejects.toThrow(/isn't on its line once/);
     });
 
-    it("captures a task to the Inbox and a thought to the Scratchpad, through Changes", async () => {
+    it("captures a task to the Inbox and a note to the Scratchpad, through Changes", async () => {
       answers.changes_submit_many = outcomes(true);
       const out = (await run("inbox.capture", { kind: "task", text: "Ask  Maya about the venue @calls" })) as string;
       expect(out).toMatch(/^Added to the Inbox \(the To Do list's Other\): Ask Maya about the venue #context\/calls;/);
-      await run("inbox.capture", { kind: "thought", text: "The venue\nneeds a ramp" });
+      await run("inbox.capture", { kind: "scratchpad", text: "The venue\nneeds a ramp" });
       const [task, thought] = submitted();
       expect(task).toMatchObject({ page: "Me. To Do List.md", kind: "task", instruction: { op: "add_task" } });
       expect(thought).toMatchObject({ page: "Me. Scratchpad.md", instruction: { op: "add_thought", text: "The venue\nneeds a ramp" } });
@@ -3160,23 +3685,11 @@ describe("MCP actions", () => {
       expect(calls.filter(([c]) => c === "smart_list_save").map(([, a]) => a!.layers)).toEqual([[], ["wiki"]]);
     });
 
-    it("gives a day's log entries beside its files, and searches as the screen does", async () => {
-      answers.activity = () => ({
-        log: [
-          { date: "2026-10-02", time: "10:00", action: "ingest", title: "Orbit", description: "two pages" },
-          { date: "2026-10-02", time: "09:00", action: "trash", title: "Idea. Old", description: "" },
-          { date: "2026-10-01", time: "09:30", action: "ingest", title: "Hub Platform", description: "" },
-        ],
-      });
-      answers.activity_day = () => [{ path: "wiki/entities/Orbit App.md" }];
+    it("gives a day's files, and points to Changes for what Brainstead changed that day", async () => {
+      answers.activity_day = () => [{ path: "wiki/entities/Orbit App.md", title: "Orbit App", mtime: 0 }];
       expect(await run("activity", { date: "2026-10-02" })).toBe(
-        "3 files changed and entries in log.md on 2026-10-02:\n- wiki/entities/Orbit App.md\n- 2026-10-02 ingest Orbit\n- 2026-10-02 trash Idea. Old",
+        "What assistants and Brainstead's runs changed that day, and the vault's log.md: list_changes with date 2026-10-02.\n1 file changed on 2026-10-02:\n- wiki/entities/Orbit App.md",
       );
-      // The query narrows the entries, not the files; the date isn't searched, as on the screen.
-      expect(await run("activity", { date: "2026-10-02", query: "pages" })).toMatch(
-        /:\n- wiki\/entities\/Orbit App\.md\n- 2026-10-02 ingest Orbit$/,
-      );
-      expect(await run("activity", { query: "2026-10-01" })).toMatch(/^0 entries/);
     });
 
     it("won't save a contradictions report while a check runs", async () => {
@@ -3240,7 +3753,7 @@ describe("MCP actions", () => {
       await expect(run("source.provenance", { source: "sources/Gone.pdf" })).rejects.toThrow(/no source at/);
     });
 
-    it("gives Knowledge health's summary and trend", async () => {
+    it("gives Wiki health's summary and trend", async () => {
       const report = {
         checks: [
           { id: "orphans", title: "Orphan pages", classic: true, items: [{ text: "Lena", page: "wiki/entities/Lena.md", safe: false }] },
@@ -3255,7 +3768,7 @@ describe("MCP actions", () => {
         ranAt: null,
       });
       expect(await run("health.lint")).toMatch(
-        /^Knowledge health:\nNeed a decision: 1; nothing safe to fix\. Trend: 1 Oct: 3 → 6 Oct: 1 \(1 Oct to 6 Oct\. Highest: 3\.\)/,
+        /^Wiki health:\nTo decide: 1; nothing safe to fix\. Trend: 1 Oct: 3 → 6 Oct: 1 \(1 Oct to 6 Oct\. Highest: 3\.\)/,
       );
       answers.health_report = () => ({ report, history: [], ranAt: null });
       expect(await run("health.lint")).toContain("The trend shows after a second day.");
@@ -3278,5 +3791,15 @@ describe("MCP actions", () => {
 
   it("refuses an action it doesn't know", async () => {
     await expect(run("nope")).rejects.toThrow(/doesn't know the action/);
+  });
+});
+
+describe("renamed values", () => {
+  it("takes the old names for a release", () => {
+    expect(renewArgs("inbox.clarify", { becomes: "task", item: "task:1" })).toEqual({ becomes: "todo", item: "task:1" });
+    expect(renewArgs("inbox.capture", { kind: "thought" }).kind).toBe("scratchpad");
+    expect(renewArgs("open", { screen: "knowledge_health" }).screen).toBe("wiki_health");
+    expect(renewArgs("open", { screen: "inbox" }).screen).toBe("inbox");
+    expect(renewArgs("task.create", { kind: "thought" }).kind).toBe("thought");
   });
 });

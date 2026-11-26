@@ -223,6 +223,12 @@ export function speechSettingsChanged() {
 export function sayTest(text: string) {
   const s = player.get();
   if (s.on && !s.paused) toggleReading();
+  // The sample takes the synthesiser, so the paused sentence can't be continued: play starts its
+  // block again, as after a change of voice.
+  if (s.on) {
+    held = false;
+    resumeAt = resumeAt ?? s.index;
+  }
   tts.speak(0, text, voiceFor(), rate()).catch(() => {});
 }
 

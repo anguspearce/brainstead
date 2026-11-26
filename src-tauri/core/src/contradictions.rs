@@ -11,6 +11,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -114,9 +115,9 @@ pub fn parse_as_of(s: &str) -> Option<NaiveDate> {
 /// A quote or page as words: link targets dropped for the text shown, and anything but letters
 /// and digits a gap.
 fn quote_words(s: &str) -> Vec<String> {
+    static SHOWN: LazyLock<regex::Regex> = LazyLock::new(|| regex::Regex::new(r"\[\[[^\]|]*\|([^\]]*)\]\]").unwrap());
     let k = lint_key(s);
-    let shown = regex::Regex::new(r"\[\[[^\]|]*\|([^\]]*)\]\]").unwrap();
-    let k = shown.replace_all(&k, "$1");
+    let k = SHOWN.replace_all(&k, "$1");
     let mut out = Vec::new();
     let mut cur = String::new();
     for c in k.chars() {
@@ -448,6 +449,22 @@ impl State {
         let j = serde_json::to_vec(&Cached { page: rel.into(), claims }).map_err(|e| e.to_string())?;
         crate::write::write_atomic(&p, &j, false).map_err(|e| e.to_string())
     }
+    /// Deletes the cached claims no page has any more: each edit to a page caches its claims under
+    /// a new name, and the old file would otherwise stay for good. Returns how many went. Does
+    /// nothing when there are no pages (a vault that couldn't be read keeps its cache).
+    pub fn prune(&self, pages: &[(String, String, Vec<String>)]) -> usize {
+        if pages.is_empty() {
+            return 0;
+        }
+        let keep: HashSet<String> = pages.iter().map(|(rel, text, _)| format!("{}.json", page_hash(rel, text))).collect();
+        let Ok(rd) = std::fs::read_dir(self.dir.join("claims")) else { return 0 };
+        rd.flatten()
+            .filter(|e| {
+                let name = e.file_name().to_string_lossy().into_owned();
+                name.ends_with(".json") && !keep.contains(&name) && std::fs::remove_file(e.path()).is_ok()
+            })
+            .count()
+    }
     pub fn verdicts(&self) -> HashMap<String, Verdict> {
         let mut out = HashMap::new();
         if let Ok(t) = std::fs::read_to_string(self.dir.join("verdicts.jsonl")) {
@@ -608,9 +625,18 @@ pub fn parse_lines<T: for<'de> Deserialize<'de>>(text: &str) -> Vec<T> {
 /// output), as against an empty array: a page read that way isn't known to have no claims.
 pub fn parse_answer_lines<T: for<'de> Deserialize<'de>>(text: &str) -> Option<Vec<T>> {
     let t = text.trim();
-    if let (Some(a), Some(b)) = (t.find('['), t.rfind(']')) {
-        if let Ok(v) = serde_json::from_str::<Vec<T>>(&t[a..=b]) {
-            return Some(v);
+    if let Some(a) = t.find('[') {
+        // A `]` before the `[` (prose with brackets) is no array.
+        if let Some(b) = t.rfind(']').filter(|b| a < *b) {
+            if let Ok(v) = serde_json::from_str::<Vec<T>>(&t[a..=b]) {
+                return Some(v);
+            }
+        }
+        // An array cut off part-way: the objects so far aren't the whole answer, so the pages
+        // it didn't reach mustn't be taken to have no claims.
+        let array_first = t.find('{').is_none_or(|o| a < o);
+        if array_first && serde_json::from_str::<Vec<T>>(&t[a..]).is_err_and(|e| e.is_eof()) {
+            return None;
         }
     }
     let v: Vec<T> = t.lines().filter_map(|l| serde_json::from_str::<T>(l.trim().trim_end_matches(',')).ok()).collect();
@@ -621,6 +647,8 @@ pub fn parse_answer_lines<T: for<'de> Deserialize<'de>>(text: &str) -> Option<Ve
 /// could rest on. Found where the quote's first words are.
 pub fn uncited(claims: &[Dated], texts: &HashMap<String, String>) -> Vec<(String, String)> {
     let mut out = Vec::new();
+    // Each page's lines as words, worked out once however many claims the page has.
+    let mut pages: HashMap<&str, Vec<(&str, String)>> = HashMap::new();
     for d in claims {
         let Some(text) = texts.get(&d.claim.page) else { continue };
         let words = quote_words(&d.claim.quote);
@@ -628,7 +656,10 @@ pub fn uncited(claims: &[Dated], texts: &HashMap<String, String>) -> Vec<(String
             continue;
         }
         let head = words.iter().take(4).cloned().collect::<Vec<_>>().join(" ");
-        let line = crate::lint::body(text).lines().find(|l| quote_words(l).join(" ").contains(&head));
+        let lines = pages
+            .entry(d.claim.page.as_str())
+            .or_insert_with(|| crate::lint::body(text).lines().map(|l| (l, quote_words(l).join(" "))).collect());
+        let line = lines.iter().find(|(_, w)| w.contains(&head)).map(|(l, _)| *l);
         if let Some(l) = line {
             if !l.contains("[[") && !l.contains("](") {
                 out.push((d.claim.page.clone(), l.trim().chars().take(160).collect()));
@@ -643,6 +674,23 @@ pub fn uncited(claims: &[Dated], texts: &HashMap<String, String>) -> Vec<(String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cached_claims_are_pruned_to_the_pages_as_they_are() {
+        let t = tempfile::tempdir().unwrap();
+        let st = State::new(t.path());
+        let page = |text: &str| vec![("wiki/entities/Orbit App.md".to_string(), text.to_string(), vec![])];
+        st.cache("wiki/entities/Orbit App.md", "as it was", vec![]).unwrap();
+        st.cache("wiki/entities/Orbit App.md", "as it is", vec![]).unwrap();
+        st.cache("wiki/entities/Acme.md", "a page since deleted", vec![]).unwrap();
+        // No pages at all (the vault couldn't be read): nothing goes.
+        assert_eq!(st.prune(&[]), 0);
+        assert_eq!(st.prune(&page("as it is")), 2);
+        assert!(st.cached("wiki/entities/Orbit App.md", "as it is").is_some());
+        assert!(st.cached("wiki/entities/Orbit App.md", "as it was").is_none());
+        assert_eq!(current(&st, &page("as it is")).1, Vec::<String>::new());
+        assert_eq!(st.prune(&page("as it is")), 0);
+    }
 
     #[test]
     fn a_fixed_contradiction_is_no_longer_open() {
@@ -806,6 +854,12 @@ mod tests {
         assert_eq!(parse_answer_lines::<Claim>("```json\n[]\n```"), Some(vec![]));
         assert_eq!(parse_answer_lines::<Claim>("I can't help with that [policy]."), None);
         assert_eq!(parse_answer_lines::<Claim>(""), None);
+        // A `]` before the `[` isn't an array, and mustn't panic.
+        assert_eq!(parse_answer_lines::<Claim>("Nothing to report] see [note"), None);
+        // An array cut off after its first object isn't a whole answer.
+        let cut = "[\n{\"subject\":\"A\",\"attribute\":\"role\",\"value\":\"x\"},\n{\"subject\":\"B\",\"attri";
+        assert_eq!(parse_answer_lines::<Claim>(cut), None);
+        assert_eq!(parse_answer_lines::<Claim>(&format!("```json\n{cut}")), None);
         let a: Vec<Claim> = parse_lines("[{\"subject\":\"A\",\"attribute\":\"role\",\"value\":\"x\"}]");
         assert_eq!(a.len(), 1);
         let b: Vec<Claim> = parse_lines("{\"subject\":\"A\",\"attribute\":\"role\",\"value\":\"x\"}\nnot json\n{\"subject\":\"B\",\"attribute\":\"team\",\"value\":\"y\"},");

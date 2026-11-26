@@ -1,17 +1,17 @@
 ---
-title: Knowledge health
+title: Wiki health
 kind: screen
 screens: [health]
 order: 15
 summary: Checks the wiki for missing pages, broken links, stale dates and other problems, and fixes the safe ones for you.
 ---
-Knowledge health checks the wiki and its sources whenever the vault changes. **Need a decision** counts the issues only you can settle; the sidebar and Today's **Wiki issues to decide** show the same number. From the second day, a sparkline beside it shows the trend; hover it for the highest count.
+Wiki health checks the wiki and its sources whenever the vault changes. Open it from **Vault** at the foot of the sidebar. It has two tabs, **Checks** (this page) and [Contradictions](help:contradictions), picked at the top. **To decide** counts the issues only you can settle; the Checks tab, the sidebar (on **Vault** while it's shut) and Today's **Wiki health to decide** show the same number. From the second day, a sparkline beside it shows the trend; hover it for the highest count.
 
 ## Read the checks
 The checks come in two groups.
 
 - **Wiki checks**: missing pages (linked but never written), broken sources, orphan pages (nothing links to them), missing cross-links, stale `updated:` dates, unlogged writes (pages changed after `log.md` was last written), sources not yet ingested, and images nothing uses.
-- **More checks**: possible duplicates, stale pages others rely on, sources changed since they were cited, pages not in the page shape, pages with no Current state, claims with no citation (found by the [contradictions](app:contradictions) check), and system notes missing their header.
+- **More checks**: possible duplicates, stale pages others rely on, sources changed since they were cited, pages not in the page shape, pages with no Current state, initiative actions and decisions to check (no owner, a status or date that doesn't read, an id used twice, or a quote that isn't in its source), claims with no citation (found by the [contradictions](app:contradictions) check), and system notes missing their header.
 
 A system note's header is the "This is a system note" callout at the top of notes such as the To Do list, which Brainstead looks for. **Fix** puts it back as Brainstead last saw it.
 
@@ -29,21 +29,23 @@ Some issues have one right answer, so Brainstead fixes them without asking:
 
 Click **Fix** on one issue, or **Fix safe issues** in the top bar for all of them. `⌘Z` undoes each fix.
 
+Safe fixes don't turn anything amber: in the [Wiki](app:wiki) list a page with only safe fixes says **Safe fix** in grey, and one line above the list counts them with its own **Fix**. Amber, there and here, is kept for what needs your decision.
+
 ## Deal with the rest
 - **Missing pages**: **Create** makes the page in `wiki/entities/` (from `Templates/Wiki page.md` if there is one) and opens it. **Link to…** points the link at an existing page instead, everywhere it's used: type part of a page name and pick it. It's listed in Changes, with Revert. Each row says which pages link it. When a note's name is a slip away from the missing link (as after a note was renamed: "meting" for "meeting"), the row asks **Did you mean** that note, and **Link to it** points the links there in one click. Linking also points the claims on those pages made from the old name at the note, so a later ingest doesn't write the old name again; Revert puts them back with the link.
 - **A missing page or broken source whose file is in the Trash** (a transcript trashed after its meeting note, say) says **In the Trash since** the day. If a meeting note was made from it (same title and day; a transcript's Part 1 and Part 2 count as one meeting), the row asks **Did you mean** that note, with **Link to it**. **Restore from Trash** puts the file back instead; there's no **Create** for a file in the Trash. An assistant reading the checks is told the same: In the Trash since, and Did you mean. When Brainstead trashes a transcript at the end of making its meeting note, it points the links to it at the note first, so nothing is left missing.
 - **Broken sources** (a page's `sources:` lists a file that isn't there): **Link to…** points it at a file that's there, with **Did you mean** and **Restore from Trash** as for missing pages.
-- **Sources changed since they were cited**: **Ingest again** reads the source again, so the pages citing it catch up.
-- **Orphan pages**: `index.md`'s catalogue links every wiki page, so an orphan is one it hasn't caught up with yet (the daily check does). **Add them to index.md** brings it up to date now.
+- **Sources changed since they were cited**: **Ingest again** reads the source again, so the pages citing it catch up. A source an ingest has already read as it is now isn't listed, even when nothing in it was worth adding to those pages. With **Also refresh pages whose sources changed** on (Settings › AI assistants), an email thread or chat that's grown is left to the daily check, which ingests it again; it's listed here only if its pages are still behind after that.
+- **Orphan pages**: `index.md`'s catalogue links every wiki page, so an orphan is one it hasn't caught up with yet (the daily check does). **Add them to index.md** brings it up to date now. An initiative is never an orphan: you reach it from the Inbox, the brief and the Wiki's initiative filter, not by links.
 - **Possible duplicates**: **Open the other** compares them; **Not duplicates** stops the pair being flagged.
 - **Anything else** (a stale page, a broken source…): **Ignore** hides it until its page (or, for a claim, its line) changes; **Show again** lists ignored ones again. Stale pages and claims with no citation also have **Ignore all**, at the top of their list.
 
 A fixed issue leaves the list as soon as its fix is made, and the checks rerun within a second of any change to the vault, wherever it was made (Changes, Ask, another editor).
 - **Images nothing uses**: **Move to the Trash**, after asking; you can restore them.
-- **Sources not yet ingested**: **Ingest** starts the same ingest as [Sources](app:sources); its page changes are listed in [Changes](app:review). A source that can't be ingested, such as an SVG or a zip file, shows **Can't ingest**.
+- **Sources not yet ingested**: a source no wiki page cites and no ingest has read (one read with nothing in it worth keeping isn't listed). They aren't counted in **To decide**, and they aren't listed here: they wait under **Captures** in the [Inbox](app:inbox), where you ingest each or keep it in Sources, so the row only counts them and clicking it opens the Inbox. One you kept in Sources without ingesting is still counted here, and [Sources](app:sources) shows it as **New**.
 
 ## Put pages in the page shape
-Every entity and concept page has the same layout: the opening text, **Current state**, its topics (such as Architecture), a **Timeline**, then **See also**. Each Timeline entry is a heading starting with its date, newest first, with a line under it naming the note it came from:
+Every entity, concept and initiative page has the same layout: the opening text, **Current state**, its topics (such as Architecture), a **Timeline**, then **See also**. Each Timeline entry is a heading starting with its date, newest first, with a line under it naming the note it came from:
 
 ```
 ### 2026-10-02 — Steerco: launch moves to 28 November
@@ -68,13 +70,13 @@ Tracker notes have a shape of their own ([Trackers](help:projects)) and aren't l
 **Pages with no Current state** lists pages with a Timeline but no Current state; they aren't counted as needing a decision. **Write 5** has the assistant's cheap model write one for five pages, so you can check them in [Changes](app:review) first; **Write all** does the rest. It uses only the page's opening text and newest Timeline entries, and leaves alone a page with nothing current to say. Each page is one change, with **Revert all** for the run. **Stop** ends the run after the pages in progress.
 
 ## Fix with Ask
-**Fix with Ask** starts a chat asking the assistant to fix the issues that need judgement. Its edits are listed in [Changes](app:review) with Revert; safe fixes are made at once and `⌘Z` undoes them. The button is greyed out when nothing needs a decision.
+**Fix with Ask** starts a chat asking the assistant to fix the issues that need judgement. Its edits, and any safe fixes it makes, are listed in [Changes](app:review) with Revert. The button is greyed out when nothing needs a decision.
 
 ## Side cards and contradictions
-On the right, **Wiki pages by type** and **Wiki pages by tag** are pie charts; click a slice or row to open the [Wiki](app:wiki) filtered to it. **Pending sources** lists sources not yet cited and those changed since. **Contradictions** on the top bar's ⋯ opens the report of wiki pages that disagree.
+On the right, **Wiki pages by type** and **Wiki pages by tag** are pie charts; click a slice or row to open the [Wiki](app:wiki) filtered to it. **Most linked** lists the notes and wiki pages the most others link to; click one to open it. Sources changed since they were cited are under **More checks**. The **Contradictions** tab at the top has the report of wiki pages that disagree.
 
 ## The daily check
-Turn on **Daily check** in [Settings › Jobs & schedule](app:settings/jobs) to have Brainstead, at the time you set (09:00 to start), look for contradictions in pages that changed and update the list of pages in `index.md`. It catches up after sleep. **Also refresh pages whose sources changed**, in [Settings › AI assistants](app:settings/assistants), has it ingest those sources again. Its notification also says how many pages have left the page shape, for **Reshape pages**. **Run now** runs it straight away and becomes **Stop** while it runs.
+Turn on **Daily check** in [Settings › Automations](app:settings/jobs) to have Brainstead, at the time you set (09:00 to start), look for contradictions in pages that changed and update the list of pages in `index.md`. It catches up after sleep. **Also refresh pages whose sources changed**, in [Settings › AI assistants](app:settings/assistants), has it ingest those sources again. Its notification also says how many pages have left the page shape, for **Reshape pages**. **Run now** runs it straight away and becomes **Stop** while it runs.
 
 ## Resize the panes
 Drag the line beside the side column to make it wider or narrower; a double-click on it puts it back ([pane widths](help:settings-general)).

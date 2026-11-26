@@ -4,7 +4,7 @@
 
 //! Prepare the weekly review: a background job that reads the week and saves suggestions for each
 //! of the review's steps (brainstead_core::reviews::prep gathers, prompts and checks). It runs on
-//! the review day, `prep::LEAD_HOURS` before the review (Settings › Jobs & schedule), when
+//! the review day, `prep::LEAD_HOURS` before the review (Settings › Automations), when
 //! Brainstead runs the jobs and the week has changed since it was last prepared; when the review
 //! is started and the week has no preparation or has changed since (`weekprep_ensure`); and on
 //! Run now (`weekprep_run`).
@@ -143,14 +143,14 @@ impl WeekPrep {
     }
 }
 
-/// The weekly review's day and time (Settings › Jobs & schedule).
+/// The weekly review's day and time (Settings › Automations).
 fn review_schedule(app: &AppHandle) -> (Weekday, String) {
     let st = app.state::<AppState>();
     let s = crate::lock(&st.settings);
     (s.weekly_review.day, s.weekly_review.time.clone())
 }
 
-/// The job runs on schedule (Settings › Jobs & schedule, `weekprepEnabled`, on unless switched off).
+/// The job runs on schedule (Settings › Automations, `weekprepEnabled`, on unless switched off).
 fn enabled(app: &AppHandle) -> bool {
     let st = app.state::<AppState>();
     let s = crate::lock(&st.settings);
@@ -187,7 +187,7 @@ pub fn weekprep_status(app: AppHandle, week: String) -> Status {
     Status { prep: read_prep(&week), running, error: last.filter(|r| r.status == "error").and_then(|r| r.error) }
 }
 
-/// The job's row in Settings › Jobs & schedule: its last run, and when it next runs on schedule.
+/// The job's row in Settings › Automations: its last run, and when it next runs on schedule.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JobStatus {
@@ -212,7 +212,7 @@ pub fn weekprep_job(app: AppHandle) -> JobStatus {
     JobStatus { running, last, next, enabled: on }
 }
 
-/// Stops the run going now (Stop, in Settings › Jobs & schedule).
+/// Stops the run going now (Stop, in Settings › Automations).
 #[tauri::command]
 pub fn weekprep_stop(app: AppHandle) {
     let wp = app.state::<WeekPrep>();
@@ -263,7 +263,7 @@ fn ensure(app: &AppHandle, week: &str, trigger: &str, unattended: bool) -> Resul
 /// An accepted link suggestion: the note with the words linked, made as an agent change (in
 /// Changes, revertable), or held there for the user. Returns what became of it.
 #[tauri::command]
-pub fn weekprep_link(
+pub async fn weekprep_link(
     app: AppHandle,
     week: String,
     path: String,
@@ -271,23 +271,27 @@ pub fn weekprep_link(
     target: String,
     unattended: Option<bool>,
 ) -> Result<crate::changes::Outcome, String> {
-    let abs = app.state::<VaultService>().resolve_path(&path)?;
+    crate::blocking(move || link(&app, &week, &path, &phrase, &target, unattended.unwrap_or(false))).await
+}
+
+fn link(app: &AppHandle, week: &str, path: &str, phrase: &str, target: &str, unattended: bool) -> Result<crate::changes::Outcome, String> {
+    let abs = app.state::<VaultService>().resolve_path(path)?;
     let before = std::fs::read_to_string(&abs).map_err(|_| format!("{path} isn't there any more."))?;
-    let after = prep::with_link(&before, &phrase, &target).ok_or_else(|| format!("“{phrase}” isn't in {path} any more."))?;
-    let title = format!("Link {target} in {}", brainstead_core::filename::stem(&path));
+    let after = prep::with_link(&before, phrase, target).ok_or_else(|| format!("“{phrase}” isn't in {path} any more."))?;
+    let title = format!("Link {target} in {}", brainstead_core::filename::stem(path));
     // An assistant nobody is watching: held when a check fails.
-    let trigger = unattended.unwrap_or(false).then(|| "scheduled".to_string());
+    let trigger = unattended.then(|| "scheduled".to_string());
     let origin = Origin { kind: "review".into(), label: Some(format!("Weekly review {week}")), trigger, ..Default::default() };
     let mut s = crate::changes::Submit::new(
-        &path,
+        path,
         Kind::Edit,
         &title,
         "Suggested while preparing the weekly review.",
         origin,
         brainstead_core::changes::from_texts(Some(&before), &after),
     );
-    s.model = Some(model(&app, false));
-    crate::changes::submit(&app, s).map_err(|e| e.message().to_string())
+    s.model = Some(model(app, false));
+    crate::changes::submit(app, s).map_err(|e| e.message().to_string())
 }
 
 /// Checks every minute whether the preparation is due; runs nothing unless Brainstead runs the
@@ -385,7 +389,20 @@ fn start(app: &AppHandle, week: &str, trigger: &str, unattended: bool) -> Result
     wp.save();
     let _ = app.emit(CHANGED, ());
     let (app2, id2, week2) = (app.clone(), id.clone(), week.to_string());
-    std::thread::spawn(move || run(&app2, &id2, &week2, &model));
+    std::thread::spawn(move || {
+        // A panic ends the run as `run` would, so preparation isn't left going until restart.
+        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&app2, &id2, &week2, &model))).is_err() {
+            let wp = app2.state::<WeekPrep>();
+            wp.update_run(&id2, |r| {
+                r.finished_at = Some(stamp(now()));
+                r.status = "error".into();
+                r.error = Some("Something went wrong; Brainstead's log has the details (Settings › About).".into());
+            });
+            *crate::lock(&wp.going) = None;
+            let _ = app2.emit("review-done", Finished { chat_id: id2.clone(), filename: None });
+            let _ = app2.emit(CHANGED, ());
+        }
+    });
     Ok(id)
 }
 

@@ -31,29 +31,28 @@ Waiting for rows show how long each has waited, such as "4 d waiting" ("since to
 **Draft nudge**, on hover or focus, opens [Ask](app:ask) to draft a short follow-up to copy into Outlook or Teams. Nothing is sent.
 
 ## Capture without leaving the screen
-The box under the counts is the same as Quick capture. Type a task and press `↩` for the To Do list, or press Tab for a Thought in the Scratchpad. `due: fri` and `defer: +3d` become dates as you type.
+The box under the counts is the same as Quick capture. Type a task and press `↩` for the To Do list, or press Tab for a **Scratchpad note**. `due: fri` and `defer: +3d` become dates as you type.
 
 **Capture** in the top bar opens the floating Quick capture window. **Ask**, beside `?`, starts a chat in [Ask](app:ask) about your day.
 
 ## Use the To process card
-The To process card shows:
+The To process card is the one list of what needs you. When the right rail is under the bands (a narrow window with the full sidebar, or a bigger interface), To process moves above them as a strip of buttons, one for each row below. Each row's count is the one the screen it opens shows, and the sidebar's badges and the menu-bar window count the same way. It shows:
 
-- **Inbox to clarify**, with its count and **Clarify**, which opens the [Inbox](app:inbox). It says when the Inbox is clear.
+- **Inbox to clarify**, with its count and **Clarify**, which opens the [Inbox](app:inbox). It says when the Inbox is clear. Sources waiting to be ingested are counted here, as they wait under the Inbox's **Captures**.
+- **Changes held for you**, with **Decide**, which opens [Changes › Held](app:review) to accept or reject them.
 - **Bookmarks to triage**, with **Triage**, when bookmarks are stale or missing.
-- **Wiki issues to decide**, with **Check**, which opens [Knowledge health](app:health). It counts only issues you must decide, not ones a safe fix mends.
-- **Weekly review day** with **Start**, from the review's time on its day until the end of the next day (Friday 16:00 unless changed in [Settings › Jobs & schedule](app:settings/jobs)). While a review is paused it shows **Weekly review, paused** with **Carry on**. Either goes straight into the [Weekly review](app:weekly).
+- **Wiki health to decide**, with **Decide**, which opens [Wiki health](app:health). It counts only issues you must decide, not ones a safe fix mends.
+- **Weekly review day** with **Start**, from the review's time on its day until the end of the next day (Friday 16:00 unless changed in [Settings › Automations](app:settings/jobs)). While a review is paused it shows **Weekly review, paused** with **Carry on**. Either goes straight into the [Weekly review](app:weekly).
 
 ## Read the daily and weekly summaries
-The **Daily summary** card shows today's or the most recent daily summary, folded to one line: its date, and whether a run is going or when the next is due. Click the line to open or fold it; Brainstead remembers. **Open note** opens the summary note at that day's heading.
+The **Daily brief** card, while the brief is on, shows today's or the most recent brief, folded to one line the same way; **Open note** opens it. The **Daily summary** card shows today's or the most recent daily summary, folded to one line: its date, and whether a run is going or when the next is due. Click the line to open or fold it; Brainstead remembers. **Open note** opens the summary note at that day's heading.
 
-The **Weekly summary** card above it works the same way. Both show when **Brainstead runs the daily and weekly summaries** is on in [Settings › Jobs & schedule](app:settings/jobs), or when there's a summary to show.
+The **Weekly summary** card above it works the same way. Both show when **Brainstead runs the daily and weekly summaries** is on in [Settings › Automations](app:settings/jobs), or when there's a summary to show.
 
 ## See today's meetings
-On macOS and Windows, with [Teams and Outlook sync](app:settings/sync) on, an **Upcoming meetings** card lists your remaining Teams meetings for the day, read from your own calendar. From midday it also shows tomorrow's, under a **Tomorrow** heading, so an afternoon glance covers the next morning. It shows the last list it read straight away and changes only when a fresh read of the calendar differs. It's hidden when there are none.
+On macOS and Windows, with Teams and Outlook on in [Settings › Sync](app:settings/sync), an **Upcoming meetings** card lists your remaining Teams meetings for the day, read from your own calendar. From midday it also shows tomorrow's, under a **Tomorrow** heading, so an afternoon glance covers the next morning. It shows the last list it read straight away and changes only when a fresh read of the calendar differs. It's hidden when there are none.
 
 ## Pick up where you left off
-**Changes held for you** counts the changes held in [Changes](app:review) and lists the first four; click one, or **Review**, to accept or reject them.
-
 **Continue where you left off** shows up to six notes: unsaved ones first (marked Unsaved, with **Discard**), then notes you opened lately, then notes changed lately here or in another editor. **More in Activity** opens [Activity](app:activity).
 
 ## Resize the panes

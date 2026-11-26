@@ -4,6 +4,14 @@
     "screen": "tasks"
   },
   {
+    "name": "tasks-suggestions",
+    "screen": "tasks",
+    "view": {
+      "tasks:view": "next",
+      "tasks:suggestions": true
+    }
+  },
+  {
     "name": "system-lock",
     "screen": "doc",
     "path": "Me. To Do List.md",
@@ -28,6 +36,21 @@
     "name": "task-menu",
     "screen": "tasks",
     "taskMenu": "Project. Orbit App launch.md:9"
+  },
+  {
+    "name": "task-menu-more",
+    "screen": "tasks",
+    "taskMenu": "Project. Orbit App launch.md:9|more"
+  },
+  {
+    "name": "task-chip",
+    "screen": "tasks",
+    "taskMenu": "Project. Orbit App launch.md:9|due"
+  },
+  {
+    "name": "task-add",
+    "screen": "tasks",
+    "taskMenu": "Project. Orbit App launch.md:9|add"
   },
   {
     "name": "tasks-search",
@@ -112,6 +135,28 @@
   {
     "name": "health-narrow",
     "screen": "health",
+    "window": [1000, 760],
+    "width": 1000
+  },
+  {
+    "name": "rail-wide",
+    "screen": "tasks",
+    "view": {
+      "tasks:sel": "Project. Orbit App launch.md:9"
+    },
+    "settings": { "sidebarRail": { "wide": true } }
+  },
+  {
+    "name": "rail-vault",
+    "screen": "health",
+    "folded": { "vault": false },
+    "window": [1000, 760],
+    "width": 1000
+  },
+  {
+    "name": "today-narrow-full",
+    "screen": "today",
+    "settings": { "sidebarRail": { "narrow": false } },
     "window": [1000, 760],
     "width": 1000
   },
@@ -361,6 +406,14 @@
     "docs": true
   },
   {
+    "name": "projects-suggestions",
+    "screen": "projects",
+    "path": "Project. Orbit App launch.md",
+    "view": {
+      "projects:suggestions": true
+    }
+  },
+  {
     "name": "projects-folded",
     "screen": "projects",
     "path": "Project. Orbit App launch.md",
@@ -388,6 +441,21 @@
     "docs": true
   },
   {
+    "name": "review-held",
+    "screen": "review",
+    "view": {
+      "review:view": "held"
+    }
+  },
+  {
+    "name": "review-type",
+    "screen": "review",
+    "view": {
+      "review:view": "all",
+      "review:type": "update"
+    }
+  },
+  {
     "name": "review-applied",
     "screen": "review",
     "view": {
@@ -406,6 +474,13 @@
   {
     "name": "contradictions",
     "screen": "contradictions"
+  },
+  {
+    "name": "sidebar-vault-open",
+    "screen": "graph",
+    "folded": {
+      "vault": false
+    }
   },
   {
     "name": "health",
@@ -467,6 +542,13 @@
   {
     "name": "activity",
     "screen": "activity"
+  },
+  {
+    "name": "activity-sync",
+    "screen": "activity",
+    "view": {
+      "activity.view": "sync"
+    }
   },
   {
     "name": "settings-about",
@@ -977,14 +1059,6 @@
     }
   },
   {
-    "name": "resize-columns-activity",
-    "screen": "activity",
-    "paneWidths": {
-      "activity.time": 110,
-      "activity.action": 160
-    }
-  },
-  {
     "name": "resize-columns-wiki",
     "screen": "wiki",
     "paneWidths": {
@@ -1006,6 +1080,7 @@
     "paneWidths": {
       "sidebar": 400
     },
+    "settings": { "sidebarRail": { "narrow": false } },
     "window": [1040, 760],
     "width": 1040
   },
@@ -1044,5 +1119,10 @@
     "settings": {
       "referenceLinks": [{ "prefix": "FAC-", "url": "https://tickets.example.com/browse/{key}" }]
     }
+  },
+  {
+    "name": "runs-open",
+    "screen": "today",
+    "runs": "open"
   }
 ]

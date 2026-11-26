@@ -10,7 +10,7 @@ use serde_json::Value;
 pub struct Frontmatter {
     /// The parsed YAML as JSON (an object), or Null when there is none or it doesn't parse.
     pub data: Value,
-    /// Why the YAML didn't parse, for Knowledge health later.
+    /// Why the YAML didn't parse, for Wiki health later.
     pub error: Option<String>,
     /// Byte offset where the body starts (0 when there's no frontmatter).
     pub body_start: usize,

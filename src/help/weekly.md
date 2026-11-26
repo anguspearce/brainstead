@@ -8,7 +8,7 @@ summary: A guided GTD weekly review over your real lists, step by step, saved in
 The weekly review walks you through eleven steps in GTD's three phases over your real lists, so you can act on what you see as you go.
 
 ## Start or carry on a review
-From the review's time on its day until the end of the next day, the To process card on [Today](app:today) shows **Weekly review day** with **Start**. Or start it any time from ⌘K with "Start the weekly review". The day and time (Friday 16:00 by default) are in [Settings › Jobs & schedule](app:settings/jobs).
+From the review's time on its day until the end of the next day, the To process card on [Today](app:today) shows **Weekly review day** with **Start**. Or start it any time from ⌘K with "Start the weekly review". Set the day and time (Friday 16:00 by default) under **Scheduled** on the review's start page, **Every** a day **at** a time, or in [Settings › Automations](app:settings/jobs): they're the same setting.
 
 **Weekly review** in the sidebar, under Projects, opens a start page. It shows:
 
@@ -33,13 +33,13 @@ The steps are listed on the left by phase; click any to jump to it, which marks 
 ## Suggestions prepared from your week
 With an AI assistant set up, Brainstead reads the week ahead of the review and prepares suggestions for the steps. Starting the review prepares them only if the week has none yet. Without an assistant the steps work as normal. Like the step, the suggestions leave out on-hold and someday projects' tasks, except those due or deferred in the next two weeks. The preparation reads the week its own way, so its next actions can differ from the step's.
 
-A line under the step's title says when they were prepared, with **Prepare again** for a fresh set. A bar shows while they're being prepared; if it fails you see why, with **Retry**. If the model stops part way, what came before is kept; if nothing can be read, the run's chat in Ask shows what it wrote.
+A line under the step's title says when they were prepared, with **Suggest again** for a fresh set. A bar shows while they're being prepared; if it fails you see why, with **Suggest again** to try once more. If the model stops part way, what came before is kept; if nothing can be read, the run's chat in Ask shows what it wrote.
 
-Each suggestion is a row above the step's usual content: what's suggested, the note it came from (hover for the quote, click to open it), an action and **Skip**. The actions are **Add task**, **Tick**, **Defer to** a date, **Waiting for**, **Someday**, **Change wording**, **Clarify as…** and **Link**. Collect loose ends and New ideas show prompts to think about instead.
+Each suggestion is a row above the step's usual content, with the same buttons as suggestions elsewhere, always open: what's suggested, what accepting does and the note it came from in grey (hover for the quote, click to open it), then **Accept**, **Edit** and **Skip**. What accepting does is **Add task**, **Tick**, **Defer to** a date, **Waiting for**, **Someday**, **Change wording**, **Clarify as…** or **Link**; hover **Accept** for the detail. **Edit** shows where there are words to change first: the task to add, the new wording, or what an Inbox item becomes. Collect loose ends and New ideas show prompts to think about instead.
 
 Nothing changes until you click. An accepted suggestion does the app's usual undoable action, with Undo on the message. A new task goes under Other on the To Do list, or into its project. A link is listed in [Changes](app:review) with Revert. What you accept or skip stays hidden after a pause, and what you accept goes in the review's log. The [Inbox](app:inbox) shows the inbox suggestions too.
 
-In [Ask](app:ask) you can ask for help, such as "go through this week's suggestions with me". Once the review is started, the assistant can read the suggestions, accept or skip one, or prepare them again (for a paused review, its own week).
+In [Ask](app:ask) you can ask for help, such as "go through this week's suggestions with me". Once the review is started, the assistant can read the suggestions, accept one (with its words changed, as Edit does) or skip one, or prepare them again (for a paused review, its own week). What an assistant accepts is made as a change in [Changes](app:review), with **Revert**, and is held for you there when a check fails.
 
 ## Act on what you find
 Each step lists the real items with their usual actions:
@@ -47,7 +47,7 @@ Each step lists the real items with their usual actions:
 - **Projects** shows active projects with no next action or nothing for two weeks. Type a next action to add it, or click **Someday** or **Done** to change the status. A project moved to Someday takes its tasks out of Next actions.
 - **Waiting for** lists those tasks. **Draft nudges in Ask** asks [Ask](app:ask) to draft a follow-up for each, to copy into Outlook or Teams. Nothing is sent.
 - **Someday / maybe** lists those tasks, and someday projects with **Start now**.
-- **Links to pages not written yet** lists links to missing pages, with a way to [Knowledge health](app:health) to create or link them.
+- **Links to pages not written yet** lists links to missing pages, with a way to [Wiki health](app:health) to create or link them.
 
 Brainstead can't read your calendar, so Look ahead asks you to open Outlook and capture what you find.
 

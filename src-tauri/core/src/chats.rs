@@ -173,7 +173,11 @@ pub fn serialize(c: &Chat) -> String {
 
 /// The transcript in a chat file's text; empty when it's missing or unreadable (the chat still lists).
 pub fn parse_transcript(text: &str) -> Vec<Item> {
-    let Some((start, marker)) = [OPEN, LEGACY_OPEN].into_iter().find_map(|m| text.find(m).map(|i| (i, m))) else { return Vec::new() };
+    // The last marker: the transcript is written after the messages, and a message may quote one.
+    let Some((start, marker)) = [OPEN, LEGACY_OPEN].into_iter().filter_map(|m| text.rfind(m).map(|i| (i, m))).max_by_key(|(i, _)| *i)
+    else {
+        return Vec::new();
+    };
     let from = start + marker.len();
     let Some(end) = text[from..].find(CLOSE) else { return Vec::new() };
     let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(text[from..from + end].trim()) else { return Vec::new() };
@@ -254,6 +258,10 @@ mod tests {
         let back = parse(&c.summary.filename, &text, "x");
         assert_eq!(back, c);
         assert!(!text.contains("reasoningEffort"));
+        // A message that quotes the marker doesn't hide the transcript.
+        let mut q = chat();
+        q.transcript[1].text = format!("It ends with `{OPEN}` and `{LEGACY_OPEN}`.");
+        assert_eq!(parse(&q.summary.filename, &serialize(&q), "x"), q);
         // A chat's own effort is kept beside its model.
         let mut e = chat();
         e.summary.effort = Some("high".into());

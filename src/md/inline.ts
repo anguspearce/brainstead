@@ -12,7 +12,7 @@ import { NO_PATTERNS, type Ref, type RefPattern, refPatterns, scan, type Tok, wi
 export type Inline =
   | { t: "text"; text: string }
   | { t: "code"; text: string }
-  | { t: "wiki"; label: string }
+  | { t: "wiki"; label: string; inner: string }
   | { t: "image"; alt: string }
   | { t: "em" | "strong"; children: Inline[] }
   | { t: "a"; kind: "ref" | "link" | "url"; href: string; text: string; children: Inline[] };
@@ -35,7 +35,7 @@ function node(t: Exclude<Tok, { k: "text" }>): Inline {
     case "code":
       return { t: "code", text: t.inner };
     case "wiki":
-      return { t: "wiki", label: wikiLabel(t.inner) };
+      return { t: "wiki", label: wikiLabel(t.inner), inner: t.inner };
     case "image":
       return { t: "image", alt: t.alt };
     case "plink":

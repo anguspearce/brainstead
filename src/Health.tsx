@@ -2,7 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Knowledge health (stage 7a): the previous app's eight wiki checks, ported to Rust, and
+// Wiki health (stage 7a): the previous app's eight wiki checks, ported to Rust, and
 // "More checks", Brainstead's own (possible duplicates, stale pages others rely on, sources changed since
 // they were cited, page shape, system notes' headers and the rest). They rerun in the background whenever the index changes. Safe fixes
 // (cross-links, `updated:` dates, log lines, system notes' headers) apply straight away and can be undone; anything that
@@ -19,6 +19,7 @@ import { ingestable } from "./Lists";
 import { useGlance, WikiGlance } from "./Glance";
 import {
   ADVISORY,
+  IN_INBOX,
   claimsByPage,
   decisions,
   OWN_ACTIONS,
@@ -31,6 +32,7 @@ import {
   health,
   pageName,
   IGNORE_ALL,
+  issueClass,
   reloadHealth,
   safeFixes,
   startKnowledge,
@@ -43,7 +45,7 @@ import { nav, openDoc, useViewState } from "./nav";
 import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
 import { MoreMenu, TopBar } from "./TopBar";
-import { Dialog, LayerTag, Squeeze } from "./ui";
+import { Dialog, fmtCount, Seg, Squeeze } from "./ui";
 import { Store, useStore } from "./store";
 import { keyLabel } from "./platform";
 import { vaultVersion } from "./state";
@@ -117,6 +119,36 @@ function BusyButton({
 
 const fixed = (label: string) => toast(label, undo, "ok");
 
+/** The safe fixes as one quiet line, for a list whose rows don't badge them (the Wiki list): the
+ *  count opens Wiki health at the first check that has them, so the pages they're on stay one click
+ *  away, and Fix is this screen's Fix safe issues, undone with ⌘Z. Nothing when there are none. */
+export function SafeFixLine({ report }: { report: LintReport | null | undefined }) {
+  const fixes = safeFixes(report);
+  if (!fixes.length) return null;
+  const n = fixes.length;
+  return (
+    <div className="safeline faint small">
+      <button
+        type="button"
+        className="linkish"
+        title="Open Wiki health at the safe fixes, to see which pages they're on"
+        onClick={() => nav.go({ screen: "health", view: { "health:open": fixes[0].check } })}
+      >
+        {fmtCount(n)} safe {n === 1 ? "fix" : "fixes"}
+      </button>
+      <span>Brainstead can make by itself, such as out-of-date updated: dates</span>
+      <BusyButton
+        id="fix-all"
+        icon="check"
+        title={keyLabel("Fix every issue that's safe to fix; ⌘Z undoes it")}
+        onClick={() => act("fix-all", () => api.healthFix(fixes), fixed)}
+      >
+        Fix
+      </BusyButton>
+    </div>
+  );
+}
+
 /** After Reshape pages: how many, and the way to Changes, where they can be reverted. */
 const reshaped = (r: { applied: number; failed: string[] }) =>
   toast(
@@ -124,6 +156,25 @@ const reshaped = (r: { applied: number; failed: string[] }) =>
     { label: "Changes", run: () => nav.go("review") },
     r.failed.length ? "bad" : "ok",
   );
+
+/** Wiki health's two tabs, Checks and Contradictions (D-20261119-05). Each is a screen of its own
+ *  (health, contradictions), so links, ⌘K and an assistant's open reach either, and back and forward
+ *  step between them; a tab swaps one for the other in place. */
+export function HealthTabs({ on }: { on: "health" | "contradictions" }) {
+  useEffect(startKnowledge, []);
+  const need = decisions(useStore(health)?.report ?? null);
+  return (
+    <Seg<"health" | "contradictions">
+      label="Show"
+      value={on}
+      onChange={(screen) => screen !== on && nav.replace({ screen })}
+      options={[
+        ["health", "Checks", "The checks over the wiki: what to decide, what's safe to fix", need ? ` ${fmtCount(need)}` : undefined],
+        ["contradictions", "Contradictions", "Places where wiki pages disagree with each other"],
+      ]}
+    />
+  );
+}
 
 export function HealthScreen() {
   const panes = usePanes({ "health.side": PANES["health.side"] }, { minFlex: 360 });
@@ -180,10 +231,11 @@ export function HealthScreen() {
   return (
     <main className="main">
       <TopBar
-        title="Knowledge health"
+        title="Wiki health"
         sub={r ? `${r.wikiPages} wiki pages · ${r.sources} sources` : "Checking…"}
         ask={{ about: "the wiki's health", prompt: "About my wiki's health: " }}
       >
+        <HealthTabs on="health" />
         <BusyButton
           id="fix-all"
           icon="check"
@@ -208,7 +260,7 @@ export function HealthScreen() {
           Fix with Ask
         </button>
         <MoreMenu
-          title="Check now, Contradictions"
+          title="Check now"
           items={[
             {
               label: rechecking ? "Checking…" : "Check now",
@@ -216,12 +268,6 @@ export function HealthScreen() {
               title: "Run the checks again now (they run by themselves when the vault changes)",
               disabled: rechecking,
               run: recheck,
-            },
-            {
-              label: "Contradictions",
-              icon: "info",
-              title: "Show places where wiki pages disagree with each other",
-              run: () => nav.go("contradictions"),
             },
           ]}
         />
@@ -231,7 +277,7 @@ export function HealthScreen() {
         <div className="hmain">
           <div className="hsum">
             <div className="hnum">
-              <span className="eyebrow">Need a decision</span>
+              <span className="eyebrow">To decide</span>
               <b>{r ? need : "…"}</b>
               <span className="faint small">{fixes.length ? `${fixes.length} more are safe to fix` : "nothing safe to fix"}</span>
             </div>
@@ -256,7 +302,7 @@ export function HealthScreen() {
             <Group title="More checks" checks={ours} open={open} setOpen={setOpen} on={{ setTrash, setLinking, setReshaping, ghosts }} />
           )}
         </div>
-        <aside className="hside">{r && <SideCards r={r} />}</aside>
+        <aside className="hside">{r && <SideCards />}</aside>
       </div>
       {trash && (
         <Dialog onClose={() => setTrash(null)} width={440} label="Move image to Trash">
@@ -338,7 +384,9 @@ export const CHECK_TIPS: Record<string, string> = {
   "no-current-state":
     "Wiki pages with a Timeline but no Current state section; Write Current state has the model write one from the page's newest entries",
   "page-shape":
-    "Entity and concept pages not laid out as opening text, Current state, topics, Timeline (newest first) and See also; Reshape pages moves their sections",
+    "Entity, concept and initiative pages not laid out as opening text, Current state, topics, Timeline (newest first) and See also; Reshape pages moves their sections",
+  "initiative-items":
+    "Initiative actions with no owner, a status or due date that doesn't read, an id used twice, or a quote that isn't in the note or source it cites",
   "system-callouts": 'System notes whose "This is a system note" header has gone; Fix puts it back as Brainstead last saw it',
 };
 
@@ -370,6 +418,26 @@ function Group({
         const n = c.items.length;
         const ignored = c.ignored ?? 0;
         const isOpen = open === c.id && n + ignored > 0;
+        // Sources not yet ingested are acted on in Inbox › Captures: here a count that goes there.
+        if (IN_INBOX.has(c.id))
+          return (
+            <div key={c.id}>
+              <button
+                type="button"
+                className={`ck ${n ? "" : "zero"}`}
+                title={n ? "Go to the Inbox, where each waits under Captures to be ingested or kept in Sources" : "Every source is cited"}
+                onClick={() => n && nav.go("inbox")}
+              >
+                <Icon name={n ? "inbox" : "check"} size={14} className={n ? "advisory" : "green"} />
+                <span className="grow" title={CHECK_TIPS[c.id]}>
+                  {c.title}
+                  {n > 0 && <span className="faint small"> · in Inbox › Captures</span>}
+                </span>
+                <span className="c">{n}</span>
+                {n > 0 && <Icon name="forward" size={12} />}
+              </button>
+            </div>
+          );
         return (
           <div key={c.id}>
             <button
@@ -382,13 +450,15 @@ function Group({
               <Icon
                 name={n ? "info" : "check"}
                 size={14}
-                className={n ? (ADVISORY.has(c.id) ? "advisory" : c.items.some((i) => !i.safe) ? "amber" : "") : "green"}
+                className={
+                  n ? (ADVISORY.has(c.id) ? "advisory" : c.items.some((i) => issueClass(c.id, i) === "decide") ? "amber" : "") : "green"
+                }
               />
               <span className="grow" title={CHECK_TIPS[c.id]}>
                 {c.title}
               </span>
               <span className="c">{n}</span>
-              {n + ignored > 0 && <Icon name="chevdown" size={12} style={{ transform: isOpen ? undefined : "rotate(-90deg)" }} />}
+              {n + ignored > 0 && <Icon name="chevdown" size={12} className={`foldchev ${isOpen ? "" : "shut"}`} />}
             </button>
             {isOpen && (
               <div className={`ckitems ${c.id === "missing-pages" || c.id === "broken-sources" ? "ghosts" : ""}`}>
@@ -439,6 +509,8 @@ function Row({ check, i, on }: { check: string; i: LintItem; on: Handlers }) {
         return `${pageName(page ?? "")} · ${i.count} backlinks · ${i.detail}`;
       case "page-shape":
         return pageName(page ?? "");
+      case "initiative-items":
+        return i.text;
       default:
         return page ? (check === "uningested-sources" || check === "unreferenced-images" ? page : pageName(page)) : i.text;
     }
@@ -884,36 +956,11 @@ function IngestButton({ path, again = false }: { path: string; again?: boolean }
   );
 }
 
-function SideCards({ r }: { r: LintReport }) {
-  const get = (id: string) => r.checks.find((c) => c.id === id)?.items ?? [];
-  const pendingSources = get("uningested-sources");
-  const changed = get("changed-sources");
+function SideCards() {
   const glance = useGlance();
   return (
     <>
       {glance && <WikiGlance g={glance} />}
-      <div className="card hq">
-        <div className="row">
-          <span className="eyebrow grow">Pending sources</span>
-          <span className="faint small">{pendingSources.length + changed.length}</span>
-        </div>
-        {!pendingSources.length && !changed.length && <p className="faint small">Every source is cited.</p>}
-        {pendingSources.slice(0, 6).map((i) => (
-          <div key={i.text} className="hqi">
-            <LayerTag layer="source" />
-            <span className="grow ell">{pageName(i.page ?? "")}</span>
-            <span className="chip amber sm">New</span>
-            <IngestButton path={i.page ?? ""} />
-          </div>
-        ))}
-        {changed.slice(0, 4).map((i) => (
-          <div key={i.text} className="hqi">
-            <LayerTag layer="source" />
-            <span className="grow ell">{pageName(i.page ?? "")}</span>
-            <span className="chip amber sm">Changed</span>
-          </div>
-        ))}
-      </div>
       <p className="faint small">
         Safe fixes (cross-links, dates, log lines, system-note headers) apply straight away and can be undone with {keyLabel("⌘Z")}.
         Anything that changes meaning is an agent change, listed in Changes with Revert.

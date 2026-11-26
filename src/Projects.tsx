@@ -4,9 +4,10 @@
 
 // Projects (stage 6): every `Project. <name>.md` note, by status and area, with what moves each
 // forward. A project with nothing to do next is flagged red, one that's gone quiet for two weeks
-// amber. The open one shows its outcome, next actions, waiting-fors and the notes that link it.
+// muted (worth a look, not a problem). The open one shows its outcome, next actions, waiting-fors and the notes that link it.
 
-import { FoundProjects } from "./Found";
+import { UpdateBox } from "./UpdateBox";
+import { FoundBar, FoundList } from "./Found";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ProjectDoc, ProjectRow, TaskRow } from "./api";
 import { askAboutNote } from "./Ask";
@@ -151,7 +152,6 @@ export function ProjectsScreen() {
     <main className="main">
       <TopBar
         title="Projects"
-        sub={projects ? `${counts.get("active")} active · ${counts.get("on-hold")} on hold · ${counts.get("someday")} someday` : undefined}
         ask={
           open
             ? { about: `the project ${askQuote(open.name)}`, prompt: `About ${askLink(open.path)}: ` }
@@ -177,7 +177,14 @@ export function ProjectsScreen() {
       <div className="body projects" {...panes.root}>
         {panes.resizers}
         <div className="plistcol">
-          {tab === "active" && <FoundProjects />}
+          {tab === "active" && (
+            <>
+              <div className="suggline">
+                <FoundBar kind="project" />
+              </div>
+              <FoundList kind="project" />
+            </>
+          )}
           {projects === null && <p className="faint pad">Loading…</p>}
           {projects && !shown.length && (
             <p className="faint pad">
@@ -278,7 +285,7 @@ export function ProjectsScreen() {
                             )}
                             {p.waiting > 0 && <span>{p.waiting} waiting</span>}
                             {flag === "quiet" && (
-                              <span className="amber" title="Quiet: nothing has happened for two weeks">
+                              <span className="faint" title="Quiet: nothing has happened for two weeks, worth a look in the Weekly review">
                                 Quiet
                               </span>
                             )}
@@ -396,6 +403,8 @@ function AreaBand({
 }
 
 function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAllTasks> }) {
+  // Update…'s box, at its button (src/UpdateBox.tsx).
+  const [upd, setUpd] = useState<DOMRect | null>(null);
   const side = usePanes({ "project.side": PANES["project.side"] });
   const t = useMemo(() => projectTasks(all ?? [], p.path), [all, p.path]);
   const patterns = useRefPatterns();
@@ -564,6 +573,16 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
               Make active
             </button>
           )}
+          <button
+            type="button"
+            className="btn"
+            title="Say what's happened on it (“the vendor signed”) and an assistant applies it in the background: tasks done, follow-ups, a note of it"
+            onClick={(e) => setUpd(e.currentTarget.getBoundingClientRect())}
+          >
+            <Icon name="zap" size={14} />
+            Update…
+          </button>
+          {upd && <UpdateBox target={{ kind: "project", project: p }} at={upd} onClose={() => setUpd(null)} />}
           <button
             type="button"
             className="btn ghost"

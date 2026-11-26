@@ -11,27 +11,22 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, CurrentStateRun, DailyCheckStatus, FindState, IngestRun, ReviewsStatus, TaskRow, WeekPrepJob } from "./api";
+import { api, TaskRow } from "./api";
+import { loadRunStates, Running, runningOf, shownRuns } from "./runs";
 import { CaptureBox } from "./Capture";
-import { unclarified } from "./Inbox";
+import { heldCount, toClarify } from "./needsYou";
 import { Icon, Mark } from "./icons";
 import { localToday } from "./md/taskQuery";
-import { pageName } from "./knowledge";
 import { ReadOnlyPill } from "./Sidebar";
 import { settings, useStore } from "./store";
 import { applyLook } from "./accent";
 import { Switch } from "./ui";
 import { deferredPast, todayRows, viewRows, VIEWS } from "./taskModel";
 import { isMod, keyLabel } from "./platform";
+import { syncLine } from "./syncActivity";
 
-export interface Running {
-  key: string;
-  label: string;
-  doing: string;
-  /** 0 to 1, or null when there's no measure. */
-  progress: number | null;
-  stop: () => Promise<unknown>;
-}
+export { runningOf };
+export type { Running, RunStates } from "./runs";
 
 export interface TrayData {
   /** Null when the tasks, the Inbox or Changes couldn't be read: shown as such, never as 0. */
@@ -43,6 +38,8 @@ export interface TrayData {
   held: number | null;
   running: Running[];
   nextReview: string | null;
+  /** The sync and ingests in a line (src/syncActivity.ts), or null when nothing has synced or been ingested. */
+  sync?: { text: string; problem: boolean } | null;
 }
 
 /** What couldn't be loaded, in words. */
@@ -78,96 +75,15 @@ const when = (iso: string | null) => {
     : `${d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })} at ${time}`;
 };
 
-/** What's going, as run_status lists it (src/mcpActions.ts): each run with its Stop. */
-export interface RunStates {
-  ingests: IngestRun[];
-  dailyCheck: DailyCheckStatus;
-  reviews: ReviewsStatus;
-  contradictions: boolean;
-  weekprep: WeekPrepJob | null;
-  find: FindState | null;
-  currentState: CurrentStateRun | null;
-}
-
-export function runningOf({ ingests, dailyCheck, reviews, contradictions, weekprep, find, currentState }: RunStates): Running[] {
-  const out: Running[] = [];
-  // Meeting notes are runs in the ingest queue of their own kind.
-  for (const r of ingests.filter((x) => x.status === "running" || x.status === "queued")) {
-    const steps = r.steps.length;
-    const done = r.steps.filter((s) => s.status === "done" || s.status === "skipped").length;
-    out.push({
-      key: `ingest:${r.id}`,
-      label: r.kind === "meeting" ? `Writing a meeting note from ${pageName(r.source)}` : `Ingesting ${pageName(r.source)}`,
-      doing: r.status === "queued" ? "Waiting its turn" : (r.steps.find((s) => s.status === "running")?.name ?? "Starting"),
-      progress: steps ? done / steps : null,
-      stop: () => api.ingestStop(r.id),
-    });
-  }
-  if (dailyCheck.running)
-    out.push({
-      key: "daily-check",
-      label: "Running the daily check",
-      doing: dailyCheck.doing,
-      progress: dailyCheck.progress,
-      stop: () => api.dailyCheckStop(),
-    });
-  for (const k of reviews.running)
-    out.push({
-      key: `review:${k}`,
-      label: `Writing the ${k} summary`,
-      doing: "The model is writing it",
-      progress: null,
-      stop: () => api.reviewsStop(k),
-    });
-  if (contradictions)
-    out.push({
-      key: "contradictions",
-      label: "Checking for contradictions",
-      doing: "Reading the wiki",
-      progress: null,
-      stop: () => api.contradictionsStop(),
-    });
-  if (weekprep?.running)
-    out.push({
-      key: "weekprep",
-      label: "Preparing the weekly review",
-      doing: `Suggestions for ${weekprep.running}`,
-      progress: null,
-      stop: () => api.weekprepStop(),
-    });
-  const f = find?.run;
-  if (f?.status === "running")
-    out.push({
-      key: "find",
-      label: "Finding tasks and projects",
-      doing: `${f.done} of ${f.batches} batches, ${f.found} found`,
-      progress: f.batches ? f.done / f.batches : null,
-      stop: () => api.findStop(),
-    });
-  if (currentState?.running)
-    out.push({
-      key: "current-state",
-      label: "Writing Current state",
-      doing: `${currentState.done} of ${currentState.total} pages`,
-      progress: currentState.total ? currentState.done / currentState.total : null,
-      stop: () => api.currentStateStop(),
-    });
-  return out;
-}
-
 async function load(): Promise<TrayData> {
-  const [tasks, inbox, changes, ingests, dailyCheck, reviews, contra, weekprep, find, currentState] = await Promise.all([
+  const [tasks, inbox, changes, runs, syncLog] = await Promise.all([
     api.tasksNotes().catch(() => null as TaskRow[] | null),
     api.inboxList().catch(() => null),
     api.changesList().catch(() => null),
-    api.ingestRuns().catch(() => []),
-    api.dailyCheckStatus().catch(() => ({ running: false }) as DailyCheckStatus),
-    api.reviewsStatus().catch(() => ({ runs: [], next: { daily: null, weekly: null }, running: [] }) as ReviewsStatus),
-    api.contradictionsReport().catch(() => null),
-    api.weekprepJob().catch(() => null),
-    api.findStatus().catch(() => null),
-    api.currentStateStatus().catch(() => null),
+    loadRunStates(),
+    api.syncLog().catch(() => null),
   ]);
+  const { ingests, reviews } = runs;
   const today = localToday();
   const t = tasks && todayRows(tasks, today);
   const waitingView = VIEWS.find((v) => v.id === "waiting");
@@ -181,10 +97,12 @@ async function load(): Promise<TrayData> {
     overdue: t ? t.overdue.length : null,
     due: t ? t.due.length : null,
     waiting: tasks ? (waitingView ? viewRows(tasks, waitingView, today).filter((r) => !deferredPast(r, today)).length : 0) : null,
-    inbox: inbox && inbox.filter(unclarified).length,
-    held: changes && changes.filter((c) => c.status === "held").length,
-    running: runningOf({ ingests, dailyCheck, reviews, contradictions: !!contra?.last?.running, weekprep, find, currentState }),
+    // As Today's To process and the sidebar count them (src/needsYou.ts).
+    inbox: inbox && toClarify(inbox),
+    held: changes && heldCount(changes),
+    running: runningOf(runs),
     nextReview: next ? `${next[1]} ${when(next[0])}` : null,
+    sync: syncLog && syncLine(syncLog, ingests),
   };
 }
 
@@ -359,7 +277,7 @@ export function TrayWindow() {
       </div>
       {d.running.length > 0 && (
         <div className="tray-sec">
-          {d.running.map((r) => (
+          {shownRuns(d.running).shown.map((r) => (
             <div key={r.key} className="tray-run">
               <div className="tray-runhead">
                 <span className="spin" aria-hidden="true" />
@@ -379,12 +297,31 @@ export function TrayWindow() {
               <span className="faint small ell">{r.doing}</span>
             </div>
           ))}
+          {shownRuns(d.running).queued > 0 && (
+            <button
+              type="button"
+              className="tray-queued faint small"
+              title="Open Sources, where the ingest runs list each one waiting, with its Stop"
+              onClick={() => show("sources")}
+            >
+              {shownRuns(d.running).queued} more waiting their turn
+            </button>
+          )}
+        </div>
+      )}
+      {d.sync && (
+        <div className="tray-sec tray-list">
+          <Item icon={d.sync.problem ? "alert" : "refresh"} label={d.sync.text} onClick={() => show("activity/sync")} />
         </div>
       )}
       {(!!d.held || !!d.inbox) && (
         <div className="tray-sec tray-list">
           {!!d.held && (
-            <Item icon="review" label={`${d.held} ${d.held === 1 ? "change" : "changes"} held for you`} onClick={() => show("review")} />
+            <Item
+              icon="review"
+              label={`${d.held} ${d.held === 1 ? "change" : "changes"} held for you`}
+              onClick={() => show("review/held")}
+            />
           )}
           {!!d.inbox && (
             <Item icon="inbox" label={`${d.inbox} ${d.inbox === 1 ? "item" : "items"} in the Inbox`} onClick={() => show("inbox")} />

@@ -4,7 +4,7 @@
 
 // Tasks: the previous app's To Do lists as views, each task live from the notes it's written in.
 
-import { FoundTasks } from "./Found";
+import { FoundBar, FoundList } from "./Found";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CaptureBox } from "./Capture";
 import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, SortBy, sortTasks, withinEffort } from "./taskGroups";
@@ -15,6 +15,7 @@ import { Icon } from "./icons";
 import { fmtShortDate } from "./md/dates";
 import { taskLabel } from "./md/TaskBlock";
 import { localToday } from "./md/taskQuery";
+import { useHourly } from "./state";
 import { nav, openDoc, useViewState } from "./nav";
 import { askWith } from "./askState";
 import { InfoTip, TaskEditor, taskKey, TaskList, TasksFailed, useTaskListKeys } from "./TaskList";
@@ -61,7 +62,8 @@ export function TasksScreen() {
   const inbox = useInbox();
   const [viewId, setViewId] = useViewState("tasks:view", "next");
   const [sel, setSel] = useViewState<string | null>("tasks:sel", null);
-  const today = localToday();
+  // Redrawn on the hour and on coming back from sleep, so a list left open overnight moves on a day.
+  const today = localToday(useHourly());
   const view = VIEWS.find((v) => v.id === viewId) ?? VIEWS[0];
   // The search narrows every list, so the counts on the left say where the matches are.
   const [q, setQ] = useViewState("tasks:q", "");
@@ -135,11 +137,33 @@ export function TasksScreen() {
   const search = useRef<HTMLInputElement>(null);
   const pinned = usePinnedBar();
   useTaskListKeys(search);
+  // On a narrow main area the grid has no column for the task's pane (the stylesheet drops it), so it
+  // slides over the list from the right while a task is picked: Esc or its × puts it away and keeps
+  // the task picked; picking a task again brings it back.
+  const overlay = panes.gone.has("tasks.side");
+  const [shut, setShut] = useState(false);
+  const pick = (k: string | null) => {
+    setShut(false);
+    setSel(k);
+  };
+  const paneOpen = overlay && !!selected && !shut;
+  useEffect(() => {
+    if (!paneOpen) return;
+    const k = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if ((e.target as HTMLElement)?.closest?.("input, textarea, select, [contenteditable]")) return;
+      if (document.querySelector(".scrim, [role='dialog'], .popover")) return;
+      setShut(true);
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [paneOpen]);
   return (
     <main className="main">
       <TopBar
-        title={view.label}
-        sub={all && !failed ? (rows.length === 1 ? "1 task" : `${fmtCount(rows.length)} tasks`) : undefined}
+        title="Tasks"
+        sub={[view.label, all && !failed && (rows.length === 1 ? "1 task" : `${fmtCount(rows.length)} tasks`)].filter(Boolean).join(" · ")}
         ask={
           selected
             ? {
@@ -236,7 +260,6 @@ export function TasksScreen() {
           )}
         </nav>
         <div className="tpage">
-          {view.id === "next" && <FoundTasks />}
           {failed ? (
             <TasksFailed />
           ) : all === null ? (
@@ -298,7 +321,9 @@ export function TasksScreen() {
                   <option value="manual">Manual order</option>
                   <option value="priority">By priority</option>
                 </select>
+                {view.id === "next" && <FoundBar kind="task" />}
               </div>
+              {view.id === "next" && <FoundList kind="task" />}
               <div className="ttable" role="table" aria-label={view.label}>
                 {groups.map((g) => (
                   <div key={g.key} className="tb-group" role="rowgroup">
@@ -325,8 +350,8 @@ export function TasksScreen() {
                         manual={view.manual && groupBy === "none" && sortBy === "manual"}
                         every={every}
                         selected={sel}
-                        onSelect={(t) => setSel(taskKey(t))}
-                        onDeselect={() => setSel(null)}
+                        onSelect={(t) => pick(taskKey(t))}
+                        onDeselect={() => pick(null)}
                         onOpen={() => document.querySelector<HTMLElement>(".trow.sel .trename")?.click()}
                         keys
                         empty={
@@ -374,9 +399,22 @@ export function TasksScreen() {
             </div>
           </Popover>
         )}
-        <aside className="tpane">
-          {selected ? <TaskDetail t={selected} /> : <p className="faint">Select a task to see where it lives.</p>}
-        </aside>
+        {(!overlay || paneOpen) && (
+          <aside className={`tpane${overlay ? " overlay" : ""}`} aria-label={overlay ? "The task" : undefined}>
+            {overlay && (
+              <button
+                type="button"
+                className="ibtn tpaneclose"
+                aria-label="Close"
+                title="Close the task's pane (Esc); the task stays picked"
+                onClick={() => setShut(true)}
+              >
+                <Icon name="x" />
+              </button>
+            )}
+            {selected ? <TaskDetail t={selected} /> : <p className="faint">Select a task to see where it lives.</p>}
+          </aside>
+        )}
       </div>
     </main>
   );
@@ -389,8 +427,8 @@ const otherFields = (t: TaskRow) =>
 function TaskDetail({ t }: { t: TaskRow }) {
   return (
     <div className="tdetail">
-      {/* The task menu's own editor, so the pane offers everything the menu does. */}
-      <TaskEditor t={t} onClose={() => {}} wide={false} />
+      {/* The same sections and verbs as the row's chips and its ⋯ menu, so the pane offers everything they do. */}
+      <TaskEditor t={t} />
       {(otherFields(t).length > 0 || t.tags.some((g) => !g.startsWith("context/"))) && (
         <dl className="kv">
           {otherFields(t).map((p, i) => (

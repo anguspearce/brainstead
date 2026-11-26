@@ -130,6 +130,9 @@ export interface Panes<K extends string> {
   resizer: (key: K) => ReactNode;
   /** Every pane's resizer, for the root. */
   resizers: ReactNode;
+  /** The panes a breakpoint dropped from the grid as it's laid out now (paneShown): a screen whose
+   *  side pane is gone shows it another way (the Tasks screen's task pane, over the list). */
+  gone: ReadonlySet<K>;
 }
 
 /** What a screen's panes show for one measure of its root: each pane's width and room, the panes a
@@ -263,7 +266,7 @@ export function usePanes<K extends string>(specs: Record<K, PaneSpec>, opts: Pan
     );
   // Left to right, so Tab reaches a screen's dividers in the order they're drawn.
   const inOrder = [...keys.filter((k) => specs[k].side === "left"), ...keys.filter((k) => specs[k].side === "right")];
-  return { root: { ref: setRoot, style }, resizer, resizers: <>{inOrder.map((k) => resizer(k))}</> };
+  return { root: { ref: setRoot, style }, resizer, resizers: <>{inOrder.map((k) => resizer(k))}</>, gone };
 }
 
 interface ResizerProps<K extends string> {
@@ -303,7 +306,7 @@ export function PaneResizer<K extends string>({ spec, paneKey, live, layout, roo
       else root.style.removeProperty(spec.cssVar);
     };
   }, [dragging, root, spec.cssVar]);
-  // A screen whose root scrolls (Today, Knowledge health) would scroll its dividers away with its
+  // A screen whose root scrolls (Today, Wiki health) would scroll its dividers away with its
   // first screenful: each is placed at the scroll position, one view tall, as the root scrolls.
   const self = useRef<HTMLDivElement>(null);
   useEffect(() => {

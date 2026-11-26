@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! The scheduled daily and weekly reviews, run here in Rust (a hidden webview throttles its
-//! timers). Only when Settings › Jobs & schedule says Brainstead runs them: one app at a time.
+//! timers). Only when Settings › Automations says Brainstead runs them: one app at a time.
 //!
 //! A run gathers the review's inputs itself (brainstead_core::reviews, replacing the previous app's
 //! scripts), asks the model with read-only tools to compose the block from them and the workflow,
@@ -70,18 +70,20 @@ struct Saved {
     /// When each kind last ran (or its schedule changed), local `YYYY-MM-DDTHH:MM:SS`.
     last_daily: Option<String>,
     last_weekly: Option<String>,
+    last_brief: Option<String>,
     runs: Vec<Run>,
 }
 
 impl Saved {
     fn last(&self) -> schedule::LastRun {
         let p = |s: &Option<String>| s.as_deref().and_then(|s| NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S").ok());
-        schedule::LastRun { daily: p(&self.last_daily), weekly: p(&self.last_weekly) }
+        schedule::LastRun { daily: p(&self.last_daily), weekly: p(&self.last_weekly), brief: p(&self.last_brief) }
     }
     fn set_last(&mut self, k: ReviewKind, t: NaiveDateTime) {
         match k {
             ReviewKind::Daily => self.last_daily = Some(stamp(t)),
             ReviewKind::Weekly => self.last_weekly = Some(stamp(t)),
+            ReviewKind::Brief => self.last_brief = Some(stamp(t)),
         }
     }
 }
@@ -103,7 +105,7 @@ pub fn automated_file() -> PathBuf {
     dir().join("automated.json")
 }
 
-/// The user's own tools (Settings › Jobs & schedule): the signatures in `automated.json`, not
+/// The user's own tools (Settings › Automations): the signatures in `automated.json`, not
 /// the built-in ones. A file that doesn't read gives none.
 #[tauri::command]
 pub fn automated_list() -> Vec<reviews::sessions::Automation> {
@@ -273,6 +275,12 @@ pub fn review_run_now(app: AppHandle, kind: ReviewKind, day: Option<String>, una
         None => schedule::target_for(kind, now()),
         Some(d) => {
             let d = chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map_err(|_| format!("Expected a date like 2026-10-02, got {d:?}."))?;
+            if kind == ReviewKind::Brief {
+                if d > now().date() {
+                    return Err("A brief can be written for today or a day before it.".into());
+                }
+                return Ok(start_for(&app, kind, Target::Day(d), if unattended.unwrap_or(false) { "unattended" } else { "manual" }));
+            }
             if d >= now().date() {
                 return Err("A summary can only cover a day that has ended.".into());
             }
@@ -283,6 +291,7 @@ pub fn review_run_now(app: AppHandle, kind: ReviewKind, day: Option<String>, una
                     return Err("A weekly summary can only cover a week that has ended, and this week runs to Sunday.".into())
                 }
                 ReviewKind::Weekly => Target::week_of(d),
+                ReviewKind::Brief => unreachable!("handled above"),
             }
         }
     };
@@ -329,6 +338,7 @@ fn kind_name(k: ReviewKind) -> &'static str {
     match k {
         ReviewKind::Daily => "Daily",
         ReviewKind::Weekly => "Weekly",
+        ReviewKind::Brief => "Brief",
     }
 }
 
@@ -338,6 +348,7 @@ fn run_name(k: ReviewKind) -> &'static str {
     match k {
         ReviewKind::Daily => "Daily summary",
         ReviewKind::Weekly => "Weekly summary",
+        ReviewKind::Brief => "Daily brief",
     }
 }
 
@@ -402,7 +413,18 @@ fn start_for(app: &AppHandle, kind: ReviewKind, target: Target, trigger: &str) -
     let retry = trigger == "schedule";
     let scheduled = trigger != "manual";
     std::thread::spawn(move || {
-        if !run(&app2, &id2, kind, window, &model, retry, scheduled) && retry {
+        // A panic ends the run as `run` would, so its kind isn't left running until restart. It
+        // isn't tried again: the same notes would panic again.
+        let written = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| run(&app2, &id2, kind, window, &model, retry, scheduled)))
+            .unwrap_or_else(|_| {
+                let rv = app2.state::<Reviews>();
+                rv.update_run(&id2, |r| r.finished_at = Some(stamp(now())));
+                rv.running.lock().unwrap().retain(|k| *k != kind);
+                let _ = app2.emit("review-done", Finished { chat_id: id2.clone(), filename: None });
+                let _ = app2.emit("reviews-changed", ());
+                true
+            });
+        if !written && retry {
             std::thread::sleep(std::time::Duration::from_secs(RETRY_AFTER_SECS));
             // Not when one is going already (Run now, or the next scheduled one).
             let busy = app2.state::<Reviews>().running.lock().unwrap().contains(&kind);
@@ -430,20 +452,26 @@ fn run(app: &AppHandle, id: &str, kind: ReviewKind, w: Window, model: &str, retr
 
     let mut looked: Vec<String> = Vec::new();
     let queued = app.state::<AppState>().settings.lock().unwrap().ui.get("holdSummaries").and_then(|v| v.as_bool()).unwrap_or(false);
-    let result = compose(app, id, kind, &w, model, &mut looked).and_then(|block| {
-        let origin = Origin {
-            kind: "review".into(),
-            label: Some(w.log_detail()),
-            run: Some(id.into()),
-            trigger: scheduled.then(|| "scheduled".into()),
-            ..Default::default()
-        };
-        if queued {
-            hold(app, &w, &block, &title, model, origin).map(|f| (block, f, None))
-        } else {
-            put(app, id, &w, &block, &title, model, origin).map(|(f, how)| (block, f, how))
-        }
-    });
+    let origin = Origin {
+        kind: "review".into(),
+        label: Some(w.log_detail()),
+        run: Some(id.into()),
+        trigger: scheduled.then(|| "scheduled".into()),
+        ..Default::default()
+    };
+    let result = if kind == ReviewKind::Brief {
+        compose_brief(app, id, &w, model, &mut looked)
+            .and_then(|note| write_brief(app, id, &w, &note, &title, model, origin.clone(), queued).map(|(f, how)| (note, f, how)))
+    } else {
+        compose(app, id, kind, &w, model, &mut looked).and_then(|block| {
+            let origin = origin.clone();
+            if queued {
+                hold(app, &w, &block, &title, model, origin).map(|f| (block, f, None))
+            } else {
+                put(app, id, &w, &block, &title, model, origin).map(|(f, how)| (block, f, how))
+            }
+        })
+    };
 
     // The run as a chat: what was asked, what it looked at, and the block or what went wrong.
     let mut transcript = vec![Item { id: "1".into(), role: "user".into(), text: ask_line, meta: None }];
@@ -544,6 +572,7 @@ fn compose(app: &AppHandle, id: &str, kind: ReviewKind, w: &Window, model: &str,
     let workflow = match kind {
         ReviewKind::Daily => reviews::DAILY_REVIEW,
         ReviewKind::Weekly => reviews::WEEKLY_REVIEW,
+        ReviewKind::Brief => return Err("A brief is composed by compose_brief.".into()),
     };
     let prompt = format!(
         "{workflow}\n\n# Inputs\n\n{}\n\nReply with the block only, starting with the line `{}`.",
@@ -605,6 +634,85 @@ fn put(
     Ok((file, Some(how)))
 }
 
+/// The daily brief's note for the window's day (D-20261118-14): what the code gathered, with the
+/// Themes the model wrote from what came in since the day before (no call when nothing did).
+fn compose_brief(app: &AppHandle, id: &str, w: &Window, model: &str, looked: &mut Vec<String>) -> Result<String, String> {
+    let svc = app.state::<VaultService>();
+    let root = svc.root().ok_or("No vault is open.")?;
+    let day = w.label().to_string();
+    let d = chrono::NaiveDate::parse_from_str(&day, "%Y-%m-%d").map_err(|e| e.to_string())?;
+    // Since the start of the day before.
+    let since = (d - chrono::Duration::days(1)).and_hms_opt(0, 0, 0).unwrap_or_default();
+    let since_ms = since.and_local_timezone(Local).earliest().map_or(0, |t| t.timestamp_millis());
+    let clarified = crate::gtd::clarified();
+    let mut inputs = brainstead_core::brief::gather(&root, &day, since_ms, |_| false);
+    // Read and taken out of the Inbox, and nothing cites it: nothing came of it.
+    let paths: Vec<String> = inputs.arrived.iter().map(|a| a.rel.clone()).collect();
+    let cited = svc.with_index(|ix, _| ix.ingested(&paths).map_err(|e| e.to_string())).unwrap_or_else(|_| vec![true; paths.len()]);
+    for (a, c) in inputs.arrived.iter_mut().zip(cited) {
+        a.quiet = !c && clarified.contains(&a.rel);
+    }
+    looked.push(format!(
+        "Gathered {} initiative(s) and {} source(s) that came in since {}.",
+        inputs.initiatives.len(),
+        inputs.arrived.len(),
+        since.format("%Y-%m-%d")
+    ));
+    let themes = match brainstead_core::brief::prompt(&inputs) {
+        None => None,
+        Some(prompt) => {
+            let system = brainstead_core::ask::system_prompt(&ask::today(), false);
+            let mut on = |_: &Event| {};
+            let out = ask::run(app, Job::Summaries, id, &prompt, model, None, &system, None, &mut on);
+            if let Some(e) = out.error {
+                return Err(e);
+            }
+            Some(brainstead_core::brief::themes_of(&out.text))
+        }
+    };
+    Ok(brainstead_core::brief::render(&inputs, themes.as_deref()))
+}
+
+/// The brief's note made, or held for the user (Hold the summaries for me): the whole note, a run
+/// again the same day replacing it. `None` for the how: it was held.
+#[allow(clippy::too_many_arguments)]
+fn write_brief(
+    app: &AppHandle,
+    id: &str,
+    w: &Window,
+    note: &str,
+    title: &str,
+    model: &str,
+    origin: Origin,
+    held: bool,
+) -> Result<(String, Option<Upsert>), String> {
+    if !brainstead_core::changes::scheduled(&origin) && !held {
+        writable(&app.state::<AppState>())
+            .map_err(|_| "Brainstead is read-only, so the brief wasn't written. Turn read-only off in Settings › Vault.".to_string())?;
+    }
+    let root = app.state::<VaultService>().root().ok_or("No vault is open.")?;
+    let file = brainstead_core::brief::path(w.label());
+    let before = std::fs::read_to_string(root.join(&file)).ok();
+    if before.as_deref() == Some(note) {
+        return Ok((file, Some(Upsert::Replaced)));
+    }
+    let kind = if before.is_some() { Kind::Edit } else { Kind::New };
+    let mut s = crate::changes::Submit::new(&file, kind, title, "", origin, brainstead_core::changes::from_texts(before.as_deref(), note));
+    s.model = Some(model.into());
+    if held {
+        s.hold = Some("You asked for the summaries to be held for you (Settings › Automations).".into());
+    }
+    let o = crate::changes::submit(app, s).map_err(|e| e.message().to_string())?;
+    if held || !o.applied {
+        return Ok((file, None));
+    }
+    let after = std::fs::read(root.join(&file)).map(|b| write::version(&b)).map_err(|e| e.to_string())?;
+    let undo = serde_json::to_vec(&vec![Written { path: file.clone(), before: before.clone(), after }]).map_err(|e| e.to_string())?;
+    let _ = std::fs::create_dir_all(dir().join("undo"));
+    write::write_atomic(&dir().join("undo").join(format!("{id}.json")), &undo, false).map_err(|e| e.to_string())?;
+    Ok((file, Some(if before.is_some() { Upsert::Replaced } else { Upsert::Created })))
+}
+
 /// The block held in Changes for the user to accept ("Hold the summaries for me", Settings › Jobs
 /// & schedule), instead of a write.
 fn hold(app: &AppHandle, w: &Window, block: &str, title: &str, model: &str, origin: Origin) -> Result<String, String> {
@@ -615,14 +723,18 @@ fn hold(app: &AppHandle, w: &Window, block: &str, title: &str, model: &str, orig
     let kind = if before.is_some() { Kind::Edit } else { Kind::New };
     let mut s = crate::changes::Submit::new(&file, kind, title, "", origin, brainstead_core::changes::from_texts(before.as_deref(), &text));
     s.model = Some(model.into());
-    s.hold = Some("You asked for the summaries to be held for you (Settings › Jobs & schedule).".into());
+    s.hold = Some("You asked for the summaries to be held for you (Settings › Automations).".into());
     crate::changes::submit(app, s).map_err(|e| e.message().to_string())?;
     Ok(file)
 }
 
 /// Puts the files back as they were before the run, if they're still as it left them.
 #[tauri::command]
-pub fn review_undo(app: AppHandle, id: String) -> Result<(), String> {
+pub async fn review_undo(app: AppHandle, id: String) -> Result<(), String> {
+    crate::blocking(move || undo_run(&app, &id)).await
+}
+
+fn undo_run(app: &AppHandle, id: &str) -> Result<(), String> {
     writable(&app.state::<AppState>()).map_err(|_| "Brainstead is read-only: turn it off in Settings › Vault to undo.".to_string())?;
     let root = app.state::<VaultService>().root().ok_or("No vault is open.")?;
     let file = dir().join("undo").join(format!("{id}.json"));
@@ -648,10 +760,10 @@ pub fn review_undo(app: AppHandle, id: String) -> Result<(), String> {
         }
         paths.push(abs);
     }
-    written(&app, &paths);
+    written(app, &paths);
     let _ = std::fs::remove_file(file);
-    crate::changes::mark_reverted(&app, &id);
-    app.state::<Reviews>().update_run(&id, |r| r.undone = true);
+    crate::changes::mark_reverted(app, id);
+    app.state::<Reviews>().update_run(id, |r| r.undone = true);
     let _ = app.emit("reviews-changed", ());
     Ok(())
 }
@@ -665,7 +777,7 @@ pub fn reverted_in_changes(app: &AppHandle, run: &str) {
 }
 
 fn notify(app: &AppHandle, kind: ReviewKind, w: &Window, result: &Result<String, String>, retrying: bool) {
-    use tauri_plugin_notification::NotificationExt;
+    let need = if result.is_ok() { crate::notify::Need::News } else { crate::notify::Need::You };
     let (title, body) = match result {
         Ok(f) => (format!("{} written", run_name(kind)), format!("{} is in {}.", label(w), f.trim_end_matches(".md"))),
         Err(e) => (
@@ -673,7 +785,7 @@ fn notify(app: &AppHandle, kind: ReviewKind, w: &Window, result: &Result<String,
             format!("{}{}", e.chars().take(180).collect::<String>(), if retrying { " Brainstead tries again in 15 minutes." } else { "" }),
         ),
     };
-    let _ = app.notification().builder().title(title).body(body).show();
+    crate::notify::show(app, need, &title, &body);
 }
 
 #[cfg(test)]

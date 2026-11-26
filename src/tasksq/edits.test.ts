@@ -37,6 +37,8 @@ describe("tasks in quotes and callouts", () => {
       "> - [x] Bins 🔁 every week 📅 2026-10-03 ✅ 2026-10-03",
     ]);
     expect(inQuote("> - [ ] Plain", (l) => completion(l, today))).toBeNull();
+    // A rule rrule can't read (it throws on this one) is ticked as a plain task, not an error.
+    expect(completion("- [ ] Call Maya 🔁 every blue moon", today)?.lines).toEqual(["- [x] Call Maya 🔁 every blue moon ✅ 2026-10-03"]);
     expect(inQuote("- [ ] Outside", waitingToggled).lines).toEqual(["- [ ] Outside #waiting-for"]);
   });
   it("leaves a priority emoji inside a code span alone when it sets or clears the priority", () => {

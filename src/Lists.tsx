@@ -5,8 +5,8 @@
 // The Library lists: Notes (type filters), Wiki (tag tree), Sources (ingested or pending) and
 // Templates.
 
-import { useEffect, useMemo, useState } from "react";
-import { api, FileSummary, Layer, LintCheck, LintReport, SourceRow, WikiMeta } from "./api";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { api, FileSummary, Layer, LintItem, LintReport, SourceRow, WikiMeta } from "./api";
 import { filedPage } from "./Ask";
 import { Column, FileList, fmtDay, Grouping, Snippet } from "./FileList";
 import { Icon } from "./icons";
@@ -14,7 +14,8 @@ import { ingest, RunsPane } from "./Ingest";
 import { runSourceAction, SOURCE_ACTION, sourceActions } from "./sourceActions";
 import { isTranscriptPath } from "./meetingFlow";
 import { checkTemplate } from "./notes/templater";
-import { changes, health, held, startKnowledge } from "./knowledge";
+import { changes, health, held, IssueClass, issueClass, startKnowledge } from "./knowledge";
+import { SafeFixLine } from "./Health";
 import { settings, useStore } from "./store";
 import { openNewNote, setNewNoteCursor } from "./notes/dialogs";
 import { nav, openDoc, useViewState } from "./nav";
@@ -26,6 +27,7 @@ import { useDraftPaths } from "./drafts";
 import { IMAGE_EXT } from "./md/wikilinks";
 import { TopBar } from "./TopBar";
 import { hasSync } from "./platform";
+import { mailOn } from "./syncStatus";
 import { Dialog, fmtBytes, fmtCount, Popover, Seg } from "./ui";
 import { TypeDot, TypePill } from "./typeTone";
 import { keyLabel } from "./platform";
@@ -88,7 +90,7 @@ const modCol = <T extends FileSummary>(table: ListTable): Column<T> => ({
   key: "mtime",
   ...listColumn(`${table}.mtime`),
   value: (r) => r.mtime,
-  render: (r) => <span className="faint">{fmtDay(r.mtime)}</span>,
+  render: (r) => <span className="faint ell">{fmtDay(r.mtime)}</span>,
 });
 const sizeCol = <T extends FileSummary>(table: Exclude<ListTable, "wiki">): Column<T> => ({
   key: "size",
@@ -99,6 +101,25 @@ const sizeCol = <T extends FileSummary>(table: Exclude<ListTable, "wiki">): Colu
 });
 
 /** The type chips: the five commonest types, then Other for untyped notes and the rest. */
+
+/** A window near the 800px minimum (CSS px, so Interface size counts): the lists leave out the
+ *  columns they can best spare, Wiki's Tags (its side column filters by them) and Sources count,
+ *  and Sources' Folder, Modified and Size, so the rest fit without scrolling sideways
+ *  (D-20261120-02). */
+const TIGHT = "(max-width: 940px)";
+const tightMedia = typeof window !== "undefined" && window.matchMedia ? window.matchMedia(TIGHT) : null;
+function useTightWindow(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      tightMedia?.addEventListener?.("change", cb);
+      return () => tightMedia?.removeEventListener?.("change", cb);
+    },
+    () => !!tightMedia?.matches,
+  );
+}
+/** `cols` without the keys a tight window leaves out. */
+const spare = <T,>(cols: Column<T>[], tight: boolean, keys: string[]) => (tight ? cols.filter((c) => !keys.includes(c.key)) : cols);
+
 export function typeChips(rows: FileSummary[], selected: string | null): [string, number][] {
   const counts = new Map<string, number>();
   for (const r of rows) if (r.type) counts.set(r.type, (counts.get(r.type) ?? 0) + 1);
@@ -338,26 +359,55 @@ function TagTreeView({
   );
 }
 
-/** A wiki page's health in the list: a change to it held for you, flagged stale, another Knowledge
- *  health issue, or none. */
-export function wikiHealth(path: string, heldPages: Set<string>, report: LintReport | null | undefined): "held" | "stale" | "issue" | "ok" {
+/** A wiki page's health in the list, by Wiki health's own rule (issueClass): a change to it held
+ *  for you, a source changed since it was written, or another issue that needs your decision (all
+ *  amber); only worth a look, or only safe fixes Brainstead makes by itself (muted, not a badge:
+ *  the banner above the list fixes them); or none. */
+export function wikiHealth(
+  path: string,
+  heldPages: Set<string>,
+  report: LintReport | null | undefined,
+): "held" | "stale" | "issue" | "look" | "safe" | "ok" {
   if (heldPages.has(path)) return "held";
-  const on = (c: LintCheck) => c.items.some((i) => i.page === path || i.pages?.includes(path));
-  const checks = report?.checks ?? [];
-  if (checks.some((c) => (c.id === "stale-pages" || c.id === "stale-dates" || c.id === "changed-sources") && on(c))) return "stale";
-  if (checks.some((c) => c.id !== "unlogged-writes" && on(c))) return "issue";
+  const on = (i: LintItem) => i.page === path || !!i.pages?.includes(path);
+  const found = new Map<IssueClass, Set<string>>();
+  for (const c of report?.checks ?? [])
+    for (const i of c.items)
+      if (on(i)) {
+        const k = issueClass(c.id, i);
+        found.set(k, (found.get(k) ?? new Set()).add(c.id));
+      }
+  const decide = found.get("decide");
+  if (decide?.has("changed-sources")) return "stale";
+  if (decide) return "issue";
+  if (found.has("advisory")) return "look";
+  if (found.has("safe")) return "safe";
   return "ok";
 }
 
 const HEALTH_CHIP = {
-  held: ["Held", "amber", "Held: a change to this page waits in Changes for you to accept or reject"],
-  stale: ["Stale", "amber", "Stale: a source changed after this page was written, or Knowledge health flags it as out of date"],
+  held: ["Held", "chip amber", "Held: a change to this page waits in Changes for you to accept or reject"],
+  stale: [
+    "Stale",
+    "chip amber",
+    "Stale: a source this page cites changed after it was written; Wiki health lists it to re-ingest or check",
+  ],
   issue: [
     "Check",
-    "amber",
-    "Check: Knowledge health lists something to look at on this page, such as a link to a page that doesn't exist, or a source that has gone",
+    "chip amber",
+    "Check: Wiki health lists something to decide on this page, such as a link to a page that doesn't exist, or a source that has gone",
   ],
-  ok: ["Healthy", "green", "Healthy: Knowledge health finds nothing to fix on this page"],
+  look: [
+    "Worth a look",
+    "faint small",
+    "Worth a look: Wiki health suggests a look, such as a page others rely on that hasn't changed in months; nothing needs fixing",
+  ],
+  safe: [
+    "Safe fix",
+    "faint small",
+    "Safe fix: Wiki health can fix this page by itself, such as an out-of-date updated: date; Fix above the list does it",
+  ],
+  ok: ["Healthy", "chip green", "Healthy: Wiki health finds nothing to fix on this page"],
 } as const;
 
 export function WikiScreen() {
@@ -390,6 +440,7 @@ export function WikiScreen() {
     const named = new Set(chips.filter(([t]) => t !== "other").map(([t]) => t));
     return byTag.filter((r) => (type === "other" ? !r.type || !named.has(r.type) : r.type === type));
   }, [byTag, type, chips]);
+  const tight = useTightWindow();
   const columns: Column<FileSummary>[] = [
     {
       key: "title",
@@ -425,9 +476,9 @@ export function WikiScreen() {
       ...listColumn("wiki.health"),
       value: (r) => wikiHealth(r.path, pendingPages, report),
       render: (r) => {
-        const [label, tone, tip] = HEALTH_CHIP[wikiHealth(r.path, pendingPages, report)];
+        const [label, cls, tip] = HEALTH_CHIP[wikiHealth(r.path, pendingPages, report)];
         return (
-          <span className={`chip ${tone}`} title={tip}>
+          <span className={cls} title={tip}>
             {label}
           </span>
         );
@@ -450,6 +501,7 @@ export function WikiScreen() {
     },
     modCol("wiki"),
   ];
+  const fit = spare(columns, tight, ["tags", "sources"]);
   return (
     <main className="main">
       <TopBar
@@ -497,12 +549,13 @@ export function WikiScreen() {
         </nav>
         <FileList
           rows={shown}
-          columns={columns}
+          columns={fit}
           layers={["wiki"]}
           noun={["wiki page", "wiki pages"]}
           table="wiki"
           defaultSort={["title", 1]}
           placeholder="Search the wiki"
+          banner={<SafeFixLine report={report} />}
           filters={
             <div className="chips">
               <button
@@ -539,18 +592,21 @@ export function WikiScreen() {
   );
 }
 
-/** New wiki page: a concept or an entity, written at once (the user's own page, not a model's) and
- *  opened in Edit. */
+/** New wiki page: a concept, an entity or an initiative, written at once (the user's own page, not a
+ *  model's) and opened in Edit. */
+type WikiKind = "concept" | "entity" | "initiative";
+const WIKI_FOLDER: Record<WikiKind, string> = { concept: "concepts", entity: "entities", initiative: "initiatives" };
+
 function NewWikiPage({ at, onClose }: { at: DOMRect; onClose: () => void }) {
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<"concept" | "entity">("concept");
+  const [kind, setKind] = useState<WikiKind>("concept");
   const n = name.trim();
   const ok = !!n && !/[\\/:*?"<>|#^[\]]/.test(n);
   const make = async () => {
     if (!ok) return;
-    const path = `wiki/${kind === "concept" ? "concepts" : "entities"}/${n}.md`;
+    const path = `wiki/${WIKI_FOLDER[kind]}/${n}.md`;
     try {
-      await api.docCreate(path, filedPage(n, kind, ""));
+      await api.docCreate(path, kind === "initiative" ? await api.initiativePage(n) : filedPage(n, kind, ""));
       onClose();
       openDoc(path);
     } catch (e) {
@@ -570,17 +626,18 @@ function NewWikiPage({ at, onClose }: { at: DOMRect; onClose: () => void }) {
             onKeyDown={(e) => e.key === "Enter" && void make()}
           />
         </label>
-        <Seg<"concept" | "entity">
+        <Seg<WikiKind>
           label="Kind"
           value={kind}
           onChange={setKind}
           options={[
             ["concept", "Concept", "An idea, a process, a topic"],
             ["entity", "Entity", "A person, a team, a product, a company"],
+            ["initiative", "Initiative", "Something you're tracking, with its actions and decisions"],
           ]}
         />
         <div className="row">
-          <span className="faint small grow">In wiki/{kind === "concept" ? "concepts" : "entities"}/</span>
+          <span className="faint small grow">In wiki/{WIKI_FOLDER[kind]}/</span>
           <span title={ok ? "Create the page and open it (↩)" : "Type a name the page can be saved under"}>
             <button type="button" className="btn sm pri" disabled={!ok} onClick={() => void make()}>
               Create
@@ -615,7 +672,13 @@ export const sourceFolder = (path: string) =>
     .slice(0, -1)
     .join("/");
 
-const STATUS_CHIP = { new: ["New", "amber"], changed: ["Changed", "amber"], ingested: ["Ingested", "green"] } as const;
+// Only Changed is amber: it needs you (re-ingest it, or check the pages citing it). New is only
+// information here; the Inbox's Captures is where a new source waits for you, and counts it.
+const STATUS_CHIP = {
+  new: ["New", "", "New: no wiki page cites it yet; it waits in Inbox › Captures to be ingested or kept"],
+  changed: ["Changed", "amber", "Changed: it changed after the wiki pages citing it were written; re-ingest it or check them"],
+  ingested: ["Ingested", "green", "Ingested: a wiki page cites it"],
+} as const;
 
 /** Copies files (full paths) into sources/ and says how it went. */
 async function importToSources(paths: string[]) {
@@ -674,12 +737,12 @@ function useDropToSources(): boolean {
   return over;
 }
 
-/** Run one Teams and Outlook sync pass from a button, reporting what it added. Shared by the Sources
+/** Run one sync pass from a button, reporting what it added. Shared by the Sources
  *  top bar and Settings' Sync now. */
 function SyncNowButton() {
   const s = useStore(settings);
   const [syncing, setSyncing] = useState(false);
-  if (!hasSync || !s.syncEnabled) return null;
+  if (!hasSync || !(s.syncEnabled || mailOn(s) || s.syncSlack)) return null;
   const run = () => {
     setSyncing(true);
     api
@@ -717,7 +780,11 @@ export function SourcesScreen() {
   useEffect(startKnowledge, []);
   const h = useStore(health);
   const changed = useMemo(
-    () => new Set((h?.report?.checks.find((c) => c.id === "changed-sources")?.items ?? []).map((i) => i.page ?? "")),
+    () =>
+      new Set([
+        ...(h?.report?.checks.find((c) => c.id === "changed-sources")?.items ?? []).map((i) => i.page ?? ""),
+        ...(h?.report?.waiting ?? []),
+      ]),
     [h],
   );
   const [status, setStatus] = useViewState<"all" | "new" | "changed" | "ingested">("sources:status", "all");
@@ -730,6 +797,7 @@ export function SourcesScreen() {
     .filter((r) => ingestable(r.path) && sourceStatus(r, changed) !== "ingested" && !isTranscriptPath(r.path))
     .map((r) => r.path);
   const dropping = useDropToSources();
+  const tight = useTightWindow();
   const columns: Column<SourceRow>[] = [
     titleCol(),
     // A pill as Notes and Wiki show a type, after the title.
@@ -744,8 +812,12 @@ export function SourcesScreen() {
       ...listColumn("sources.ingested"),
       value: (r) => sourceStatus(r, changed),
       render: (r) => {
-        const [label, tone] = STATUS_CHIP[sourceStatus(r, changed)];
-        return <span className={`chip ${tone}`}>{label}</span>;
+        const [label, tone, tip] = STATUS_CHIP[sourceStatus(r, changed)];
+        return (
+          <span className={`chip ${tone}`} title={tip}>
+            {label}
+          </span>
+        );
       },
     },
     {
@@ -769,6 +841,9 @@ export function SourcesScreen() {
     modCol("sources"),
     sizeCol("sources"),
   ];
+  const fit = spare(columns, tight, ["path", "mtime", "size"]);
+  // Without its Modified column the list still starts newest first, as it does with it.
+  const fitRows = useMemo(() => (tight && shown ? [...shown].sort((a, b) => b.mtime - a.mtime) : shown), [tight, shown]);
   return (
     <main className="main">
       <TopBar title="Sources" ask={{ about: "your sources", prompt: "About my sources: " }}>
@@ -781,6 +856,8 @@ export function SourcesScreen() {
           <Icon name="note" size={14} />
           Meeting notes
         </button>
+        {/* Not the screen's main button: Sources is the library, and Inbox › Captures is where new
+            sources wait to be dealt with (D-20261119-04). */}
         <span
           title={
             waiting.length
@@ -788,7 +865,7 @@ export function SourcesScreen() {
               : "No new or changed sources to ingest"
           }
         >
-          <button type="button" className="btn pri" disabled={!waiting.length} onClick={() => ingest(waiting)}>
+          <button type="button" className="btn" disabled={!waiting.length} onClick={() => ingest(waiting)}>
             <Icon name="wiki" size={14} />
             Ingest {waiting.length || ""}
           </button>
@@ -797,8 +874,8 @@ export function SourcesScreen() {
       <div className="body sources" {...panes.root}>
         {panes.resizers}
         <FileList
-          rows={shown}
-          columns={columns}
+          rows={fitRows}
+          columns={fit}
           layers={["source"]}
           noun={["source", "sources"]}
           table="sources"

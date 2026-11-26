@@ -107,12 +107,16 @@ impl Cli {
 /// The MCP server's name, as each CLI is told it.
 pub const MCP_NAME: &str = "brainstead";
 /// Its tools, for the CLIs that list each one (Copilot).
-pub const MCP_TOOLS: [&str; 87] = [
+pub const MCP_TOOLS: [&str; 93] = [
     "search",
     "read_section",
     "backlinks",
     "resolve_entity",
     "facts",
+    "list_initiatives",
+    "create_initiative",
+    "set_action",
+    "add_decision",
     "pending_sources",
     "provenance",
     "lint",
@@ -125,6 +129,7 @@ pub const MCP_TOOLS: [&str; 87] = [
     "list_inbox",
     "clarify_inbox",
     "capture",
+    "update_item",
     "list_projects",
     "create_project",
     "update_project",
@@ -170,6 +175,7 @@ pub const MCP_TOOLS: [&str; 87] = [
     "doc_check",
     "compare_docs",
     "activity",
+    "sync_activity",
     "graph",
     "list_suggestions",
     "suggestions",
@@ -569,7 +575,7 @@ Tasks are `- [ ]` lines with dates as emoji: 📅 due, ⏳ scheduled (deferred u
 {can}\n\
 Link notes you mention as [[wikilinks]] with the note's file name without `.md`, so the app can open them. Answer plainly and briefly unless asked for depth; say when the vault has nothing on a point rather than guessing.",
         can = if tools {
-            "You can't change files in the vault yourself (you may keep your own memory up to date: it lives outside the vault); Brainstead's tools do what its screens do. Read with search, read_section, backlinks, resolve_entity, lint, list_tasks, list_inbox and list_projects. When the user asks, the tools make the change straight away, each recorded in Brainstead's Changes screen where the user can revert it: task changes (edit_task, move_task), clarifying the Inbox, projects, and prose, renames and deletes: edit_page (any page, or a new wiki page), create_note, create_task, rename_note, trash_note, delete_task. Runs (start_run: ingest, summaries, the daily check, contradictions, meeting notes) record their own changes there. Bookmarks, saved searches and Knowledge health's safe fixes are made at once too, undoable with ⌘Z in the app rather than in Changes. A change to a template (Templates/, or renaming or trashing one), one that adds code that runs (a script, a Tasks function, a Templater tag), or one that changes a system note's header is held for the user, and only they can accept it, in the app: you can't. Change only what the user asked for. Quote the sources a change rests on word for word: a quote that isn't in its source is flagged to the user. list_changes lists what was changed and what's held for the user, and changes reverts one when the user asks. Say what you changed."
+            "You can't change files in the vault yourself (you may keep your own memory up to date: it lives outside the vault); Brainstead's tools do what its screens do. Read with search, read_section, backlinks, resolve_entity, lint, list_tasks, list_inbox and list_projects. When the user asks, the tools make the change straight away, each recorded in Brainstead's Changes screen where the user can revert it: task changes (edit_task, move_task), clarifying the Inbox, projects, and prose, renames and deletes: edit_page (any page, or a new wiki page), create_note, create_task, rename_note, trash_note, delete_task. Runs (start_run: ingest, summaries, the daily check, contradictions, meeting notes) record their own changes there. Wiki health's safe fixes (fix_health) and a name fixed everywhere (fix_name) are recorded there too. Bookmarks and saved searches are made at once, undoable with ⌘Z in the app rather than in Changes. A change to a template (Templates/, or renaming or trashing one), one that adds or changes code that runs (a script, a Tasks function, a Templater tag), or one that changes a system note's header is held for the user, and only they can accept it, in the app: you can't. Change only what the user asked for. Quote the sources a change rests on word for word: a quote that isn't in its source is flagged to the user. list_changes lists what was changed and what's held for the user, and changes reverts one when the user asks. Say what you changed."
         } else {
             "You can read and search the vault, and nothing else: you can't change any file in it (your own memory, outside the vault, you may keep up to date). If asked to change something, say what you would change and where, so the user can do it."
         }
@@ -923,11 +929,13 @@ pub struct Parser {
     error: Option<String>,
     /// Antigravity's step or Copilot's message the last text came in, to break between replies.
     block: Option<String>,
+    /// Claude: where the text stood when the message being streamed began, until it stops.
+    message: Option<usize>,
 }
 
 impl Parser {
     pub fn new(cli: Cli) -> Parser {
-        Parser { cli, text: String::new(), session: None, error: None, block: None }
+        Parser { cli, text: String::new(), session: None, error: None, block: None, message: None }
     }
 
     /// Text written after a search is a new block; without a break it runs on from the text
@@ -961,6 +969,18 @@ impl Parser {
         match v["type"].as_str() {
             Some("stream_event") => {
                 let ev = &v["event"];
+                // A message that starts before the last one stopped: the CLI gave up on that one
+                // mid-stream and asked again, so its half answer goes ("…Initiatives: [[" then the
+                // whole answer again).
+                if ev["type"] == "message_start" {
+                    if let Some(at) = self.message {
+                        self.text.truncate(at);
+                    }
+                    self.message = Some(self.text.len());
+                }
+                if ev["type"] == "message_stop" {
+                    self.message = None;
+                }
                 if ev["type"] == "content_block_start" && ev["content_block"]["type"] == "text" {
                     self.separate(out);
                 }
@@ -1744,6 +1764,21 @@ mod tests {
         assert!(ev.contains(&Event::Compacted));
         let o = p.finish(true, "");
         assert_eq!(o, Outcome { text: "Let me look.\n\nTwo tasks are due.".into(), session: Some("s2".into()), error: None });
+    }
+
+    /// A stream the CLI retried: the half answer before it isn't kept, a finished message is.
+    #[test]
+    fn claude_retried_stream_keeps_only_the_answer() {
+        let start = r#"{"type":"stream_event","event":{"type":"message_start","message":{}}}"#;
+        let stop = r#"{"type":"stream_event","event":{"type":"message_stop"}}"#;
+        let block = r#"{"type":"stream_event","event":{"type":"content_block_start","content_block":{"type":"text"}}}"#;
+        let delta = |t: &str| {
+            format!(r#"{{"type":"stream_event","event":{{"type":"content_block_delta","delta":{{"type":"text_delta","text":"{t}"}}}}}}"#)
+        };
+        let (a, b, c) =
+            (delta("Let me look."), delta("**Launch** moved. Initiatives: [["), delta("**Launch** moved. Initiatives: [[Orbit]]"));
+        let (_, p) = feed(Cli::Claude, &[start, block, &a, stop, start, block, &b, start, block, &c, stop]);
+        assert_eq!(p.finish(true, "").text, "Let me look.\n\n**Launch** moved. Initiatives: [[Orbit]]");
     }
 
     #[test]

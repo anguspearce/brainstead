@@ -6,19 +6,24 @@
 // first and grouped by run, each with Revert. Changes you started (Ask, a terminal, a run started
 // by hand) are made at once; a scheduled run's change that fails a check is held at the top, with
 // why, for you to accept or reject. Reading the feed is optional: only held changes are counted.
+// Two tabs (D-20261119-04): Held, the held changes alone, and All, every change with the lines of
+// the vault's log.md that aren't one (src/changesLog.ts), by type and day as well as the search.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { api, ChangeRow, ChangeView, Hunk } from "./api";
+import { api, ChangeRow, ChangeView, Hunk, LogEntry } from "./api";
 import { Icon } from "./icons";
 import { fieldIcon, fieldTip, splitTaskFields } from "./taskFields";
-import { byRun, changeMatches, changes, held, originLabel, pageName, reloadChanges, runChanges, startKnowledge } from "./knowledge";
+import { byRun, changes, held, originLabel, pageName, reloadChanges, runChanges, startKnowledge } from "./knowledge";
 import { nav, openDoc, useViewState } from "./nav";
 import { reportEditError, undoLast } from "./taskModel";
 import { toast } from "./Toast";
 import { askLink, askQuote, ReadOnlyBanner, TopBar } from "./TopBar";
 import { settings, Store, useStore } from "./store";
-import { Dialog, SearchBox, TableBand, useDebounced } from "./ui";
+import { Dialog, fmtCount, SearchBox, Seg, TableBand, useDebounced } from "./ui";
+import { lastSeen, useVaultVersion } from "./state";
+import { actionLabel, fmtDate, linkTarget, marks } from "./activityModel";
+import { allTimeline, AllFilter, changeShown, entryShown, logOnly, typesIn } from "./changesLog";
 import { offerFollowUp } from "./Ingest";
 import { DocButton, useGone } from "./docButton";
 import { iconizeEmoji } from "./md/fieldEmoji";
@@ -153,15 +158,16 @@ export function revert(c: ChangeRow) {
 /** The run whose held changes are being accepted now, if any: Accept all and ⌘↩ wait for it. */
 export const acceptingRun = new Store<string | null>(null);
 
-/** Accepts every held change in a run (only those the search `q` shows, when there is one), one
- *  run at a time; each meeting note it made gets its follow-up offer. */
-export function acceptRun(group: string, rows: ChangeRow[], q = "") {
+/** Accepts every held change in a run, one run at a time; each meeting note it made gets its
+ *  follow-up offer. `shown` is the changes the screen shows: when its search, type or day has
+ *  `narrowed` them, only the run's shown ones are accepted. */
+export function acceptRun(group: string, shown: ChangeRow[], narrowed = false) {
   if (acceptingRun.get()) return Promise.resolve();
   acceptingRun.set(group);
-  const todo = runChanges(rows, group, "held", q);
+  const todo = runChanges(shown, group, "held");
   const meetings = todo.filter((c) => c.origin.kind === "meeting" && c.origin.chat);
   return api
-    .changesAcceptAll(group, false, q ? todo.map((c) => c.id) : undefined)
+    .changesAcceptAll(group, false, narrowed ? todo.map((c) => c.id) : undefined)
     .then(async (m) => {
       if (m.failed.length) toast(`Accepted ${m.done}; ${m.failed.length} couldn't be made: ${m.failed[0]}`, undefined, "bad");
       else toast(`Accepted ${plural(m.done, "change")}`, undefined, "ok");
@@ -179,23 +185,77 @@ export const keyIsElsewhere = (e: KeyboardEvent) =>
   !!(e.target as HTMLElement)?.closest?.("input, textarea, select, [contenteditable]") ||
   !!document.querySelector(".scrim, [role='dialog']");
 
-/** How many runs of the feed show before "Show more". */
+/** How many runs (and log.md lines) of the feed show before more are drawn. */
 const RUNS_SHOWN = 30;
+
+/** Changes' tabs: the held changes alone, or everything (D-20261119-04). */
+export type ChangesView = "held" | "all";
 
 export function ReviewScreen() {
   const panes = usePanes({ "changes.list": PANES["changes.list"] }, { minFlex: 320 });
   useEffect(startKnowledge, []);
   const all = useStore(changes);
+  // The tab, type and day aren't remembered: Changes opens on All unless a link asks for Held.
+  const [view, setView] = useViewState<ChangesView>("review:view", "all", false);
+  const [type, setType] = useViewState<string | null>("review:type", null, false);
+  const [day, setDay] = useViewState<string | null>("review:day", null, false);
   // The search narrows held changes and the feed alike; ↑↓ in the box move through what it found.
   const [q, setQ] = useViewState("review:q", "");
   const dq = useDebounced(q).trim();
-  const rows = useMemo(() => (all && dq ? all.filter((c) => changeMatches(c, dq)) : all), [all, dq]);
+  const isAll = view !== "held";
+  const f: AllFilter = useMemo(() => ({ type: isAll ? type : null, day: isAll ? day : null, q: dq }), [isAll, type, day, dq]);
+  const rows = useMemo(() => (all ? all.filter((c) => changeShown(c, f)) : all), [all, f]);
   const heldAll = useMemo(() => held(all ?? []).length, [all]);
   const waiting = useMemo(() => held(rows ?? []), [rows]);
   const heldRuns = useMemo(() => byRun(waiting), [waiting]);
   const [more, setMore] = useState(1);
-  const feedRuns = useMemo(() => byRun((rows ?? []).filter((c) => c.status !== "held")), [rows]);
-  const shownRuns = feedRuns.slice(0, RUNS_SHOWN * more);
+  // log.md, for All's lines that aren't a change; the last read shows at once on reopening.
+  const version = useVaultVersion();
+  const [log, setLog] = useState(() => lastSeen.get<LogEntry[]>("vaultlog"));
+  useEffect(() => {
+    let live = true;
+    api
+      .vaultLog()
+      .then((l) => live && setLog(lastSeen.set("vaultlog", l)))
+      .catch(() => live && setLog((l) => l ?? []));
+    return () => {
+      live = false;
+    };
+  }, [version]);
+  const lines = useMemo(() => (isAll && log ? logOnly(log, all ?? []) : []), [isAll, log, all]);
+  const types = useMemo(() => (isAll ? typesIn(all ?? [], lines) : []), [isAll, all, lines]);
+  const timeline = useMemo(
+    () =>
+      isAll
+        ? allTimeline(
+            (rows ?? []).filter((c) => c.status !== "held"),
+            lines.filter((e) => entryShown(e, f)),
+          )
+        : [],
+    [isAll, rows, lines, f],
+  );
+  const shownItems = timeline.slice(0, RUNS_SHOWN * more);
+  const madeCount = useMemo(() => (rows ?? []).filter((c) => c.status !== "held").length, [rows]);
+  const shownRuns = useMemo(() => shownItems.flatMap((x) => (x.kind === "run" ? [x.run] : [])), [shownItems]);
+  // Each log line that names a file links to it, as Activity's log did.
+  const [paths, setPaths] = useState<Map<string, string | null>>(new Map());
+  useEffect(() => {
+    setPaths(new Map());
+  }, [version]);
+  useEffect(() => {
+    const want = [...new Set(shownItems.flatMap((x) => (x.kind === "log" ? [linkTarget(x.entry.title)] : [])))].filter(
+      (t) => !paths.has(t),
+    );
+    if (!want.length) return;
+    let live = true;
+    api
+      .linksResolve(want)
+      .then((r) => live && setPaths((m) => new Map([...m, ...want.map((t, i) => [t, r[i]] as [string, string | null])])))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [shownItems, paths]);
   // J / K follow the list: held changes first, then the feed.
   const order = useMemo(() => [...heldRuns, ...shownRuns].flatMap((g) => g.rows), [heldRuns, shownRuns]);
   const [sel, setSel] = useViewState<string | null>("review:sel", null);
@@ -215,7 +275,7 @@ export function ReviewScreen() {
   const pick = (id: string) => setSel(cur?.id === id ? "" : id);
   // Older runs are drawn as the end of the list comes into view, as the other lists do.
   const end = useRef<HTMLDivElement>(null);
-  const older = feedRuns.length > shownRuns.length;
+  const older = timeline.length > shownItems.length;
   useEffect(() => {
     const el = end.current;
     if (!el || !older) return;
@@ -242,10 +302,11 @@ export function ReviewScreen() {
   const readOnly = useStore(settings).readOnly;
   const [confirm, setConfirm] = useState<{ group: string; label: string; n: number; revert?: boolean } | null>(null);
   const accepting = useStore(acceptingRun);
-  // With a search on, a run's Reject all and Revert all act only on the changes it shows, as their
-  // confirmations count (Accept all too).
+  // With a search, a type or a day on, a run's Reject all and Revert all act only on the changes it
+  // shows, as their confirmations count (Accept all too).
+  const narrowed = !!(f.q || f.type || f.day);
   const runIds = (group: string, status: ChangeRow["status"]) =>
-    dq ? runChanges(all ?? [], group, status, dq).map((c) => c.id) : undefined;
+    narrowed ? runChanges(rows ?? [], group, status).map((c) => c.id) : undefined;
   const rejectRun = (group: string) =>
     api
       .changesRejectAll(group, runIds(group, "held"))
@@ -271,9 +332,9 @@ export function ReviewScreen() {
   // screen, such as an ingest run's See changes, chose it), and the list scrolls to its row.
   useEffect(() => {
     if (!sel) return;
-    const at = feedRuns.findIndex((g) => g.rows.some((c) => c.id === sel));
+    const at = timeline.findIndex((x) => x.kind === "run" && x.run.rows.some((c) => c.id === sel));
     if (at >= RUNS_SHOWN * more) setMore(Math.floor(at / RUNS_SHOWN) + 1);
-  }, [sel, feedRuns, more]);
+  }, [sel, timeline, more]);
   // Arriving (from See N changes, say), the change is brought to the middle of the list; after
   // that J / K only scroll as far as keeps it in sight.
   const arrived = useRef(false);
@@ -307,7 +368,17 @@ export function ReviewScreen() {
             ? { about: `the change ${askQuote(cur.title)}`, prompt: `About the change “${cur.title}” to ${askLink(cur.page)}: ` }
             : { about: "Changes", prompt: "About the changes assistants made: " }
         }
-      />
+      >
+        <Seg<ChangesView>
+          label="Show"
+          value={view}
+          onChange={setView}
+          options={[
+            ["held", "Held", "Only the changes held for you to accept or reject", heldAll ? ` ${fmtCount(heldAll)}` : undefined],
+            ["all", "All", "Every change, with the vault's log.md lines that aren't one, newest first"],
+          ]}
+        />
+      </TopBar>
       {readOnly && <ReadOnlyBanner blocks="nothing here can be accepted or reverted" />}
       {confirm?.revert && (
         <Dialog onClose={() => setConfirm(null)} width={440} label="Revert the run's changes">
@@ -379,7 +450,44 @@ export function ReviewScreen() {
               )}
             </SearchBox>
           </div>
+          {isAll && (types.length > 1 || day) && (
+            <div className="chips qtypes">
+              {day && (
+                <button type="button" className="chip f on" title="Show every day again" onClick={() => setDay(null)}>
+                  {fmtDate(day)}
+                  <Icon name="x" size={10} />
+                </button>
+              )}
+              <button
+                type="button"
+                className={`chip f ${type ? "" : "on"}`}
+                title="Show every type of change"
+                onClick={() => setType(null)}
+              >
+                All types
+              </button>
+              {types.map((a) => (
+                <button
+                  key={a}
+                  type="button"
+                  className={`chip f ${type === a ? "on" : ""}`}
+                  title={type === a ? "Show every type of change again" : `Show only “${actionLabel(a)}”`}
+                  onClick={() => setType(type === a ? null : a)}
+                >
+                  {actionLabel(a)}
+                </button>
+              ))}
+            </div>
+          )}
           {rows === null && <p className="faint pad">Loading…</p>}
+          {!isAll && rows !== null && !heldRuns.length && (
+            <div className="faint pad">
+              {dq ? `No held change matches “${dq}”.` : "Nothing is held for you."}{" "}
+              <button type="button" className="linkish" title="Show every change and the vault's log" onClick={() => setView("all")}>
+                Show all changes
+              </button>
+            </div>
+          )}
           {heldRuns.length > 0 && (
             <div className="tb-group held" role="rowgroup">
               <TableBand
@@ -409,7 +517,7 @@ export function ReviewScreen() {
                         type="button"
                         className="btn sm"
                         disabled={readOnly || !!accepting}
-                        onClick={() => void acceptRun(g.group, all ?? [], dq)}
+                        onClick={() => void acceptRun(g.group, rows ?? [], narrowed)}
                       >
                         {accepting === g.group ? "Accepting…" : "Accept all"}
                       </button>
@@ -431,54 +539,84 @@ export function ReviewScreen() {
               ))}
             </div>
           )}
-          {shownRuns.map((g) => (
-            <div key={g.group} className="qrun" role="rowgroup">
-              <div className="qrunhead">
-                <RunToggle
-                  open={openRun === g.group}
-                  onToggle={() => toggle(g.group)}
-                  icon={g.rows[0].origin.kind === "chat" ? "ask" : "wiki"}
-                  label={runHeading(g.label, g.rows)}
+          {/* All: what's already made gets its own band, so the held changes above visibly end where it starts. */}
+          {isAll && timeline.length > 0 && (
+            <div className="tb-group made" role="rowgroup">
+              <TableBand
+                icon="check"
+                label="Already made"
+                n={madeCount}
+                tip={`${plural(madeCount, "change")} already made${lines.length ? `, and the log's other lines` : ""}, newest first`}
+              />
+            </div>
+          )}
+          {shownItems.map((x) => {
+            if (x.kind === "log")
+              return (
+                <LogLine
+                  key={`log|${x.entry.date}|${x.entry.time}|${x.entry.action}|${x.entry.title}|${x.at}`}
+                  e={x.entry}
+                  path={paths.get(linkTarget(x.entry.title)) ?? null}
+                  q={dq}
                 />
-              </div>
-              {openRun === g.group && g.rows.filter((c) => c.status === "applied").length > 1 && (
-                <div className="qrunhead qrunacts">
-                  <span className="grow" />
-                  <span
-                    title={
-                      readOnly
-                        ? "Read-only is on (Settings › Vault)"
-                        : dq
-                          ? "Put back every page this run changed that the search shows"
-                          : "Put back every page this run changed"
-                    }
-                  >
-                    <button
-                      type="button"
-                      className="btn sm ghost"
-                      disabled={readOnly}
-                      onClick={() =>
-                        setConfirm({ group: g.group, label: g.label, n: g.rows.filter((c) => c.status === "applied").length, revert: true })
+              );
+            const g = x.run;
+            return (
+              <div key={g.group} className="qrun" role="rowgroup">
+                <div className="qrunhead">
+                  <RunToggle
+                    open={openRun === g.group}
+                    onToggle={() => toggle(g.group)}
+                    icon={g.rows[0].origin.kind === "chat" ? "ask" : "wiki"}
+                    label={runHeading(g.label, g.rows)}
+                  />
+                </div>
+                {openRun === g.group && g.rows.filter((c) => c.status === "applied").length > 1 && (
+                  <div className="qrunhead qrunacts">
+                    <span className="grow" />
+                    <span
+                      title={
+                        readOnly
+                          ? "Read-only is on (Settings › Vault)"
+                          : dq
+                            ? "Put back every page this run changed that the search shows"
+                            : "Put back every page this run changed"
                       }
                     >
-                      Revert all
-                    </button>
-                  </span>
-                </div>
-              )}
-              {openRun === g.group &&
-                g.rows.map((c) => <Row key={c.id} c={c} sel={cur?.id === c.id} gone={gone(c.to ?? c.page)} onSel={() => pick(c.id)} />)}
-            </div>
-          ))}
+                      <button
+                        type="button"
+                        className="btn sm ghost"
+                        disabled={readOnly}
+                        onClick={() =>
+                          setConfirm({
+                            group: g.group,
+                            label: g.label,
+                            n: g.rows.filter((c) => c.status === "applied").length,
+                            revert: true,
+                          })
+                        }
+                      >
+                        Revert all
+                      </button>
+                    </span>
+                  </div>
+                )}
+                {openRun === g.group &&
+                  g.rows.map((c) => <Row key={c.id} c={c} sel={cur?.id === c.id} gone={gone(c.to ?? c.page)} onSel={() => pick(c.id)} />)}
+              </div>
+            );
+          })}
           {older && (
             <div ref={end} className="faint pad">
               Loading older changes…
             </div>
           )}
-          {rows !== null && !rows.length && <p className="faint pad">{dq ? `No changes match “${dq}”.` : "No changes yet."}</p>}
+          {isAll && rows !== null && !rows.length && !timeline.length && (
+            <p className="faint pad">{dq || type || day ? "Nothing matches." : "No changes yet."}</p>
+          )}
         </div>
         {cur ? (
-          <Detail key={cur.id} row={cur} q={dq} onMove={move} />
+          <Detail key={cur.id} row={cur} shown={rows ?? []} narrowed={narrowed} onMove={move} />
         ) : order.length ? (
           <div className="iopen">
             <p className="faint">Select a change to see what it did.</p>
@@ -502,6 +640,75 @@ export function ReviewScreen() {
         )}
       </div>
     </main>
+  );
+}
+
+/** A line of log.md that isn't a change Changes has: its title (a link when it names a file), the
+ *  first line of what it says, its day and time, and its type. */
+function LogLine({ e, path, q }: { e: LogEntry; path: string | null; q: string }) {
+  const first = (e.description.split("\n").find((l) => l.trim()) ?? "").replace(/^[-*]\s+/, "");
+  const title = linkTarget(e.title);
+  return (
+    <div className="qrow tb-row qlog" role="row" title={e.description ? `From log.md: ${e.description}` : "From log.md"}>
+      <span className="qtop">
+        {path ? (
+          <button type="button" className="linkish tt" title={`Open ${path}`} onClick={() => openDoc(path)}>
+            <Marked text={title} q={q} />
+          </button>
+        ) : (
+          <span className="tt">
+            <FieldText text={e.title} q={q} />
+          </span>
+        )}
+        <span className="chip sm">{actionLabel(e.action)}</span>
+      </span>
+      <span className="faint ell">
+        {first && (
+          <>
+            <FieldText text={first} q={q} />
+            {" · "}
+          </>
+        )}
+        {day(e.date)}
+        {e.time ? ` ${e.time}` : ""} · log.md
+      </span>
+    </div>
+  );
+}
+
+/** Text with its task fields (a log line quoting a task) drawn as their icons, never the file's emoji. */
+function FieldText({ text, q }: { text: string; q: string }) {
+  return (
+    <>
+      {splitTaskFields(text).map((p, i) =>
+        typeof p === "string" ? (
+          <Marked key={i} text={p} q={q} />
+        ) : (
+          <span key={i} className="dfield" title={fieldTip(p, p.value)}>
+            <Icon name={fieldIcon(p)} size={12} />
+            {p.value}
+          </span>
+        ),
+      )}
+    </>
+  );
+}
+
+/** Text with the search's words marked. */
+function Marked({ text, q }: { text: string; q: string }) {
+  if (!q) return <>{text}</>;
+  return (
+    <>
+      {marks(text, q).map((m, i) =>
+        m.hit ? (
+          <mark key={i} className="search-hit">
+            {m.text}
+          </mark>
+        ) : (
+          <span key={i}>{m.text}</span>
+        ),
+      )}
+    </>
   );
 }
 
@@ -554,7 +761,18 @@ function Row({ c, sel, gone, onSel }: { c: ChangeRow; sel: boolean; gone?: boole
   );
 }
 
-function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: number) => void }) {
+function Detail({
+  row,
+  shown,
+  narrowed,
+  onMove,
+}: {
+  row: ChangeRow;
+  /** The changes the list shows, and whether a search, type or day narrowed them (⌘↩ accepts those). */
+  shown: ChangeRow[];
+  narrowed: boolean;
+  onMove: (d: number) => void;
+}) {
   const [v, setV] = useState<ChangeView | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [tries, setTries] = useState(0);
@@ -562,7 +780,6 @@ function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: num
   const readOnly = useStore(settings).readOnly;
   const accepting = useStore(acceptingRun);
   const pending = useStore(reverting);
-  const all = useStore(changes);
   const gone = useGone([...(v?.quotes.map((q) => q.path) ?? []), row.to ?? row.page]);
 
   useEffect(() => {
@@ -613,7 +830,7 @@ function Detail({ row, q, onMove }: { row: ChangeRow; q: string; onMove: (d: num
       if (e.defaultPrevented || keyIsElsewhere(e)) return;
       if (isMod(e) && e.key === "Enter") {
         if (e.repeat || !isHeld || readOnly || accepting || !v || v.problem) return;
-        void acceptRun(row.group, all ?? [], q);
+        void acceptRun(row.group, shown, narrowed);
       } else if (e.repeat && (e.key === "a" || e.key === "r")) return;
       else if (e.metaKey || e.ctrlKey || e.altKey) return;
       else if (e.key === "j") onMove(1);

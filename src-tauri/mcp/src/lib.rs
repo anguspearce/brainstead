@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use brainstead_core::changes::{self, Instruction};
 use brainstead_core::proposals::{self, Kind, Origin, Patch, Quote, SourceText};
 use brainstead_core::search::SearchRequest;
-use brainstead_core::{bridge, extract, filename, images, lint, paths, projects, write, Index};
+use brainstead_core::{bridge, extract, filename, images, initiatives, lint, paths, projects, write, Index};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use unicode_normalization::UnicodeNormalization;
@@ -31,14 +31,16 @@ const TODO_LIST: &str = "Me. To Do List.md";
 /// so it stays under that; each tool's description says the rest.
 const INSTRUCTIONS: &str = "Brainstead's tools over the user's vault (notes, a wiki in wiki/, sources in sources/), doing what the app's screens do. \
 The list_* tools and the others marked read-only only read; help answers questions about the app itself. \
-Every change to a note (tasks, the Inbox, projects, edit_page, create_note, add_image, rename_note, trash_note) is made at once and recorded in Brainstead's Changes, where the user can revert it. \
-A change to Templates/, one that adds code that runs (a script, a Tasks function, a Templater tag) or one that changes a system note's header is always held for the user to accept in the app. \
+Every change to a note (tasks, the Inbox, projects, edit_page, create_note, add_image, rename_note, trash_note, fix_health, fix_name) is made at once and recorded in Brainstead's Changes, where the user can revert it. \
+A change to Templates/, one that adds or changes code that runs (a script, a Tasks function, a Templater tag) or one that changes a system note's header is always held for the user to accept in the app. \
 Other tools change things at once; each one's description says how it's undone. \
 Change only what the user asked for. While the vault is read-only (app_status says) every change is refused. \
-In a session nobody is watching (a loop, a scheduled agent), pass unattended: true on every call: a change that fails a check is then held for the user, and for the rest of the session nothing held can be accepted and weekly_start_over and moving_over are refused. \
+In a session nobody is watching (a loop, a scheduled agent), pass unattended: true: from the first call that does, every call in the session is taken as unattended, so a change that fails a check is held for the user, nothing held can be accepted, and weekly_start_over and moving_over are refused. \
 changes accepts a held change only while the user is there, and only one held because a check failed. \
 Quote sources word for word in edit_page's quotes: a quote that isn't in its source is flagged. \
-Tools marked as needing the app open Brainstead when it isn't running.";
+Tools marked as needing the app open Brainstead when it isn't running. \
+A tool that waits on a model (doc_check, compare_docs, draft_reply, triage_bookmarks, list_inbox with suggest) can take up to ten minutes. \
+When Brainstead doesn't answer in time, the reply says whether nothing was done or the action may still happen: check before trying again.";
 
 /// Where the server works.
 #[derive(Debug)]
@@ -46,12 +48,14 @@ pub struct Ctx {
     /// The app data folder: `settings.json`, `index.db`, `text/` (what was read from sources) and
     /// `bridge/` (requests to the running app).
     pub data: PathBuf,
-    pub vault: PathBuf,
+    /// The vault, as `settings.json` named it when last read: [`Ctx::vault`] gives it, and each
+    /// tool call reads it again when the file has changed.
+    vault: std::sync::Mutex<VaultAt>,
     /// The Ask chat that started it, and its model, for Changes.
     pub chat: Option<String>,
     pub model: Option<String>,
-    /// Today, for `updated:` (tests fix it).
-    pub today: chrono::NaiveDate,
+    /// A fixed day for [`Ctx::today`], set by the tests. None reads the clock.
+    pub fixed_today: Option<chrono::NaiveDate>,
     /// The app's own program, to open it for an action when it isn't running; None from the
     /// separate `brainstead-mcp` binary and in tests.
     pub app: Option<PathBuf>,
@@ -65,22 +69,42 @@ pub struct Ctx {
     pub init: std::sync::Mutex<Option<Value>>,
 }
 
+/// The vault, and the `settings.json` it was read from, to tell when the user has opened another.
+#[derive(Debug)]
+struct VaultAt {
+    path: PathBuf,
+    /// The file's modification time and size when it was read.
+    stamp: Option<(std::time::SystemTime, u64)>,
+}
+
+fn settings_stamp(data: &Path) -> Option<(std::time::SystemTime, u64)> {
+    let m = std::fs::metadata(data.join("settings.json")).ok()?;
+    Some((m.modified().ok()?, m.len()))
+}
+
+/// The vault the data folder's `settings.json` names.
+fn vault_in(data: &Path) -> Result<PathBuf, String> {
+    let settings: Value = std::fs::read(data.join("settings.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .ok_or_else(|| format!("No Brainstead settings in {}: open Brainstead and choose the vault first.", data.display()))?;
+    settings
+        .get("vaultPath")
+        .and_then(Value::as_str)
+        .filter(|v| !v.trim().is_empty())
+        .map(PathBuf::from)
+        .ok_or_else(|| "Brainstead has no vault chosen yet.".to_string())
+}
+
 impl Ctx {
     /// From the command line (`--data <dir>`, `--chat <id>`, `--model <id>`), the vault being the one
     /// in the data folder's `settings.json`. `default_data` is the app data folder when no `--data`.
     pub fn from_args(args: &[String], default_data: PathBuf) -> Result<Ctx, String> {
         let opt = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
         let data = opt("--data").map(PathBuf::from).unwrap_or(default_data);
-        let settings: Value = std::fs::read(data.join("settings.json"))
-            .ok()
-            .and_then(|b| serde_json::from_slice(&b).ok())
-            .ok_or_else(|| format!("No Brainstead settings in {}: open Brainstead and choose the vault first.", data.display()))?;
-        let vault = settings
-            .get("vaultPath")
-            .and_then(Value::as_str)
-            .filter(|v| !v.trim().is_empty())
-            .map(PathBuf::from)
-            .ok_or("Brainstead has no vault chosen yet.")?;
+        // The stamp first: a write between the two is read again on the next call.
+        let stamp = settings_stamp(&data);
+        let vault = std::sync::Mutex::new(VaultAt { path: vault_in(&data)?, stamp });
         // Started as the app (`Brainstead --mcp`): the same program opens the app.
         let app = std::env::current_exe().ok().filter(|p| {
             let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
@@ -91,13 +115,41 @@ impl Ctx {
             vault,
             chat: opt("--chat"),
             model: opt("--model"),
-            today: chrono::Local::now().date_naive(),
+            fixed_today: None,
             app,
             calls: Default::default(),
             session: format!("session-{}", proposals::new_id()),
             unattended: Default::default(),
             init: Default::default(),
         })
+    }
+
+    /// Today, for `updated:`, an action's `on:` and the lookbacks. Read on each call, since a
+    /// terminal session runs for days.
+    pub fn today(&self) -> chrono::NaiveDate {
+        self.fixed_today.unwrap_or_else(|| chrono::Local::now().date_naive())
+    }
+
+    /// The vault's folder.
+    pub fn vault(&self) -> PathBuf {
+        self.vault.lock().unwrap().path.clone()
+    }
+
+    /// Follows the vault the user has open. A session outlives a switch of vault in Settings: the
+    /// app then applies changes, by their paths, to the new vault, so text read from the old one
+    /// would be checked against the wrong notes. When `settings.json` has changed since it was
+    /// read, the vault is read from it again (the index is opened afresh for each call, from the
+    /// same data folder). A file that can't be read just now, or names no vault, leaves the vault
+    /// as it was, to be read again on the next call.
+    fn follow_vault(&self) {
+        let stamp = settings_stamp(&self.data);
+        let mut v = self.vault.lock().unwrap();
+        if stamp == v.stamp {
+            return;
+        }
+        if let Ok(path) = vault_in(&self.data) {
+            *v = VaultAt { path, stamp };
+        }
     }
 
     fn index(&self) -> Result<Index, String> {
@@ -325,6 +377,11 @@ pub fn tools() -> Vec<Value> {
     let detail =
         json!({"type": "boolean", "description": "true for the full rows (see the description); a shorter line each when left out."});
     let layers = json!({"type": "array", "items": {"type": "string", "enum": ["notes", "wiki", "sources", "templates"]}, "description": "Only these parts of the vault; all when left out."});
+    let quotes_arg = json!({"type": "array", "description": "The quotes it rests on, each from a note or source.", "items": schema(json!({
+        "source": {"type": "string", "description": "The note or source's name or path."},
+        "anchor": {"type": "string", "description": "A heading in it (Branch 2), if the quote is under one."},
+        "text": {"type": "string", "description": "Word for word from the source."}
+    }), &["source", "text"])});
     let edit_schema = schema(
         json!({
             "page": page,
@@ -371,14 +428,51 @@ pub fn tools() -> Vec<Value> {
                 "subject": {"type": "string", "description": "What the fact is about, by name: Orbit App."},
                 "attribute": {"type": "string", "description": "Which fact: go_live_date, owner, status, role… (synonyms count)."}
             }), &[])),
+        tool("list_initiatives", "List initiatives", Read,
+            "The initiatives the user is tracking: wiki pages in wiki/initiatives/, each with its status (active, paused or done), what it's about and how many actions are open: the user's own, delegated (waiting for someone) and other people's. Give initiative for one in full: its open actions (done and dropped ones too with all) with their ids, owners, due dates and quotes, and its decisions. Change them with set_action and add_decision.",
+            schema(json!({
+                "initiative": {"type": "string", "description": "One initiative, by name or path, to see in full."},
+                "status": {"type": "string", "enum": ["active", "paused", "done", "all"], "description": "Only initiatives with this status; active and paused when left out."},
+                "all": {"type": "boolean", "description": "With initiative: done and dropped actions too."}
+            }), &[])),
+        tool("create_initiative", "Create an initiative", Change,
+            "Makes an initiative page in wiki/initiatives/, as New wiki page does with Initiative chosen: in the page shape, with empty Actions and Decisions sections (needs the app). Recorded in Changes, where the user can revert it. Add its actions with set_action and decisions with add_decision.",
+            schema(json!({
+                "name": {"type": "string", "description": "The initiative's name, as its page is titled: Acme renewal."},
+                "about": {"type": "string", "description": "What it is, one sentence: its opening line and description."},
+                "reason": reason
+            }), &["name"])),
+        tool("set_action", "Add or change an initiative's action", Change,
+            "Adds an action to an initiative's Actions, or changes one (needs the app), leaving every other line of the page as it was. Without action it adds one: give text and owner (me for the user's own; delegated with person for one the user handed to someone, a waiting-for; other with person for someone else's own). With action (its id from list_initiatives, or its words exactly) it changes only what's given: reassign it with owner and person (a delegated one is stamped [since:: today], kept while it stays with the same person; one with no due date comes back to the Inbox a week after), mark it done or dropped with status, set or clear (\"\") due; or with move_to, move it whole, with its quotes, to another initiative, as Move to… does (the task made from it follows it), changing nothing else. Both pages change together or neither does. Quotes are added under the action, each once: copy them word for word from the note or source; a quote that isn't in its source is flagged. Recorded in Changes, where the user can revert it.",
+            schema(json!({
+                "initiative": {"type": "string", "description": "The initiative, by name or path."},
+                "action": {"type": "string", "description": "The action to change: its id (a-3f9c) or its words exactly. Leave out to add one."},
+                "text": {"type": "string", "description": "What's to be done, one line."},
+                "owner": {"type": "string", "enum": ["me", "delegated", "other"], "description": "me: the user's own; delegated: the user handed it to person; other: person's own."},
+                "person": {"type": "string", "description": "Who it's delegated to, or whose it is, as the vault names them: Lena."},
+                "status": {"type": "string", "enum": ["open", "done", "dropped"]},
+                "due": {"type": "string", "description": "YYYY-MM-DD; \"\" clears it."},
+                "quotes": quotes_arg.clone(),
+                "move_to": {"type": "string", "description": "With action: another initiative, by name or path, to move the action to, whole. Nothing else changes."},
+                "reason": reason
+            }), &["initiative"])),
+        tool("add_decision", "Add a decision to an initiative", Change,
+            "Adds a decision to an initiative's Decisions, newest first by date (needs the app). Copy its quotes word for word from the note or source; a quote that isn't in its source is flagged. Recorded in Changes, where the user can revert it.",
+            schema(json!({
+                "initiative": {"type": "string", "description": "The initiative, by name or path."},
+                "text": {"type": "string", "description": "What was decided, one line."},
+                "date": {"type": "string", "description": "When, YYYY-MM-DD."},
+                "quotes": quotes_arg.clone(),
+                "reason": reason
+            }), &["initiative", "text"])),
         tool("pending_sources", "Sources not yet in the wiki", Read,
-            "Files in sources/ with their Status, as the Sources screen gives it: New (no wiki page cites it yet in its sources: property), Changed (changed since the pages citing it) or Ingested. Without status, the ones still to ingest, New and Changed: notes, PDFs, Office files and images (whose text is read from the picture), each path ready to pass to start_run's ingest (a Teams transcript is written up with start_run meeting_note instead); a file an ingest can't read is never listed as one to ingest, and status all marks it. An empty list means the wiki is up to date with Sources.",
+            "Files in sources/ with their Status, as the Sources screen gives it: New (no wiki page cites it yet in its sources: property), Changed (changed since the pages citing it) or Ingested. Without status, the ones still to ingest, New and Changed: notes, PDFs, Office files and images (whose text is read from the picture), each path ready to pass to start_run's ingest (a Teams transcript is written up with start_run meeting_note instead); a file an ingest can't read is never listed as one to ingest, and status all marks it. An empty list means the wiki is up to date with Sources. In the app, the New ones not yet dealt with wait in Inbox › Captures, where the user ingests them or keeps them in Sources (list_inbox lists them, clarify_inbox acts on them); Wiki health only counts them there.",
             schema(json!({"status": {"type": "string", "enum": ["all", "new", "changed", "ingested"], "description": "The Sources screen's Status: only New, Changed or Ingested sources, or all; New and Changed when left out."}}), &[])),
         tool("provenance", "A source's provenance", Read,
             "A source's Provenance card, as Sources and the source's own page show it (needs the app): whether it's ingested and by which run (when, its status and model), its size and when it changed, what the search index holds of it (passages indexed, its SHA-256), and the wiki pages that cite it with the passages they quote from it (three a page, as the card shows). Re-ingest is start_run ingest; Move to the Trash is trash_note.",
             schema(json!({"source": {"type": "string", "description": "The source, by its path in the vault (sources/…), as pending_sources gives it."}}), &["source"])),
-        tool("lint", "Knowledge health report", Read,
-            "Knowledge health's checks on the wiki, as its screen lists them when Brainstead is open (ignored issues and pairs marked not duplicates left out, and the checks only the app runs: claims with no citation and system notes missing their header), else from the vault. Each check says whether it's counted (the grey ones, only worth a look, aren't) and each item marked [safe fix] can be fixed with fix_health. Wiki checks: missing pages, broken sources, orphan pages, missing cross-links, stale updated: dates, unlogged writes, sources not yet ingested and images nothing uses. More checks: possible duplicates, stale pages others rely on, sources changed since they were cited, pages not in the page shape (reshape_pages) and pages with no Current state (write_current_state). For one page when given. With the app, the whole report starts with the screen's summary card: how many Need a decision, how many more are safe to fix, and the trend (the first and last day's count, and the highest). With the app, a missing page or broken source also says, as its row does, when the file it names is in the Trash (since when, and the id for restore_from_trash) and Did you mean, the note it most likely meant (the meeting note a trashed transcript became, or one a slip away), for health_issue link_to. Missing pages, broken sources (link_to), duplicates, unused images and orphan pages (add_to_index) have health_issue for their buttons.",
+        tool("lint", "Wiki health report", Read,
+            "Wiki health's checks on the wiki, as its screen lists them when Brainstead is open (ignored issues and pairs marked not duplicates left out, and the checks only the app runs: claims with no citation and system notes missing their header), else from the vault. Each check says whether it's counted (the grey ones, only worth a look, aren't, nor sources not yet ingested, which the Inbox's Captures counts and acts on) and each item marked [safe fix] can be fixed with fix_health. Only counted issues need a decision, and only they (or a held change) turn a page's Health amber in the Wiki list: Held, Stale (a source it cites changed since) or Check; a page with only safe fixes says Safe fix there in grey, one with only grey checks Worth a look, and one line above the list counts the safe fixes. Wiki checks: missing pages, broken sources, orphan pages, missing cross-links, stale updated: dates, unlogged writes, sources not yet ingested and images nothing uses. More checks: possible duplicates, stale pages others rely on, sources changed since they were cited, pages not in the page shape (reshape_pages) and pages with no Current state (write_current_state). For one page when given. With the app, the whole report starts with the screen's summary card: how many Need a decision, how many more are safe to fix, and the trend (the first and last day's count, and the highest). With the app, a missing page or broken source also says, as its row does, when the file it names is in the Trash (since when, and the id for restore_from_trash) and Did you mean, the note it most likely meant (the meeting note a trashed transcript became, or one a slip away), for health_issue link_to. Missing pages, broken sources (link_to), duplicates, unused images and orphan pages (add_to_index) have health_issue for their buttons.",
             schema(json!({"page": page}), &[])),
         tool("help", "Brainstead's help", Read,
             "Brainstead's own help: how the app works and how to use it (screens, settings, shortcuts, getting-started guides). For questions about the app itself, not the vault. No arguments lists the topics; `topic` reads one (and `section` one part of it); `query` finds the best matching sections.",
@@ -441,13 +535,13 @@ pub fn tools() -> Vec<Value> {
             schema(json!({"task": task, "text": task_text, "reason": reason}), &["task", "text"])),
         // Inbox and projects.
         tool("list_inbox", "List the Inbox", Read,
-            "What's waiting in the Inbox to clarify (needs the app): captures from Outlook and Teams and other sources not yet ingested, Scratchpad thoughts and tasks under Other on the To Do list. Each row has its id (task:14, capture:…) for clarify_inbox. Clarified items aren't listed. With suggest, the model suggests what each of the first 20 rows shown is, as the Inbox's Suggest does; nothing changes, and accepting one is clarify_inbox with its values.",
+            "What's waiting in the Inbox to clarify (needs the app): first the actions on the user's initiatives (their own, and those they delegated that are past their due date, or with none, handed over more than a week ago) not yet made tasks, then captures from Outlook and Teams and other sources not yet ingested, Scratchpad notes and tasks under Other on the To Do list. Each row has its id (task:14, capture:sources/…) for clarify_inbox. Clarified items aren't listed. With suggest, the model suggests what each of the first 20 rows shown is, as the Inbox's Suggest (and Suggest again) does; nothing changes. Its Accept is clarify_inbox with those values (Edit: with them changed); Skip is leaving it.",
             schema(json!({"suggest": {"type": "boolean", "description": "true asks the model what each of the first 20 rows shown is (a run on the user's account): becomes, text, project, context, effort, due and why, as clarify_inbox takes them."}}), &[])),
         tool("clarify_inbox", "Clarify an Inbox item", Change,
-            "Decides what an Inbox item is, as the Inbox screen does (needs the app); its edits to notes are recorded in Changes, where the user can revert them, and held together when one is held. next and waiting write a task (with project, under the project's Next actions, or its Waiting for for waiting, as the Inbox files them; next needs a project or a context, as the Inbox's form does); someday writes a #someday-maybe task; project makes a new project from it; done ticks or clears it; reference files it in a note (note or new_note), or keeps a capture in Sources; ingest ingests a capture into the wiki; delete takes it out (a capture goes to the Trash). Each kind of item offers only the Inbox's choices for it: a Teams transcript only ingest, reference or delete (its meeting note is start_run meeting_note); an email or chat thread's reply is draft_reply; a capture isn't done (reference keeps it in Sources), and only an email or chat thread can be waiting.",
+            "Decides what an Inbox item is, as the Inbox screen does (needs the app); its edits to notes are recorded in Changes, where the user can revert them, and held together when one is held. next and waiting write a task (with project, under the project's Next actions, or its Waiting for for waiting, as the Inbox files them; next needs a project or a context, as the Inbox's form does); todo writes it as a task at the top of the To Do list's To Do with nothing more to set, as the Inbox's To Do does (an action's due date and link come with it); someday writes a #someday-maybe task; project makes a new project from it; done ticks or clears it; reference files it in a note (note or new_note), or keeps a capture in Sources; ingest ingests a capture into the wiki; delete takes it out (a capture goes to the Trash). Each kind of item offers only the Inbox's choices for it: a Teams transcript only ingest, reference or delete (its meeting note is start_run meeting_note); an email or chat thread's reply is draft_reply; a capture isn't done (reference keeps it in Sources), and only an email or chat thread can be waiting. An initiative's action (action:<id>) becomes next, todo or someday (a task, for the user's own) or waiting (a #waiting-for task, for a delegated one), its due date carried over, and the action is marked with where its task went so it leaves the Inbox; done marks the action done and delete marks it dropped, on its initiative.",
             schema(json!({
-                "item": {"type": "string", "description": "The item's id from list_inbox, as in task:14."},
-                "becomes": {"type": "string", "enum": ["next", "waiting", "someday", "project", "done", "reference", "ingest", "delete"], "description": "What it is, as the Inbox's buttons name it."},
+                "item": {"type": "string", "description": "The item's id from list_inbox, as in task:14 or action:a-3f9c."},
+                "becomes": {"type": "string", "enum": ["next", "todo", "waiting", "someday", "project", "done", "reference", "ingest", "delete"], "description": "What it is, as the Inbox's buttons name it."},
                 "text": {"type": "string", "description": "The task's text, if it should read differently: start with a verb."},
                 "project": {"type": "string", "description": "For next, waiting or someday: the active project it belongs to, by name (the Inbox offers only active ones)."},
                 "context": {"type": "string", "description": "For next, waiting or someday: where or with what, as in calls or office."},
@@ -460,12 +554,20 @@ pub fn tools() -> Vec<Value> {
                 "new_note": {"type": "string", "description": "For reference: a new note's title to hold it."}
             }), &["item", "becomes"])),
         tool("capture", "Quick capture", Change,
-            "Captures something to clarify later, as Quick capture does (needs the app): a task goes to the Inbox (the top of the To Do list's Other section), a thought to the Scratchpad under today's date and time; both then wait in the Inbox (list_inbox). The capture box's shorthand works: due:, defer:, start: with a date or a word such as tomorrow, @context and effort:. Recorded in Changes, where the user can revert it. Capture only what the user asked for; a task they've decided on is create_task.",
+            "Captures something to clarify later, as Quick capture does (needs the app): a task goes to the Inbox (the top of the To Do list's Other section), a Scratchpad note to the Scratchpad under today's date and time; both then wait in the Inbox (list_inbox). A Scratchpad note's line that starts with # or ## is written \\# so the note stays one block. The capture box's shorthand works: due:, defer:, start: with a date or a word such as tomorrow, @context and effort:. Recorded in Changes, where the user can revert it. Capture only what the user asked for; a task they've decided on is create_task.",
             schema(json!({
-                "kind": {"type": "string", "enum": ["task", "thought"], "description": "Quick capture's Task (to the Inbox) or Thought (to the Scratchpad)."},
-                "text": {"type": "string", "description": "What to capture: a task on one line, or a thought (several lines are fine)."},
+                "kind": {"type": "string", "enum": ["task", "scratchpad"], "description": "Quick capture's Task (to the Inbox) or Scratchpad note (to the Scratchpad)."},
+                "text": {"type": "string", "description": "What to capture: a task on one line, or a Scratchpad note (several lines are fine)."},
                 "reason": reason
             }), &["kind", "text"])),
+        tool("update_item", "Apply an update", Change,
+            "Update…, as the Inbox, a task's menu and a project's detail offer it (needs the app): a line saying what has happened (\"Lena has already replied to Maya\") about an Inbox item, a task or a project, which Brainstead hands to an assistant in a chat of its own in the background. That assistant applies it with these same tools (an action or task done or dropped, a new date, a follow-up, a dated line on the project's or initiative's note); each change is in Changes with Revert. Returns at once with the chat it runs in; run_status and Ask show how it went. Give exactly one of item, task or project. Only when the user is there and asks for it: refused in an unattended session.",
+            schema(json!({
+                "update": {"type": "string", "description": "What has happened, in the user's words."},
+                "item": {"type": "string", "description": "An Inbox item's id from list_inbox: action:<id>, task:12, capture:sources/…"},
+                "task": task, "text": task_text,
+                "project": {"type": "string", "description": "A project's name, as list_projects gives it."}
+            }), &["update"])),
         tool("list_projects", "List projects", Read,
             "Every project, as the Projects screen lists them (needs the app), in its order (by area, as dragged there or with move_project, then A to Z): its name, status and count of next actions, flagged as the screen flags an active one (Stuck: no next action; Quiet: nothing has happened for two weeks), with its note's path. detail adds the area, what done looks like and the waiting, someday and done counts. Statuses are the screen's tabs: active, on-hold, someday, completed; an on-hold or someday project's tasks are left out of Next actions until it's active again. Use the name with list_tasks' project, create_task or update_project. A project's tasks are those in its note, those whose line links it, and those in its member notes: notes (not wiki pages, sources or templates) whose first Project: [[Project. <name>]] line, within their first 15 lines and outside code and HTML comments, names it, unless the task's line links another project or one that isn't there. detail also lists each project's member notes (its Documents: Tracker, Plan, Findings, Review, Ticket, Prompt and others) with their summary property; a tracker's structured item carries its current_state. detail also lists a project's references, as its page's Tickets and links card does: each reference key or link written in its note's or its documents' properties or in its open tasks, once, with the url it opens and where it's written (the structured item's references: key, url and from). Once the user's Reference links setting has a pattern, the structured item carries references; without one there are none and no tasks are read for them.",
             schema(json!({"detail": detail}), &[])),
@@ -523,7 +625,7 @@ pub fn tools() -> Vec<Value> {
                 "reason": reason
             }), &[])),
         tool("rename_note", "Rename a note", Change,
-            "Renames a note or any file in the vault in its folder, with the links to it rewritten (needs the app); revertable in Changes. Give the new name's parts; Brainstead builds `Type. Title - date` and keeps the file's own extension, as the file menu's Rename does (a source report.pdf stays a PDF). With preview, only the links it would rewrite are listed, as the Rename box lists them. A rename that touches Templates/ is held for the user.",
+            "Renames a note or any file in the vault in its folder, with the links to it rewritten (needs the app); revertable in Changes. Give the new name's parts; Brainstead builds `Type. Title - date` and keeps the file's own extension, as the file menu's Rename does (a source report.pdf stays a PDF). Links that name it by part of its path are rewritten too, and it never replaces a file that's there. With preview, only the links it would rewrite are listed, as the Rename box lists them. A rename that touches Templates/ is held for the user.",
             schema(json!({
                 "page": page,
                 "type": {"type": "string", "description": "The new name's type: Meeting, Idea… Leave out for a plain title."},
@@ -563,29 +665,35 @@ pub fn tools() -> Vec<Value> {
             }), &["name"])),
         // What agents changed.
         tool("list_changes", "What assistants changed", Read,
-            "What assistants and Brainstead's runs changed, and the changes held for the user, as the Changes screen shows them (needs the app). list gives them as one list, the held ones first and then those made, newest first, a page at a time (limit, offset and query page through the whole list), grouped by run, each with its id and its run's group; show gives one change's diff, quotes and flags; history says how long Changes keeps its history. detail adds each change's kind, who made it and why. Act on them with changes.",
+            "What assistants and Brainstead's runs changed, and the changes held for the user, as the Changes screen shows them (needs the app). list gives them as one list, a page at a time (limit, offset and query page through the whole list), grouped by run, each with its id and its run's group. view picks Changes' tab: all (the default) has the held ones first, then those made with the vault's log.md lines that aren't a change (older than Changes' history, from another computer, the previous app or a terminal, or Brainstead's own writes that aren't changes: what the user accepts in the weekly review, and Fix name and safe fixes made on their screens), newest first, as All shows them; held has the held ones only. With view all, type keeps one type, as All's chips do, and date one day, as Activity's Changes that day opens it. show gives one change's diff, quotes and flags; history says how long Changes keeps its history. detail adds each change's kind, who made it and why, and each log.md line's time and what it says. Act on them with changes.",
             schema(json!({
                 "action": {"type": "string", "enum": ["list", "show", "history"], "description": "Default list."},
+                "view": {"type": "string", "enum": ["all", "held"], "description": "For list: Changes' tab, All (the default) or Held."},
+                "type": {"type": "string", "description": "For list with view all: only changes and log.md lines of this type, as the log names it or All's chip does: ingest, update, create, lint-fix, review, weekly-review…"},
+                "date": day("for list with view all, only that day's changes and log.md lines."),
                 "id": {"type": "string", "description": "For show: the change's id from list."},
-                "page": {"type": "string", "description": "For list: only this page's changes, by its path."},
+                "page": {"type": "string", "description": "For list: only this page's changes, by its path (no log.md lines)."},
                 "detail": detail
             }), &[])),
         tool("changes", "Accept, reject or revert changes", Destroy,
-            "Decides on what assistants and runs changed (needs the app); list_changes lists them. accept makes a held change (on the page as it is now; a meeting note's follow-up, ingesting it and trashing its transcript, is then offered to the user in the app, as the screen's Accept does, and the reply says so) and reject turns it down; accept_run and reject_run do every held change in a run (its group), and with query only those of them the query finds, as Changes' Accept all and Reject all do with its search on; revert undoes a change that was made, also after later edits, and says when its lines have been edited since; revert_run reverts every change a run made, or with query those the query finds (Changes' Revert all); history with days or mb sets how long Changes keeps its history. accept and accept_run work only while the user is there (never with unattended) and only for a change held because a check failed: one held because it changes a template, adds code that runs, changes a system note's header, renames or trashes a template (or rewrites links in one), or comes from a job set to hold its changes is the user's to accept, in the app. Accept, reject, revert or change the history only as the user asked.",
+            "Decides on what assistants and runs changed (needs the app); list_changes lists them. accept makes a held change (on the page as it is now; a meeting note's follow-up, ingesting it and trashing its transcript, is then offered to the user in the app, as the screen's Accept does, and the reply says so) and reject turns it down; accept_run and reject_run do every held change in a run (its group), and with query, type or date only those of them these leave, as Changes' Accept all and Reject all do with its search, a type or a day on; revert undoes a change that was made, also after later edits, and says when its lines have been edited since; revert_run reverts every change a run made, or with query, type or date those these leave (Changes' Revert all); history with days or mb sets how long Changes keeps its history. accept and accept_run work only while the user is there (never with unattended) and only for a change held because a check failed: one held because it changes a template, adds or changes code that runs, changes a system note's header, renames or trashes a template (or rewrites links in one), or comes from a job set to hold its changes is the user's to accept, in the app. Accept, reject, revert or change the history only as the user asked.",
             schema(json!({
                 "action": {"type": "string", "enum": ["accept", "reject", "accept_run", "reject_run", "revert", "revert_run", "history"]},
                 "id": {"type": "string", "description": "For accept, reject and revert: the change's id from list_changes."},
                 "group": {"type": "string", "description": "For accept_run, reject_run and revert_run: the run's group from list_changes."},
                 "query": {"type": "string", "description": "For accept_run, reject_run and revert_run: only the run's changes with every word of this in their title, page, the page it moved to, origin or model (Changes' search)."},
+                "type": {"type": "string", "description": "For accept_run, reject_run and revert_run: only the run's changes of this type, as list_changes names them or All's chip does: ingest, update, create, lint-fix, review."},
+                "date": day("for accept_run, reject_run and revert_run, only the run's changes made that day."),
                 "days": {"type": "integer", "enum": [30, 90, 180, 365], "description": "For history: keep this many days."},
                 "mb": {"type": "integer", "enum": [100, 250, 500, 1000, 2000], "description": "For history: keep at most this many MB."}
             }), &["action"])),
         // Runs and the wiki.
         tool("start_run", "Start a run", Run,
-            "Starts work Brainstead does with a model on the user's account, as its screens do (needs the app): ingest sources into the wiki (notes, PDFs, Office files or images; their changes are made and recorded in Changes), the daily check, the daily or weekly summary (daily_summary, weekly_summary; date picks the day or week; summary reads them), the weekly review's preparation (weekly_prep: suggestions for each step of the review's week, a paused review's own as on the screen, nothing changed until one is accepted; weekly_review lists them), a look through the last 90 days of notes for tasks and projects (find_tasks; list_suggestions lists what it found), a contradictions check, or a meeting note from a Teams transcript (list_transcripts; once made, the note is ingested and the transcript moved to the Trash, as the user's settings say; with ingest_existing, the note that's there already is kept as it is instead and followed through the same way, as the card's Ingest the existing note does). Write Current state has its own tool, write_current_state. It returns once started; run_status shows progress and stop_run stops it.",
+            "Starts work Brainstead does with a model on the user's account, as its screens do (needs the app): ingest sources into the wiki (notes, PDFs, Office files or images; their changes are made and recorded in Changes), the daily check, the daily or weekly summary (daily_summary, weekly_summary; date picks the day or week; summary reads them), the daily brief (daily_brief: themes of what came in, the user's actions, waiting-fors and what can be archived, as Briefs/Brief YYYY-MM-DD.md; date picks the day, today by default; summary kind brief reads it), the weekly review's preparation (weekly_prep: suggestions for each step of the review's week, a paused review's own as on the screen, nothing changed until one is accepted; weekly_review lists them), a look through the last 90 days of notes for tasks and projects (find_tasks; list_suggestions lists what it found), a contradictions check, or a meeting note from a Teams transcript (list_transcripts; once made, the note is ingested and the transcript moved to the Trash, as the user's settings say; with ingest_existing, the note that's there already is kept as it is instead and followed through the same way, as the card's Ingest the existing note does). Write Current state has its own tool, write_current_state. It returns once started; run_status shows progress and stop_run stops it.",
             schema(json!({
-                "run": {"type": "string", "enum": ["ingest", "daily_check", "daily_summary", "weekly_summary", "weekly_prep", "find_tasks", "contradictions", "meeting_note"], "description": "Which run."},
+                "run": {"type": "string", "enum": ["ingest", "daily_check", "daily_summary", "weekly_summary", "daily_brief", "weekly_prep", "find_tasks", "contradictions", "meeting_note"], "description": "Which run."},
                 "sources": {"type": "array", "items": {"type": "string"}, "description": "For ingest: vault paths to ingest, in sources/ or notes (pending_sources lists those not yet ingested): notes and text, PDFs, Office files and images; anything else is refused. All are checked before any is queued. Every ingest waits in one queue with the app's own, one at a time, oldest source first (by the date in its name, else the file's), so the order given and how many calls make no difference."},
+                "mode": {"type": "string", "enum": ["full", "actions", "auto"], "description": "For ingest: full (the default) writes its pages and takes its actions; actions reads each source for its actions and decisions only, for a source the wiki already has (D-20261118-23); auto does that for a source a wiki page already cites and a full ingest for the rest, as after Fetch again."},
                 "transcript": {"type": "string", "description": "For meeting_note: the transcript's path."},
                 "ingest_existing": {"type": "boolean", "description": "For meeting_note: no new note; the one there already (list_transcripts says when there is one; name, type and date pick another) is ingested and the transcript moved to the Trash, as the user's settings say."},
                 "type": {"type": "string", "enum": ["Meeting", "1-1", "Workshop", "Interview"], "description": "For meeting_note: the note's type, as the screen offers them, if Brainstead guessed wrong."},
@@ -593,26 +701,28 @@ pub fn tools() -> Vec<Value> {
                 "date": {"type": "string", "pattern": DATE, "description": "For meeting_note: the meeting's day, YYYY-MM-DD; needed when list_transcripts says the date is only the capture day (ask the user). For daily_summary: the day to summarise (default yesterday); for weekly_summary: a day in a week that has ended (default the week just ended, as Run now; this week is refused)."}
             }), &["run"])),
         tool("run_status", "How runs are going", Read,
-            "How Brainstead's runs are going (needs the app): ingests running and lately done, the daily check, the daily and weekly summaries, the weekly review's preparation, Find tasks and projects, the contradictions check, meeting notes being written and Write Current state. Each says whether it's running, done or failed, with its progress; ingests and meeting notes give their ids, for stop_run, the meeting notes lately finished or failed are listed with the note made, and an ingest or meeting note says what the checks left out of it and why. Then the last eight summary runs, as Settings › Jobs & schedule's Recent runs lists them: kind, day, when, how it was started, its status and its note, and the id of its change in Changes (changes revert with that id undoes it, as Recent runs' Undo does). A summary run and the weekly review's last preparation give their chat with the model (Jobs' Open), which list_chats with action read and that chat reads. With query, the ingests listed are those the Sources screen's Ingest runs search finds (every word in the source or meeting note's name, its state, model or day), up to 20. Use it after start_run, rather than starting a run again; stop_run stops one.",
+            "How Brainstead's runs are going (needs the app): ingests running and lately done, the daily check, the daily and weekly summaries, the weekly review's preparation, Find tasks and projects, the contradictions check, meeting notes being written and Write Current state. Each says whether it's running, done or failed, with its progress; ingests and meeting notes give their ids, for stop_run, the meeting notes lately finished or failed are listed with the note made, and an ingest or meeting note says what the checks left out of it and why. Then the last eight summary runs, as Settings › Automations' Recent runs lists them: kind, day, when, how it was started, its status and its note, and the id of its change in Changes (changes revert with that id undoes it, as Recent runs' Undo does). A summary run and the weekly review's last preparation give their chat with the model (Automations' Open), which list_chats with action read and that chat reads. With query, the ingests listed are those the Sources screen's Ingest runs search finds (every word in the source or meeting note's name, its state, model or day), up to 20. Use it after start_run, rather than starting a run again; stop_run stops one.",
             schema(json!({"query": {"type": "string", "description": "Words to find ingest runs by, as the Ingest runs pane's search box: Steerco failed."}}), &[])),
         tool("stop_run", "Stop a run", Destroy,
             "Stops a run that's going, or an ingest or meeting note waiting its turn (needs the app), as its Stop button does. What it already changed stays, listed in Changes; the part not yet done is dropped, so start it again with start_run to finish. Stopping a run that isn't going does nothing. Only when the user asks.",
-            schema(json!({"run": {"type": "string", "enum": ["ingest", "daily_check", "daily_summary", "weekly_summary", "weekly_prep", "find_tasks", "contradictions", "meeting_note", "write_current_state"], "description": "Which run, as run_status names it."}, "id": {"type": "string", "description": "For ingest or meeting_note: the run's id from run_status, running or waiting; else the one running, or when none is, the next waiting."}}), &["run"])),
+            schema(json!({"run": {"type": "string", "enum": ["ingest", "daily_check", "daily_summary", "weekly_summary", "daily_brief", "weekly_prep", "find_tasks", "contradictions", "meeting_note", "write_current_state"], "description": "Which run, as run_status names it."}, "id": {"type": "string", "description": "For ingest or meeting_note: the run's id from run_status, running or waiting; else the one running, or when none is, the next waiting."}}), &["run"])),
         // Summaries and the weekly review.
-        tool("summary", "A daily or weekly summary", Read,
-            "The daily or weekly summary Brainstead wrote (what the user did that day or week, from their notes, tasks and log): the latest on file, or the one for day. For \"what did I do yesterday\", give kind daily and yesterday's date.",
+        tool("summary", "A daily or weekly summary, or a brief", Read,
+            "The daily or weekly summary Brainstead wrote (what the user did that day or week, from their notes, tasks and log), or the daily brief (kind brief: the themes of what came in, the user's open actions, what they're waiting for and what can be archived, in Briefs/Brief YYYY-MM-DD.md): the latest on file, or the one for day. For \"what did I do yesterday\", give kind daily and yesterday's date.",
             schema(json!({
-                "kind": {"type": "string", "enum": ["daily", "weekly"], "description": "Default daily."},
+                "kind": {"type": "string", "enum": ["daily", "weekly", "brief"], "description": "Default daily."},
                 "day": {"type": "string", "description": "YYYY-MM-DD: that day's summary, or for weekly the summary of the week it's in (2026-W40 works too). The latest when left out."}
             }), &[])),
         tool("weekly_review", "The weekly review", Read,
-            "The guided weekly review (needs the app): when it's scheduled and its suggestions are next prepared, the week it's for (on a Monday or Tuesday the week just ended, otherwise this one; a paused review keeps its week), its progress (steps done, the step it's on, notes and decisions so far), the path of the week's own review note once it's finished (Me. Weekly Review - YYYY-Www.md, what the user did and wrote; read it with read_section), and the prepared suggestions not yet accepted or skipped, grouped by step, each with its id, text, source and what accepting does. weekly_suggestion accepts or skips one; start_run weekly_prep prepares them again.",
+            "The guided weekly review (needs the app): when it's scheduled (settings weeklyReview.day and weeklyReview.time, which the review's start page and Settings › Automations set) and when its suggestions are next prepared, the week it's for (on a Monday or Tuesday the week just ended, otherwise this one; a paused review keeps its week), its progress (steps done, the step it's on, notes and decisions so far), the path of the week's own review note once it's finished (Me. Weekly Review - YYYY-Www.md, what the user did and wrote; read it with read_section), and the prepared suggestions not yet accepted or skipped, grouped by step, each with its id, text, source and what accepting does. weekly_suggestion accepts (with text, as Edit does), or skips one, as the review's Accept, Edit and Skip do; start_run weekly_prep is Suggest again.",
             schema(json!({}), &[])),
         tool("weekly_suggestion", "Accept or skip a weekly review suggestion", Destroy,
-            "Accepts a prepared weekly review suggestion, doing what the Weekly review's button does (a task added, ticked, deferred or reworded, or an Inbox item clarified, undoable with ⌘Z in the app; a link added to a note, made as a change recorded in Changes, where the user can revert it); or skips it. Either way it's hidden from the review for good and an accepted one goes in the review's log (needs the app). Only in a review that's started (weekly_step start), as the screen shows them in one. Accept or skip only what the user asked for.",
+            "Accepts a prepared weekly review suggestion, doing what the Weekly review's Accept does (a task added, ticked, deferred, marked waiting for, moved to someday / maybe or reworded, an Inbox item clarified as clarify_inbox clarifies it, or a link added to a note), made as a change recorded in Changes, where the user can revert it, and held for the user when a check fails (the reply says so; the suggestion still counts as accepted), with text for the words to use instead, as Edit does (the task to add, a task's new wording, or what an Inbox item becomes); or skips it, as Skip does. Either way it's hidden from the review for good and an accepted one goes in the review's log (needs the app). Only in a review that's started (weekly_step start), as the screen shows them in one. Accept or skip only what the user asked for.",
             schema(json!({
                 "id": {"type": "string", "description": "The suggestion's id from weekly_review."},
-                "action": {"type": "string", "enum": ["accept", "skip"]}
+                "action": {"type": "string", "enum": ["accept", "skip"]},
+                "text": {"type": "string", "description": "For accept: the words to use instead, as Edit does; only where the suggestion has words (a task to add, a new wording, what an Inbox item becomes)."},
+                "reason": reason
             }), &["id", "action"])),
         tool("weekly_start_over", "Start the weekly review over", Destroy,
             "Starts the weekly review over, as its Start over button does (needs the app): the paused review's progress, notes, decisions and handled suggestions are dropped, and it starts again from step 1 for this week. What it already changed in the vault stays, and there's no undo. Only when the user asks: refused once any call in the session passed unattended: true.",
@@ -652,42 +762,42 @@ pub fn tools() -> Vec<Value> {
         tool("list_transcripts", "Transcripts to write up", Read,
             "Teams meeting transcripts in Sources still without a meeting note (needs the app), or with show all every transcript, the done ones saying why (ingested, or linked from a note), as the screen's Show › All does. Each row has the transcript's path and what Brainstead guesses it is: its type, its name or who it was with, and its date, flagged when the date is only the day it was captured; as the screen marks them, the note it would make when that exists already, what to check with the user, and whether a note is being drafted or was drafted from it. Write one up with start_run meeting_note, giving the right date when it's flagged, and another name or date when its note exists.",
             schema(json!({"show": {"type": "string", "enum": ["to_do", "all"], "description": "The screen's Show: to_do (To do, the default) or all (All)."}}), &[])),
-        tool("fix_health", "Fix Knowledge health issues", Change,
-            "Applies Knowledge health's safe fixes (needs the app): missing cross-links, stale updated: dates, unlogged writes' log lines and system notes' lost headers; all of them, or the items named (their text as lint gives it). Undoable. Page shape items are reshape_pages'. Issues that need judgement aren't safe fixes: make those with edit_page.",
+        tool("fix_health", "Fix Wiki health issues", Change,
+            "Makes Wiki health's safe fixes, the ones its Fix safe issues and the Wiki list's safe-fixes line's Fix make (needs the app): missing cross-links, stale updated: dates, unlogged writes' log lines and system notes' lost headers; all of them, or the items named (their text as lint gives it). Each page fixed is a change in Changes, where the user can revert it, with updated: set to today; putting a system note's header back is always held for the user to accept there. Page shape items are reshape_pages'. Issues that need judgement aren't safe fixes: make those with edit_page.",
             schema(json!({"items": {"type": "array", "items": {"type": "string"}, "description": "Only these issues, by their text as lint gives it; every safe fix when left out."}}), &[])),
-        tool("ignore_issue", "Ignore a Knowledge health issue", Change,
-            "Knowledge health's Ignore (needs the app): stops listing an issue that has no fix (its text as lint gives it) until its page changes, or for a claim with no citation until its line changes; only when the user asked, and not for missing pages, duplicates, unused images, sources not yet ingested or page shape, which have buttons of their own (health_issue, start_run ingest, reshape_pages). With all and check (stale-pages or uncited-claims), Ignore all: every issue that check lists, as its Ignore all button does. With show_again, Show again: the ignored issues listed again, of one check (its id) or all. Ignored issues are left out of the app's count and of lint while the app is open.",
+        tool("ignore_issue", "Ignore a Wiki health issue", Change,
+            "Wiki health's Ignore (needs the app): stops listing an issue that has no fix (its text as lint gives it) until its page changes, or for a claim with no citation until its line changes; only when the user asked, and not for missing pages, duplicates, unused images, sources not yet ingested or page shape, which have buttons of their own (health_issue, start_run ingest, reshape_pages). With all and check (stale-pages or uncited-claims), Ignore all: every issue that check lists, as its Ignore all button does. With show_again, Show again: the ignored issues listed again, of one check (its id) or all. Ignored issues are left out of the app's count and of lint while the app is open.",
             schema(json!({
                 "item": {"type": "string", "description": "The issue's text, as lint gives it."},
                 "show_again": {"type": "boolean", "description": "List ignored issues again instead."},
                 "all": {"type": "boolean", "description": "Ignore every issue of check (stale-pages or uncited-claims), as Ignore all does."},
                 "check": {"type": "string", "description": "With all: stale-pages or uncited-claims. With show_again: the check's id (orphans, stale-pages…); every check when left out."}
             }), &[])),
-        tool("health_issue", "A Knowledge health issue's button", Destroy,
-            "Does what an issue's own button on Knowledge health does (needs the app), the issue named by its text as lint gives it. create (Create, on a missing page): writes the page as a new entity page, as Create does (a concept page is edit_page's, in wiki/concepts/); link_to (Link to…, on a missing page): points every link to the missing page at an existing page, given as to; not_duplicates (Not duplicates, on a possible duplicate): the pair isn't listed again; move_to_trash (Move to the Trash, on an image nothing uses; restore_from_trash puts it back); link_to also points a broken source (a page citing a file that isn't there) at a file that is; add_to_index (Add them to index.md, on Orphan pages, no item) brings index.md's catalogue up to date now, which links every wiki page. A missing page whose file is in the Trash has no create, as the screen has no Create for it: put it back with restore_from_trash (lint gives the id), or link_to another page; the same goes for a broken source. A page made is undone with ⌘Z in the app; each relinked page is a change in Changes, with Revert. Only as the user asked.",
+        tool("health_issue", "A Wiki health issue's button", Destroy,
+            "Does what an issue's own button on Wiki health does (needs the app), the issue named by its text as lint gives it. create (Create, on a missing page): writes the page as a new entity page, as Create does (a concept page is edit_page's, in wiki/concepts/); link_to (Link to…, on a missing page): points every link to the missing page at an existing page, given as to; not_duplicates (Not duplicates, on a possible duplicate): the pair isn't listed again; move_to_trash (Move to the Trash, on an image nothing uses; restore_from_trash puts it back); link_to also points a broken source (a page citing a file that isn't there) at a file that is; add_to_index (Add them to index.md, on Orphan pages, no item) brings index.md's catalogue up to date now, which links every wiki page. A missing page whose file is in the Trash has no create, as the screen has no Create for it: put it back with restore_from_trash (lint gives the id), or link_to another page; the same goes for a broken source. A page made is undone with ⌘Z in the app; each relinked page is a change in Changes, with Revert. Only as the user asked.",
             schema(json!({
                 "action": {"type": "string", "enum": ["create", "link_to", "not_duplicates", "move_to_trash", "add_to_index"]},
                 "item": {"type": "string", "description": "The issue's text, as lint gives it (not for add_to_index)."},
                 "to": {"type": "string", "description": "For link_to: the page the links should point at, by name or path."}
             }), &["action"])),
         tool("list_contradictions", "Contradictions", Read,
-            "The Contradictions screen's findings (needs the app): when the last check ran, and as the screen's banners say, why it failed or which fixes it couldn't make; then every finding, in the screen's order (real ones by severity, then unclear, then those settled), each with its id, the claims that clash (page, value, as-of date and quote), the model's verdict, and the judge's fix with its change in Changes (waiting there for the user, or made, with the change's id), as the screen's Judge's view and The fix is in Changes show them. Settle one or save the report with contradictions; start_run contradictions runs the check again.",
+            "Wiki health's Contradictions tab's findings (needs the app): when the last check ran, and as the screen's banners say, why it failed or which fixes it couldn't make; then every finding, in the screen's order (real ones by severity, then unclear, then those settled), each with its id, the claims that clash (page, value, as-of date and quote), the model's verdict, and the judge's fix with its change in Changes (waiting there for the user, or made, with the change's id), as the screen's Judge's view and The fix is in Changes show them. Settle one or save the report with contradictions; start_run contradictions runs the check again.",
             schema(json!({}), &[])),
         tool("contradictions", "Settle a contradiction", Change,
-            "Acts on the Contradictions screen (needs the app): mark settles a finding as its buttons do (resolved: Mark resolved; ignored: Ignore, not a real contradiction, so it isn't flagged again); save writes the report as a new note, Contradictions - YYYY-MM-DD, as Save report as note does, recorded in Changes. list_contradictions lists the findings. Mark only as the user asked.",
+            "Acts on Wiki health's Contradictions tab (needs the app): mark settles a finding as its buttons do (resolved: Mark resolved; ignored: Ignore, not a real contradiction, so it isn't flagged again); save writes the report as a new note, Contradictions - YYYY-MM-DD, as Save report as note does, recorded in Changes. list_contradictions lists the findings. Mark only as the user asked.",
             schema(json!({
                 "action": {"type": "string", "enum": ["mark", "save"]},
                 "id": {"type": "string", "description": "For mark: the finding's id from list_contradictions."},
                 "as": {"type": "string", "enum": ["resolved", "ignored"], "description": "For mark."}
             }), &["action"])),
         tool("page_shape", "Page shape", Read,
-            "Knowledge health's Page shape check: which wiki entity and concept pages aren't in the page shape (opening text, Current state, topical sections, a Timeline of `### YYYY-MM-DD — title` entries newest first, each with a Source: [[…]] line, then See also), which of them Reshape pages can do by itself and why the rest need the user, then how many Tracker notes aren't in the tracker shape. With page, that page's report: the headings it would rewrite and the lines it would add. A Tracker note (Tracker. <title>) has a shape of its own: its opening with the Project: [[…]] line, then ## Current state, ## Blockers, ## Next and ## Log (dated bullets, - YYYY-MM-DD: …, newest first), any other sections kept below those.",
+            "Wiki health's Page shape check: which wiki entity and concept pages aren't in the page shape (opening text, Current state, topical sections, a Timeline of `### YYYY-MM-DD — title` entries newest first, each with a Source: [[…]] line, then See also), which of them Reshape pages can do by itself and why the rest need the user, then how many Tracker notes aren't in the tracker shape. With page, that page's report: the headings it would rewrite and the lines it would add. A Tracker note (Tracker. <title>) has a shape of its own: its opening with the Project: [[…]] line, then ## Current state, ## Blockers, ## Next and ## Log (dated bullets, - YYYY-MM-DD: …, newest first), any other sections kept below those.",
             schema(json!({"page": page}), &[])),
         tool("reshape_pages", "Reshape pages", Change,
-            "Reshape pages, as Knowledge health's Page shape check does it (needs the app): every wiki page that can be reshaped by itself, or the pages named (as proposed, even those that need the user; only when the user asked). Sections move whole and dated headings are rewritten; no text is lost. A Tracker note is reshaped to the tracker shape (see page_shape) only when named: its missing sections are added empty, its Log sorted newest first, and its other sections kept below. Each page is one change in Changes, in one run the user can revert alone or all together (changes revert_run).",
+            "Reshape pages, as Wiki health's Page shape check does it (needs the app): every wiki page that can be reshaped by itself, or the pages named (as proposed, even those that need the user; only when the user asked). Sections move whole and dated headings are rewritten; no text is lost. A Tracker note is reshaped to the tracker shape (see page_shape) only when named: its missing sections are added empty, its Log sorted newest first, and its other sections kept below. Each page is one change in Changes, in one run the user can revert alone or all together (changes revert_run).",
             schema(json!({"pages": {"type": "array", "items": page, "description": "Only these pages, by name or path."}}), &[])),
         tool("write_current_state", "Write Current state", Run,
-            "Knowledge health's Write Current state (needs the app): for wiki pages with a Timeline but no Current state (lint lists them under Pages with no Current state), the cheap model writes one from each page's opening and newest Timeline entries only, checked (no links the page doesn't have) and made as a change in one Changes run. Runs in the background: limit does only that many first (a sample to look at), pages only those named; status says how the run is going; stop stops it after the page it's on. For a Tracker note, give page and text: the text of its ## Current state section, above any ### parts it has (which stay), becomes text (the section is made where the tracker shape puts it when the note has none) and nothing else changes; log also adds - <today>: <log> at the top of its ## Log, spaced like the entries below it. That's one change, recorded in Changes, where the user can revert it; no model is asked.",
+            "Wiki health's Write Current state (needs the app): for wiki pages with a Timeline but no Current state (lint lists them under Pages with no Current state), the cheap model writes one from each page's opening and newest Timeline entries only, checked (no links the page doesn't have) and made as a change in one Changes run. Runs in the background: limit does only that many first (a sample to look at), pages only those named; status says how the run is going; stop stops it after the page it's on. For a Tracker note, give page and text: the text of its ## Current state section, above any ### parts it has (which stay), becomes text (the section is made where the tracker shape puts it when the note has none) and nothing else changes; log also adds - <today>: <log> at the top of its ## Log, spaced like the entries below it. That's one change, recorded in Changes, where the user can revert it; no model is asked.",
             schema(json!({
                 "pages": {"type": "array", "items": page, "description": "Only these pages; every page without a Current state when left out."},
                 "page": {"type": "string", "description": "A Tracker note (Tracker. <title>), with text or log."},
@@ -699,7 +809,7 @@ pub fn tools() -> Vec<Value> {
                 "stop": {"type": "boolean", "description": "true stops the run after the page it's on."}
             }), &[])),
         tool("fix_name", "Fix a name everywhere", Change,
-            "Corrects a misspelt name across the notes and wiki, as Fix name does (needs the app); sources are left alone, and so are the files to leave alone; with ask_about_each_file, as Ask about each file, the notes to rewrite start unticked. Without apply it only lists the files the name is in, as the screen does, with what happens to each (Rewrite, Add as alias, Left alone, Guarded: someone else; a name in the file name is renamed separately) and how many will change; with apply true it changes the files (undoable), or with files only those, as ticking files in Fix name does. The correction is remembered for future captures, transcripts and ingests unless remember is false.",
+            "Corrects a misspelt name across the notes and wiki, as Fix name does (needs the app); sources are left alone, and so are the files to leave alone; with ask_about_each_file, as Ask about each file, the notes to rewrite start unticked. Without apply it only lists the files the name is in, as the screen does, with what happens to each (Rewrite, Add as alias, Left alone, Guarded: someone else; a name in the file name is renamed separately) and how many will change; with apply true it changes the files, or with files only those, as ticking files in Fix name does: each file is a change in Changes, where the user can revert it, made together or, when any of them is held (a template, a check that fails in an unattended session), held together. The correction is remembered for future captures, transcripts and ingests once the files are changed, unless remember is false. Web addresses, link destinations and tags are never rewritten; when the right page's properties don't read as YAML the alias can't be added and nothing is changed.",
             schema(json!({
                 "written_as": {"type": "string", "description": "Written as: the name as it's misspelt, Lenna."},
                 "correct_spelling": {"type": "string", "description": "Correct spelling: the name as it should be, Lena."},
@@ -712,19 +822,20 @@ pub fn tools() -> Vec<Value> {
             }), &["written_as", "correct_spelling"])),
         // The skill screens.
         tool("triage_bookmarks", "Triage bookmarks", Run,
-            "Asks the model what to do with each bookmark given, as the Triage screen does (needs the app), in its choices: Keep, Ingest into the wiki (with the page to make), Make a task (with the task), Archive, or Remove for one whose note is gone; nothing is changed. list_bookmarks lists them, with how long since each changed. Act on a suggestion as the user decides, as its button does: Keep is bookmarks keep; Archive and Remove are bookmarks remove (by the bookmark's target); Ingest into the wiki is edit_page making the page, and Make a task is capture with kind task (to the Inbox), each then taking the bookmark off with bookmarks remove, as the screen's do.",
+            "Asks the model what to do with each bookmark given, as Triage's Suggest (and Suggest again) does (the Inbox's Bookmarks band opens it; needs the app), in its choices: Keep, Ingest into the wiki (with the page to make), Make a task (with the task), Archive, or Remove for one whose note is gone; nothing is changed. list_bookmarks lists them, with how long since each changed. Act on a suggestion as the user decides, as its Accept (or Edit, with the page or task changed) does, or leave it, as Skip does: Keep is bookmarks keep; Archive and Remove are bookmarks remove (by the bookmark's target); Ingest into the wiki is edit_page making the page, and Make a task is capture with kind task (to the Inbox), each then taking the bookmark off with bookmarks remove, as the screen's do.",
             schema(json!({"items": {"type": "array", "minItems": 1, "description": "The bookmarks to ask about, as list_bookmarks gives them.", "items": schema(json!({
                 "target": {"type": "string", "description": "The bookmark's target, from list_bookmarks."},
                 "path": {"type": "string", "description": "The note it points at, from list_bookmarks."}
             }), &["target", "path"])}}), &["items"])),
         tool("draft_reply", "Draft a reply", Run,
-            "Drafts a reply to an email thread in sources/ (thread) or to pasted text, as the Draft reply screen does (needs the app). It says how fully the draft answers the thread. With current and change, it revises that reply as asked, as the screen's Ask for a change box does, keeping the rest of it. Nothing is sent and nothing in the vault changes: give the draft to the user.",
+            "Drafts a reply to an email thread in sources/ (thread) or to pasted text, as the Draft reply screen does (needs the app). It says how fully the draft answers the thread. With current and change, it revises that reply as asked, as the screen's Ask for a change box does, keeping the rest of it. With place (and thread), it's the screen's Put in Outlook or Put in Teams instead, for the reply the user is happy with: an email's reply becomes a reply-all draft on the thread in Outlook, a synced Teams chat's is typed into the chat's message box by the Teams extension, and the link opens in the browser; the user sends it there. Only when the user asks for it, and refused in an unattended session. Nothing is ever sent and nothing in the vault changes.",
             schema(json!({
                 "thread": {"type": "string", "description": "The email thread's path in sources/."},
                 "text": {"type": "string", "description": "Instead of thread: the message to reply to, pasted."},
                 "tone": {"type": "string", "enum": ["brief", "warm", "formal"], "description": "The screen's Tone: brief (as short as it can be while still answering, the default), warm (friendly and personal) or formal (courteous and complete, for someone senior or outside the team)."},
                 "current": {"type": "string", "description": "To revise: the reply as it stands, with any edits the user made."},
-                "change": {"type": "string", "description": "To revise: what to change, as the user asked (shorter, mention the date…)."}
+                "change": {"type": "string", "description": "To revise: what to change, as the user asked (shorter, mention the date…)."},
+                "place": {"type": "string", "description": "Put in Outlook / Put in Teams: the reply to leave, unsent, on the thread (needs thread)."}
             }), &[])),
         tool("doc_check", "Check a document", Run,
             "Checks a document, as Doc check does (needs the app): against the version in force of a governing document in the canonical docs register, or against the feedback the user gave on its last version. The findings come in the screen's words, as Copy findings gives them (Conflict, Not covered, Superseded term, Beyond scope, Agrees; the version In force and those not used). Without document it gives the register, each version's key and status (In force, Draft, Superseded), so you can pick governing_document from it; with start_register and no register yet, it's Start the register (Me. Canonical Docs.md, with its empty table). save is Save as note: the findings as a new note, Doc check. <name> - YYYY-MM-DD. Those two are recorded in Changes, where the user can revert them; otherwise nothing in the vault changes. Against the version in force, it first looks at the two documents' openings and stops there, checking nothing and saving nothing, when they aren't about the same thing. A finished check is kept, as the screen keeps it: while neither document has changed it's given again (saying when it was made) rather than run again, unless fresh.",
@@ -739,17 +850,20 @@ pub fn tools() -> Vec<Value> {
                 "save": {"type": "boolean", "description": "Save as note, once it's compared."}
             }), &["document_a", "document_b"])),
         // Around the vault.
-        tool("activity", "Recent activity", Read,
-            "log.md, newest first: what Brainstead and the assistants changed in the vault (needs the app), a line an entry with its date, action and title. action keeps one kind of entry, as the Activity screen's action chips do; query keeps the entries with all its words in their title, description or action's label, as its search does, best matches first or with order latest the newest first. With date, the day picked as on the screen: the files changed that day, then that day's entries (action and query narrow the entries, not the files). detail adds each entry's time and description.",
-            schema(json!({"date": day("the files changed that day and its entries."), "action": {"type": "string", "description": "Only entries of this action, as the log names it or its chip on the Activity screen does: ingest, review, trash…"}, "order": {"type": "string", "enum": ["best_match", "latest"], "description": "With query, the screen's order of search results: best_match (Best match, the default) or latest (Latest). Newest first without query."}, "detail": detail}), &[])),
+        tool("activity", "Files by day", Read,
+            "Activity's Files by day (needs the app): the days files in the vault last changed on, newest first, each with how many files, as its heatmap shades them (templates aren't counted); detail splits each day into notes, wiki pages and sources. With date, the day picked as on the screen: the files that last changed that day, newest first (detail adds the time). What assistants and Brainstead's runs changed, and the vault's log.md, are Changes' (list_changes, with date for one day).",
+            schema(json!({"date": day("the files that last changed that day."), "detail": detail}), &[])),
+        tool("sync_activity", "Sync and ingest activity", Read,
+            "What the sync brought in and what each ingest did with it (needs the app), newest first over the last two weeks, as Activity › Sync & ingest shows it: each Teams, Outlook and Slack sync pass (the sources it wrote new or topped up, its problems, or why it couldn't run, counted when the same wall repeats) and each ingest (what it changed, that it found nothing and moved a chat day to the Trash, or why it failed). The first line says when the sync last ran, as the menu-bar window does. filter keeps one service, or problems only, as the screen's chips do; query keeps the rows with all its words. detail adds the files each row names, by what they are, and what went wrong or was left out.",
+            schema(json!({"filter": {"type": "string", "enum": ["all", "teams", "outlook", "slack", "failed"], "description": "As the screen's chips: all (the default), teams, outlook, slack, or failed (Problems: failed ingests and passes with a problem or that couldn't run)."}, "detail": detail}), &[])),
         tool("graph", "Links around a page", Read,
             "The pages linked to and from a page (by name, [[link]] or path), to a depth of 1 to 3 (needs the app), as the Graph screen draws it; the whole wiki without page. Like the screen it keeps the nearest 400 pages, and says so when there were more. It lists the links between them, one `from → to` a line. hide leaves out kinds of page, as the screen's chips do (the page itself stays). detail lists the pages too, each with its type, how far it is from the page and how many links it has.",
             schema(json!({"page": page, "depth": {"type": "integer", "minimum": 1, "maximum": 3, "description": "How many links away to go. Default 2, as the Graph screen starts."}, "hide": {"type": "array", "items": {"type": "string", "enum": ["Entities", "Concepts", "Summaries", "Other wiki", "Sources", "Notes", "Not written yet"]}, "description": "The kind chips turned off: those pages and their links are left out."}, "detail": detail}), &[])),
         tool("list_suggestions", "Suggested tasks and projects", Read,
-            "Find tasks and projects' suggestions (needs the app): tasks and projects a read of the user's notes from the last 90 days found, each with the note and quote it rests on and its id, and how the last look went. Accept or skip one with suggestions; start_run find_tasks looks again.",
+            "Find tasks and projects' suggestions (needs the app): tasks and projects a read of the user's notes from the last 90 days found, each with the note and quote it rests on and its id, and how the last look went. Accept or skip one with suggestions, as Tasks' and Projects' Accept, Edit and Skip do; start_run find_tasks is their Suggest again.",
             schema(json!({}), &[])),
         tool("suggestions", "Accept or skip a suggestion", Destroy,
-            "Acts on a Find tasks and projects suggestion (needs the app). accept makes it (a task added to its project's Next actions or the To Do list, a project note with its first next actions) as a change recorded in Changes, where the user can revert it (⌘Z in the app undoes it too, as Found's Undo does), with text to reword it (or a project's name) and done_looks_like for a project's; skip leaves it out. Neither comes back. Accept or skip only what the user asked for.",
+            "Acts on a Find tasks and projects suggestion (needs the app). accept makes it (a task added to its project's Next actions or the To Do list, a project note with its first next actions) as a change recorded in Changes, where the user can revert it (⌘Z in the app undoes it too, as Found's Undo does), with text to reword it (or a project's name) and done_looks_like for a project's, as Edit does; skip leaves it out, as Skip does. Neither comes back. Accept or skip only what the user asked for.",
             schema(json!({
                 "action": {"type": "string", "enum": ["accept", "skip"]},
                 "id": {"type": "string", "description": "The suggestion's id from list_suggestions."},
@@ -766,10 +880,10 @@ pub fn tools() -> Vec<Value> {
                 "item": {"type": "string", "description": "For tick and untick: the item's id from list_moving_over (otherStopped)."}
             }), &["action"])),
         tool("list_automated_tools", "Tools that start sessions", Read,
-            "The user's own tools that start Claude Code sessions (Settings › Jobs & schedule), whose sessions the daily summary counts as automated instead of as the user's work (needs the app). It lists them, then as suggestions the folders whose recent sessions were nearly all one prompt and done. Add or remove one with automated_tools.",
+            "The user's own tools that start Claude Code sessions (Settings › Automations), whose sessions the daily summary counts as automated instead of as the user's work (needs the app). It lists them, then as suggestions the folders whose recent sessions were nearly all one prompt and done. Add or remove one with automated_tools.",
             schema(json!({}), &[])),
         tool("automated_tools", "Add or remove a tool that starts sessions", Destroy,
-            "Changes the user's list of tools that start Claude Code sessions (Settings › Jobs & schedule; needs the app): add lists one (a name, and folder_contains and/or first_message_starts_with, the screen's Folder contains and First message starts with), replacing one of the same name; remove takes one off by name. list_automated_tools lists them. Only when the user asks.",
+            "Changes the user's list of tools that start Claude Code sessions (Settings › Automations; needs the app): add lists one (a name, and folder_contains and/or first_message_starts_with, the screen's Folder contains and First message starts with), replacing one of the same name; remove takes one off by name. list_automated_tools lists them. Only when the user asks.",
             schema(json!({
                 "action": {"type": "string", "enum": ["add", "remove"]},
                 "name": {"type": "string", "description": "The tool's name."},
@@ -790,10 +904,10 @@ pub fn tools() -> Vec<Value> {
                 "group": {"type": "string", "enum": ["none", "project", "context", "due", "priority"], "description": "For save: default none."}
             }), &["action", "name"])),
         tool("list_settings", "Brainstead's settings", Read,
-            "Brainstead's settings that settings can change, as the Settings screen shows them (needs the app): each one's key, pane, label and value, and for a choice its choices; a note's Text size, set from a note's top bar, is among them, and so are the Interface size (the whole window, 80 to 150%) and the pane widths (paneWidths: each pane or table column the user dragged, in px by pane key, with every pane's key, what its screen calls it (a column by its heading), its range and whether it's locked) and the two locks on resizing (resizeLocks.panes, Lock pane widths, for the screens' panes and the sidebar; resizeLocks.columns, Lock column widths, for every table's columns); the Accent colour (app or system) is listed on Windows alone, which has a system accent to follow. A job that can run scheduled (summaries, weekprep, ingest, meeting, contradictions) on an Ollama model (jobModels.<job>, its own or one it follows) says which model its scheduled runs use instead. The vault, Read-only and the folders left out aren't listed: they're the user's to change, in the app.",
+            "Brainstead's settings that settings can change, as the Settings screen shows them (needs the app): each one's key, pane, label and value, and for a choice its choices; a note's Text size, set from a note's top bar, is among them, and so are the Interface size (the whole window, 80 to 150%) and the pane widths (paneWidths: each pane or table column the user dragged, in px by pane key, with every pane's key, what its screen calls it (a column by its heading), its range and whether it's locked) and the two locks on resizing (resizeLocks.panes, Lock pane widths, for the screens' panes and the sidebar; resizeLocks.columns, Lock column widths, for every table's columns); the sidebar as an icon rail, chosen per width as ⌘\\ chooses it (sidebarRail.wide, Icons only on a wide window, off unless chosen; sidebarRail.narrow, Icons only on a narrow window, 1100 px or less, on unless chosen; the one for the width the window is at now says so); the Accent colour (app or system) is listed on Windows alone, which has a system accent to follow. A job that can run scheduled (summaries, weekprep, ingest, meeting, contradictions) on an Ollama model (jobModels.<job>, its own or one it follows) says which model its scheduled runs use instead. The vault, Read-only and the folders left out aren't listed: they're the user's to change, in the app.",
             schema(json!({}), &[])),
         tool("settings", "Change a setting", Change,
-            "Changes one of Brainstead's settings by its key from list_settings, as the Settings screen does (needs the app). The value is checked against the setting's kind: true or false, a time HH:MM, a day (mon…sun), a number from its choices, one of the choices list_settings gives by id or name (a model, a voice, a spelling language such as British English, a document theme or colour), a note's Text size (12 to 24), the Interface size (80 to 150, a percentage of the whole window, in steps of 10), a pane's width (paneWidths.<pane> in px, clamped to the pane's range as dragging it is; null puts that pane back, and paneWidths with null every pane; a pane whose type is locked by resizeLocks.panes or resizeLocks.columns is refused until that lock is off, though paneWidths with null still puts every pane back), a resize lock (resizeLocks.panes or resizeLocks.columns, true or false), the Accent colour (app, or system for the Windows accent, followed as it changes), the quick capture shortcut (Control, Alt, Shift or Super, then a key: Control+Alt+Space; it says whether the system registered it), or text, or for referenceLinks (Settings › Notes › Reference links) the whole list of rows, each a prefix and the address its keys open (a key is the prefix and digits, as ORBIT-12; {key} in the address is the whole key and {num} its digits; [] for none); null puts a setting with a default choice back to it (a job's Default model, As macOS, System voice, As the app, Default effort). A job's effort (jobEffort.<job>) is that job's only and never what a new chat starts with; giving the job a model (jobModels.<job>) whose assistant lacks that level (or, for an Ollama model, that the model doesn't name) puts it back to Default, and the reply says so; while a model it only follows (askModel, or jobModels.summaries for weekprep) is on such an assistant, it reads null and comes back with the model. An effort is offered only for an assistant that is installed, and for an Ollama model only the thinking levels it names (list_settings lists them per job). Ollama runs only in Ask and runs started by hand: a scheduled run of a job on an Ollama model, and a run that writes to the vault started with unattended: true (an ingest, including one an accepted weekly suggestion starts, the daily check, a contradictions check, Write Current state, a summary, a meeting note, and Find tasks and projects or the weekly review's preparation, whose suggestions can then be accepted unattended), goes on askModel instead, or claude:sonnet when that is Ollama's too, at the job's effort where that assistant offers it. start_run's find_tasks and weekly_prep write nothing until the user accepts a suggestion, so they keep the job's model. Change only what the user asked for; ⌘Z doesn't undo it.",
+            "Changes one of Brainstead's settings by its key from list_settings, as the Settings screen does (needs the app). The value is checked against the setting's kind: true or false, a time HH:MM, a day (mon…sun), a number from its choices, one of the choices list_settings gives by id or name (a model, a voice, a spelling language such as British English, a document theme or colour), a note's Text size (12 to 24), the Interface size (80 to 150, a percentage of the whole window, in steps of 10), a pane's width (paneWidths.<pane> in px, clamped to the pane's range as dragging it is; null puts that pane back, and paneWidths with null every pane; a pane whose type is locked by resizeLocks.panes or resizeLocks.columns is refused until that lock is off, though paneWidths with null still puts every pane back), a resize lock (resizeLocks.panes or resizeLocks.columns, true or false), the sidebar's icon rail for a width (sidebarRail.wide or sidebarRail.narrow, true or false), the Accent colour (app, or system for the Windows accent, followed as it changes), the quick capture shortcut (Control, Alt, Shift or Super, then a key: Control+Alt+Space; it says whether the system registered it), or text, or for referenceLinks (Settings › Notes › Reference links) the whole list of rows, each a prefix and the address its keys open (a key is the prefix and digits, as ORBIT-12; {key} in the address is the whole key and {num} its digits; [] for none); null puts a setting with a default choice back to it (a job's Default model, As macOS, System voice, As the app, Default effort). A job's effort (jobEffort.<job>) is that job's only and never what a new chat starts with; giving the job a model (jobModels.<job>) whose assistant lacks that level (or, for an Ollama model, that the model doesn't name) puts it back to Default, and the reply says so; while a model it only follows (askModel, or jobModels.summaries for weekprep) is on such an assistant, it reads null and comes back with the model. An effort is offered only for an assistant that is installed, and for an Ollama model only the thinking levels it names (list_settings lists them per job). Ollama runs only in Ask and runs started by hand: a scheduled run of a job on an Ollama model, and a run that writes to the vault started with unattended: true (an ingest, including one an accepted weekly suggestion starts, the daily check, a contradictions check, Write Current state, a summary, a meeting note, and Find tasks and projects or the weekly review's preparation, whose suggestions can then be accepted unattended), goes on askModel instead, or claude:sonnet when that is Ollama's too, at the job's effort where that assistant offers it. start_run's find_tasks and weekly_prep write nothing until the user accepts a suggestion, so they keep the job's model. Change only what the user asked for; ⌘Z doesn't undo it.",
             schema(json!({
                 "key": {"type": "string", "description": "The setting's key from list_settings."},
                 "value": {"type": ["boolean", "number", "string", "array", "null"], "description": "The new value, of the kind list_settings shows: true or false, a number, a time HH:MM, a day, one of its choices, or text; null for its default choice. referenceLinks takes the whole list as an array of {prefix, url} rows ([] for none).", "items": {"type": "object", "properties": {"prefix": {"type": "string", "description": "What a key starts with, as ORBIT-."}, "url": {"type": "string", "description": "The address a key opens, with {key} for the whole key or {num} for its digits."}}}}
@@ -822,8 +936,8 @@ pub fn tools() -> Vec<Value> {
         tool("open", "Open Brainstead", Read,
             "Opens Brainstead (starting it when it isn't running) and brings its window to the front, on a screen, a Settings pane, a note or a search when given, with the help drawer open beside it when help is given; it changes nothing. meeting (Meeting note from a transcript) opens on transcript when given, reply (Draft a reply) on thread, doc_check (Check a document) on document, ready for the user to go on there; edit opens the page in Edit; graph with page opens Graph around that page; focus opens the page (or the one showing) in focus mode, as ⌘. does; image shows an image full size over the window, as a click on one in a note does. Only when the user asks to see something.",
             schema(json!({
-                "screen": {"type": "string", "enum": ["today", "inbox", "tasks", "projects", "weekly_review", "changes", "ask", "search", "notes", "wiki", "sources", "templates", "graph", "knowledge_health", "contradictions", "activity", "triage", "meeting", "reply", "doc_check", "compare", "trash", "settings"], "description": "The screen, as the sidebar or the command palette names it; the one showing when left out."},
-                "pane": {"type": "string", "enum": ["general", "notes", "vault", "assistants", "jobs", "capture", "permissions", "about"], "description": "With screen settings: the pane."},
+                "screen": {"type": "string", "enum": ["today", "inbox", "tasks", "projects", "weekly_review", "changes", "ask", "search", "notes", "wiki", "sources", "templates", "graph", "wiki_health", "contradictions", "activity", "triage", "meeting", "reply", "doc_check", "compare", "trash", "settings"], "description": "The screen, as the sidebar or the command palette names it (contradictions is Wiki health's Contradictions tab, triage the Triage the Inbox's Bookmarks band opens); the one showing when left out."},
+                "pane": {"type": "string", "enum": ["general", "notes", "vault", "assistants", "jobs", "capture", "permissions", "about"], "description": "With screen settings: the pane (jobs is Automations)."},
                 "page": page,
                 "lines": {"type": "array", "items": {"type": "string"}, "description": "With page: lines of it to highlight, scrolled to the first, each as its text (as lint gives a claim with no citation)."},
                 "query": {"type": "string", "description": "With screen search: what to search for."},
@@ -841,16 +955,18 @@ pub fn tools() -> Vec<Value> {
         tool("capture_extensions", "Capture extensions", Read,
             "Settings › Capture extensions, as the pane shows it (needs the app): the folder the Outlook and Teams extensions are loaded from, the browsers and whether each knows Brainstead's capture host, and the last captures, each with what it was, the file it made in sources/ or why it was refused.",
             schema(json!({}), &[])),
-        tool("teams_sync", "Teams and Outlook sync", Change,
-            "Settings › Teams and Outlook sync, doing what the pane does (needs the app; macOS and Windows). Reads the user's own Teams chats, meeting transcripts, Inbox mail and calendar into sources/ while Teams is open in the browser (D-20261025-01). With action get (the default): whether it's on, whether it's signed in, how many channels are chosen, which senders are skipped, and today's remaining meetings. on/off turns it on or off (also the syncEnabled setting). now runs one pass and says what it added. channels lists the user's channels with their ids and whether each is on; channel/unchannel turns one on or off by id. ignore/unignore adds or removes a sender address or a whole domain from the mail skip list, as “Don't sync this sender” does. The sync only ever reads from Teams and Outlook. Only when the user asks.",
+        tool("teams_sync", "Sync: Teams, Outlook and Slack", Change,
+            "Settings › Sync, doing what the pane does (needs the app; macOS and Windows). Reads the user's own Teams chats, meeting transcripts, Inbox mail and calendar into sources/ while Teams is open in the browser (D-20261025-01). With action get (the default): whether it's on, whether it's signed in, how many channels are chosen, which senders are skipped, and today's remaining meetings. on/off turns Teams (chats, transcripts, calendar) on or off (the syncEnabled setting), outlook_on/outlook_off Outlook mail (syncOutlook); each needs its own browser tab open, Teams' and Outlook on the web's, to hand its sign-in over. now runs one pass and says what it added; fetch_again, with from (YYYY-MM-DD), is the pane's Fetch again (D-20261118-23): Teams and Slack conversations from that day on and the Outlook Inbox's threads with a message since then (attachments only from those messages), topping up what's already in sources/ rather than doubling it; what it fetches waits in the Inbox, not ingested on arrival, and it lists the sources it wrote. channels lists the user's channels with their ids and whether each is on; channel/unchannel turns one on or off by id. ignore/unignore adds or removes a sender address or a whole domain from the mail skip list, as “Don't sync this sender” does. suggestions lists the skips suggested from what the user keeps moving to the Trash (a sender, or a chat, deleted three times or more), each with its key; accept puts one on its skip list (Skip), dismiss stops it being suggested (Not this one); unskip_chat syncs a skipped chat again, by its id (a Slack conversation's too). Slack sync (D-20261118-01, while Slack is open in a browser tab with the Slack sync extension): slack_on/slack_off turns it on or off (the syncSlack setting); slack_channels lists the user's Slack channels with their ids and whether each is synced; slack_channel/slack_unchannel turns one on or off by id. DMs, group DMs and threads that mention the user always sync while it's on; now runs a pass of both. The sync only ever reads from Teams and Outlook. Only when the user asks.",
             schema(json!({
-                "action": {"type": "string", "enum": ["get", "on", "off", "now", "channels", "channel", "unchannel", "ignore", "unignore"], "description": "What to do; get (status) when left out."},
+                "action": {"type": "string", "enum": ["get", "on", "off", "outlook_on", "outlook_off", "now", "fetch_again", "channels", "channel", "unchannel", "ignore", "unignore", "suggestions", "accept", "dismiss", "unskip_chat", "slack_on", "slack_off", "slack_channels", "slack_channel", "slack_unchannel"], "description": "What to do; get (status) when left out."},
                 "sender": {"type": "string", "description": "With ignore or unignore: an email address (name@example.com) or a bare domain (example.com)."},
-                "id": {"type": "string", "description": "With channel or unchannel: the channel's conversation id, as action channels lists it."},
+                "id": {"type": "string", "description": "With channel or unchannel: the channel's conversation id, as action channels lists it; with slack_channel or slack_unchannel, a Slack channel's id (slack_channels); with unskip_chat, a skipped chat's."},
+                "key": {"type": "string", "description": "With accept or dismiss: the suggestion's key, as action suggestions lists it (sender:… or chat:…)."},
+                "from": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "description": "With fetch_again: the first day to fetch Teams and Slack from, YYYY-MM-DD."},
                 "reason": reason
             }), &[])),
         tool("pull_teams_outlook", "Pull from Teams and Outlook", Change,
-            "Gather the user's own Teams chats, Inbox/mailbox mail and meeting transcripts about a topic over the last few days into the vault's sources/, and return the source paths to read (needs the app; macOS and Windows; Teams and Outlook sync must be on and signed in). It reuses what's already in the vault — an item already pulled is vended, not fetched again — and pulls only what's missing, each written like a capture (in the Inbox, ingestable). Reads only. Use this to answer a request like “summarise how the Fit programme is going from the last week's emails, chats and meetings”: call it with query \"Fit programme\" and days 7, then read the returned sources with read_section or search and write the summary with create_note or edit_page. Only when the user asks.",
+            "Gather the user's own Teams chats, Inbox/mailbox mail and meeting transcripts about a topic over the last few days into the vault's sources/, and return the source paths to read (needs the app; macOS and Windows; Teams and Outlook sync must be on and signed in). It reuses what's already in the vault — an item already pulled is vended, not fetched again unless it has gained messages since, when its source is topped up — and pulls only what's missing, each written like a capture (in the Inbox, ingestable). A chat on Chats to skip and mail from a sender on Mail to skip (Settings › Sync) are never read, as in the sync: the result says what was left out for that, so tell the user rather than taking it that nothing was there. Reads only. Use this to answer a request like “summarise how the Fit programme is going from the last week's emails, chats and meetings”: call it with query \"Fit programme\" and days 7, then read the returned sources with read_section or search and write the summary with create_note or edit_page. Only when the user asks.",
             schema(json!({
                 "query": {"type": "string", "description": "The topic to gather, matched across chat text and names, mail (server-side search) and meeting subjects. Leave out for everything in the window."},
                 "days": {"type": "integer", "minimum": 1, "maximum": 90, "description": "How many days back to look (default 7)."},
@@ -858,10 +974,10 @@ pub fn tools() -> Vec<Value> {
                 "reason": reason
             }), &[])),
         tool("glance", "The vault at a glance", Read,
-            "Glance's counts, as Activity and Knowledge health show them (needs the app): notes and wiki pages by type and by tag, most first, and the files the most others link to.",
+            "The vault at a glance (needs the app): notes and wiki pages by type and by tag, most first, and the files the most others link to. Wiki health's side shows the wiki pages' charts and Most linked; the notes' types are the Notes screen's Type filter.",
             schema(json!({}), &[])),
         tool("app_status", "Brainstead's state", Read,
-            "The vault, whether it's read-only (then nothing can be changed until the user switches it off in Settings › Vault), the index as Settings › Vault shows it (its counts, or why it failed), what the vault takes on disk by part (notes, wiki, sources, templates, images, other files; excluded folders apart) and what Brainstead's own data takes outside it, Changes' history among it, Full Disk Access, Brainstead's version, its app data folder and its website, whether the update it was last closed for didn't install (Windows, where the installer then reopens this version), whether Brainstead runs the daily and weekly summaries, whether the previous app's skills are still in the vault (moving_over retires them), and what ⌘Z would undo (needs the app). Then features: which of Quick Look (a file previewed as its app shows it: Quick Look on a Mac, Windows' own preview handlers in the window on Windows, called Preview there: its Preview line says which common types show in the window, and list_trash says it per file), spelling, grammar, Read aloud, Export PDF, rich copy, Full Disk Access, Open at login and the text in images this system has; the window has no button or setting for the rest, so don't offer them.",
+            "The vault, whether it's read-only (then nothing can be changed until the user switches it off in Settings › Vault), the index as Settings › Vault shows it (its counts, or why it failed, its warning when the folder can't be watched for changes, and any note a crash left halfway through a rename, which the user renames back by hand), what the vault takes on disk by part (notes, wiki, sources, templates, images, other files; excluded folders apart) and what Brainstead's own data takes outside it, Changes' history among it, Full Disk Access, Brainstead's version, its app data folder and its website, whether the update it was last closed for didn't install (Windows, where the installer then reopens this version), whether Brainstead runs the daily and weekly summaries, whether the previous app's skills are still in the vault (moving_over retires them), and what ⌘Z would undo (needs the app). Then features: which of Quick Look (a file previewed as its app shows it: Quick Look on a Mac, Windows' own preview handlers in the window on Windows, called Preview there: its Preview line says which common types show in the window, and list_trash says it per file), spelling, grammar, Read aloud, Export PDF, rich copy, Full Disk Access, Open at login and the text in images this system has; the window has no button or setting for the rest, so don't offer them.",
             schema(json!({}), &[])),
         tool("list_assistants", "AI assistants found", Read,
             "Settings › AI assistants' Found on this computer, as the pane lists it (needs the app): Claude Code, Codex, Antigravity, Copilot and Ollama (its local models, run through Codex: ollama:<model> ids, for Ask and runs started by hand, never scheduled runs), each with its version, how many models it offers, where it is (Ollama: its server) and its effort (an effort.<cli> setting: settings sets it), or that it isn't installed (with where to read how to install it) or lists no models (then the user runs it in Terminal and signs in; for Ollama, pulls a model that calls tools), or for Ollama that its server isn't running, Codex is missing, or OLLAMA_HOST names another computer (Brainstead uses Ollama only on this computer: localhost, 127.0.0.1 or ::1; Ollama's ids then aren't offered and a run on one stops with that message). look_again looks for them again, as the pane's Look again does, after one is installed or signed in. Then the pane's other groups: Brainstead's tools' command for each assistant found, to use them from Terminal, and Skills Brainstead does now (the vault's skills whose screen Brainstead has).",
@@ -894,7 +1010,7 @@ const DATE: &str = r"^\d{4}-\d{2}-\d{2}$";
 const DAY_OR_MONTH: &str = r"^\d{4}-\d{2}(-\d{2})?$";
 
 /// The tools that list something: each gives how many there are and a page of them at a time.
-const PAGED: [&str; 20] = [
+const PAGED: [&str; 21] = [
     "list_tasks",
     "pending_sources",
     "backlinks",
@@ -909,6 +1025,7 @@ const PAGED: [&str; 20] = [
     "list_contradictions",
     "page_shape",
     "activity",
+    "sync_activity",
     "graph",
     "list_suggestions",
     "list_automated_tools",
@@ -945,10 +1062,11 @@ fn outputs() -> std::collections::HashMap<&'static str, Value> {
     let mut changes = json!({"type": "object", "properties": {
         "held": page_schema(change.clone()),
         "made": page_schema(change),
+        "log": page_schema(json!({"date": s("string"), "time": sn(), "action": s("string"), "title": s("string"), "description": s("string")})),
         "change": {"type": "object", "description": "show: the change, with its diff and quotes."},
         "history": {"type": "object", "properties": {"days": s("integer"), "mb": s("integer")}}
     }});
-    changes["description"] = json!("list gives held and made: one page of the list (held first, then made), split in two, each with its own total and matching and the same offset and next_offset; show gives change; history gives history.");
+    changes["description"] = json!("list gives held, made and log: one page of the list (held first, then made and log.md's other lines, newest first), split in three, each with its own total and matching and the same offset and next_offset; show gives change; history gives history.");
     let mut chats = page_schema(
         json!({"file": s("string"), "title": s("string"), "updated": s("string"), "saved": s("boolean"), "pinned": s("boolean")}),
     );
@@ -991,7 +1109,13 @@ fn outputs() -> std::collections::HashMap<&'static str, Value> {
         (
             "activity",
             page_schema(
-                json!({"date": s("string"), "time": sn(), "action": s("string"), "title": s("string"), "description": s("string"), "path": s("string")}),
+                json!({"date": s("string"), "notes": s("integer"), "wiki": s("integer"), "sources": s("integer"), "path": s("string")}),
+            ),
+        ),
+        (
+            "sync_activity",
+            page_schema(
+                json!({"at": s("string"), "kind": s("string"), "status": s("string"), "services": {"type": "array", "items": s("string")}, "title": s("string"), "files": {"type": "object", "description": "The files it names, by what they are (New from Teams, Topped up from Outlook, Source, Changed).", "additionalProperties": {"type": "array", "items": s("string")}}, "detail": {"type": "array", "items": s("string")}}),
             ),
         ),
         ("list_chats", chats),
@@ -1103,6 +1227,7 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
     if !tools().iter().any(|t| t["name"] == name) {
         return Err(CallError::Unknown(format!("Unknown tool: {name}")));
     }
+    ctx.follow_vault();
     {
         let mut calls = ctx.calls.lock().unwrap();
         let now = std::time::Instant::now();
@@ -1124,6 +1249,10 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
     }
     // Once a call has said nobody's watching, the whole session is (D-20261005-09).
     let unwatched = ctx.unattended.load(std::sync::atomic::Ordering::Relaxed);
+    // So a later call without the flag is still held when a check fails, here and in the app.
+    if unwatched {
+        obj["unattended"] = json!(true);
+    }
     let act = |action: &str, a: Value| -> Result<Out, CallError> { Ok(act(ctx, action, a)?) };
     // The app records these in Changes as this session's (D-20261005-10).
     if [
@@ -1138,10 +1267,13 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
         "compare_docs",
         "restore_from_trash",
         "contradictions",
+        "fix_health",
+        "fix_name",
+        "weekly_suggestion",
     ]
     .contains(&name)
     {
-        obj["origin"] = serde_json::to_value(origin(ctx, unattended)).unwrap_or_default();
+        obj["origin"] = serde_json::to_value(origin(ctx, unwatched)).unwrap_or_default();
     }
     match name {
         "search" => Ok(search(ctx, parse(obj)?)?),
@@ -1149,6 +1281,10 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
         "backlinks" => Ok(backlinks(ctx, parse(obj)?)?.into()),
         "resolve_entity" => Ok(resolve_entity(ctx, parse(obj)?)?.into()),
         "facts" => Ok(facts(ctx, parse(obj)?)?.into()),
+        "list_initiatives" => Ok(list_initiatives(ctx, parse(obj)?)?.into()),
+        "create_initiative" => Ok(create_initiative(ctx, parse(obj)?)?.into()),
+        "set_action" => Ok(set_action(ctx, parse(obj)?)?.into()),
+        "add_decision" => Ok(add_decision(ctx, parse(obj)?)?.into()),
         "pending_sources" => Ok(pending_sources(ctx, parse(obj)?)?.into()),
         "provenance" => act("source.provenance", obj),
         // The app's report when it's open, as the screen shows it; else the core's checks.
@@ -1240,6 +1376,10 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
                 acting(obj, name, &["accept", "reject", "accept_run", "reject_run", "revert", "revert_run", "history"], "", &["page"])?,
             )
         }
+        "update_item" if unwatched => Err(CallError::Tool(
+            "update_item hands the update to an assistant whose changes are made at once, so it's only for when the user is there and asks for it, not in an unattended session.".into(),
+        )),
+        "update_item" => act("item.update", obj),
         "weekly_start_over" | "moving_over" if unwatched => {
             Err(CallError::Tool("That's only for when the user is there and asks for it, not in an unattended session.".into()))
         }
@@ -1287,6 +1427,9 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
             }
             act("triage.suggest", obj)
         }
+        "draft_reply" if unwatched && obj.get("place").is_some() => Err(CallError::Tool(
+            "Putting a reply in Outlook or Teams is only for when the user is there and asks for it, not in an unattended session.".into(),
+        )),
         "draft_reply" => act("reply.draft", obj),
         "compare_docs" => act("compare.run", obj),
         "doc_check" => {
@@ -1294,6 +1437,7 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
             act(if run { "doccheck.run" } else { "doccheck.register" }, obj)
         }
         "activity" => act("activity", obj),
+        "sync_activity" => act("sync_activity", obj),
         "graph" => act("graph", obj),
         "open" => act("open", obj),
         "capture_extensions" => act("capture.status", obj),
@@ -1349,16 +1493,14 @@ fn without(mut obj: Value, keys: &[&str]) -> Value {
     obj
 }
 
-/// How long the server waits for the app to answer one action.
-const ACT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(150);
-
 /// Runs an action in the app (src/mcpActions.ts, through core/src/bridge.rs), opening the app
 /// first when it isn't running. A text result is given back as it is, a listing as its text and
 /// data; anything else as JSON.
 fn act(ctx: &Ctx, action: &str, args: Value) -> Result<Out, String> {
     open_app(ctx)?;
     let req = bridge::Request { id: bridge::new_id(), action: action.into(), args, chat: ctx.chat.clone(), model: ctx.model.clone() };
-    let r = bridge::ask(&ctx.data, &req, ACT_TIMEOUT);
+    // Longer for an action that waits on a model, as the app's wait for its window is (core's bridge).
+    let r = bridge::ask(&ctx.data, &req, bridge::act_timeout(&req.action, &req.args));
     if !r.ok {
         return Err(r.error.unwrap_or_else(|| "It didn't work.".into()));
     }
@@ -1447,7 +1589,7 @@ fn find_task(ctx: &Ctx, id: &str, text: &str) -> Result<(String, usize, String),
     brainstead_core::trash::safe_rel(path).map_err(|e| e.to_string())?;
     // Only tasks in notes, as the Tasks screen and list_tasks have them (edit_task and move_task
     // refuse the rest the same way).
-    let layer = brainstead_core::vault::Vault::new(ctx.vault.clone(), vec![]).classify(&path.replace('\\', "/"));
+    let layer = brainstead_core::vault::Vault::new(ctx.vault(), vec![]).classify(&path.replace('\\', "/"));
     if layer != Some(brainstead_core::vault::Layer::Note) {
         return Err(format!(
             "{path} isn't a note: only tasks in notes can be edited, moved or deleted, not ones in the wiki, sources, Templates or images folders."
@@ -1465,10 +1607,15 @@ fn find_task(ctx: &Ctx, id: &str, text: &str) -> Result<(String, usize, String),
     if let Some(l) = n.checked_sub(1).and_then(|i| lines.get(i)).filter(|l| fits(l)) {
         return Ok((path.to_string(), n - 1, l.to_string()));
     }
-    let hits: Vec<usize> = (0..lines.len()).filter(|&i| fits(lines[i])).collect();
+    // No words to look for (the text was empty, or only a tag): every task would fit, so the
+    // line given is the only one taken, as in src/mcpActions.ts.
+    let hits: Vec<usize> = if want.is_empty() { Vec::new() } else { (0..lines.len()).filter(|&i| fits(lines[i])).collect() };
     match hits.as_slice() {
         [i] => Ok((path.to_string(), *i, lines[*i].to_string())),
-        _ => Err(format!("There's no task at {id} reading “{text}” any more. List the tasks again for its current place.")),
+        _ => {
+            let reading = if text.is_empty() { String::new() } else { format!(" reading “{text}”") };
+            Err(format!("There's no task at {id}{reading} any more. List the tasks again for its current place."))
+        }
     }
 }
 
@@ -1547,7 +1694,7 @@ fn rename_note(ctx: &Ctx, a: RenameArgs) -> Result<String, String> {
     if to == rel {
         return Err("That's its name already.".into());
     }
-    if ctx.vault.join(&to).exists() && !to.eq_ignore_ascii_case(&rel) {
+    if ctx.vault().join(&to).exists() && !to.eq_ignore_ascii_case(&rel) {
         return Err(format!("{to} exists already."));
     }
     if a.preview {
@@ -1563,7 +1710,7 @@ fn rename_note(ctx: &Ctx, a: RenameArgs) -> Result<String, String> {
 fn rename_preview(ctx: &Ctx, ix: &Index, rel: &str, to: &str) -> Result<String, String> {
     let linkers = ix.linkers(rel).map_err(|e| e.to_string())?;
     let resolves = |t: &str| ix.resolve(&[t.to_string()]).ok().and_then(|v| v.into_iter().next().flatten()).as_deref() == Some(rel);
-    let plan = brainstead_core::rename::plan(&ctx.vault, rel, to, &linkers, &resolves).map_err(|e| e.to_string())?;
+    let plan = brainstead_core::rename::plan(&ctx.vault(), rel, to, &linkers, &resolves).map_err(|e| e.to_string())?;
     let mut files: Vec<(&str, Vec<&brainstead_core::rename::LinkChange>)> = Vec::new();
     for c in &plan.changes {
         match files.iter_mut().find(|(f, _)| *f == c.path) {
@@ -1614,7 +1761,7 @@ fn image_input(ctx: &Ctx, a: &ImageArgs) -> Result<(Vec<u8>, String), String> {
                 None => PathBuf::from(p),
             };
             let abs = std::fs::canonicalize(&abs).map_err(|e| format!("Couldn't find {p}: {e}"))?;
-            if let Some(rel) = std::fs::canonicalize(&ctx.vault).ok().and_then(|v| abs.strip_prefix(v).ok().map(Path::to_path_buf)) {
+            if let Some(rel) = std::fs::canonicalize(ctx.vault()).ok().and_then(|v| abs.strip_prefix(v).ok().map(Path::to_path_buf)) {
                 let rel = rel.to_string_lossy().replace('\\', "/");
                 return Err(format!("That image is in the vault already, at {rel}: embed it with ![[{rel}]]."));
             }
@@ -1723,12 +1870,12 @@ fn new_note_path(ctx: &Ctx, a: &NoteArgs) -> Result<String, String> {
     let mut folder = a.folder.as_deref().unwrap_or("").trim().trim_matches(paths::SEPARATORS).to_string();
     if !folder.is_empty() {
         // As the file system spells it, so `templates` and `TEMPLA~1` are Templates/.
-        folder = paths::vault_rel(&ctx.vault, &folder)?;
+        folder = paths::vault_rel(&ctx.vault(), &folder)?;
         let first = folder.split('/').next().unwrap_or("");
         if folder.split('/').any(|s| s.starts_with('.')) || proposals::NOT_FOR_NOTES.iter().any(|n| n.eq_ignore_ascii_case(first)) {
             return Err(format!("A note can't go in {folder}/: not in sources/, wiki/ (edit_page makes wiki pages) or Templates/."));
         }
-        if !ctx.vault.join(&folder).is_dir() {
+        if !ctx.vault().join(&folder).is_dir() {
             return Err(format!("There's no folder {folder}/ in the vault."));
         }
     }
@@ -1742,7 +1889,7 @@ fn create_note(ctx: &Ctx, a: NoteArgs) -> Result<String, String> {
         return Err("test_run is the Test run of a template: give template too.".into());
     }
     let rel = new_note_path(ctx, &a)?;
-    if ctx.vault.join(&rel).exists() {
+    if ctx.vault().join(&rel).exists() {
         return Err(format!("{rel} exists already. To change it, use edit_page."));
     }
     let content = a
@@ -1778,7 +1925,7 @@ fn create_template(ctx: &Ctx, a: TemplateArgs) -> Result<String, String> {
         return Err(format!("{name} isn't a name a template can have."));
     }
     let rel = format!("Templates/{name}.md");
-    if ctx.vault.join(&rel).exists() {
+    if ctx.vault().join(&rel).exists() {
         return Err(format!("{rel} exists already. To change it, use edit_page."));
     }
     if a.content.trim().is_empty() {
@@ -1803,9 +1950,9 @@ struct ReasonArgs {
 /// Settings › Vault's Add the example notes: the starter notes the vault doesn't have, each a new
 /// note sent as a change (core/src/starter.rs's add_missing writes the same ones straight away).
 fn add_example_notes(ctx: &Ctx, a: ReasonArgs) -> Result<String, String> {
-    let now = ctx.today.and_time(chrono::Local::now().time());
+    let now = ctx.today().and_time(chrono::Local::now().time());
     let missing: Vec<(String, String)> =
-        brainstead_core::starter::files(now).into_iter().filter(|(rel, _)| !ctx.vault.join(rel).exists()).collect();
+        brainstead_core::starter::files(now).into_iter().filter(|(rel, _)| !ctx.vault().join(rel).exists()).collect();
     if missing.is_empty() {
         return Err("The example notes are all there already: nothing to add.".into());
     }
@@ -1978,12 +2125,12 @@ fn find_page(ctx: &Ctx, ix: &Index, page: &str) -> Result<PageRef, String> {
         // `templates\meeting.md` and `TEMPLA~1/Meeting.md` are `Templates/Meeting.md`.
         let with_ext = if Path::new(&p).extension().is_some() { p.clone() } else { format!("{p}.md") };
         for cand in [&p, &with_ext] {
-            let rel = paths::vault_rel(&ctx.vault, cand)?;
-            if ctx.vault.join(&rel).is_file() {
+            let rel = paths::vault_rel(&ctx.vault(), cand)?;
+            if ctx.vault().join(&rel).is_file() {
                 return Ok(PageRef::Found(rel));
             }
         }
-        return Ok(PageRef::NotThere(paths::vault_rel(&ctx.vault, &with_ext)?));
+        return Ok(PageRef::NotThere(paths::vault_rel(&ctx.vault(), &with_ext)?));
     }
     match ix.resolve(std::slice::from_ref(&p))?.into_iter().next().flatten() {
         Some(rel) => Ok(PageRef::Found(rel)),
@@ -2008,7 +2155,7 @@ fn read_text(ctx: &Ctx, rel: &str) -> Result<String, String> {
     if !is_text(rel) {
         return Err(format!("{rel} isn't a text file: read it with read_section."));
     }
-    std::fs::read(ctx.vault.join(rel)).map(|b| String::from_utf8_lossy(&b).into_owned()).map_err(|e| format!("Couldn't read {rel}: {e}"))
+    std::fs::read(ctx.vault().join(rel)).map(|b| String::from_utf8_lossy(&b).into_owned()).map_err(|e| format!("Couldn't read {rel}: {e}"))
 }
 
 #[derive(Deserialize)]
@@ -2109,7 +2256,7 @@ fn backlinks(ctx: &Ctx, a: BacklinkArgs) -> Result<String, String> {
     let ix = ctx.index()?;
     let rel = existing(ctx, &ix, &a.page)?;
     let Some(mut meta) = ix.doc_meta(&rel)? else { return Err(format!("{rel} isn't in Brainstead's index yet.")) };
-    brainstead_core::read::fill_context(&ctx.vault, &mut meta.backlinks);
+    brainstead_core::read::fill_context(&ctx.vault(), &mut meta.backlinks);
     if meta.backlinks.is_empty() {
         return Ok(format!("Nothing links to {rel}."));
     }
@@ -2149,6 +2296,325 @@ fn resolve_entity(ctx: &Ctx, a: NameArgs) -> Result<String, String> {
 }
 
 #[derive(Deserialize)]
+struct InitiativesArgs {
+    initiative: Option<String>,
+    status: Option<String>,
+    #[serde(default)]
+    all: bool,
+}
+
+/// Every initiative page, read.
+fn initiatives(ctx: &Ctx) -> Vec<initiatives::Initiative> {
+    let Ok(rd) = std::fs::read_dir(ctx.vault().join(initiatives::FOLDER)) else { return vec![] };
+    let mut out: Vec<_> = rd
+        .flatten()
+        .filter_map(|e| {
+            let rel = format!("{}/{}", initiatives::FOLDER, e.file_name().to_string_lossy());
+            initiatives::is_initiative(&rel).then(|| std::fs::read_to_string(e.path()).ok().map(|t| initiatives::parse(&rel, &t)))?
+        })
+        .collect();
+    out.sort_by_key(|i| i.name.to_lowercase());
+    out
+}
+
+/// The initiative page `name` means: by name or path, and only an initiative.
+fn initiative_page(ctx: &Ctx, name: &str) -> Result<String, String> {
+    // By its name in wiki/initiatives/ first: one made since the index last caught up is there too.
+    let given = bare(name).replace('\\', "/");
+    let stem = given.strip_prefix(&format!("{}/", initiatives::FOLDER)).unwrap_or(&given).trim_end_matches(".md").to_string();
+    let rel = format!("{}/{stem}.md", initiatives::FOLDER);
+    if !stem.is_empty() && !stem.contains('/') && ctx.vault().join(&rel).is_file() {
+        return Ok(rel);
+    }
+    match find_page(ctx, &ctx.index()?, name)? {
+        PageRef::Found(rel) if initiatives::is_initiative(&rel) => Ok(rel),
+        PageRef::Found(rel) => {
+            Err(format!("{rel} isn't an initiative: initiatives are the pages in wiki/initiatives/ (list_initiatives)."))
+        }
+        PageRef::NotThere(_) => {
+            Err(format!("There's no initiative called {name}: list_initiatives lists them, create_initiative makes one."))
+        }
+    }
+}
+
+fn owner_words(a: &initiatives::Action) -> String {
+    match (a.owner, a.person.as_deref()) {
+        (Some(initiatives::Owner::Me), _) => "mine".into(),
+        (Some(initiatives::Owner::Delegated), Some(p)) => format!("delegated to {p}"),
+        (Some(initiatives::Owner::Other), Some(p)) => format!("{p}'s"),
+        _ => "no owner".into(),
+    }
+}
+
+fn list_initiatives(ctx: &Ctx, a: InitiativesArgs) -> Result<String, String> {
+    use initiatives::{Owner, Status};
+    if let Some(name) = a.initiative.as_deref().filter(|n| !n.trim().is_empty()) {
+        let rel = initiative_page(ctx, name)?;
+        let i = initiatives::parse(&rel, &read_text(ctx, &rel)?);
+        let mut out = format!("{} ({}, {rel})", i.name, i.status);
+        if !i.description.is_empty() {
+            out.push_str(&format!(": {}", i.description));
+        }
+        let shown: Vec<_> = i.actions.iter().filter(|x| a.all || x.status == Status::Open).collect();
+        out.push_str(&format!("\n\nActions ({} shown of {}):", shown.len(), i.actions.len()));
+        for x in shown {
+            let id = if x.id.is_empty() { String::new() } else { format!(" [{}]", x.id) };
+            let due = x.due.as_deref().map(|d| format!(", due {d}")).unwrap_or_default();
+            out.push_str(&format!("\n- {}{id}: {}, {}{due}", x.text, owner_words(x), x.status.as_str()));
+            for q in &x.quotes {
+                out.push_str(&format!("\n  “{}” from [[{}]]", q.text, q.source));
+            }
+        }
+        out.push_str(&format!("\n\nDecisions ({}):", i.decisions.len()));
+        for d in &i.decisions {
+            let when = d.date.as_deref().map(|d| format!("{d}: ")).unwrap_or_default();
+            out.push_str(&format!("\n- {when}{} [{}]", d.text, d.id));
+            for q in &d.quotes {
+                out.push_str(&format!("\n  “{}” from [[{}]]", q.text, q.source));
+            }
+        }
+        for p in &i.problems {
+            out.push_str(&format!("\nNote: {}.", p.text));
+        }
+        return Ok(out);
+    }
+    let want = a.status.as_deref().unwrap_or("");
+    let all = initiatives(ctx);
+    let shown: Vec<_> = all
+        .iter()
+        .filter(|i| match want {
+            "all" => true,
+            "" => i.status != "done",
+            w => i.status == w,
+        })
+        .collect();
+    if shown.is_empty() {
+        return Ok(if all.is_empty() {
+            "There are no initiatives yet: create_initiative makes one.".into()
+        } else {
+            "No initiatives with that status.".into()
+        });
+    }
+    let mut out = format!("{} initiative(s):", shown.len());
+    for i in shown {
+        let open = |o: Owner| i.actions.iter().filter(|x| x.status == Status::Open && x.owner == Some(o)).count();
+        out.push_str(&format!(
+            "\n- {} ({}): {} open: {} mine, {} delegated, {} other people's; {} decision(s) · {}",
+            i.name,
+            i.status,
+            i.actions.iter().filter(|x| x.status == Status::Open).count(),
+            open(Owner::Me),
+            open(Owner::Delegated),
+            open(Owner::Other),
+            i.decisions.len(),
+            i.path
+        ));
+        if !i.description.is_empty() {
+            out.push_str(&format!(" — {}", i.description));
+        }
+    }
+    Ok(out)
+}
+
+#[derive(Deserialize)]
+struct NewInitiativeArgs {
+    name: String,
+    #[serde(default)]
+    about: String,
+    #[serde(default)]
+    reason: String,
+    #[serde(default)]
+    unattended: bool,
+}
+
+fn create_initiative(ctx: &Ctx, a: NewInitiativeArgs) -> Result<String, String> {
+    let name = a.name.trim();
+    if name.is_empty() || name.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|', '#', '^', '[', ']', '\n']) || name.starts_with('.') {
+        return Err("Give the initiative a name a page can have: no slashes, brackets, # or ^.".into());
+    }
+    let rel = format!("{}/{name}.md", initiatives::FOLDER);
+    let ix = ctx.index()?;
+    if let Ok(PageRef::Found(there)) = find_page(ctx, &ix, name) {
+        return Err(format!("{there} is already called {name}: give the initiative another name."));
+    }
+    let content = initiatives::new_page(name, &a.about);
+    let c = change(ctx, &rel, Kind::New, &format!("New initiative {name}"), &a.reason, a.unattended, Instruction::Page { content });
+    send(ctx, c, vec![])
+}
+
+#[derive(Deserialize)]
+struct ActionArgs {
+    initiative: String,
+    action: Option<String>,
+    text: Option<String>,
+    owner: Option<initiatives::Owner>,
+    person: Option<String>,
+    status: Option<initiatives::Status>,
+    due: Option<String>,
+    #[serde(default)]
+    quotes: Vec<QuoteArg>,
+    /// Another initiative to move the action to, whole.
+    move_to: Option<String>,
+    #[serde(default)]
+    reason: String,
+    #[serde(default)]
+    unattended: bool,
+}
+
+/// set_action's move_to: the action, whole, onto another initiative, as Move to… does
+/// (D-20261118-26); the task made from it, if any, linked to it there.
+fn move_action(ctx: &Ctx, a: &ActionArgs, to: &str) -> Result<String, String> {
+    let key = a.action.as_deref().ok_or("Give action: the one to move, by its id or its words.")?;
+    if a.text.is_some() || a.owner.is_some() || a.person.is_some() || a.status.is_some() || a.due.is_some() || !a.quotes.is_empty() {
+        return Err("Moving an action changes nothing else: move it, then change it on its new initiative.".into());
+    }
+    let ix = ctx.index()?;
+    let from = initiative_page(ctx, &a.initiative)?;
+    let to = initiative_page(ctx, to)?;
+    if from == to {
+        return Err("The action is on that initiative already.".into());
+    }
+    let (before_from, before_to) = (read_text(ctx, &from)?, read_text(ctx, &to)?);
+    let action = initiatives::parse(&from, &before_from)
+        .actions
+        .into_iter()
+        .find(|x| x.id == key.trim().trim_start_matches('^') || x.text == key.trim())
+        .ok_or_else(|| format!("No action {key} on {}.", filename::stem(&from)))?;
+    let (after_from, after_to) = initiatives::move_action(&before_from, &before_to, &action.id)?;
+    let (from_name, to_name) = (filename::stem(&from).to_string(), filename::stem(&to).to_string());
+    // One batch, made or held together: sent one by one, a page that changed under the second
+    // would leave the action on both initiatives.
+    let title = format!("Action moved from {from_name}");
+    let why = Why { title: &title, reason: &a.reason, unattended: a.unattended };
+    let mut batch = vec![initiative_change(ctx, &ix, &to, &before_to, &after_to, why, vec![])?.0];
+    let title = format!("Action moved to {to_name}");
+    let why = Why { title: &title, reason: &a.reason, unattended: a.unattended };
+    batch.push(initiative_change(ctx, &ix, &from, &before_from, &after_from, why, vec![])?.0);
+    // Its task's link, pointed at the new page.
+    let note = action.task.as_deref().and_then(|t| {
+        let name = t.trim().trim_start_matches("[[").trim_end_matches("]]").split(['|', '#']).next()?.trim().to_string();
+        brainstead_core::names::resolve(&ix, &name).ok()?.exact.map(|(p, _)| p)
+    });
+    if let Some(note) = note {
+        let text = read_text(ctx, &note)?;
+        if let Some(new) = initiatives::relink_task(&text, &from_name, &to_name, &action.id) {
+            batch.push(change(
+                ctx,
+                &note,
+                Kind::Edit,
+                "Its task links the action on its new initiative",
+                &a.reason,
+                a.unattended,
+                changes::from_texts(Some(&text), &new),
+            ));
+        }
+    }
+    Ok(act(ctx, "change.submit_many", json!({ "changes": batch }))?.text)
+}
+
+/// A quote as the page writes it: its source with the anchor after `#`.
+fn page_quote(q: &QuoteArg) -> initiatives::Quote {
+    let source = bare(&q.source).to_string();
+    let source = match q.anchor.as_deref().map(str::trim).filter(|a| !a.is_empty()) {
+        Some(a) if !source.contains('#') => format!("{source}#{a}"),
+        _ => source,
+    };
+    initiatives::Quote { text: q.text.clone(), source }
+}
+
+/// A change's line in Changes, why it was made, and whether anyone is watching.
+struct Why<'a> {
+    title: &'a str,
+    reason: &'a str,
+    unattended: bool,
+}
+
+/// An initiative page's new text as a change, its quotes checked as edit_page's are, with what to
+/// say about them.
+fn initiative_change(
+    ctx: &Ctx,
+    ix: &Index,
+    rel: &str,
+    before: &str,
+    after: &str,
+    why: Why,
+    quotes: Vec<QuoteArg>,
+) -> Result<(Value, Vec<String>), String> {
+    let after = proposals::bump_updated(before, after, &ctx.today().to_string());
+    if after == before.replace("\r\n", "\n") {
+        return Err("That changes nothing on the page: it's already so.".into());
+    }
+    let mut quotes: Vec<Quote> =
+        quotes.into_iter().map(|q| Quote { source: q.source, anchor: q.anchor, text: q.text, checked: None, path: None }).collect();
+    let problems = proposals::mark_quotes(&mut quotes, |s| source_text(ctx, ix, s))?;
+    let mut c = change(ctx, rel, Kind::Edit, why.title, why.reason, why.unattended, changes::from_texts(Some(before), &after));
+    c["quotes"] = serde_json::to_value(&quotes).unwrap_or_default();
+    Ok((c, problems.iter().map(|p| format!("Note: {p}")).collect()))
+}
+
+/// Sends an initiative page's new text as a change.
+fn send_initiative(ctx: &Ctx, ix: &Index, rel: &str, before: &str, after: &str, why: Why, quotes: Vec<QuoteArg>) -> Result<String, String> {
+    let (c, notes) = initiative_change(ctx, ix, rel, before, after, why, quotes)?;
+    send(ctx, c, notes)
+}
+
+fn set_action(ctx: &Ctx, a: ActionArgs) -> Result<String, String> {
+    if let Some(to) = a.move_to.clone() {
+        return move_action(ctx, &a, &to);
+    }
+    let ix = ctx.index()?;
+    let rel = initiative_page(ctx, &a.initiative)?;
+    let before = read_text(ctx, &rel)?;
+    let edit = initiatives::ActionEdit {
+        id: a.action.clone(),
+        text: a.text.clone(),
+        owner: a.owner,
+        person: a.person.clone(),
+        status: a.status,
+        due: a.due.clone(),
+        quotes: a.quotes.iter().map(page_quote).collect(),
+        task: None,
+        on: Some(ctx.today().to_string()),
+    };
+    let seed = format!("{}{}", ctx.session, ctx.today());
+    let (after, id) = initiatives::with_action(&before, &edit, &seed)?;
+    let name = filename::stem(&rel);
+    let title = match &a.action {
+        None => format!("New action on {name}"),
+        Some(_) => format!("Action changed on {name}"),
+    };
+    let why = Why { title: &title, reason: &a.reason, unattended: a.unattended };
+    let out = send_initiative(ctx, &ix, &rel, &before, &after, why, a.quotes)?;
+    Ok(format!("{out}\nThe action's id is {id}."))
+}
+
+#[derive(Deserialize)]
+struct DecisionArgs {
+    initiative: String,
+    text: String,
+    date: Option<String>,
+    #[serde(default)]
+    quotes: Vec<QuoteArg>,
+    #[serde(default)]
+    reason: String,
+    #[serde(default)]
+    unattended: bool,
+}
+
+fn add_decision(ctx: &Ctx, a: DecisionArgs) -> Result<String, String> {
+    let ix = ctx.index()?;
+    let rel = initiative_page(ctx, &a.initiative)?;
+    let before = read_text(ctx, &rel)?;
+    let quotes: Vec<_> = a.quotes.iter().map(page_quote).collect();
+    let seed = format!("{}{}", ctx.session, ctx.today());
+    let (after, id) = initiatives::with_decision(&before, a.date.as_deref(), &a.text, &quotes, &seed)?;
+    let title = format!("New decision on {}", filename::stem(&rel));
+    let why = Why { title: &title, reason: &a.reason, unattended: a.unattended };
+    let out = send_initiative(ctx, &ix, &rel, &before, &after, why, a.quotes)?;
+    Ok(format!("{out}\nThe decision's id is {id}."))
+}
+
+#[derive(Deserialize)]
 struct FactsArgs {
     page: Option<String>,
     subject: Option<String>,
@@ -2169,7 +2635,7 @@ fn facts(ctx: &Ctx, a: FactsArgs) -> Result<String, String> {
         None => None,
     };
     let files: Vec<_> =
-        brainstead_core::claims::all(&ctx.vault).into_iter().filter(|f| page.as_ref().is_none_or(|p| *p == f.page)).collect();
+        brainstead_core::claims::all(&ctx.vault()).into_iter().filter(|f| page.as_ref().is_none_or(|p| *p == f.page)).collect();
     let mut out = String::new();
     for f in &files {
         let found = brainstead_core::claims::facts(f, a.subject.as_deref(), a.attribute.as_deref());
@@ -2208,13 +2674,28 @@ fn summary(ctx: &Ctx, a: SummaryArgs) -> Result<String, CallError> {
     let kind = match a.kind.as_deref().map(str::trim).unwrap_or("daily") {
         "" | "daily" => ReviewKind::Daily,
         "weekly" => ReviewKind::Weekly,
-        k => return Err(CallError::Tool(format!("kind is daily or weekly, not {k}."))),
+        "brief" => ReviewKind::Brief,
+        k => return Err(CallError::Tool(format!("kind is daily, weekly or brief, not {k}."))),
     };
-    let read = |p: &str| std::fs::read_to_string(ctx.vault.join(p)).ok();
+    let read = |p: &str| std::fs::read_to_string(ctx.vault().join(p)).ok();
+    if kind == ReviewKind::Brief {
+        let found = match a.day.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
+            None => {
+                reviews::latest(kind, ctx.today(), read).ok_or_else(|| "There's no brief from the last few weeks on file.".to_string())?
+            }
+            Some(d) => {
+                let file = brainstead_core::brief::path(d);
+                let text =
+                    read(&file).ok_or_else(|| format!("There's no brief for {d} on file. start_run daily_brief with date writes one."))?;
+                reviews::Latest { heading: format!("# Brief {d}"), label: d.to_string(), text, file }
+            }
+        };
+        return Ok(format!("The brief for {}, from {}:\n\n{}", found.label, found.file, found.text));
+    }
     let name = if kind == ReviewKind::Daily { "daily" } else { "weekly" };
     let found = match a.day.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
         None => {
-            reviews::latest(kind, ctx.today, read).ok_or_else(|| format!("There's no {name} summary from the last few weeks on file."))?
+            reviews::latest(kind, ctx.today(), read).ok_or_else(|| format!("There's no {name} summary from the last few weeks on file."))?
         }
         Some(d) => {
             let t = Target::parse(d).map_err(|_| CallError::Tool(format!("day is YYYY-MM-DD (or a week, 2026-W40), not {d}.")))?;
@@ -2245,7 +2726,7 @@ struct PendingArgs {
 }
 
 /// Sources as the Sources screen gives their Status: New (no wiki page cites it), Changed (newer
-/// than the pages citing it, Knowledge health's check) or Ingested. Without status, the ones still
+/// than the pages citing it, Wiki health's check) or Ingested. Without status, the ones still
 /// to ingest: New and Changed.
 fn pending_sources(ctx: &Ctx, a: PendingArgs) -> Result<String, String> {
     let want = a.status.as_deref().map(str::trim).filter(|s| !s.is_empty());
@@ -2256,7 +2737,9 @@ fn pending_sources(ctx: &Ctx, a: PendingArgs) -> Result<String, String> {
     let files = ix.list(Some("source"))?;
     let paths: Vec<String> = files.into_iter().map(|f| f.path).collect();
     let ingested = ix.ingested(&paths)?;
-    let report = lint::run(&ctx.vault, ctx.today, &Default::default());
+    let mut report = lint::run(&ctx.vault(), ctx.today(), &Default::default());
+    // A source an ingest has read as it is now isn't Changed, as the Sources screen has it.
+    lint::without_read_sources(&mut report, &ctx.vault(), &lint::read_at(&ctx.data));
     let changed: std::collections::HashSet<String> =
         report.check("changed-sources").map(|c| c.items.iter().filter_map(|i| i.page.clone()).collect()).unwrap_or_default();
     let rows: Vec<(String, &str)> = paths
@@ -2322,7 +2805,7 @@ fn page_shape_tool(ctx: &Ctx, page: Option<&str>, paging: &Paging) -> Result<Str
             return Ok(format!("{rel} isn't a wiki entity or concept page or a Tracker note: only those have a page shape."));
         }
         let text = read_text(ctx, &rel)?;
-        let files = pageshape::vault_files(&ctx.vault);
+        let files = pageshape::vault_files(&ctx.vault());
         let (r, _) = pageshape::one(&rel, &text, &pageshape::Sources::from_paths(files.iter().map(String::as_str)));
         let (shape, entries) =
             if pageshape::is_tracker(&rel) { ("tracker shape", "Log entries") } else { ("page shape", "Timeline entries") };
@@ -2358,8 +2841,8 @@ fn page_shape_tool(ctx: &Ctx, page: Option<&str>, paging: &Paging) -> Result<Str
         out.extend(rp.notes.iter().map(|n| format!("Note: {n}")));
         return Ok(out.join("\n"));
     }
-    let all = pageshape::survey(&ctx.vault);
-    let trackers = pageshape::survey_trackers(&ctx.vault);
+    let all = pageshape::survey(&ctx.vault());
+    let trackers = pageshape::survey_trackers(&ctx.vault());
     let off: Vec<&str> = trackers.iter().filter(|t| !t.0.in_shape).map(|t| t.0.path.as_str()).collect();
     let trackers_line = (!off.is_empty()).then(|| {
         format!(
@@ -2433,9 +2916,9 @@ fn tracker_state(ctx: &Ctx, a: TrackerStateArgs) -> Result<String, String> {
         ));
     }
     let before = read_text(ctx, &rel)?;
-    let today = pageshape::Date::parse_iso(&ctx.today.to_string()).ok_or("Today's date didn't read.")?;
+    let today = pageshape::Date::parse_iso(&ctx.today().to_string()).ok_or("Today's date didn't read.")?;
     let after = pageshape::tracker_with_state(&before, a.text.as_deref(), a.log.as_deref().map(|l| (today, l)))?;
-    let after = proposals::bump_updated(&before, &after, &ctx.today.to_string());
+    let after = proposals::bump_updated(&before, &after, &ctx.today().to_string());
     if after.replace("\r\n", "\n") == before.replace("\r\n", "\n") {
         return Err("That changes nothing in the page.".into());
     }
@@ -2454,7 +2937,8 @@ fn lint_tool(ctx: &Ctx, a: LintArgs) -> Result<String, String> {
         Some(p) => Some(existing(ctx, &ctx.index()?, p)?),
         None => None,
     };
-    let r = lint::run(&ctx.vault, ctx.today, &Default::default());
+    let mut r = lint::run(&ctx.vault(), ctx.today(), &Default::default());
+    lint::without_read_sources(&mut r, &ctx.vault(), &lint::read_at(&ctx.data));
     let mut out = String::new();
     for c in &r.checks {
         let items: Vec<&lint::Item> =
@@ -2462,7 +2946,13 @@ fn lint_tool(ctx: &Ctx, a: LintArgs) -> Result<String, String> {
         if items.is_empty() {
             continue;
         }
-        let counted = if lint::ADVISORY.contains(&c.id) { ", not counted: only worth a look" } else { "" };
+        let counted = if lint::ADVISORY.contains(&c.id) {
+            ", not counted: only worth a look"
+        } else if lint::IN_INBOX.contains(&c.id) {
+            ", not counted here: they wait in Inbox › Captures (list_inbox) to be ingested or kept"
+        } else {
+            ""
+        };
         out.push_str(&format!("\n{} ({}{counted}; check {}):\n", c.title, items.len(), c.id));
         for i in items.iter().take(40) {
             // Page shape's items are reshape_pages', not fix_health's, as the app's report has them.
@@ -2476,7 +2966,7 @@ fn lint_tool(ctx: &Ctx, a: LintArgs) -> Result<String, String> {
     Ok(if out.is_empty() {
         "No issues.".into()
     } else {
-        format!("Knowledge health{}:\n{out}", only.map(|p| format!(" for {p}")).unwrap_or_default())
+        format!("Wiki health{}:\n{out}", only.map(|p| format!(" for {p}")).unwrap_or_default())
     })
 }
 
@@ -2545,7 +3035,7 @@ fn edit_page(ctx: &Ctx, a: ProposeArgs) -> Result<String, String> {
         _ => proposals::patched(before.as_deref().unwrap_or(""), &patch)?,
     };
     if let Some(b) = &before {
-        after = proposals::bump_updated(b, &after, &ctx.today.to_string());
+        after = proposals::bump_updated(b, &after, &ctx.today().to_string());
         if after.replace("\r\n", "\n") == b.replace("\r\n", "\n") {
             return Err("That changes nothing in the page.".into());
         }
@@ -2557,7 +3047,7 @@ fn edit_page(ctx: &Ctx, a: ProposeArgs) -> Result<String, String> {
         a.quotes.into_iter().map(|q| Quote { source: q.source, anchor: q.anchor, text: q.text, checked: None, path: None }).collect();
     let problems = proposals::mark_quotes(&mut quotes, |s| source_text(ctx, &ix, s))?;
     let resolves =
-        |t: &str| ix.resolve(&[t.to_string()]).ok().and_then(|v| v.into_iter().next().flatten()).is_some() || ctx.vault.join(t).exists();
+        |t: &str| ix.resolve(&[t.to_string()]).ok().and_then(|v| v.into_iter().next().flatten()).is_some() || ctx.vault().join(t).exists();
     let ghosts = proposals::new_ghost_links(before.as_deref().unwrap_or(""), &after, resolves);
     let warnings: Vec<String> = ghosts.iter().map(|g| format!("[[{g}]] goes to no page")).collect();
     let (kind, instruction) = match &before {

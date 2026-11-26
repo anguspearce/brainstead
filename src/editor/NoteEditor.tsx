@@ -133,6 +133,9 @@ export const NoteEditor = forwardRef<NoteEditorHandle, Props>(function NoteEdito
       e.view.dispatch({
         changes: { from: toPos(c.from), to: toPos(c.to), insert: c.insert },
         annotations: Transaction.addToHistory.of(undoable),
+        // The file's own text (a reload, a merge, a restored draft), not typing: a system note's
+        // locked header takes it too, or the editor would keep the old one and save it back.
+        filter: false,
       });
     },
   }));

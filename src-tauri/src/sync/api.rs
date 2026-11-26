@@ -2,8 +2,9 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Read-only calls to Microsoft's web APIs with the user's own sign-in (`auth`). These are the same
-//! endpoints the Teams and Outlook web apps call; the sync only ever reads. Chats and the Teams
+//! Calls to Microsoft's web APIs with the user's own sign-in (`auth`). These are the same
+//! endpoints the Teams and Outlook web apps call. The sync only ever reads; the one write is
+//! [`write_json`], with which Draft reply saves a reply as an Outlook draft (`reply`), never sending it. Chats and the Teams
 //! calendar go through chatsvc / the middle tier (a Skype token plus the Spaces bearer); mail and the
 //! Outlook calendar through Outlook REST (the Outlook bearer); transcripts through Substrate.
 
@@ -23,6 +24,15 @@ fn web_headers(req: reqwest::blocking::RequestBuilder) -> reqwest::blocking::Req
 pub fn get_json(client: &Client, svc: Service, url: &str) -> Result<Value, String> {
     let token = auth::token(svc)?;
     let resp = web_headers(client.get(url).bearer_auth(token)).send().map_err(|e| e.to_string())?;
+    read(turned_down(resp, svc), url)
+}
+
+/// A POST or PATCH with a JSON body and the bearer token for `svc`, returning the JSON answer. Only
+/// Draft reply's Put in Outlook uses it (D-20261120-05): it makes and fills a draft, never sends.
+pub fn write_json(client: &Client, svc: Service, method: reqwest::Method, url: &str, body: &Value) -> Result<Value, String> {
+    let token = auth::token(svc)?;
+    let req = client.request(method, url).bearer_auth(token).header("Content-Type", "application/json").body(body.to_string());
+    let resp = web_headers(req).send().map_err(|e| e.to_string())?;
     read(turned_down(resp, svc), url)
 }
 
@@ -71,6 +81,39 @@ fn read(resp: reqwest::blocking::Response, url: &str) -> Result<Value, String> {
         });
     }
     resp.json().map_err(|e| format!("{host} gave an unreadable answer: {e}"))
+}
+
+/// A picture from Teams' picture store (a chat's pasted picture), with its content type, read with the
+/// Skype token as Teams web reads it. Refuses any other host, so the sign-in only goes to Teams, and a
+/// picture over `max` bytes.
+pub fn get_picture(client: &Client, url: &str, max: u64) -> Result<(Vec<u8>, Option<String>), String> {
+    let host = url.strip_prefix("https://").and_then(|r| r.split('/').next()).unwrap_or("");
+    if !super::fetch::picture_host(host) {
+        return Err("That picture isn't in Teams' picture store.".into());
+    }
+    let spaces = auth::token(Service::Spaces)?;
+    let skype = skype_token(client, &spaces)?;
+    let resp = client
+        .get(url)
+        .header("Authorization", format!("skype_token {skype}"))
+        .header("Origin", "https://teams.microsoft.com")
+        .header("Referer", "https://teams.microsoft.com/")
+        .send()
+        .map_err(|e| e.to_string())?;
+    // A refused picture isn't taken as the chat sign-in having expired: chats still read.
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(format!("{host} answered {}", status.as_u16()));
+    }
+    if resp.content_length().is_some_and(|n| n > max) {
+        return Err(format!("it's over {} MB", max / (1024 * 1024)));
+    }
+    let kind = resp.headers().get("content-type").and_then(|v| v.to_str().ok()).map(str::to_string);
+    let bytes = resp.bytes().map_err(|e| e.to_string())?;
+    if bytes.len() as u64 > max {
+        return Err(format!("it's over {} MB", max / (1024 * 1024)));
+    }
+    Ok((bytes.to_vec(), kind))
 }
 
 /// Exchanges the Spaces bearer for a Skype token (authsvc), which chatsvc and the middle tier

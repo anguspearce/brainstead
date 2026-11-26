@@ -137,7 +137,6 @@ describe("pane widths", () => {
     // Each column's side of its table's flexible column (Name, Item, Document): after it, "right".
     const tables = {
       trash: { type: "right", folder: "right", deleted: "right", size: "right" },
-      activity: { when: "left", time: "left", action: "right" },
       register: { version: "right", status: "right", file: "right" },
     };
     for (const [table, cols] of Object.entries(tables))

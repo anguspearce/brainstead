@@ -93,11 +93,15 @@ fn clean(v: &str) -> String {
 
 /// `[Type. ]Title[ - Date].md`, as the window's `composeFilename`; None when there's no title left.
 pub fn compose(kind: Option<&str>, title: &str, date: Option<&str>) -> Option<String> {
+    // A name can't start with a dot: the vault skips hidden files, so ".NET migration.md" would
+    // be made and never listed (as the window's `composeFilename`).
+    let undotted = |v: String| v.trim_start_matches(['.', ' ']).to_string();
+    let kind = kind.map(clean).map(undotted).filter(|k| !k.is_empty());
     let title = clean(title.trim_end_matches(".md"));
+    let title = if kind.is_some() { title } else { undotted(title) };
     if title.is_empty() {
         return None;
     }
-    let kind = kind.map(clean).filter(|k| !k.is_empty());
     let mut s = match kind {
         Some(k) => format!("{k}. {title}"),
         None => title,
@@ -151,6 +155,15 @@ mod tests {
         assert_eq!(p("Notes 2026-09-14 and 2026-10.md").2.as_deref(), Some("2026-10"));
         assert_eq!(p("Build 20260917-1.md").2, None);
         assert_eq!(p("Ticket 12026-09.md").2, None);
+    }
+
+    #[test]
+    fn a_composed_name_never_starts_with_a_dot() {
+        assert_eq!(compose(None, ".NET migration", None).as_deref(), Some("NET migration.md"));
+        assert_eq!(compose(Some("Idea"), ".NET migration", None).as_deref(), Some("Idea. .NET migration.md"));
+        assert_eq!(compose(Some(". Idea"), "Plan", Some("2026-10-02")).as_deref(), Some("Idea. Plan - 2026-10-02.md"));
+        assert_eq!(compose(Some("..."), ".NET migration", None).as_deref(), Some("NET migration.md"));
+        assert_eq!(compose(None, "...", None), None);
     }
 
     #[test]

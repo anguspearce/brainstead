@@ -271,6 +271,9 @@ describe("filenames", () => {
       "Workshop. Role Framework kickoff - 2026-07-14.md",
     );
     expect(composeFilename({ type: null, title: " a/b:c  d " })).toBe("abc d.md");
+    expect(composeFilename({ type: null, title: ".NET migration" })).toBe("NET migration.md");
+    expect(composeFilename({ type: "Idea", title: ".NET migration" })).toBe("Idea. .NET migration.md");
+    expect(composeFilename({ type: null, title: "..." })).toBe("");
     expect(composeFilename({ type: null, title: "Plan #2 [draft] ^x | v1" })).toBe("Plan 2 draft x v1.md");
     expect(composeFilename({ type: "X", title: "  " })).toBe("");
   });

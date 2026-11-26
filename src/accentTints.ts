@@ -28,7 +28,7 @@ export const APP_ACCENT: Record<"light" | "dark", AccentTokens & { ink: string; 
     accentInk: "#174fb3",
     accentSoft: "#e8f0fd",
     onAccent: "#fff",
-    ring: "#a9c4f5",
+    ring: "#3a6bc0",
     ink: "#151a22",
     grounds: ["#fafbfc", "#f2f4f7", "#fff", "#f4f6f9"],
   },

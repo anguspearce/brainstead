@@ -45,9 +45,11 @@ const ITEMS: &[(&str, &str, Option<&str>)] = &[
     ("note:trash", "Move to the Trash", None),
 ];
 
-/// The View menu's Interface size items (src/interfaceSize.ts): the whole window bigger or smaller
-/// by a step, or back to 100%. Shift on a note's Text size keys, so the two never meet.
+/// The View menu's items: the sidebar as an icon rail or in full (src/sidebarRail.ts), then
+/// Interface size (src/interfaceSize.ts), the whole window bigger or smaller by a step, or back to
+/// 100%. Shift on a note's Text size keys, so the two never meet.
 const VIEW_ITEMS: &[(&str, &str, Option<&str>)] = &[
+    ("view:sidebar", "Toggle Sidebar", Some("CmdOrCtrl+Backslash")),
     ("view:interface-bigger", "Bigger Interface", Some("Shift+CmdOrCtrl+Equal")),
     ("view:interface-smaller", "Smaller Interface", Some("Shift+CmdOrCtrl+Minus")),
     ("view:interface-usual", "Usual Interface Size", Some("Shift+CmdOrCtrl+0")),

@@ -63,15 +63,23 @@ export interface Settings {
   projectOrder?: { areas?: string[]; projects?: string[] };
   /** Each list's search results order (by the list's plural noun): best match or latest first. */
   searchOrder?: Record<string, "ranked" | "latest">;
-  /** Jobs & schedule: ingest a new source as it arrives (a capture, a file dropped or imported);
+  /** Automations: ingest a new source as it arrives (a capture, a file dropped or imported);
    *  and, in the daily check, ingest again the sources that changed since pages cited them. */
   ingestOnArrival?: boolean;
-  /** Teams and Outlook sync is on (Settings › Teams and Outlook sync; macOS only). */
+  /** Teams and Outlook sync is on (Settings › Sync; macOS only). */
   syncEnabled?: boolean;
   /** Channel conversation ids chosen to sync (1:1 and group chats always sync). */
   syncChannels?: string[];
   /** Senders or domains whose mail the sync skips ("Don't sync this sender"). */
   syncIgnoreSenders?: string[];
+  /** 1:1 and group chats the sync skips, by conversation id. */
+  syncIgnoreChats?: string[];
+  /** Slack sync (the Slack extension hands the sign-in over). */
+  syncSlack?: boolean;
+  /** Outlook mail sync, apart from Teams; unset follows syncEnabled (mailOn). */
+  syncOutlook?: boolean;
+  /** Slack channel ids to sync. */
+  slackChannels?: string[];
   /** How many days of history the first sync loads (0 = no limit). */
   syncInitialDays?: number;
   /** Bring a synced email's attachments into sources/ (PDF and Office files up to 30 MB). On by default. */
@@ -80,6 +88,8 @@ export interface Settings {
   meetingIngest?: boolean;
   meetingTrash?: boolean;
   refreshStale?: boolean;
+  /** Settings › General › Notifications: all, needs_me (the default: only when something needs you) or off. */
+  notifications?: "all" | "needs_me" | "off";
   /** A model per background job (summaries, weekprep, find, ingest, meeting, clarify, contradictions, skills); a
    *  job not named uses `askModel`. */
   jobModels?: Record<string, string>;
@@ -142,7 +152,7 @@ export interface Settings {
   askSuggest?: boolean;
   askTabs?: { id: string; filename: string }[];
   askActive?: string;
-  /** The daily and weekly summaries (Settings › Jobs & schedule), and whether Brainstead runs them. */
+  /** The daily and weekly summaries (Settings › Automations), and whether Brainstead runs them. */
   summaries?: SummarySchedule;
   summariesHere?: boolean;
   /** "Hold the summaries for me": the daily and weekly summaries wait in Changes instead of being written. */
@@ -166,6 +176,9 @@ export interface Settings {
   /** Types of pane locked against resizing (src/panes.ts), by name; a type not here is unlocked, so
    *  a further type needs only a further key. Per machine, as paneWidths is. */
   resizeLocks?: { panes?: boolean; columns?: boolean };
+  /** The sidebar as an icon rail (src/sidebarRail.ts), chosen per width: `wide` true makes a wide
+   *  window's a rail, `narrow` false keeps a narrow window's in full. Neither set is the usual. */
+  sidebarRail?: { wide?: boolean; narrow?: boolean };
 }
 
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
@@ -177,6 +190,10 @@ export interface SummarySchedule {
   weeklyEnabled: boolean;
   weeklyDay: Weekday;
   weeklyTime: string;
+  /** The daily brief (Briefs/Brief YYYY-MM-DD.md). */
+  briefEnabled?: boolean;
+  /** HH:MM, local; 07:00 when unset. */
+  briefTime?: string;
 }
 
 export interface WeeklyReviewTime {
@@ -185,9 +202,13 @@ export interface WeeklyReviewTime {
   time: string;
 }
 
+/** What Settings › Automations' Recent runs, and run_status, call a summary run's kind. */
+export const reviewKindName = (k: ReviewRun["kind"]) =>
+  k === "daily" ? "Daily summary" : k === "brief" ? "Daily brief" : "Weekly summary";
+
 export interface ReviewRun {
   id: string;
-  kind: "daily" | "weekly";
+  kind: "daily" | "weekly" | "brief";
   /** 2026-10-01 or 2026-W40. */
   target: string;
   trigger: "schedule" | "manual" | "retry" | "unattended";
@@ -207,8 +228,8 @@ export interface ReviewRun {
 
 export interface ReviewsStatus {
   runs: ReviewRun[];
-  next: { daily: string | null; weekly: string | null };
-  running: ("daily" | "weekly")[];
+  next: { daily: string | null; weekly: string | null; brief: string | null };
+  running: ("daily" | "weekly" | "brief")[];
 }
 
 /** A daily or weekly summary block, as Today shows it. */
@@ -264,6 +285,10 @@ export interface VaultStatus {
   state: "none" | "indexing" | "ready" | "error";
   vaultPath: string | null;
   error: string | null;
+  /** Something wrong that leaves the vault usable: the folder can't be watched for changes. */
+  warning?: string | null;
+  /** Notes a crash left halfway through a rename, by vault-relative path (hidden `.rename-…` files). */
+  halfRenamed?: string[];
   stats: IndexStats;
 }
 
@@ -421,13 +446,15 @@ export interface Captured {
   path: string | null;
   error: string | null;
   at: string;
-  /** Made by the Teams and Outlook sync rather than an extension button (ingested unattended). */
+  /** Made by the sync rather than an extension button (ingested unattended). */
   sync?: boolean;
   /** The item's own date/time (RFC 3339): a chat's last message, a mail's received time, a meeting's start. */
   itemDate?: string | null;
+  /** Fetched again by a back-fill: it waits in the Inbox, not ingested on arrival. */
+  backfill?: boolean;
 }
 
-/** The Teams and Outlook sign-in state (Settings › Teams and Outlook sync). */
+/** The Teams and Outlook sign-in state (Settings › Sync). */
 export interface SyncSignIn {
   signedIn: boolean;
   handedOver: string | null;
@@ -439,6 +466,10 @@ export interface SyncSignIn {
   extensionOutdated: string | null;
   /** The Teams extension version this build ships. */
   extensionShipped: string;
+  /** Teams' own sign-in is live (chats, transcripts, calendar). */
+  teams: boolean;
+  /** The mail sign-in, from an Outlook on the web tab, is live. */
+  outlook: boolean;
 }
 
 /** What one sync pass did. */
@@ -448,6 +479,35 @@ export interface SyncReport {
   transcripts: number;
   problems: string[];
   blocked: string | null;
+  /** The sources written or topped up. */
+  paths: string[];
+  /** Those of them topped up in place rather than written new. */
+  toppedUp?: string[];
+  /** Email threads topped up with a reply you sent, in any folder (D-20261120-06). */
+  replied?: string[];
+}
+
+/** One sync pass, or a run of the same blocked or failing one (src-tauri/src/sync/log.rs). */
+export interface SyncPass {
+  /** When it ran (local, YYYY-MM-DDTHH:MM:SS); the first of a run of repeats. */
+  at: string;
+  backfill: boolean;
+  /** Sources written new. */
+  added: string[];
+  /** Sources that grew in place. */
+  toppedUp: string[];
+  problems: string[];
+  /** Why it couldn't run at all. */
+  blocked: string | null;
+  /** How many passes after the first went the same way, and when the last ran. */
+  repeats: number;
+  last: string | null;
+}
+
+/** The sync's passes over the last two weeks, newest first, and when the last one ran. */
+export interface SyncLog {
+  lastPass: string | null;
+  passes: SyncPass[];
 }
 
 /** An upcoming meeting for the Today screen. */
@@ -564,9 +624,51 @@ export interface ProjectDoc {
 }
 
 /** Something to clarify: a Scratchpad block or a To Do `#### Other` task. */
+/** A skip suggested from what the user deletes (src-tauri/src/sync/skips.rs). */
+export interface SkipSuggestion {
+  key: string;
+  kind: "sender" | "chat";
+  /** The address, or the chat's conversation id: what goes on the skip list. */
+  value: string;
+  /** The address, or the chat's title. */
+  label: string;
+  deletes: number;
+  last: string;
+}
+
+/** An initiative's action waiting in the Inbox (D-20261118-12): the user's own, or delegated and
+ *  overdue. */
+export interface InboxAction {
+  id: string;
+  /** The initiative's name. */
+  initiative: string;
+  owner: "me" | "delegated";
+  person: string | null;
+  due: string | null;
+  /** The day it was delegated. */
+  since: string | null;
+  /** Past its due date, or with none, delegated more than a week ago. */
+  overdue: boolean;
+  /** Its quotes, as `“words” — [[source]]`. */
+  quotes: string[];
+}
+
+/** A change to an initiative's action (brainstead_core::initiatives::ActionEdit). */
+export interface ActionEdit {
+  id?: string;
+  text?: string;
+  owner?: "me" | "delegated" | "other";
+  person?: string;
+  status?: "open" | "done" | "dropped";
+  due?: string;
+  /** Where the task it became went: `[[Me. To Do List]]` or a project's note. */
+  task?: string;
+}
+
 export interface InboxItem {
-  /** capture: a file in sources/ from the Outlook or Teams extension (`path`; `lineText` says what it is). */
-  kind: "thought" | "task" | "capture";
+  /** capture: a file in sources/ from the Outlook or Teams extension (`path`; `lineText` says what it is).
+   *  action: an initiative's action (`path` the initiative's page, `line`/`lineText` the action's). */
+  kind: "thought" | "task" | "capture" | "action";
   path: string;
   /** The block's heading line, or the task's line (0-based). */
   line: number;
@@ -577,6 +679,7 @@ export interface InboxItem {
   stamp: string | null;
   /** A thought's block as it is in the file (heading to body, LF), to remove it by. */
   block?: string | null;
+  action?: InboxAction;
 }
 
 export interface SourceRow extends FileSummary {
@@ -646,7 +749,7 @@ export interface TrashEntry {
   sizeBytes: number;
 }
 
-// Stage 7a: Changes and Knowledge health (src-tauri/src/knowledge.rs).
+// Stage 7a: Changes and Wiki health (src-tauri/src/knowledge.rs).
 export interface MeetingInference {
   filename: string;
   kind: string;
@@ -883,7 +986,7 @@ export interface SavedCheck {
 
 export interface IngestRun {
   id: string;
-  /** ingest, or meeting (a meeting note drafted from a transcript). */
+  /** ingest, actions (actions and decisions only, of a source the wiki has) or meeting (a meeting note drafted from a transcript). */
   kind?: string;
   /** A meeting note's type, name and date. */
   note?: NoteSpec | null;
@@ -901,6 +1004,8 @@ export interface IngestRun {
   error: string | null;
   /** "scheduled" when the daily check or an unattended assistant started it; absent when the user did. */
   trigger?: string;
+  /** A chat day it found nothing in, moved to the Trash. */
+  trashed?: boolean;
 }
 
 export interface FixNameRequest {
@@ -973,7 +1078,7 @@ export interface AutomationSuggestion {
 }
 
 export interface ChangeOrigin {
-  /** chat (Ask or a terminal), ingest, meeting, lint (Knowledge health), review (a summary or the weekly review) or contradiction. */
+  /** chat (Ask or a terminal), ingest, meeting, lint (Wiki health), review (a summary or the weekly review) or contradiction. */
   kind: string;
   chat?: string;
   label?: string;
@@ -1091,6 +1196,8 @@ export interface ChangeSubmit {
   flags?: string[];
   origin: ChangeOrigin;
   model?: string | null;
+  /** Held whatever the checks say, and why: only the user accepts it. */
+  hold?: string | null;
 }
 
 export interface ChangeOutcome {
@@ -1125,6 +1232,9 @@ export interface LintReport {
   wikiPages: number;
   sources: number;
   ms: number;
+  /** Synced threads changed since they were cited that the daily check will ingest again:
+   *  Changed in Sources, not a Health issue until it has tried (D-20261120-08). */
+  waiting?: string[];
 }
 
 export interface HealthView {
@@ -1147,7 +1257,7 @@ export const api = {
   dailyCheckStatus: () => invoke<DailyCheckStatus>("daily_check_status"),
   dailyCheckRunNow: (unattended = false) => invoke<void>("daily_check_run_now", { unattended }),
   dailyCheckStop: () => invoke<void>("daily_check_stop"),
-  reviewsStop: (kind: "daily" | "weekly") => invoke<void>("reviews_stop", { kind }),
+  reviewsStop: (kind: "daily" | "weekly" | "brief") => invoke<void>("reviews_stop", { kind }),
   contradictionsStop: () => invoke<void>("contradictions_stop"),
   onDailyCheckChanged: (f: () => void): Promise<UnlistenFn> => listen("daily-check-changed", () => f()),
   contradictionsReport: () => invoke<ContradictionsReport>("contradictions_report"),
@@ -1157,7 +1267,9 @@ export const api = {
   pageFacts: (path: string) => invoke<PageFact[]>("page_facts", { path }),
   onContradictionsChanged: (f: () => void): Promise<UnlistenFn> => listen("contradictions-changed", () => f()),
   /** `unattended`: an assistant nobody is watching asked, so its changes are held when a check fails. */
-  ingestStart: (paths: string[], unattended = false) => invoke<string[]>("ingest_start", { paths, unattended }),
+  /** `mode`: full (default), actions (actions and decisions only) or auto (actions only for a source the wiki cites). */
+  ingestStart: (paths: string[], unattended = false, mode?: "full" | "actions" | "auto") =>
+    invoke<string[]>("ingest_start", mode ? { paths, unattended, mode } : { paths, unattended }),
   wikiMeta: () => invoke<WikiMeta[]>("wiki_meta"),
   /** A PowerPoint or Excel file's text by slide or sheet. */
   sourceParts: (path: string) => invoke<{ kind: string; parts: { label: string; text: string }[] }>("source_parts", { path }),
@@ -1182,6 +1294,9 @@ export const api = {
   /** With `current` and `change`, revises that reply as asked rather than drafting afresh. */
   draftReply: (thread: string | null, text: string | null, tone: string, current: string | null = null, change: string | null = null) =>
     invoke<Reply>("draft_reply", { thread, text, tone, current, change }),
+  /** Draft reply's Put in Outlook / Put in Teams: the reply, unsent, as an Outlook draft on the thread
+   *  or typed into the Teams chat's box by the Teams extension; the link is opened in the browser. */
+  replyPlace: (path: string, text: string) => invoke<{ to: "outlook" | "teams"; url: string }>("reply_place", { path, text }),
   canonicalRegister: () => invoke<CanonicalRegister>("canonical_register"),
   docCheck: (candidate: string, doc: string, mode: CheckMode) => invoke<CheckResult>("doc_check", { candidate, doc, mode }),
   /** Starts a check in the background; its steps and result come as onDocCheckChanged. */
@@ -1227,6 +1342,11 @@ export const api = {
   updateSkip: () => invoke<void>("update_skip"),
   fixnamePlan: (req: FixNameRequest) => invoke<{ rightPage: string | null; rows: FixNameRow[] }>("fixname_plan", { req }),
   fixnameApply: (req: FixNameRequest, rows: FixNameRow[]) => invoke<string>("fixname_apply", { req, rows }),
+  /** What fixnameApply would write to the ticked notes, not written: an assistant's fix goes through Changes. */
+  fixnameChanges: (req: FixNameRequest, rows: FixNameRow[]) =>
+    invoke<{ page: string; instruction: Instruction }[]>("fixname_changes", { req, rows }),
+  /** Remembers the correction alone; false when it's remembered already. */
+  fixnameRemember: (req: FixNameRequest) => invoke<boolean>("fixname_remember", { req }),
   /** Changes, newest first; with page, only that page's. */
   changesList: (page?: string) => invoke<ChangeRow[]>("changes_list", { page: page ?? null }),
   changeGet: (id: string) => invoke<ChangeView>("change_get", { id }),
@@ -1257,6 +1377,9 @@ export const api = {
   changeForEditing: (id: string) => invoke<string>("change_for_editing", { id }),
   healthReport: (fresh = false) => invoke<HealthView>("health_report", { fresh }),
   healthFix: (fixes: HealthFix[]) => invoke<string>("health_fix", { fixes }),
+  /** What healthFix would write, not written, one change a page: an assistant's fixes go through Changes. */
+  healthFixChanges: (fixes: HealthFix[]) =>
+    invoke<{ page: string; title: string; instruction: Instruction; hold: string | null }[]>("health_fix_changes", { fixes }),
   /** Reshape pages: every page that can be reshaped by itself, or those named. */
   healthReshape: (pages: string[] | null, unattended = false) =>
     invoke<{ run: string; applied: number; failed: string[]; left: number }>("health_reshape", { pages, unattended }),
@@ -1328,7 +1451,9 @@ export const api = {
   appInfo: () => invoke<AppInfo>("app_info"),
   /** The files around `center` to `depth` links, or the whole wiki when `center` is null. */
   graph: (center: string | null, depth: number) => invoke<Graph>("graph", { center, depth }),
-  activity: () => invoke<{ log: LogEntry[]; days: ActivityDay[] }>("activity"),
+  activity: () => invoke<{ days: ActivityDay[] }>("activity"),
+  /** log.md's entries, newest first. */
+  vaultLog: () => invoke<LogEntry[]>("vault_log"),
   glance: () => invoke<Glance>("glance"),
   activityDay: (date: string) => invoke<FileSummary[]>("activity_day", { date }),
   /** Which of these vault files are still there, in the same order. */
@@ -1374,6 +1499,8 @@ export const api = {
   docSave: (path: string, content: string, base: string) => invoke<string>("doc_save", { path, content, base }),
   /** Creates a new file (vault-relative); refuses with `exists`. Returns its version. */
   docCreate: (path: string, content: string) => invoke<string>("doc_create", { path, content }),
+  /** A new initiative page's text, as create_initiative makes it. */
+  initiativePage: (name: string, about = "") => invoke<string>("initiative_page", { name, about }),
   /** Makes a new vault called `name` inside `parent`, filled with the example notes; returns its path. */
   vaultCreate: (parent: string, name: string) => invoke<string>("vault_create", { parent, name }),
   /** Adds the example notes the open vault doesn't have; returns how many were added. */
@@ -1438,20 +1565,30 @@ export const api = {
       /** Each extension's version in the folder, by its folder name (teams-capture). */
       versions: Record<string, string>;
     }>("capture_status"),
-  captureReveal: (which: "outlook-capture" | "teams-capture") => invoke<void>("capture_reveal", { which }),
+  captureReveal: (which: "outlook-capture" | "teams-capture" | "slack-capture") => invoke<void>("capture_reveal", { which }),
   onCapture: (f: (c: Captured) => void): Promise<UnlistenFn> => listen<Captured>("capture", (e) => f(e.payload)),
+  /** A sync pass topped up these email threads with a reply you sent (src-tauri/src/sync/run.rs). */
+  onSyncReplied: (f: (paths: string[]) => void): Promise<UnlistenFn> => listen<string[]>("sync-replied", (e) => f(e.payload)),
   // Teams and Outlook sync (src-tauri/src/sync/). macOS only.
   syncSignInState: () => invoke<SyncSignIn>("sync_sign_in_state"),
   syncSignOut: () => invoke<void>("sync_sign_out"),
-  syncNow: () => invoke<SyncReport>("sync_now"),
+  syncSignOutOutlook: () => invoke<void>("sync_sign_out_outlook"),
+  /** One sync pass; with `from` (YYYY-MM-DD), a back-fill from that day (Settings › Sync › Fetch again). */
+  syncNow: (from?: string) => invoke<SyncReport>("sync_now", from ? { from } : {}),
+  syncLog: () => invoke<SyncLog>("sync_log"),
   syncTodayMeetings: () => invoke<SyncMeeting[]>("sync_today_meetings"),
   /** The last calendar read's meetings that haven't ended — instant, no network. */
   syncCachedMeetings: () => invoke<SyncMeeting[]>("sync_cached_meetings"),
   syncListChannels: () => invoke<{ id: string; topic: string }[]>("sync_list_channels"),
+  slackSignInState: () => invoke<{ signedIn: boolean; workspaces: string[]; handedOver: string | null }>("slack_sign_in_state"),
+  slackSignOut: () => invoke<void>("slack_sign_out"),
+  slackChannels: () => invoke<{ id: string; name: string; workspace: string }[]>("slack_channels"),
   syncPull: (query: string, days: number, kinds?: string[]) =>
     invoke<{
       items: { kind: string; title: string; date: string; path: string; alreadyHad: boolean }[];
       problems: string[];
+      /** What wasn't read because it's on a skip list (Settings › Sync). */
+      leftOut?: string[];
       blocked: string | null;
     }>("sync_pull", { query, days, kinds }),
   // Dataview (src-tauri/src/dataview.rs, src/md/dataview/).
@@ -1481,6 +1618,23 @@ export const api = {
   projectsSetArea: (paths: string[], from: string, to: string) => invoke<string>("projects_set_area", { paths, from, to }),
   /** `block` is the item's block, checked before it's removed. */
   inboxRemoveThought: (line: number, text: string) => invoke<string | null>("inbox_remove_thought", { line, text }),
+  skipSuggestions: () => invoke<{ suggestions: SkipSuggestion[]; chatNames: Record<string, string> }>("skip_suggestions"),
+  skipSuggestionDismiss: (key: string) => invoke<void>("skip_suggestion_dismiss", { key }),
+  skipSuggestionForget: (key: string) => invoke<void>("skip_suggestion_forget", { key }),
+  /** An initiative action's line after `edit`, not written (clarify_inbox sends it as a change). */
+  initiativeActionLine: (lineText: string, edit: ActionEdit) => invoke<string>("initiative_action_line", { lineText, edit }),
+  /** The Inbox's Task: a task at the end of the To Do list's To Do, nothing more to set; ⌘Z undoes it. */
+  todoAddTask: (text: string) => invoke<Edited>("todo_add_task", { text }),
+  /** The Inbox's Task for a To Do list task: its line leaves Other and `text` joins To Do, in one write. */
+  inboxTaskToTodo: (line: number, lineText: string, text: string) => invoke<Edited>("inbox_task_to_todo", { line, lineText, text }),
+  /** The initiatives: [name, path, status], A to Z. */
+  initiativesList: () => invoke<[string, string, string][]>("initiatives_list"),
+  /** Moves an action, whole, to another initiative (its task's link follows); ⌘Z undoes it. Says what it did. */
+  initiativeActionMove: (path: string, line: number, lineText: string, to: string) =>
+    invoke<string>("initiative_action_move", { path, line, lineText, to }),
+  /** Changes an initiative action's line in place (accepted, done, dropped); ⌘Z undoes it. */
+  initiativeActionSet: (path: string, line: number, lineText: string, change: ActionEdit) =>
+    invoke<Edited>("initiative_action_set", { path, line, lineText, change }),
   inboxMoveTask: (line: number, lineText: string, toPath: string, heading: string, newLine: string) =>
     invoke<string | null>("inbox_move_task", { line, lineText, toPath, heading, newLine }),
   /** What each Inbox item could become, by the default model (src-tauri/src/weekly.rs). */
@@ -1504,7 +1658,7 @@ export const api = {
    *  `unattended` (an assistant nobody is watching): held when a check fails. */
   weekprepLink: (week: string, path: string, phrase: string, target: string, unattended = false) =>
     invoke<ChangeOutcome>("weekprep_link", { week, path, phrase, target, unattended }),
-  /** The job's last run and next scheduled time (Settings › Jobs & schedule). */
+  /** The job's last run and next scheduled time (Settings › Automations). */
   weekprepJob: () => invoke<WeekPrepJob>("weekprep_job"),
   /** Stops the preparation running now. */
   weekprepStop: () => invoke<void>("weekprep_stop"),
@@ -1532,11 +1686,11 @@ export const api = {
   // Scheduled reviews (src-tauri/src/reviews.rs, src/Jobs.tsx).
   reviewsStatus: () => invoke<ReviewsStatus>("reviews_status"),
   /** `day` (YYYY-MM-DD) runs it for that day, or that day's week. */
-  reviewRunNow: (kind: "daily" | "weekly", day?: string, unattended = false) =>
+  reviewRunNow: (kind: "daily" | "weekly" | "brief", day?: string, unattended = false) =>
     invoke<string>("review_run_now", { kind, day: day ?? null, unattended }),
   reviewUndo: (id: string) => invoke<void>("review_undo", { id }),
   /** The latest daily summary block (within a month) or weekly one (this week's or last week's). */
-  reviewLatest: (kind: "daily" | "weekly") => invoke<LatestSummary | null>("review_latest", { kind }),
+  reviewLatest: (kind: "daily" | "weekly" | "brief") => invoke<LatestSummary | null>("review_latest", { kind }),
   onReviewsChanged: (f: () => void): Promise<UnlistenFn> => listen("reviews-changed", () => f()),
   /** A review run started: its chat id and title, to open as a tab. */
   /** A review run started; `effort` is the one it runs at (its job's), null for the model's own default. */
@@ -1674,7 +1828,7 @@ export interface WeekPrepRun {
   chat: string | null;
 }
 
-/** The preparation's row in Settings › Jobs & schedule. */
+/** The preparation's row in Settings › Automations. */
 export interface WeekPrepJob {
   /** The week being prepared now. */
   running: string | null;

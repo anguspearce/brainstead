@@ -57,7 +57,7 @@ pub enum Status {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Origin {
-    /// chat (a model in Ask or a terminal), ingest, meeting, lint (Knowledge health), review (a
+    /// chat (a model in Ask or a terminal), ingest, meeting, lint (Wiki health), review (a
     /// summary) or contradiction.
     pub kind: String,
     /// The Ask chat it came from, when Brainstead started the CLI.
@@ -534,7 +534,7 @@ pub fn valid_new_page(rel: &str) -> Result<(), String> {
         && !rel.contains(['\\', ':', '*', '?', '"', '<', '>', '|', '\n']);
     if !ok {
         return Err(format!(
-            "A new wiki page goes in wiki/entities/<Name>.md, wiki/concepts/<Name>.md or wiki/summaries/<Name>.md, not {rel}. A new note is create_note."
+            "A new wiki page goes in wiki/entities/<Name>.md, wiki/concepts/<Name>.md, wiki/initiatives/<Name>.md (create_initiative makes one) or wiki/summaries/<Name>.md, not {rel}. A new note is create_note."
         ));
     }
     Ok(())

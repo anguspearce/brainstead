@@ -194,6 +194,44 @@ describe("task rows", () => {
   });
 });
 
+describe("a row's chips, + and ⋯ menu", () => {
+  const task = t("Call Maya 📅 2026-10-09", { due: "2026-10-09", contexts: ["calls"], effort: "15m", effortMin: 15 });
+  const menuText = () => document.querySelector(".popover")?.textContent ?? "";
+
+  it("a chip opens its own field's picker", () => {
+    const { container } = render(<TaskList rows={[task]} manual={false} />);
+    fireEvent.click(container.querySelector(".chip.ed.f-due")!);
+    expect(menuText()).toContain("Due");
+    expect(menuText()).toContain("Next week");
+    expect(menuText()).not.toContain("Priority");
+    cleanup();
+    const again = render(<TaskList rows={[task]} manual={false} />);
+    fireEvent.click(again.container.querySelector(".chip.ed.ctx")!);
+    expect(menuText()).toContain("@calls");
+    expect(menuText()).not.toContain("Next week");
+  });
+
+  it("+ offers only the fields it hasn't got", () => {
+    const { container } = render(<TaskList rows={[task]} manual={false} />);
+    fireEvent.click(container.querySelector(".tadd")!);
+    const items = [...document.querySelectorAll(".popover [role=menuitem]")].map((b) => b.textContent);
+    expect(items).toEqual(["Defer until", "Start date", "Priority", "Project"]);
+    fireEvent.click(screen.getByText("Priority"));
+    expect(menuText()).toContain("Highest");
+  });
+
+  it("⋯ shows the verbs, and More… every field", () => {
+    const { container } = render(<TaskList rows={[task]} manual={false} />);
+    fireEvent.click(container.querySelector(".tmore")!);
+    expect(menuText()).toContain("Waiting for someone");
+    expect(menuText()).toContain("Delete task");
+    expect(menuText()).not.toContain("Next week");
+    fireEvent.click(screen.getByText("More…"));
+    for (const w of ["Due", "Defer until", "Set start date", "Set created date", "Priority", "Context", "Effort", "Project"])
+      expect(menuText()).toContain(w);
+  });
+});
+
 describe("changing a task's words", () => {
   it("keeps its dates and tags, and refuses words it can't find once", () => {
     expect(retitled("- [ ] Call Maya 📅 2026-10-09 #work", "Call Maya", "Call Lena")).toBe("- [ ] Call Lena 📅 2026-10-09 #work");
@@ -251,12 +289,12 @@ describe("the task pane's project", () => {
       ["projects_list", "tasks_all", "tasks_query"].includes(String(cmd)) ? [] : { undo: "" },
     );
     const inherited = t("From the tracker", { path: "Tracker. Orbit.md", project: "Project. Orbit.md", projectFrom: "member" });
-    const { rerender } = render(<TaskEditor t={inherited} onClose={() => {}} wide={false} />);
+    const { rerender } = render(<TaskEditor t={inherited} />);
     await act(async () => {});
     expect(screen.queryByRole("button", { name: "Clear project" })).toBeNull();
     expect(screen.getByText("From its note's Project: line")).toBeTruthy();
     // A project its line links can still be cleared.
-    rerender(<TaskEditor t={{ ...inherited, projectFrom: "line" }} onClose={() => {}} wide={false} />);
+    rerender(<TaskEditor t={{ ...inherited, projectFrom: "line" }} />);
     expect(screen.getByRole("button", { name: "Clear project" })).toBeTruthy();
     expect(screen.queryByText("From its note's Project: line")).toBeNull();
     invoke.mockImplementation(async () => ({ undo: "" }));
@@ -268,11 +306,11 @@ describe("the task editor's priority", () => {
 
   it("shows the priority the row's chip shows, wherever it is on the line", () => {
     for (const text of ["Call Sam ⏫ [effort:: 15m]", "⏫ Review the plan", "Call Sam ⏫"]) {
-      render(<TaskEditor t={t(text)} onClose={() => {}} wide={false} />);
+      render(<TaskEditor t={t(text)} />);
       expect([pressed("High"), pressed("None"), pressed("Low")], text).toEqual(["true", "false", "false"]);
       cleanup();
     }
-    render(<TaskEditor t={t("Plain words")} onClose={() => {}} wide={false} />);
+    render(<TaskEditor t={t("Plain words")} />);
     expect([pressed("High"), pressed("None")]).toEqual(["false", "true"]);
   });
 });

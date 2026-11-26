@@ -31,7 +31,7 @@ Images stay drawn in Edit, including `<img>` tags from other apps. Hover one for
 Spelling and grammar are checked in Edit and Source: click an underlined word for suggestions, **Learn** or **Ignore**. Turn checking off in [Settings › Notes](app:settings/notes).
 
 ## Save, drafts and outside changes
-Press `⌘S`, or click **Save** or the **Unsaved · ⌘S** pill. Unsaved text is kept as a draft a second after you stop typing, so nothing is lost if the app quits; reopening the note offers **Restore** or **Discard**.
+Press `⌘S`, or click **Save** or the **Unsaved · ⌘S** pill. Unsaved text is kept as a draft a second after you stop typing, so nothing is lost if the app quits; reopening the note offers **Restore** or **Discard**. If you type instead, the offer stays until you leave the note, and what you typed becomes the draft that's kept.
 
 Leaving a note with unsaved changes asks first: **Stay**, **Keep as draft**, **Discard changes** or **Save**.
 
@@ -44,7 +44,7 @@ If another app changes other lines, the change is merged in and saving keeps bot
 Nothing is overwritten.
 
 ## System notes
-System notes, such as the To Do list and the Scratchpad, are ones Brainstead relies on; [Trash](help:trash) lists them. Their header (the "This is a system note" callout) shows a lock and can't be edited here; the rest edits as usual. If another app changes it, [Knowledge health](app:health) offers to put it back.
+System notes, such as the To Do list and the Scratchpad, are ones Brainstead relies on; [Trash](help:trash) lists them. Their header (the "This is a system note" callout) shows a lock and can't be edited here; the rest edits as usual. If another app changes it, [Wiki health](app:health) offers to put it back.
 
 ## Find and replace
 Press `⌘F` to find in the note. `↩` goes to the next match, `⇧↩` to the previous one, and `Esc` closes the bar.
@@ -52,7 +52,9 @@ Press `⌘F` to find in the note. `↩` goes to the next match, `⇧↩` to the 
 In Edit and Source you can also replace: type in **Replace with**, then click **Replace** (or `↩`) or **Replace all**. `⌘Z` undoes it. View only finds.
 
 ## Tick tasks and run queries
-Tick a task's box in View or Edit. In View with nothing unsaved, it's saved at once (`⌘Z` undoes it); otherwise it joins your unsaved edits. Hover a date icon for its meaning. In Edit, typing `due:`, `defer:`, `start:` or `created:` in a task opens a date picker.
+Tick a task's box in View or Edit. In View with nothing unsaved, it's saved at once (`⌘Z` undoes it); otherwise it joins your unsaved edits. Either way a repeating task gets its next occurrence, and one marked to delete when done goes. Hover a date icon for its meaning. In Edit, typing `due:`, `defer:`, `start:` or `created:` in a task opens a date picker.
+
+Inline fields such as `[status:: open]` show as small labels in View; the text itself is unchanged.
 
 `tasks` and `dataview` code blocks are live lists of tasks or notes. **Insert a query** builds one; see [Task and Dataview queries](help:queries).
 
@@ -74,7 +76,7 @@ Some pages add buttons before these: a wiki page has **Refresh from sources**; a
 Text size sets document text from 12 to 24 px for every note. `⌘=` and `⌘-` change it and `⌘0` resets it to 15 px. It's separate from the whole window's [Interface size](help:settings-general) (`⇧⌘=` `⇧⌘-` `⇧⌘0`), which scales this text too.
 
 ## Rename, copy, export and more
-Rename edits the type, title and date, and shows the new filename and every link it will change; click **Rename & update links**. The note stays in its folder, and a message offers **Undo** (or press `⌘Z`).
+Rename edits the type, title and date, and shows the new filename and every link it will change; click **Rename & update links**. The note stays in its folder, and a message offers **Undo** (or press `⌘Z`). Links that spell part of the note's path, such as `[[entities/Orbit App]]` or `[[../entities/Orbit App]]`, change too. A rename never replaces a file: if one already has the new name, it's refused.
 
 **Export PDF…** (`⌘P`) saves a light PDF in the note's look, images included, with the title and page numbers in the footer. **Copy rich text** pastes formatted into email or a document. **Move to the Trash** is on the ⋯ menu and the Note menu, with Undo.
 

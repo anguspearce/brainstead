@@ -48,4 +48,12 @@ describe("a system note's header", () => {
     expect(edit(0, a)).toBe("\n" + NOTE.slice(a));
     expect(edit(0, NOTE.length)).toBe("\n> **This is a system note** - Tasks.\n> More.\n");
   });
+
+  it("is in the same place in a file with CRLF line breaks", () => {
+    const st = EditorState.create({ doc: NOTE, extensions: [systemLock, EditorState.lineSeparator.of("\r\n")] });
+    const [a, b] = systemCallout(NOTE)!;
+    const edit = (from: number, to: number, insert: string) => st.update({ changes: { from, to, insert } }).state.doc.toString();
+    expect(edit(a, a + 1, "x")).toBe(NOTE); // its first character is held
+    expect(edit(b + 2, b + 2, "x")).toBe(NOTE.slice(0, b + 2) + "x" + NOTE.slice(b + 2)); // the line after it isn't
+  });
 });

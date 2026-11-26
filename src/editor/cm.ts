@@ -34,7 +34,7 @@ import { templaterCompletions } from "./templaterAssist";
 import { taskHint } from "./taskHint";
 import { frontmatterEnd, lineSeparator, TASK_LINE } from "./text";
 
-/** Lines marked from outside (Knowledge health's uncited claims), as their text (trimmed, its
+/** Lines marked from outside (Wiki health's uncited claims), as their text (trimmed, its
  *  first 160 characters). Marked again when the text is replaced from outside (the page reloaded);
  *  cleared by the user's own edit. */
 const setLineHits = StateEffect.define<string[]>();
@@ -221,7 +221,14 @@ export class CMEditor implements Editor {
           ...searchKeymap.filter((k) => k.key !== "Mod-f"),
         ]),
         EditorView.lineWrapping,
-        EditorView.contentAttributes.of({ spellcheck: "false", autocorrect: "off", autocapitalize: "off", "aria-label": "Note text" }),
+        // Writing Tools stay on in a note, off in the rest of the app (index.html).
+        EditorView.contentAttributes.of({
+          spellcheck: "false",
+          autocorrect: "off",
+          autocapitalize: "off",
+          writingsuggestions: "true",
+          "aria-label": "Note text",
+        }),
         sameLineBreaks,
         taskHint,
         spelling,
@@ -381,7 +388,7 @@ export class CMEditor implements Editor {
   }
 
   /** Highlights each line that reads one of `texts` (trimmed, its first 160 characters, as
-   *  Knowledge health gives a line) until the next edit, and scrolls to the first. */
+   *  Wiki health gives a line) until the next edit, and scrolls to the first. */
   highlightLines(texts: string[]): boolean {
     this.view.dispatch({ effects: setLineHits.of(texts) });
     const first = this.view.state.field(lineHits).deco.iter();

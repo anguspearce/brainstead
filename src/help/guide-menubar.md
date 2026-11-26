@@ -12,7 +12,7 @@ Click Brainstead's icon in the menu bar. The window shows overdue, due today and
 In [Settings › General](app:settings/general), turn on **Open at login** and **Only in the menu bar when the window is closed**. Closing the window then takes Brainstead out of the Dock, and captures and scheduled jobs keep working. [The menu bar](help:menubar) has more.
 
 ## Capture from any app
-Press `⌃⌥Space` anywhere, type a task and press `↩`; `Tab` switches to **Thought**. Both wait in the [Inbox](app:inbox). Change the keys under Quick capture in [Settings › General](app:settings/general).
+Press `⌃⌥Space` anywhere, type a task and press `↩`; `Tab` switches to **Scratchpad note**. Both wait in the [Inbox](app:inbox). Change the keys under Quick capture in [Settings › General](app:settings/general).
 
 ## Install the browser extensions
 Open [Settings › Capture extensions](app:settings/capture). In Chrome, Edge or Brave, open `chrome://extensions`, switch on Developer mode, click Load unpacked and choose an extension's folder (**Show in Finder** shows it). Pin the extension to the toolbar.

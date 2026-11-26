@@ -29,7 +29,7 @@ const AT_ONCE: usize = 4;
 static RUNNING: AtomicBool = AtomicBool::new(false);
 static STOP: AtomicBool = AtomicBool::new(false);
 
-/// The run going now or the last one, for Knowledge health.
+/// The run going now or the last one, for Wiki health.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Last {
@@ -123,7 +123,10 @@ pub fn start(app: &AppHandle, pages: Option<Vec<String>>, limit: Option<usize>, 
                         break;
                     }
                     let Some(page) = queue.lock().unwrap().pop() else { break };
-                    let got = one(&app, &root, &page, &run, &model, w, unattended);
+                    // A panic on one page fails that page: the worker goes on, and the run ends.
+                    let got =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| one(&app, &root, &page, &run, &model, w, unattended)))
+                            .unwrap_or_else(|_| Err("something went wrong; Brainstead's log has the details".into()));
                     let mut l = last.lock().unwrap();
                     match got {
                         Ok(true) => l.written += 1,
@@ -145,8 +148,7 @@ pub fn start(app: &AppHandle, pages: Option<Vec<String>>, limit: Option<usize>, 
         if l.written > 0 {
             let n = l.written;
             let detail = format!("wrote Current state on {n} page{}", if n == 1 { "" } else { "s" });
-            let entry =
-                brainstead_core::reviews::log_entry("lint-fix", "Knowledge health", Some(&detail), chrono::Local::now().naive_local());
+            let entry = brainstead_core::reviews::log_entry("lint-fix", "Wiki health", Some(&detail), chrono::Local::now().naive_local());
             if let Err(e) = crate::edits::add_log(&root, &entry) {
                 crate::applog!("current state log line: {e}");
             }
@@ -228,8 +230,9 @@ pub fn stop(app: &AppHandle) {
 }
 
 #[tauri::command]
-pub fn current_state_start(app: AppHandle, pages: Option<Vec<String>>, limit: Option<usize>, unattended: Option<bool>) -> Res<bool> {
-    start(&app, pages, limit, unattended.unwrap_or(false))
+pub async fn current_state_start(app: AppHandle, pages: Option<Vec<String>>, limit: Option<usize>, unattended: Option<bool>) -> Res<bool> {
+    // Off the main thread: finding the pages that want one reads every shaped page.
+    crate::blocking(move || start(&app, pages, limit, unattended.unwrap_or(false))).await
 }
 
 #[tauri::command]

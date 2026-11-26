@@ -29,7 +29,9 @@ fn root(svc: &VaultService) -> Res<PathBuf> {
     Ok(svc.root().ok_or("No vault is open.".to_string())?)
 }
 
-/// Saves the editor's text if the file is still at `base`; the draft goes once it's saved.
+/// Saves the editor's text if the file is still at `base`. The note's draft is left alone: the
+/// editor discards its own after a save, and a save from elsewhere (the Inbox's File as reference,
+/// on a note that isn't open) mustn't delete a draft the user chose to keep.
 #[tauri::command]
 pub async fn doc_save(app: AppHandle, path: String, content: String, base: String) -> Res<String> {
     writing(move || {
@@ -37,7 +39,6 @@ pub async fn doc_save(app: AppHandle, path: String, content: String, base: Strin
         let abs = app.state::<VaultService>().resolve_path(&path)?;
         refuse_not_utf8(&abs, &path)?;
         let v = write::save_file(&abs, &content, &base)?;
-        app.state::<Drafts>().discard(&path);
         written(&app, &[abs]);
         Ok(v)
     })
@@ -63,6 +64,13 @@ pub async fn doc_create(app: AppHandle, path: String, content: String) -> Res<St
         Ok(v)
     })
     .await
+}
+
+/// A new initiative page's text: core's, so New wiki page and the MCP's create_initiative make the
+/// same page.
+#[tauri::command]
+pub fn initiative_page(name: String, about: String) -> String {
+    brainstead_core::initiatives::new_page(&name, &about)
 }
 
 /// Makes a new vault called `name` inside `parent`, filled with the starter notes, and returns its
@@ -249,12 +257,23 @@ pub async fn rename_commit(app: AppHandle, plan: RenamePlan) -> Res<String> {
 
 #[tauri::command]
 pub async fn trash_move(app: AppHandle, path: String) -> Res<TrashEntry> {
+    trash_move_as(app, path, true).await
+}
+
+/// [`trash_move`]; `learn` false for a move Brainstead makes itself (an ingest trashing a chat-day
+/// nothing came of), which mustn't count towards skipping the chat.
+pub async fn trash_move_as(app: AppHandle, path: String, learn: bool) -> Res<TrashEntry> {
     writing(move || {
         writable(&app.state::<AppState>())?;
         let svc = app.state::<VaultService>();
         let root = root(&svc)?;
         let layer = svc.with_index(|ix, _| Ok(ix.summary(&path)?.map(|s| s.layer))).ok().flatten().unwrap_or_else(|| "note".into());
+        // A synced email or chat the user deletes counts towards a skip suggestion (D-20261118-15).
+        let learnt = (learn && path.starts_with("sources/")).then(|| std::fs::read_to_string(root.join(&path)).ok()).flatten();
         let e = trash::move_to_trash(&root, &path, &layer)?;
+        if let Some(t) = learnt {
+            crate::sync::skips::on_delete(&path, &t);
+        }
         // Unsaved edits go into the trash with the note, and come back if it's restored.
         app.state::<Drafts>().rename(&path, &trashed_draft(&e.id));
         moved(&app, &path, None, &trashed_draft(&e.id));

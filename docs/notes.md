@@ -49,11 +49,12 @@ A ticket or issue key such as `ORBIT-12` can be a link that opens your browser. 
 
 ⌘S saves, and never reformats what you didn't change. Leaving a note with unsaved changes asks first.
 
-- Unsaved text is kept as a draft a second after you stop typing. If the app quits, opening the note again offers it back.
+- Unsaved text is kept as a draft a second after you stop typing. If the app quits, opening the note again offers it back. Typing instead leaves the offer up until you leave the note; what you typed is then the draft that's kept.
 - If another app changed the file meanwhile, changes on other lines are merged in. Changes on the same lines show a banner with **Reload**, **Keep mine** and **Compare** (which marks the lines that differ). Nothing is overwritten.
 
 ## Queries, callouts and diagrams
 
+- **Inline fields** such as `[status:: open]` show as small labels in View; the note's text is unchanged.
 - **Tasks queries** (`tasks` blocks) and **Dataview** (`dataview` blocks: TABLE, LIST, TASK and CALENDAR) run in View, with tasks you can tick. In Edit, the editor suggests what comes next, and **Build query…** opens a builder with a live preview.
 - **Callouts** (`> [!tip] Title`) are tinted boxes with an icon; `[!tip]-` or `[!tip]+` makes them fold.
 - **Mermaid** diagrams, with pan, zoom and a full-screen button (Escape closes it; on Windows the full screen opens below the title bar, so the window's own buttons keep their row and don't close it).
@@ -70,7 +71,7 @@ Inside a `<% %>` tag the editor suggests `tp` functions with their arguments, `m
 
 <a href="images/index.md#notes"><picture><source media="(prefers-color-scheme: dark)" srcset="images/template-caret-dark.png"><img alt="A 1-1 template in Edit: inside a tag, the editor suggests tp.file's functions with their arguments, and explains the one chosen, with a link to its docs" src="images/template-caret-light.png"></picture></a>
 
-Templates are the files in `Templates/`, written in Templater's syntax: prompts and pick lists, dates, file names, properties, includes and your own scripts in `Templates/scripts`. Its questions are asked in the New note dialog. **Test run** shows what it would make without writing anything.
+Templates are the files in `Templates/` (listed on **Templates**, under **Vault** at the foot of the sidebar), written in Templater's syntax: prompts and pick lists, dates, file names, properties, includes and your own scripts in `Templates/scripts`. Its questions are asked in the New note dialog. **Test run** shows what it would make without writing anything.
 
 A new vault comes with example templates: Meeting, Daily note (date offsets and an include), 1-1 (a pick list and a `#followup` task), Project, Weekly plan (a loop and a user script) and Reading note (properties and a move to a folder). **Settings › Vault › Add the example notes** adds any that are missing.
 
@@ -88,11 +89,11 @@ Some notes are Brainstead's own: the To Do list, the Scratchpad, bookmarks, save
 
 - They can't be renamed or moved to the Trash, from the app or by an assistant.
 - The header callout is locked in the editor. Edit freely below it.
-- If the header goes missing or changes, Knowledge health flags it. Its safe fix puts back the last header Brainstead saw.
+- If the header goes missing or changes, Wiki health flags it. Its safe fix puts back the last header Brainstead saw.
 - An assistant's change to the header is always held for you in Changes, and only you can accept it.
 
 Other apps can still change these files.
 
 ## The Trash
 
-Moving a note to the Trash puts it in the vault's `.trash` folder, with Undo. Trashing a transcript first points its links at its meeting note, when it has one. A capture restored from the Trash goes back to the Inbox. The Trash screen lists and searches what's there, puts files back where they were, and deletes them for good. **Quick Look** (`Space`) previews a file on a Mac. On Windows the same button is **Preview**: the file drawn in the window below the title bar by its preview handler, or opened in its own app when Windows has no handler for its type. `Space` or `Esc` closes it; after a click into the document, keys go to the document until the panel's bar is clicked, as in Explorer's preview pane.
+Moving a note to the Trash puts it in the vault's `.trash` folder, with Undo. Trashing a transcript first points its links at its meeting note, when it has one. A capture restored from the Trash goes back to the Inbox. The Trash screen, under **Vault** at the foot of the sidebar, lists and searches what's there, puts files back where they were, and deletes them for good. **Quick Look** (`Space`) previews a file on a Mac. On Windows the same button is **Preview**: the file drawn in the window below the title bar by its preview handler, or opened in its own app when Windows has no handler for its type. `Space` or `Esc` closes it; after a click into the document, keys go to the document until the panel's bar is clicked, as in Explorer's preview pane.

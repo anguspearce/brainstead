@@ -15,41 +15,47 @@ Today (⌘1) is what needs you now:
 - The day in one sentence under the greeting, each count a link to its band, then bands for **Overdue**, **Due today**, **Deferred until now**, **Coming up this week** (due in the next seven days) and **Waiting for**. On a wide window the last three sit beside the first two. A task deferred to a later day stays off Today until then, even if it's due. Tick, date and change tasks in place; ⌘Z undoes.
 - `@context` chips to show one context.
 - A capture box, the same as Quick capture.
-- **To process**: the Inbox, bookmarks to triage, wiki issues to decide, and the weekly review on its day.
-- The latest **Weekly summary** and **Daily summary**.
-- **Changes held for you** to accept or reject, and **Continue where you left off**.
+- **To process**, the one list of what needs you: the Inbox to clarify (sources waiting to be ingested among it), changes held for you, bookmarks to triage, Wiki health to decide, and the weekly review on its day. Each row's count is the one its screen shows, as the sidebar and the menu-bar window count, and its button names what you do: **Clarify**, **Decide**, **Triage**, **Start**.
+- The latest **Daily brief**, **Weekly summary** and **Daily summary**, and, with the sync on, your **Upcoming meetings**.
+- **Continue where you left off**.
 
 A waiting-for row shows how many days it has waited. **Draft nudge** drafts a follow-up with Ask to copy into Outlook or Teams; nothing is sent.
 
 ## Quick capture
 
-Press ⌃⌥Space in any app (change it in Settings › General).
+Press ⌃⌥Space in any app (Ctrl+Shift+Space on Windows; change it in Settings › General).
 
 - Type a task and press ↩. It goes on the To Do list under Other.
-- Press Tab for a **Thought**. It goes to the Scratchpad under a date and time heading.
+- Press Tab for a **Scratchpad note**. It goes to the Scratchpad under a date and time heading.
 - As you type, `due: fri`, `defer: +3d`, `@calls` and `effort:15m` become the task format. `[[` links a note and `#` adds a tag.
 
 Both kinds wait in the Inbox.
 
 ## The Inbox
 
-<a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/inbox-dark.png"><img alt="The Inbox: captures, Scratchpad thoughts and tasks to clarify, one open with its choices" src="images/inbox-light.png"></picture></a>
+<a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/inbox-dark.png"><img alt="The Inbox: captures, Scratchpad notes and tasks to clarify, one open with its choices" src="images/inbox-light.png"></picture></a>
 
-The Inbox (⌘2) lists what you've captured but not decided: emails and Teams chats from the browser extensions, sources added to `sources/` and not yet ingested, Scratchpad thoughts, and tasks under Other on the To Do list. Pick one (`J` and `K` move) and choose what it becomes. A suggestion from the AI shows first, and `↩` accepts it; the choices are in two lists, **It needs doing** and **It doesn't need doing**:
+The Inbox (⌘2) lists what you've captured but not decided: first the **Actions** on your [initiatives](wiki.md#initiatives) that are yours, and those you delegated that are past their due date or, with no due date, were handed over more than a week ago (Next action or Waiting for makes the task, with the action's due date, and marks the action so it leaves the Inbox; Done and Drop mark it done or dropped, and Move to… (`M`) moves it to another initiative; the task links the action, so ticking it marks the action done), then emails and Teams chats from the browser extensions, sources added to `sources/` and not yet ingested, Scratchpad notes, and tasks under Other on the To Do list. Pick one (`J` and `K` move) and choose what it becomes. A suggestion from the AI shows first, and `↩` accepts it; the choices are in two lists, **It needs doing** and **It doesn't need doing**:
 
 | Key | Choice |
 |---|---|
 | `N` | Next action, with its project, context, effort and due date |
+| `T` | To Do: at the top of the To Do list's To Do as it is (unranked, so it sorts first), nothing to fill in |
 | `P` | A new project |
 | `W` | Waiting for |
-| `2` | Done now (under 2 min) |
+| `D` | Done now (under 2 min); `D` is Draft a reply on an email thread, which has no Done |
 | `S` | Someday / maybe |
-| `R` | File as reference in a note, or keep a capture in Sources |
+| `F` / `K` | File as reference in a note / keep a capture in Sources |
+| `M` | Move an action to another initiative (a transcript's `M` is its meeting note) |
 | `⌫` | Delete |
 
-Tick several items (a section's header box ticks them all) to act on them together: make meeting notes, ingest, keep in Sources, mark done, move to Someday / maybe or delete. One that fails doesn't stop the rest: it stays ticked and the message says why. Next action, Waiting for and New project stay one at a time.
+The keys ignore typing that wasn't meant for the Inbox: a key in the second and a half after Brainstead comes back to the front, and keys pressed in quick succession, as when a password goes to the wrong window. Press the key again on its own.
 
-A capture offers only the choices that fit its kind. A transcript: make a meeting note (`M`), ingest (`I`), ask about it (`A`), keep in Sources (`R`) or delete. An email or chat thread: draft a reply (`D`), ingest, ask, Next action, New project, Waiting for, Someday / maybe, keep in Sources or delete. Any other capture: the same without the reply or Waiting for. A capture has no Done now, and only a thread can be Waiting for. **Ask about this source** starts a chat about it in Ask, where a **Still in the Inbox** strip takes it out when you're done. A transcript stays in the Inbox until its meeting note is made and ingested; if either fails it stays, to be chosen again. Suggest only suggests what the Inbox offers for that kind of item. **Suggest for all** suggests a choice for the first 20 items; ↩ accepts one. ⌘Z undoes each choice.
+Under the items, a **Bookmarks** band lists the bookmarks to triage; click one to open Triage on it.
+
+Tick several items (a section's header box ticks them all) to act on them together: make meeting notes, ingest, put them on the To Do list, keep in Sources, mark done, move to Someday / maybe or delete. One that fails doesn't stop the rest: it stays ticked and the message says why. Next action, Waiting for and New project stay one at a time.
+
+A capture offers only the choices that fit its kind. A transcript: make a meeting note (`M`), ingest (`I`), ask about it (`A`), keep in Sources (`K`) or delete. An email or chat thread: draft a reply (`D`), ingest, ask, Next action, To Do, New project, Waiting for, Someday / maybe, keep in Sources or delete. Any other capture: the same without the reply or Waiting for. A capture has no Done now, and only a thread can be Waiting for. **Ask about this source** starts a chat about it in Ask, where a **Still in the Inbox** strip takes it out when you're done. A transcript stays in the Inbox until its meeting note is made and ingested; if either fails it stays, to be chosen again. Suggest only suggests what the Inbox offers for that kind of item. **Suggest** in the top bar suggests a choice for the first 20 items (then it's **Suggest again**); ↩ or **Accept** takes one, **Edit** changes its words first, **Skip** drops it. ⌘Z undoes each choice.
 
 ## Tasks
 
@@ -59,14 +65,14 @@ Tasks (⌘3) has the GTD lists: **Next actions**, **Follow-ups**, **Waiting for*
 
 - Only tasks in your notes count. A checklist in a wiki page, a source or a template isn't listed here, counted in the tray or Projects, or listed by an assistant.
 - Tick to finish a task; a recurring one gets its next occurrence. ⌘Z undoes.
-- The ⋯ menu, a right-click or the pane on the right renames a task, sets dates, priority, context, effort and project, marks a task in progress or waiting for, cancels, deletes or opens its note.
+- A row's chips (due, defer, priority, context, effort, project) each open a picker with their quick choices, and its **+** adds a field it hasn't got. The ⋯ menu, or a right-click, renames a task, marks it in progress or waiting for, cancels, deletes or opens its note, and its **More…** sets every date, priority, context, effort and project in one place. The pane on the right shows all of them at once.
 - Drag rows into your own order, kept in the file as `^rank-N`. **Sort** switches to **By priority**: highest first, tasks with no priority last, same-priority tasks in your order. Each row shows its priority as a chip. Drag only works in **Manual order**.
 - Keys: `↑` `↓` choose, `↩` opens, `Space` ticks, `⌫` deletes (⌘Z puts it back), `/` searches. They work on Today, Projects and the weekly review too.
 - **Search tasks** narrows every list to tasks matching all its words.
 - Group by **Project**, **Context**, **Due** or **Priority**, filter by context and effort, and **Save this list…**.
 - Click a group's band to fold its tasks away, or **Collapse all** and **Expand all** in the top bar; what's folded is remembered for each grouping.
 - **New task** takes the current list's tag and context. From a list with neither, it waits in the Inbox.
-- **Find tasks and projects** has an assistant read your last 90 days of notes for tasks and projects you haven't written down. Each suggestion quotes its note; **Accept**, **Edit** or **Skip** it. Accepted ones are listed in Changes with Revert. It runs only when you start it.
+- **Find tasks and projects** has an assistant read your last 90 days of notes for tasks and projects you haven't written down. A one-line chip (at the end of Tasks' filter bar, at the top of Projects) says how many it found, with **Suggest**, then **Suggest again**; click it to open the list. Each suggestion quotes its note; **Accept**, **Edit** or **Skip** it. Accepted ones are listed in Changes with Revert. It runs only when you start it.
 
 ## Projects
 
@@ -76,7 +82,7 @@ A project is a note named `Project. <name>.md`, with its status, area and outcom
 
 A note is one of a project's documents when one of its first 15 lines after the properties says `Project: [[Project. <name>]]` (an alias is fine; indented is fine; a `Project::` field, a bold label, or a line in code or an HTML comment doesn't count; only the first such line counts; notes only, not the wiki, sources or templates). Its tasks belong to that project unless a task's own line links another, or a project note that isn't there; the task pane then says **From its note's Project: line** in place of Clear. The project's page lists its documents by type (Tracker, Plan, Findings, Review, Ticket, Prompt, Other) with each one's `summary` property, and shows its tracker's **Current state** under the project's name. A tracker's shape is `## Current state`, `## Blockers`, `## Next` and `## Log` (dated lines, newest first) after the `Project:` line, other sections below; an assistant can reshape a tracker to it and write its Current state and Log lines, each a change in Changes.
 
-An active project with no next action says **No next action** in red, and one where nothing has moved for two weeks says **Quiet** in amber. Add next actions, edit the outcome, area and status, and draft nudges for waiting-fors. **New project** writes the note with its headings.
+An active project with no next action says **No next action** in red, and one where nothing has moved for two weeks says **Quiet** in grey. Add next actions, edit the outcome, area and status, and draft nudges for waiting-fors. **New project** writes the note with its headings.
 
 A project's page also has a **Tickets and links** card: each ticket key and link written in the project note's properties, its documents' properties and its open tasks, once each, with where it appears (**Project note**, a document's title, **Next action**, **Waiting for** or **Someday / maybe**). It appears only once a reference prefix is set, and is left out when there is nothing to list. `list_projects` gives the same as its `references`, and none without a prefix.
 
@@ -87,19 +93,23 @@ A project's page also has a **Tickets and links** card: each ticket key and link
 
 In the daily and weekly summaries, area Personal goes under **Personal** and any other area under **Work done** ([Day to day](day-to-day.md)).
 
+### Update…: say what's happened
+
+An Inbox item (`U`), a task's ⋯ menu and a project's bar have **Update…**: a line saying what has happened, such as "Lena has already replied to Maya" on a *Close the loop with Maya* action. Brainstead hands it to an assistant in an Ask chat of its own (**Update: …**), in the background, and it applies the update with Brainstead's tools: the action or task done or dropped, a new date or owner, a follow-up when someone else has the next step, a dated line on the project's or initiative's note. When it can't tell what the update means it changes nothing and says so. The sidebar's Running line shows it while it works and a message says what changed when it ends; each change is in Changes with Revert. Assistants can do the same with the `update_item` tool, but not in an unattended session.
+
 ## The weekly review
 
 <a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/weekly-dark.png"><img alt="The weekly review: the steps by phase on the left, and the current step's real items to act on" src="images/weekly-light.png"></picture></a>
 
 The weekly review walks you through GTD's three phases, Get clear, Get current and Get creative, in eleven steps over your real lists, acting on each item as you go.
 
-- Open it from **Weekly review** in the sidebar, or **Start** on Today from the review's time (Friday 16:00 by default, in Settings › Jobs & schedule).
+- Open it from **Weekly review** in the sidebar, or **Start** on Today from the review's time (Friday 16:00 by default, set on its start page or in Settings › Automations).
 - **Pause** keeps your place.
 - **Finish and save** writes the week's review note. ⌘Z undoes it.
 
 On a Monday or Tuesday it covers the week just ended, otherwise this week. The scheduled weekly summary is separate, and reads your review note.
 
-With an AI assistant set up, each step shows suggestions from your week, such as a task to add from a meeting, or one to tick, defer or reword. Nothing changes until you click, and each one can be undone. Assistants use `weekly_review`, `weekly_suggestion` and `weekly_step`.
+With an AI assistant set up, each step shows suggestions from your week, such as a task to add from a meeting, one to tick, defer, reword, mark waiting for or move to Someday / maybe, or what an Inbox item should become. Each has **Accept**, **Edit** (where there are words to change) and **Skip**, as suggestions do elsewhere; **Suggest again** prepares a fresh set. Nothing changes until you click, and each one can be undone. What an assistant accepts for you is made as a change in Changes, with Revert, and held there when a check fails; an Inbox item it clarifies follows the Inbox's own rules. Assistants use `weekly_review`, `weekly_suggestion` and `weekly_step`.
 
 ## How tasks are written
 

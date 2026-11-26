@@ -44,6 +44,8 @@ const PATHS: Record<string, string> = {
   slides: "M3 4h18M4 4v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V4M12 15v4M8 20l4-1 4 1M8 11l3-3 2 2 3-3",
   sheet: "M4 4h16v16H4zM4 9h16M4 14h16M10 4v16",
   image: "M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM3 16l5-5 4 4 3-3 6 6M15.5 9.5h.01",
+  // A window with its sidebar: the sidebar's own toggle (⌘\).
+  sidebar: "M4 4h16v16H4zM9 4v16",
   folder: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
   lock: "M7 11V7a5 5 0 0 1 10 0v4M5 11h14v10H5z",
   shield: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4",

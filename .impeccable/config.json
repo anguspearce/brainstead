@@ -1,0 +1,20 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "geist",
+        "createdAt": "2026-11-20T20:52:29.410Z",
+        "reason": "Brand face: CLAUDE.md makes the design tokens in src/styles.css authoritative and they name Geist; the site follows the app"
+      },
+      {
+        "rule": "overused-font",
+        "value": "geist mono",
+        "createdAt": "2026-11-20T20:52:29.605Z",
+        "reason": "Brand face: the app's --mono token is Geist Mono (src/styles.css); the site follows the app"
+      }
+    ]
+  }
+}

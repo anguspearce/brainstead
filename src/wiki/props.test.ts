@@ -25,6 +25,11 @@ describe("wiki page properties", () => {
     expect(getList("---\ntags: hub\n---\n", "tags")).toEqual(["hub"]);
     expect(getScalar(PAGE, "type")).toBe("entity");
     expect(getList(PAGE, "missing")).toEqual([]);
+    // An apostrophe inside a value isn't a quote: the two stay two, and survive the next edit.
+    const ob = "---\naliases: [O'Brien, OB]\n---\n";
+    expect(getList(ob, "aliases")).toEqual(["O'Brien", "OB"]);
+    expect(getList(setList(ob, "aliases", ["O'Brien", "OB", "Obie"]), "aliases")).toEqual(["O'Brien", "OB", "Obie"]);
+    expect(getList("---\naliases: ['a, b', c]\n---\n", "aliases")).toEqual(["a, b", "c"]);
   });
 
   it("writes only the property, in its own style", () => {

@@ -288,17 +288,26 @@ pub fn prompt(note_filename: &str, scaffold: &str, transcript: &str, owner: Opti
     )
 }
 
-/// The note from the model's answer: inside a markdown fence or not.
+/// The note from the model's answer: inside a markdown fence or not. The fences are a wrapper only
+/// when the first opens the answer (after at most one line said before it) and the last closes it
+/// (before at most one line said after); a note that only has a code block in it is used whole.
 pub fn note_from_answer(answer: &str) -> Result<String, String> {
     let t = answer.trim();
-    let body = match (t.find("```"), t.rfind("```")) {
-        // Two separate runs: in "````" the first and last "```" overlap.
-        (Some(a), Some(b)) if b >= a + 3 => {
-            let inner = &t[a + 3..b];
-            inner
-                .split_once('\n')
-                .map(|(lang, rest)| if lang.trim().chars().all(char::is_alphanumeric) { rest } else { inner })
-                .unwrap_or(inner)
+    let lines: Vec<&str> = t.lines().collect();
+    let ticks = |l: &str| l.trim().bytes().take_while(|&b| b == b'`').count();
+    let opens = |l: &str| ticks(l) >= 3 && l.trim()[ticks(l)..].trim().chars().all(char::is_alphanumeric);
+    let closes = |l: &str| ticks(l) >= 3 && ticks(l) == l.trim().len();
+    // A heading before the fence is the note's own, not something said about it.
+    let open = lines.iter().take(2).position(|l| opens(l)).filter(|&i| i == 0 || !lines[0].starts_with('#'));
+    let close = open.and_then(|a| {
+        let b = lines.iter().rposition(|l| closes(l)).filter(|&b| b > a)?;
+        (lines[b + 1..].iter().filter(|l| !l.trim().is_empty()).count() <= 1).then_some(b)
+    });
+    let inner;
+    let body = match (open, close) {
+        (Some(a), Some(b)) => {
+            inner = lines[a + 1..b].join("\n");
+            inner.as_str()
         }
         _ => t,
     };
@@ -427,6 +436,14 @@ mod tests {
             "## Notes\n\nLaunch moved to November.\n"
         );
         assert!(note_from_answer("ok").is_err());
+        // A note that isn't fenced and has a code block in it is kept whole.
+        let plain = "## Notes\n\nMaya showed the query:\n\n```sql\nselect 1\n```\n\nLena to check it.\n\n```\nselect 2\n```\n\n## Actions\n\n- Lena checks the query";
+        assert_eq!(note_from_answer(plain).unwrap(), format!("{plain}\n"));
+        // A fenced note with a code block in it loses only the wrapper.
+        assert_eq!(
+            note_from_answer("```markdown\n## Notes\n\n```sql\nselect 1\n```\n\nLena to check it.\n```").unwrap(),
+            "## Notes\n\n```sql\nselect 1\n```\n\nLena to check it.\n"
+        );
     }
 
     #[test]

@@ -2,7 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Changes (what assistants and runs changed, and what's held for you) and Knowledge health's last
+// Changes (what assistants and runs changed, and what's held for you) and Wiki health's last
 // report, loaded once and reloaded when Rust says they changed: changes arrive from the MCP server
 // and from runs in the background, and the checks rerun after the index changes.
 
@@ -14,17 +14,30 @@ export const health = new Store<HealthView | null>(null);
 
 let started = false;
 
+// The latest request wins: of several under way at once (a burst of changes), an earlier one that
+// answers last doesn't put its older list back.
+let changesAsked = 0;
+let healthAsked = 0;
+
 export function reloadChanges() {
+  const n = ++changesAsked;
   return api
     .changesList()
-    .then((r) => changes.set(r))
-    .catch(() => changes.set(changes.get() ?? []));
+    .then((r) => {
+      if (n === changesAsked) changes.set(r);
+    })
+    .catch(() => {
+      if (n === changesAsked) changes.set(changes.get() ?? []);
+    });
 }
 
 export function reloadHealth(fresh = false) {
+  const n = ++healthAsked;
   return api
     .healthReport(fresh)
-    .then((r) => health.set(r))
+    .then((r) => {
+      if (n === healthAsked) health.set(r);
+    })
     .catch(() => {});
 }
 
@@ -42,9 +55,9 @@ export function startKnowledge() {
 /** The changes waiting for you. */
 export const held = (rows: ChangeRow[]) => rows.filter((c) => c.status === "held");
 
-/** Where a change came from, for its row: "Ask · Sonnet", "Knowledge health", "Daily summary 2026-10-02". */
+/** Where a change came from, for its row: "Ask · Sonnet", "Wiki health", "Daily summary 2026-10-02". */
 export function originLabel(c: ChangeRow): string {
-  if (c.origin.kind === "lint") return c.origin.label === "Missing page" || !c.origin.label ? "Knowledge health" : c.origin.label;
+  if (c.origin.kind === "lint") return c.origin.label === "Missing page" || !c.origin.label ? "Wiki health" : c.origin.label;
   if (c.origin.kind === "review") return c.origin.label ? reviewLabel(c.origin.label) : "Scheduled run";
   if (c.origin.label) return c.origin.label;
   return c.origin.chat ? "Ask" : "An assistant";
@@ -99,11 +112,17 @@ function reviewLabel(detail: string): string {
 /** A page's name from its path. */
 export const pageName = (path: string) => (path.split("/").pop() ?? path).replace(/\.md$/, "");
 
-/** Checks that are worth a look but aren't problems: not counted in the sidebar. */
 /** Checks whose issues have their own buttons, so they get no Ignore. */
 export const OWN_ACTIONS = new Set(["missing-pages", "duplicates", "unreferenced-images", "uningested-sources", "page-shape"]);
 
+/** Checks that are worth a look but aren't problems: not counted as needing a decision. Kept
+ *  beside core/src/lint.rs ADVISORY. */
 export const ADVISORY = new Set(["stale-pages", "uncited-claims", "no-current-state"]);
+
+/** Checks whose issues are acted on in the Inbox, not Wiki health: sources no page cites wait in
+ *  Inbox › Captures to be ingested or kept, so they aren't counted to decide here as well (one
+ *  place for each kind of status, D-20261119-04). Kept beside core/src/lint.rs IN_INBOX. */
+export const IN_INBOX = new Set(["uningested-sources"]);
 
 /** The note a missing link most likely meant: one whose name is the link's but for a slip or two
  *  ("meting" for "meeting"), as when a note was renamed after the link was written. Null when
@@ -149,7 +168,7 @@ const linkStem = (name: string) => (name.trim().split("/").pop() ?? "").replace(
 /** The Trash's files by name (lower case, no `.md`), for a missing link that names one. */
 export const trashByName = (entries: TrashEntry[]) => new Map(entries.map((e) => [linkStem(e.basename).toLowerCase(), e]));
 
-/** What Knowledge health offers for a missing link (a missing page, or a source a page cites that
+/** What Wiki health offers for a missing link (a missing page, or a source a page cites that
  *  isn't there): the file it names if that's in the Trash, and Did you mean, the note it most likely
  *  meant (the meeting note a trashed transcript became, else one a slip away). The screen's rows and
  *  lint and health_issue all use this. */
@@ -203,17 +222,30 @@ function distance(a: string, b: string, most: number): number {
 /** The checks with Ignore all (knowledge.rs IGNORE_ALL, kept the same): advisory, with no fix of their own. */
 export const IGNORE_ALL = new Set(["stale-pages", "uncited-claims"]);
 
+/** What an issue asks of you, the one rule every screen follows (core/src/lint.rs needs_decision
+ *  counts the same): the Inbox's (sources not yet ingested, acted on there), safe (Brainstead fixes
+ *  it by itself: Fix safe issues), advisory (only worth a look) or decide (it needs you). Only
+ *  decide is counted, and only decide (or a held change) turns a row amber. */
+export type IssueClass = "inbox" | "safe" | "advisory" | "decide";
+export function issueClass(check: string, i: LintItem): IssueClass {
+  if (IN_INBOX.has(check)) return "inbox";
+  if (i.safe) return "safe";
+  return ADVISORY.has(check) ? "advisory" : "decide";
+}
+
 /** Issues that need you: everything Brainstead can't fix on its own. */
 export function decisions(r: LintReport | null | undefined): number {
   if (!r) return 0;
-  return r.checks.filter((c) => !ADVISORY.has(c.id)).reduce((n, c) => n + c.items.filter((i) => !i.safe).length, 0);
+  return r.checks.reduce((n, c) => n + c.items.filter((i) => issueClass(c.id, i) === "decide").length, 0);
 }
 
 /** Every safe fix in the report, as health_fix takes them. */
 export function safeFixes(r: LintReport | null | undefined): HealthFix[] {
   if (!r) return [];
   // Reshaping pages is its own action (Reshape pages), recorded in Changes rather than undone with ⌘Z.
-  return r.checks.filter((c) => c.id !== "page-shape").flatMap((c) => c.items.filter((i) => i.safe && i.page).map((i) => fixOf(c.id, i)));
+  return r.checks
+    .filter((c) => c.id !== "page-shape")
+    .flatMap((c) => c.items.filter((i) => issueClass(c.id, i) === "safe" && i.page).map((i) => fixOf(c.id, i)));
 }
 
 export const fixOf = (check: string, i: LintItem): HealthFix => ({ check, page: i.page!, name: i.name, detail: i.detail });
@@ -263,14 +295,14 @@ export function claimsByPage(items: LintItem[]): { page: string; items: LintItem
 export function fixWithAskPrompt(r: LintReport): string {
   const lines: string[] = [];
   for (const c of r.checks) {
-    if (ADVISORY.has(c.id)) continue;
+    if (ADVISORY.has(c.id) || IN_INBOX.has(c.id)) continue;
     const open = c.items.filter((i) => !i.safe);
     if (!open.length) continue;
     lines.push(`${c.title}:`);
     for (const i of open.slice(0, 15)) lines.push(`- ${i.text}`);
   }
   return [
-    "Knowledge health found these issues in the wiki. For each one you can fix from the vault, make the fix with edit_page (one change per page; quote the source for any fact). Say which ones need me to decide.",
+    "Wiki health found these issues in the wiki. For each one you can fix from the vault, make the fix with edit_page (one change per page; quote the source for any fact). Say which ones need me to decide.",
     "",
     ...lines,
   ].join("\n");

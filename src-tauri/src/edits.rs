@@ -106,7 +106,7 @@ pub(crate) async fn writing<T: Send + 'static>(f: impl FnOnce() -> Res<T> + Send
 }
 
 pub fn written(app: &AppHandle, paths: &[PathBuf]) {
-    // Knowledge health reads these again (a write that kept the file's time and size is otherwise
+    // Wiki health reads these again (a write that kept the file's time and size is otherwise
     // invisible to its cache), and reruns once the vault is quiet.
     brainstead_core::lint::forget(paths);
     crate::knowledge::vault_changed(app);
@@ -114,6 +114,7 @@ pub fn written(app: &AppHandle, paths: &[PathBuf]) {
     match svc.refresh(paths) {
         Ok(ch) if !ch.is_empty() => {
             let _ = app.emit("vault-changed", &ch);
+            crate::actiontasks::vault_changed(app, &ch.changed);
         }
         Ok(_) => {}
         Err(e) => crate::applog!("re-index after write: {e}"),
@@ -134,6 +135,10 @@ pub struct UndoEntry {
     /// completion): every line written, in place of `after`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub written: Option<Vec<String>>,
+    /// The lines either side of the task as it was, so one that was deleted (nothing written in
+    /// its place) goes back between them and nowhere else.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub around: Option<write::Around>,
     /// A change to one or two whole files (a project created, a task moved between notes): each
     /// put back as it was, only if every one is still as the change left it. `path`, `line`,
     /// `before` and `after` aren't used then.
@@ -156,7 +161,7 @@ impl UndoEntry {
     /// An entry for whole-file changes, by vault path.
     pub fn files(label: String, files: Vec<FileUndo>) -> Self {
         let path = files.first().map(|f| f.path.clone()).unwrap_or_default();
-        UndoEntry { path, line: 0, before: String::new(), after: String::new(), label, written: None, files }
+        UndoEntry { path, line: 0, before: String::new(), after: String::new(), label, written: None, around: None, files }
     }
 }
 
@@ -252,13 +257,37 @@ pub(crate) fn edit(
     verb: &str,
     f: impl FnOnce(&str) -> Result<String, WriteError>,
 ) -> Res<Edited> {
+    edit_where(app, path, line, expected, verb, true, f)
+}
+
+/// As `edit`, for a line that isn't a task: an initiative's action (D-20261118-08).
+pub(crate) fn edit_any_line(
+    app: &AppHandle,
+    path: &str,
+    line: usize,
+    expected: &str,
+    verb: &str,
+    f: impl FnOnce(&str) -> Result<String, WriteError>,
+) -> Res<Edited> {
+    edit_where(app, path, line, expected, verb, false, f)
+}
+
+fn edit_where(
+    app: &AppHandle,
+    path: &str,
+    line: usize,
+    expected: &str,
+    verb: &str,
+    task: bool,
+    f: impl FnOnce(&str) -> Result<String, WriteError>,
+) -> Res<Edited> {
     let st = app.state::<AppState>();
     writable(&st)?;
     let svc = app.state::<VaultService>();
     let abs = vault_path(&svc, path)?;
     let mut err = None;
     // `f` sees the task inside any quote or callout markers, which stay in front.
-    let (i, new) = write::edit_task(&abs, line, expected, |l| {
+    let change = |l: &str| {
         let (pre, body) = brainstead_core::tasks::split_quote(l);
         match f(body) {
             Ok(n) => format!("{pre}{n}"),
@@ -267,7 +296,8 @@ pub(crate) fn edit(
                 l.to_string()
             }
         }
-    })?;
+    };
+    let (i, new) = if task { write::edit_task(&abs, line, expected, change) } else { write::edit_line(&abs, line, expected, change) }?;
     if let Some(e) = err {
         return Err(e.into());
     }
@@ -281,6 +311,7 @@ pub(crate) fn edit(
             after: new.clone(),
             label: label.clone(),
             written: None,
+            around: None,
             files: Vec::new(),
         });
         undo = Some(label);
@@ -347,7 +378,7 @@ pub async fn task_replace(app: AppHandle, path: String, line: usize, line_text: 
         if lines.len() > 2 {
             return Err(EditError { code: "invalid", message: "A task becomes at most two lines.".into(), current: None });
         }
-        let i = write::replace_task(&abs, line, &line_text, &lines)?;
+        let (i, around) = write::replace_task(&abs, line, &line_text, &lines)?;
         let mut undo = None;
         if lines.len() != 1 || lines[0] != line_text {
             let shown = lines
@@ -363,6 +394,7 @@ pub async fn task_replace(app: AppHandle, path: String, line: usize, line_text: 
                 after: lines.join("\n"),
                 label: text.clone(),
                 written: Some(lines.clone()),
+                around: Some(around),
                 files: Vec::new(),
             });
             undo = Some(text);
@@ -448,9 +480,9 @@ fn apply_undo(resolve: impl Fn(&str) -> Res<PathBuf>, e: &UndoEntry) -> Res<Vec<
     let abs = resolve(&e.path)?;
     let before = e.before.clone();
     match &e.written {
-        Some(lines) => write::restore_task(&abs, e.line, lines, &before)?,
+        Some(lines) => write::restore_task(&abs, e.line, lines, &before, e.around.as_ref())?,
         None => {
-            write::edit_task(&abs, e.line, &e.after, move |_| before).map_err(|err| match err {
+            write::edit_line(&abs, e.line, &e.after, move |_| before).map_err(|err| match err {
                 WriteError::Stale(_) => WriteError::Stale("That line has changed since, so it can't be undone.".into()),
                 other => other,
             })?;
@@ -509,6 +541,7 @@ mod tests {
             after: after.into(),
             label: "x".into(),
             written: None,
+            around: None,
             files: Vec::new(),
         }
     }
@@ -587,5 +620,30 @@ mod tests {
         // Again: the files aren't as the move left them now, so nothing changes.
         assert_eq!(apply_undo(resolve, &m).unwrap_err().code, "stale");
         assert_eq!(std::fs::read_to_string(root.join("Project. A.md")).unwrap(), proj);
+    }
+
+    #[test]
+    fn a_deleted_task_is_undone_beside_its_neighbours() {
+        let d = tempfile::tempdir().unwrap();
+        let root = d.path().to_path_buf();
+        let resolve = |rel: &str| Ok(root.join(rel));
+        let note = "## Orbit App\n- [ ] Call Maya\n- [ ] Book the room\n\n## Acme\n- [ ] Send the notes\n";
+        std::fs::write(root.join("A.md"), note).unwrap();
+        let (i, around) = write::replace_task(&root.join("A.md"), 2, "- [ ] Book the room", &[]).unwrap();
+        let mut e = line("A.md", "- [ ] Book the room", "");
+        (e.line, e.written, e.around) = (i, Some(vec![]), Some(around));
+        // Kept across a restart with the rest of the entry.
+        let e: UndoEntry = serde_json::from_str(&serde_json::to_string(&e).unwrap()).unwrap();
+        // A heading and a task added above since: the task goes back under its own heading.
+        let gone = std::fs::read_to_string(root.join("A.md")).unwrap();
+        std::fs::write(root.join("A.md"), format!("## Lena\n- [ ] Plan the week\n{gone}")).unwrap();
+        apply_undo(resolve, &e).unwrap();
+        assert_eq!(std::fs::read_to_string(root.join("A.md")).unwrap(), format!("## Lena\n- [ ] Plan the week\n{note}"));
+        // One remembered without its neighbours (before they were kept) isn't placed by line number.
+        std::fs::write(root.join("A.md"), note).unwrap();
+        let mut old = line("A.md", "- [ ] Book the room", "");
+        (old.line, old.written) = (2, Some(vec![]));
+        assert_eq!(apply_undo(resolve, &old).unwrap_err().code, "stale");
+        assert_eq!(std::fs::read_to_string(root.join("A.md")).unwrap(), note);
     }
 }

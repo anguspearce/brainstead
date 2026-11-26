@@ -313,7 +313,7 @@ export function MeetingScreen() {
           onChange={setShow}
           options={[
             ["todo", "To do", "Transcripts not yet ingested or linked from a note"],
-            ["all", "All", undefined, all ? ` · ${all.length}` : undefined],
+            ["all", "All", undefined, all ? ` ${all.length}` : undefined],
           ]}
         />
         {batch.length > 1 && (
@@ -375,7 +375,7 @@ export function MeetingScreen() {
                 title="Show this transcript and the note it will become"
                 onClick={() => setSel(t.path)}
               >
-                <span className="tt">{pageName(t.path).replace(/^Teams\. Transcript\. /, "")}</span>
+                <span className="tt">{keepDateWhole(pageName(t.path).replace(/^Teams\. Transcript\. /, ""))}</span>
                 <span className="faint">
                   {t.inferred.type ?? "?"} · {t.inferred.date ?? "no date"}
                   {needsDate(t, edits[t.path]) ? " · check the date" : !t.inferred.confident && " · check"}
@@ -537,5 +537,18 @@ export function MeetingScreen() {
         </Dialog>
       )}
     </main>
+  );
+}
+
+/** A long transcript name wraps, but never inside its date: "Orbit App Steerco - 2026-10-01" breaks
+ *  before " - 2026-10-01", not at one of its hyphens. */
+function keepDateWhole(name: string) {
+  const m = name.match(/^(.*?) (- \d{4}-\d{2}-\d{2})$/);
+  return m ? (
+    <>
+      {m[1]} <span className="mdate">{m[2]}</span>
+    </>
+  ) : (
+    name
   );
 }

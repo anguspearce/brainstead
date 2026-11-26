@@ -15,17 +15,18 @@ import { listen } from "@tauri-apps/api/event";
 import { toast, Toasts } from "./Toast";
 import { startAsk } from "./askState";
 import { ingest } from "./Ingest";
-import { nav, openDoc, restorePlaces, Screen, SettingsPane } from "./nav";
+import { nav, openDoc, place, restorePlaces, Screen, SettingsPane } from "./nav";
 import { applyScene, parseScene } from "./scene";
 import { recheckPermissions, startStatus } from "./state";
 import { applyReadSize, installFlushers, settings } from "./store";
 import { startMoves } from "./moves";
-import { isTranscriptPath } from "./meetingFlow";
+import { isTranscriptPath, makeMeetingNotes } from "./meetingFlow";
 import { loadFeatures } from "./features";
 import { applyPlatform, blockBrowserKeys } from "./platform";
 import { applyInterfaceSize } from "./interfaceSize";
 import { applyLook, startSystemAccent } from "./accent";
 import { showScrollbarsWhileScrolling } from "./scrollbars";
+import { guardSelectingClicks } from "./textSelect";
 
 // WebKit's own right-click menu offers Reload, which throws away the app's state. Keep it only
 // where it's useful — in text fields and on selected text — and leave custom menus to their owners.
@@ -41,6 +42,7 @@ async function start() {
   applyPlatform();
   blockBrowserKeys();
   showScrollbarsWhileScrolling();
+  guardSelectingClicks();
   const [s, sceneJson] = await Promise.all([api.settingsRead(), api.scene().catch(() => null), loadFeatures(), startSystemAccent()]);
   settings.loadFrom(s);
   applyLook(s);
@@ -80,19 +82,34 @@ async function start() {
   await Promise.all([startStatus(), recheckPermissions(), startAsk().catch((e) => console.error("ask", e))]);
   // A note renamed or trashed by an assistant, a run or Changes: the screens follow it.
   startMoves();
-  // The menu-bar window asks for a screen when it opens the main window; "settings/vault" is a Settings pane.
+  // The menu-bar window asks for a screen when it opens the main window; "settings/vault" is a Settings
+  // pane, "activity/sync" Activity's Sync & ingest, "review/held" Changes' Held tab.
   void listen<string>("navigate", (e) => {
     const [screen, pane] = e.payload.split("/");
-    nav.go(pane ? { screen: screen as Screen, pane: pane as SettingsPane } : (screen as Screen));
+    const here = place.get().place;
+    const tab = screen === "activity" ? "activity.view" : screen === "review" ? "review:view" : null;
+    if (tab && pane && here.screen === screen) nav.replace({ ...here, view: { ...here.view, [tab]: pane } });
+    else if (tab && pane) nav.go({ screen: screen as Screen, view: { [tab]: pane } });
+    else nav.go(pane ? { screen: screen as Screen, pane: pane as SettingsPane } : (screen as Screen));
+  });
+  // A reply you sent (even one archived with its thread) topped up its thread's source: ingested
+  // again, unattended, so what it settles reaches the initiatives (D-20261120-06). Here, in the main
+  // window, as every other ingest is: its setting is the live one, and one window starts the runs.
+  void api.onSyncReplied((paths) => {
+    if (settings.get().ingestOnArrival && paths.length) ingest(paths, true);
   });
   // A capture from the Outlook or Teams extension (src-tauri/src/nativehost.rs).
   void api.onCapture((c) => {
     if (!c.path) return toast(`${c.what} not captured: ${c.error ?? "refused"}`, undefined, "bad");
     toast(`${c.what} captured`, { label: "Open", run: () => openDoc(c.path!) });
     // Settings › AI assistants › Ingest: a new source is ingested as it arrives.
-    // A transcript waits for its meeting note instead (src/meetingFlow.ts). A capture the Teams and
-    // Outlook sync made (c.sync) is ingested unattended, so a change that fails a check is held.
-    if (settings.get().ingestOnArrival && !isTranscriptPath(c.path)) ingest([c.path], c.sync === true);
+    // A transcript gets its meeting note, written and ingested when Brainstead is sure of it, else it
+    // waits in the Inbox (src/meetingFlow.ts, D-20261118-05). A capture the sync
+    // made (c.sync) is handled unattended, so a change that fails a check is held.
+    // A back-fill's sources wait in the Inbox (Settings › Sync › Fetch again).
+    if (!settings.get().ingestOnArrival || c.backfill) return;
+    if (isTranscriptPath(c.path)) void makeMeetingNotes([c.path], { unattended: c.sync === true });
+    else ingest([c.path], c.sync === true);
   });
   root.render(
     <React.StrictMode>

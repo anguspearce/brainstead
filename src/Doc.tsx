@@ -21,6 +21,7 @@ import { headingSlug } from "./md/plugins";
 import { Markdown } from "./md/Markdown";
 import { tokenize, useRefPatterns } from "./md/refs";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { MoveAction } from "./MoveAction";
 import { nav, openDoc, place, setLeaveGuard } from "./nav";
 import { bodyStartsWithH1, DOC_ACCENTS, DOC_STYLES, useDocLook } from "./docLook";
 import { DatePicker } from "./DatePicker";
@@ -37,7 +38,7 @@ import { checkTemplate } from "./notes/templater";
 import { templaterSyntax } from "./notes/templaterSyntax";
 import { templaterAssist } from "./editor/templaterAssist";
 import { TemplaterDocsLink, TestRun } from "./notes/TemplateRun";
-import { toggledLine } from "./editor/text";
+import { tickChange, tickedText } from "./editor/text";
 import { localToday } from "./md/taskQuery";
 import { toggleTask } from "./taskModel";
 import { noteOpened } from "./recent";
@@ -256,7 +257,7 @@ export function DocScreen() {
     el?.scrollIntoView({ block: "start" });
     el?.classList.add("flash");
   }, [doc, here.anchor, session]); // eslint-disable-line react-hooks/exhaustive-deps
-  // To lines (a page's uncited claims in Knowledge health): highlighted in the editor, or the
+  // To lines (a page's uncited claims in Wiki health): highlighted in the editor, or the
   // blocks that hold them marked in View, scrolled to the first.
   const wantLines = (here.lines ?? []).join("\n");
   useEffect(() => {
@@ -340,8 +341,8 @@ export function DocScreen() {
     if (dirty && e) {
       if (line + 1 > e.view.state.doc.lines) return;
       const l = e.view.state.doc.line(line + 1);
-      const next = toggledLine(l.text, done, localToday());
-      if (next !== l.text) e.view.dispatch({ changes: { from: l.from, to: l.to, insert: next }, userEvent: "input.tick" });
+      const next = tickedText(l.text, done, localToday());
+      if (next !== l.text) e.view.dispatch({ changes: tickChange(e.view.state.doc, l, next), userEvent: "input.tick" });
       return;
     }
     if (!doc || !s) return;
@@ -482,17 +483,21 @@ export function DocScreen() {
   const isWiki = s?.layer === "wiki" && isMarkdown(s.path);
   const pageText = liveText ?? doc?.content ?? "";
   const [cites, setCites] = useState<{ listed: string[]; order: string[] }>({ listed: [], order: [] });
+  // An initiative's action being moved (its 0-based line), from its Move to… button.
+  const [moveLine, setMoveLine] = useState<number | null>(null);
   const sourceNames = isWiki ? getList(rendered, "sources").map(linkName).join("\n") : "";
   // Again when the vault changes: a source may have been added or renamed.
   const vv = useVaultVersion();
   useEffect(() => {
     let live = true;
     const names = sourceNames ? sourceNames.split("\n") : [];
-    if (!names.length) setCites({ listed: [], order: [] });
+    // Kept as it is when nothing changed, so the note isn't drawn afresh on each change in the vault.
+    const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+    if (!names.length) setCites((c) => (c.listed.length || c.order.length ? { listed: [], order: [] } : c));
     else
       void api.linksResolve(names).then((ps) => {
         const listed = ps.filter((p): p is string => !!p).filter((p, i, a) => a.indexOf(p) === i);
-        if (live) setCites((c) => ({ listed, order: c.order }));
+        if (live) setCites((c) => (sameList(c.listed, listed) ? c : { listed, order: c.order }));
       });
     return () => {
       live = false;
@@ -861,6 +866,7 @@ export function DocScreen() {
                       onCites={(order) => setCites((c) => ({ listed: c.listed, order }))}
                       scripts={s.layer === "note" && scriptsAllowed(s.path, doc.meta.frontmatter)}
                       templater={isTemplate}
+                      onMoveAction={canEdit && !dirty && s.path.startsWith("wiki/initiatives/") ? setMoveLine : undefined}
                     />
                   </div>
                 </div>
@@ -962,6 +968,9 @@ export function DocScreen() {
             </div>
           </div>
         </Dialog>
+      )}
+      {moveLine !== null && doc && s && (
+        <MoveAction path={s.path} line={moveLine} lineText={doc.content.split(/\r?\n/)[moveLine] ?? ""} onClose={() => setMoveLine(null)} />
       )}
     </main>
   );

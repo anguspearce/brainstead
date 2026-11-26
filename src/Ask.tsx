@@ -9,7 +9,7 @@
 // src/askState.ts; History lists every chat, saved to the vault or kept in Brainstead's app data.
 
 import { StillInInbox } from "./StillInInbox";
-import { HelpButton } from "./help/HelpDrawer";
+import { HelpButton, helpOpen } from "./help/HelpDrawer";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChatSummary, CliInfo, Skill, api } from "./api";
 import {
@@ -218,11 +218,13 @@ function ChatView({ c, found }: { c: Chat; found: CliInfo[] | null }) {
   useEffect(() => {
     if (pinned.current) end.current?.scrollIntoView({ block: "end" });
   }, [c.transcript.length, c.streaming, c.status]);
-  // Esc stops it.
+  // Esc stops it, unless the Esc is closing something else: the help drawer, a dialog or a menu.
   useEffect(() => {
     if (!c.busy) return;
     const k = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !e.defaultPrevented) stop(c.id);
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (helpOpen.get() || document.querySelector(".scrim, [role='dialog'], [role='menu']")) return;
+      stop(c.id);
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);

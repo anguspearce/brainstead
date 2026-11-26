@@ -53,4 +53,4 @@ Inline queries go in the text: `` `= this.file.name` `` writes a value in place.
 ## Scripts in queries
 `dataviewjs` blocks, inline `` `$= …` `` and Tasks' `filter by function` run JavaScript, only in your own notes. Not in sources, wiki pages, templates, saved chats, summary notes, or notes an assistant wrote (`created-by: assistant`; delete it to trust the note). There a short notice stands in for the script; plain queries still work.
 
-An assistant's change that adds a script, or any change to `Templates/`, is always held for you in [Changes](help:review).
+An assistant's change that adds a script or changes one, or any change to `Templates/`, is always held for you in [Changes](help:review).

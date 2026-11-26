@@ -24,7 +24,8 @@
   --accent-ink: #174fb3;
   --accent-soft: #e8f0fd;
   --on-accent: #fff;
-  --ring: #a9c4f5;
+  --ring: #3a6bc0;
+  --select: color-mix(in srgb, var(--accent) 22%, transparent); /* selected text */
   --amber: #9a5600;
   --amber-soft: #fbf0df;
   --hl-red: #f6d6d2;
@@ -61,6 +62,20 @@
   --display: "Geist Variable", -apple-system, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   --mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, "Cascadia Mono", Consolas, monospace;
 
+  /* The type scale: every UI size is one of these (D-20261119-15), a step up from the first
+     (D-20261120-10). Note text follows --read-size and the export looks keep their pt sizes; only
+     the brand wordmark sits off the scale. */
+  --fs-2xs: 11px; /* rail labels, tiny pills, weekday initials */
+  --fs-xs: 12px; /* chips, counts, meta lines, hints */
+  --fs-sm: 13px; /* secondary text, rows' second line, small buttons */
+  --fs-base: 14px; /* the UI's body: rows, buttons, inputs */
+  --fs-md: 15px; /* reading-size UI text: Ask, Review bodies, empty states */
+  --fs-lg: 16px; /* pane titles, large inputs */
+  --fs-xl: 18px; /* dialog titles, capture box, big numbers */
+  --fs-2xl: 21px; /* panel headings */
+  --fs-3xl: 23px; /* .h2 */
+  --fs-display: 34px; /* .h1, the health score */
+
   /* The left panes, one width each kind: a nav or list beside a page (Inbox, Tasks, Search, Wiki,
      Settings, Meeting notes, the weekly steps), and a list beside a record (Projects, Changes). */
   --pane-left: 260px;
@@ -96,6 +111,7 @@
     --accent-soft: #1b2535;
     --on-accent: #fff;
     --ring: #3a6bc0;
+    --select: color-mix(in srgb, var(--accent) 40%, transparent);
     --amber: #d9a24e;
     --amber-soft: #2f2618;
     --hl-red: #49211f;
@@ -150,6 +166,7 @@
   --accent-soft: #1b2535;
   --on-accent: #fff;
   --ring: #3a6bc0;
+  --select: color-mix(in srgb, var(--accent) 40%, transparent);
   --amber: #d9a24e;
   --amber-soft: #2f2618;
   --hl-red: #49211f;
@@ -185,7 +202,7 @@ body,
 body {
   background: var(--ground);
   color: var(--ink);
-  font: 13px/1.45 var(--sans);
+  font: var(--fs-base)/1.45 var(--sans);
   -webkit-font-smoothing: antialiased;
   -webkit-user-select: none;
   user-select: none;
@@ -200,15 +217,55 @@ input {
   -webkit-user-select: text;
   user-select: text;
 }
+
+/* What people may want to copy is selectable, though the chrome around it isn't: a task's
+   line, an Inbox item, an answer in Ask, a quote, a change's title. A click that ends selecting
+   text in a row doesn't also click the row (src/textSelect.ts). */
+.selectable,
+.trow .tt,
+.irow .tt,
+.qrow .tt,
+.tdetail .kv dd,
+.isugg-what,
+.isugg-text,
+.isugg-why,
+.cclaim,
+.qquote,
+.suggrow .t,
+.syncrow .t,
+.help-text,
+.toast {
+  -webkit-user-select: text;
+  user-select: text;
+}
 :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 1px;
+}
+
+/* Selected text and the caret take the app's blue, as the editor's do, rather than the system's. */
+::selection {
+  background: var(--select);
+}
+
+/* Every box's hint is the quiet ink, not the browser's grey, which is too pale to read on the light
+   surfaces. */
+::placeholder {
+  color: var(--ink3);
+  opacity: 1;
+}
+input,
+textarea {
+  caret-color: var(--accent);
 }
 
 /* shell */
 .shell {
   /* The sidebar's width, here rather than only as the grid's fallback: its divider is placed by it. */
   --pane-sidebar: 232px;
+
+  /* The icon rail's width (below); wider on macOS, for the traffic lights. */
+  --rail-w: 60px;
 
   height: 100%;
   display: grid;
@@ -297,7 +354,7 @@ body:has(.scrim:not(.mfull)) .winctl {
 /* Windows 11's caption glyphs (src/WindowControls.tsx): its icon font at 10px, regular weight. */
 .winctl .wglyph {
   font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif;
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   font-weight: 400;
   line-height: 1;
 }
@@ -330,7 +387,7 @@ html[data-platform="windows"] .top {
   border: 1px solid var(--line);
   color: var(--ink3);
   margin: 0 0 10px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   cursor: pointer;
   text-align: left;
 }
@@ -377,7 +434,7 @@ html[data-platform="windows"] .top {
   color: var(--ink);
 }
 .sect {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--ink3);
   padding: 14px 8px 4px;
@@ -435,7 +492,7 @@ html[data-platform="windows"] .top {
 }
 .navi .n {
   margin-left: auto;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
   font-variant-numeric: tabular-nums;
 }
@@ -465,6 +522,16 @@ html[data-platform="windows"] .top {
 }
 
 /* A row that opens a menu (Tools): a chevron after its count. */
+
+/* A fold's chevron: down when open, turned to point right when folded (sidebar sections, the
+   Vault fold, Wiki health's checks). */
+.foldchev {
+  flex: none;
+  transition: transform 0.15s;
+}
+.foldchev.shut {
+  transform: rotate(-90deg);
+}
 .navi .navchev {
   flex: none;
   color: var(--ink3);
@@ -477,7 +544,7 @@ html[data-platform="windows"] .top {
 }
 .sideempty {
   padding: 4px 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--ink3);
 }
 .side .foot {
@@ -493,7 +560,7 @@ html[data-platform="windows"] .top {
   align-items: center;
   gap: 8px;
   padding: 6px 8px 0;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
   font-variant-numeric: tabular-nums;
 }
@@ -518,6 +585,111 @@ html[data-platform="windows"] .top {
 }
 
 /* The sidebar's status line, with the Read-only pill (also in the tray header) at its end. */
+
+/* The sidebar's Running line (src/RunsLine.tsx): above the index line while something runs, and
+   for a while after the last run ends. */
+.runsline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 6px 0 0;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--ink2);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  cursor: pointer;
+}
+.runsline:hover {
+  background: var(--hover);
+}
+.runsline.going {
+  color: var(--accent-ink);
+}
+.runsline.bad {
+  color: var(--red);
+}
+.runsline.rail {
+  position: relative;
+  justify-content: center;
+  padding: 6px 0;
+}
+.runsline .runsn {
+  position: absolute;
+  top: 0;
+  right: 6px;
+  font-size: var(--fs-2xs);
+  color: var(--ink2);
+}
+
+/* Update…'s box (src/UpdateBox.tsx). */
+.updbox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+}
+.updbox .mhead {
+  padding: 0;
+}
+.updbox textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  font-size: var(--fs-md);
+}
+.updbox p {
+  margin: 0;
+}
+
+.runspop {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+}
+.runspop .mhead {
+  padding: 0;
+}
+.runspop .tray-runhead .linkish {
+  color: var(--ink);
+  font-weight: 500;
+  text-align: left;
+}
+.runsdone {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--ink2);
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.runsdone.bad {
+  color: var(--red);
+}
+.runsdone:hover .grow {
+  text-decoration: underline;
+}
+.tray-queued {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.tray-queued:hover {
+  text-decoration: underline;
+}
+
 .statusrow {
   display: flex;
   align-items: flex-end;
@@ -536,7 +708,7 @@ html[data-platform="windows"] .top {
   background: var(--amber-soft);
   color: var(--amber);
   font: inherit;
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   font-weight: 600;
   cursor: pointer;
 }
@@ -652,7 +824,7 @@ html[data-platform="windows"] .top {
   min-height: 0;
   background: var(--surface);
   border-bottom: 1px solid var(--line2);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--ink3);
   cursor: default;
@@ -672,9 +844,19 @@ html[data-platform="windows"] .top {
   padding: 0 16px 0 12px;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink2);
+}
+
+/* Changes' held group: amber, as what waits for a decision is everywhere (D-20261119-11), so it reads
+   apart from the Already made band and the feed under it. */
+.tb-group.held {
+  background: var(--amber-soft);
+}
+.tb-group.held > .tb-band {
+  background: var(--amber-soft);
+  color: var(--amber);
 }
 .tb-group + .tb-group .tb-band {
   margin-top: 12px;
@@ -702,12 +884,12 @@ html[data-platform="windows"] .top {
   color: var(--ink3);
   cursor: pointer;
 }
-.headbtn:hover {
+.headbtn:hover:not(:disabled) {
   color: var(--ink);
 }
 .headbtn:disabled {
   cursor: default;
-  opacity: 0.6;
+  opacity: 0.45;
 }
 .tb-band.none > :first-child {
   font-style: italic;
@@ -716,7 +898,7 @@ html[data-platform="windows"] .top {
 .tb-band .n {
   flex: none;
   min-width: 20px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 400;
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -759,22 +941,22 @@ html[data-platform="windows"] .top {
 
 /* type */
 .h1 {
-  font: 600 34px/1.1 var(--display);
+  font: 600 var(--fs-display)/1.1 var(--display);
   letter-spacing: -0.03em;
   margin: 0;
 }
 .h2 {
-  font: 600 22px/1.2 var(--display);
+  font: 600 var(--fs-3xl)/1.2 var(--display);
   letter-spacing: -0.02em;
   margin: 0;
 }
 .h3 {
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   margin: 0;
 }
 .eyebrow {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink2);
 }
@@ -786,7 +968,7 @@ html[data-platform="windows"] .top {
 }
 .mono {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .err {
   color: var(--red);
@@ -869,7 +1051,7 @@ body.presizing * {
   border: 1px solid var(--line2);
   background: var(--surface);
   color: var(--ink);
-  font: 500 12.5px/1 var(--sans);
+  font: 500 var(--fs-sm)/1 var(--sans);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -877,11 +1059,16 @@ body.presizing * {
   white-space: nowrap;
   flex: none;
 }
-.btn:hover {
+.btn:hover:not(:disabled) {
   background: var(--sunk);
 }
+
+/* One disabled look for every control: buttons, chips, links and pickers. */
 .btn:disabled,
-.ibtn:disabled {
+.ibtn:disabled,
+.chip:disabled,
+.tlink:disabled,
+select.sel:disabled {
   opacity: 0.45;
   cursor: default;
 }
@@ -890,7 +1077,7 @@ body.presizing * {
   border-color: var(--accent);
   color: var(--on-accent);
 }
-.btn.pri:hover {
+.btn.pri:hover:not(:disabled) {
   background: var(--accent-ink);
 }
 .btn.ghost {
@@ -898,19 +1085,19 @@ body.presizing * {
   border-color: transparent;
   color: var(--ink2);
 }
-.btn.ghost:hover {
+.btn.ghost:hover:not(:disabled) {
   background: var(--hover);
 }
 
 /* Every button is the standard 28px high; sm and lg only change the padding and the text. */
 .btn.sm {
   padding: 0 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   border-radius: 6px;
 }
 .btn.lg {
   padding: 0 14px;
-  font-size: 13.5px;
+  font-size: var(--fs-base);
   border-radius: 8px;
 }
 .ibtn {
@@ -936,7 +1123,7 @@ body.presizing * {
   margin-right: -4px;
 }
 .kbd {
-  font: 500 10.5px/1 var(--sans);
+  font: 500 var(--fs-2xs)/1 var(--sans);
   color: var(--ink3);
   border: 1px solid var(--line2);
   border-bottom-width: 2px;
@@ -952,7 +1139,7 @@ body.presizing * {
   height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-weight: 500;
   background: var(--sunk);
   color: var(--ink2);
@@ -986,7 +1173,7 @@ body.presizing * {
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--ink2);
   border: 0;
@@ -1006,7 +1193,7 @@ body.presizing * {
   border: 1px solid var(--line2);
   background: var(--surface);
   padding: 0 10px;
-  font: 13px var(--sans);
+  font: var(--fs-base) var(--sans);
   color: var(--ink);
   display: flex;
   align-items: center;
@@ -1014,7 +1201,7 @@ body.presizing * {
   min-width: 0;
 }
 .inp.mono {
-  font: 12.5px var(--mono);
+  font: var(--fs-sm) var(--mono);
 }
 .inp svg {
   color: var(--ink3);
@@ -1098,7 +1285,7 @@ body.presizing * {
   border: 1px solid var(--line);
   border-radius: 7px;
   box-shadow: var(--pop);
-  font: 500 12px/1.35 var(--sans);
+  font: 500 var(--fs-sm)/1.35 var(--sans);
   pointer-events: none;
   animation: fadein 0.12s ease-out;
   overflow-wrap: anywhere;
@@ -1161,7 +1348,7 @@ body.presizing * {
   border: 0;
   outline: 0;
   background: transparent;
-  font: 400 17px var(--sans);
+  font: 400 var(--fs-xl) var(--sans);
   color: var(--ink);
 }
 .plist {
@@ -1177,7 +1364,7 @@ body.presizing * {
 }
 
 .pg {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink3);
   padding: 12px 20px 4px;
@@ -1224,7 +1411,7 @@ body.presizing * {
   padding: 10px 16px;
   border-top: 1px solid var(--line);
   background: var(--sunk);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
 }
 
@@ -1251,7 +1438,7 @@ body.presizing * {
 .wcard .tagline {
   margin: -6px 0 12px;
   color: var(--ink3);
-  font-size: 15px;
+  font-size: var(--fs-lg);
 }
 .wcard p {
   margin: 0;
@@ -1348,6 +1535,14 @@ body.presizing * {
 .sgroup p {
   margin: 0;
 }
+
+/* A sub-heading inside a Settings section (Teams channels, Mail to skip). */
+.sgroup .ssub {
+  margin: 8px 0 0;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--ink2);
+}
 .srow {
   display: flex;
   align-items: center;
@@ -1407,7 +1602,7 @@ body.presizing * {
   grid-template-columns: 140px 1fr;
   gap: 6px 12px;
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .sysf dd,
 .kv dd {
@@ -1461,7 +1656,7 @@ body.presizing * {
   border-radius: 7px;
   background: var(--surface);
   color: var(--ink);
-  font: 500 12.5px var(--sans);
+  font: 500 var(--fs-sm) var(--sans);
   padding: 0 8px;
   display: inline-flex;
   align-items: center;
@@ -1530,7 +1725,7 @@ body.presizing * {
    and one selected look everywhere. */
 .tnode,
 .spanes .navi {
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .tnode {
   display: flex;
@@ -1561,7 +1756,7 @@ body.presizing * {
 }
 .tnode .n {
   margin-left: auto;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
   font-variant-numeric: tabular-nums;
 }
@@ -1582,6 +1777,22 @@ body.presizing * {
 .ftools .sp {
   flex: 1;
 }
+
+/* The Wiki list's safe fixes: one quiet line, not a badge on every row. */
+.safeline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.safeline .linkish {
+  font-weight: 500;
+}
+.safeline .btn {
+  margin-left: 4px;
+}
 .listq {
   width: 280px;
 }
@@ -1589,11 +1800,11 @@ body.presizing * {
   display: flex;
   gap: 6px;
   align-items: center;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
 .count {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-variant-numeric: tabular-nums;
 }
 .chip.f {
@@ -1632,7 +1843,7 @@ body.presizing * {
   border-style: dashed;
 }
 .badge {
-  font: 600 10.5px/1 var(--mono);
+  font: 600 var(--fs-2xs)/1 var(--mono);
   color: var(--l-source);
   letter-spacing: 0.03em;
 }
@@ -1660,7 +1871,7 @@ body.presizing * {
   padding-bottom: 0;
 }
 .fhead .fcell {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--ink3);
   border: 0;
@@ -1698,7 +1909,7 @@ body.presizing * {
   padding: 24px 18px;
 }
 .snip {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 400;
   color: var(--ink2);
   line-height: 1.45;
@@ -1723,7 +1934,7 @@ mark.search-hit {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -1783,10 +1994,10 @@ mark.search-hit {
 }
 .inp.lg {
   height: 40px;
-  font-size: 15px;
+  font-size: var(--fs-lg);
 }
 .scount {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .shelp {
   max-width: 640px;
@@ -1872,6 +2083,14 @@ html[data-platform]:not([data-platform="macos"]) .top.focusbar {
 .docgrid.focus {
   padding: 12px 10% 120px;
 }
+
+/* Centred at a reading measure (about 75 characters a line), growing with the text size, rather
+   than the window's width less its margins. */
+.docgrid.focus .doc {
+  width: 100%;
+  max-width: calc((var(--read-size, 15px) + 2px) * 42);
+  margin-inline: auto;
+}
 .docgrid.focus .prose,
 .docgrid.focus .editor .cm-content {
   font-size: calc(var(--read-size, 15px) + 2px);
@@ -1934,7 +2153,7 @@ html[data-platform]:not([data-platform="macos"]) .top.focusbar {
   margin: 0 -8px;
   border-radius: 7px;
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   min-width: 0;
   width: calc(100% + 16px);
 }
@@ -1942,7 +2161,7 @@ html[data-platform]:not([data-platform="macos"]) .top.focusbar {
   background: var(--hover);
 }
 .blink .faint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1959,7 +2178,7 @@ html[data-platform]:not([data-platform="macos"]) .top.focusbar {
   margin: 0 0 22px;
   padding: 0 0 14px;
   border-bottom: 1px solid var(--line);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .props.err {
   display: block;
@@ -2031,6 +2250,21 @@ html[data-platform]:not([data-platform="macos"]) .top.focusbar {
 .prose ul,
 .prose ol {
   padding-left: 24px;
+}
+
+/* An initiative's action: Move to… shows on hover, at the item's right. */
+.prose li:has(> .mdmove) {
+  position: relative;
+}
+.prose .mdmove {
+  position: absolute;
+  top: 0;
+  right: 0;
+  opacity: 0;
+}
+.prose li:hover > .mdmove,
+.prose .mdmove:focus-visible {
+  opacity: 1;
 }
 .prose li > p {
   margin: 0;
@@ -2155,8 +2389,7 @@ a.wl .embedmark {
 
   margin: 0 0 14px;
   padding: 8px 14px;
-  border: 1px solid color-mix(in srgb, var(--c) 22%, transparent);
-  border-left: 3px solid var(--c);
+  border: 1px solid color-mix(in srgb, var(--c) 32%, transparent); /* no bar down one side: the tint, icon and title say what it is */
   border-radius: 10px;
   background: var(--c-soft);
 }
@@ -2226,7 +2459,7 @@ details.callout[open] .callout-chev {
 }
 .sysnote summary {
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink3);
   letter-spacing: 0.02em;
@@ -2287,7 +2520,7 @@ details.callout[open] .callout-chev {
   min-width: 0;
 }
 .tqhead code {
-  font: 11.5px var(--mono);
+  font: var(--fs-xs) var(--mono);
   color: var(--ink3);
   background: none;
   border: 0;
@@ -2297,7 +2530,7 @@ details.callout[open] .callout-chev {
 }
 .tqmsg {
   padding: 8px 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .tlink {
   border: 0;
@@ -2305,7 +2538,39 @@ details.callout[open] .callout-chev {
   padding: 0;
   color: var(--accent-ink);
   cursor: pointer;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
+}
+
+/* A link inside a sentence takes the sentence's size, as Learn more does. */
+p > .tlink {
+  font-size: inherit;
+}
+
+/* A setting's Learn more (src/help/HelpDrawer.tsx): after its one line, in the line's own size. */
+.tlink.learn {
+  font-size: inherit;
+  white-space: nowrap;
+}
+.tlink.learn:hover {
+  text-decoration: underline;
+}
+
+/* Status tints for a Settings row's icon or line: on and working, needs a look, failed, off, and
+   the accent for one that's neither (Settings, src/Jobs.tsx). */
+.tint-ok {
+  color: var(--green);
+}
+.tint-warn {
+  color: var(--amber);
+}
+.tint-bad {
+  color: var(--red);
+}
+.tint-off {
+  color: var(--ink3);
+}
+.tint-accent {
+  color: var(--accent);
 }
 
 /* mermaid */
@@ -2447,7 +2712,7 @@ html[data-platform="windows"] .scrim.winprevscrim {
   border-radius: 8px;
 }
 .mermaid-source {
-  font: 12px var(--mono);
+  font: var(--fs-sm) var(--mono);
   white-space: pre-wrap;
 }
 
@@ -2470,14 +2735,14 @@ html[data-platform="windows"] .scrim.winprevscrim {
 .srcocr summary {
   cursor: pointer;
   color: var(--ink2);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .srcocr .srctext,
 .srcocr p {
   margin-top: 8px;
 }
 .srctext {
-  font: 12.5px/1.55 var(--mono);
+  font: var(--fs-sm)/1.55 var(--mono);
   white-space: pre-wrap;
   background: var(--sunk);
   border: 1px solid var(--line);
@@ -2630,8 +2895,16 @@ html[data-platform="windows"] .scrim.winprevscrim {
   position: relative;
   cursor: default;
 }
-.trow + .trow {
-  box-shadow: 0 -1px 0 var(--line);
+
+/* The line between rows is drawn straight across, not as the row's shadow, which would bend round
+   its corners. */
+.trow + .trow::before {
+  content: "";
+  position: absolute;
+  inset: -1px 0 auto;
+  height: 1px;
+  background: var(--line);
+  pointer-events: none;
 }
 .trow:hover {
   background: var(--hover);
@@ -2643,12 +2916,19 @@ html[data-platform="windows"] .scrim.winprevscrim {
 /* The keyboard's row in a list with no selection of its own (Today), shown while the list has the keyboard. */
 .tlist.keys:focus-within .trow.kcur {
   background: var(--accent-soft);
-  box-shadow: inset 3px 0 0 var(--accent);
+  box-shadow: inset 0 0 0 1px var(--ring);
 }
 .tlist.keys:focus-visible:has(.trow.sel, .trow.kcur) {
   outline: none;
 }
 .tlist.keys:focus-visible .trow.sel {
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+/* A rounded row is ringed all the way round; the Tasks table's square rows keep a bar at the left
+   edge of the list, where a stripe down one side doesn't bend round a corner. */
+.tlist.table.keys:focus-within .trow.kcur,
+.tlist.table.keys:focus-visible .trow.sel {
   box-shadow: inset 3px 0 0 var(--accent);
 }
 .loadfail {
@@ -2660,7 +2940,7 @@ html[data-platform="windows"] .scrim.winprevscrim {
 }
 .loadfail.compact {
   padding: 8px 12px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .loadfail.loading {
   color: var(--ink3);
@@ -2674,7 +2954,7 @@ html[data-platform="windows"] .scrim.winprevscrim {
   padding: 8px 20px;
   background: var(--accent-soft);
   color: var(--accent-ink);
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .trow.dragging {
   opacity: 0.6;
@@ -2710,7 +2990,7 @@ html[data-platform="windows"] .scrim.winprevscrim {
   flex-wrap: wrap;
   gap: 2px 14px;
   align-items: center;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink3);
 }
 
@@ -2750,8 +3030,34 @@ html[data-platform="windows"] .scrim.winprevscrim {
 .itag {
   margin-left: 6px;
   color: var(--ink3);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 400;
+}
+
+/* A chip that opens its field's picker: plain text until pointed at, as the project's. */
+.trow .ts .chip.ed {
+  cursor: pointer;
+}
+.trow .ts .chip.ed:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.trow .ts .chip.ed.red:hover {
+  color: var(--red);
+}
+
+/* The row's +, for a field it hasn't got: only on the row pointed at, selected or with the keyboard. */
+.trow .tadd {
+  opacity: 0;
+  width: 24px;
+  height: 24px;
+  margin-right: -8px;
+}
+.trow:hover .tadd,
+.trow.sel .tadd,
+.tlist.keys:focus-within .trow.kcur .tadd,
+.trow .tadd:focus-visible {
+  opacity: 1;
 }
 
 /* Always there, muted until the row is hovered or selected, so the menu can be found. */
@@ -2781,6 +3087,12 @@ html[data-platform="windows"] .scrim.winprevscrim {
   border: 0;
   border-top: 1px solid var(--line);
   border-radius: 0;
+}
+
+/* A project's lists that can't be dragged (Waiting for, Someday) keep the room of the grip the Next
+   actions above them have, so every tick box on the page is in one column. */
+.pmain .tcard .trow > .cb:first-child {
+  margin-left: 12px;
 }
 .mlabel {
   display: flex;
@@ -2831,8 +3143,8 @@ html[data-platform="windows"] .scrim.winprevscrim {
   padding: 9px 16px 9px 12px;
   border-radius: 0;
 }
-.tlist.table .trow + .trow {
-  box-shadow: none;
+.tlist.table .trow + .trow::before {
+  content: none;
 }
 .tlist.table .trow.sel {
   box-shadow: inset 3px 0 0 var(--accent);
@@ -2856,16 +3168,23 @@ html[data-platform="windows"] .scrim.winprevscrim {
   gap: 14px;
 }
 .tdetail .h2 {
-  font-size: 15px;
+  font-size: var(--fs-lg);
   line-height: 1.4;
   letter-spacing: -0.01em;
 }
 
 /* A task row's words, renamed in place: a pencil on hover or the selected row, then a box. */
+.trow .tt:has(.trename) {
+  padding-right: 10px;
+}
 .trow .trename {
   width: 20px;
   height: 20px;
   margin-left: 4px;
+
+  /* It takes no room of its own, so a title that just fits doesn't push it onto a line by itself:
+     it sits in the little .tt keeps for it and the gap before the row's buttons. */
+  margin-right: -24px;
   vertical-align: -4px;
   color: var(--ink3);
   opacity: 0;
@@ -2891,7 +3210,7 @@ html[data-platform="windows"] .scrim.winprevscrim {
   font-weight: 500;
 }
 .seglabel {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .tdetail .kv {
   /* As wide as the longest name with its ⓘ, so none wraps. */
@@ -2919,7 +3238,7 @@ html[data-platform="windows"] .scrim.winprevscrim {
   min-width: 0;
 }
 .small {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   margin: 0;
 }
 
@@ -2952,7 +3271,7 @@ html[data-platform="windows"] .scrim.winprevscrim {
 /* Today's counts as a sentence under the greeting; each count jumps to its band. */
 .tsum {
   margin: 0;
-  font-size: 15.5px;
+  font-size: var(--fs-lg);
   line-height: 1.5;
   color: var(--ink2);
 }
@@ -3040,7 +3359,7 @@ html[data-platform="windows"] .scrim.winprevscrim {
   gap: 6px;
   padding: 10px 16px 10px 0;
   border-bottom: 1px solid var(--line);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .tctx .faint {
   margin-right: 4px;
@@ -3062,7 +3381,7 @@ html[data-platform="windows"] .scrim.winprevscrim {
   color: var(--ink);
 }
 .tcalm .faint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .todaytable .tfoot {
   display: flex;
@@ -3073,7 +3392,7 @@ html[data-platform="windows"] .scrim.winprevscrim {
 .trow .wsince {
   align-self: center;
   flex: none;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   color: var(--ink3);
 }
@@ -3114,7 +3433,7 @@ html[data-platform="windows"] .scrim.winprevscrim {
   padding: 0 0 6px;
   background: none;
   border: 0;
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .rcard .rrow {
   padding-left: 0;
@@ -3131,7 +3450,7 @@ html[data-platform="windows"] .scrim.winprevscrim {
   background: none;
   color: var(--ink);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   text-align: left;
   width: 100%;
   min-width: 0;
@@ -3146,7 +3465,7 @@ html[data-platform="windows"] .scrim.winprevscrim {
 .rrow .n {
   flex: none;
   min-width: 20px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-variant-numeric: tabular-nums;
   text-align: right;
   color: var(--ink3);
@@ -3155,9 +3474,24 @@ html[data-platform="windows"] .scrim.winprevscrim {
   font-weight: 600;
   color: var(--ink);
 }
+
+/* A group label inside a card's rows (Upcoming meetings' Tomorrow), styled as .rsub but on the
+   rows' inset. */
+.rrow.rgroup {
+  min-height: 0;
+  padding-top: 8px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ink3);
+}
+.rrow .ricon {
+  display: inline-flex;
+  flex: none;
+  color: var(--ink3);
+}
 .rrow .rstat {
   flex: none;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   white-space: nowrap;
 }
 .rcard .ract {
@@ -3192,13 +3526,19 @@ button.rrow.rlink:hover {
 }
 .rsub {
   padding: 10px 0 4px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink3);
 }
 .rfoot {
   display: flex;
   padding: 4px 0;
+}
+
+/* The footer's ghost button (More in Activity, Open note) keeps its hover padding but puts its words
+   on the card's left edge, where the rows' icons start. */
+.rcard .rfoot .btn.ghost {
+  margin-left: -9px;
 }
 
 /* Today's daily and weekly summary cards: the band folds and opens the block. */
@@ -3226,7 +3566,7 @@ button.rrow.rlink:hover {
 }
 .sumline {
   flex: none;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   white-space: nowrap;
 }
 .sumbody {
@@ -3236,7 +3576,7 @@ button.rrow.rlink:hover {
   border-bottom: 1px solid var(--line);
 }
 .sumbody .prose {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .rempty {
   margin: 0;
@@ -3273,7 +3613,7 @@ button.rrow.rlink:hover {
   padding: 0 4px;
 }
 .ghead .faint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 /* capture */
@@ -3297,14 +3637,19 @@ button.rrow.rlink:hover {
   outline: 0;
   resize: none;
   background: transparent;
-  font: 17px/1.4 var(--sans);
+  font: var(--fs-xl)/1.4 var(--sans);
   color: var(--ink);
   field-sizing: content;
   max-height: 160px;
   min-height: 24px;
 }
+
+/* Empty, it's as tall as its hint, which wraps on a narrow column: no scroll bar for that. */
+.capture textarea:placeholder-shown {
+  overflow: hidden;
+}
 .capture.compact textarea {
-  font-size: 14px;
+  font-size: var(--fs-md);
 }
 .capture .cfoot {
   display: flex;
@@ -3313,7 +3658,7 @@ button.rrow.rlink:hover {
   padding: 8px 14px;
   border-top: 1px solid var(--line);
   background: var(--sunk);
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   border-radius: 0 0 12px 12px;
 }
 .capture .cfoot .sp {
@@ -3341,7 +3686,7 @@ button.rrow.rlink:hover {
   background: var(--accent-soft);
 }
 
-/* Knowledge health's Link to…: the wiki's pages under the box as you type (in the dialog's flow,
+/* Wiki health's Link to…: the wiki's pages under the box as you type (in the dialog's flow,
    which clips anything floating out of it). */
 .csugg.pagelist {
   margin: 6px 0 0;
@@ -3570,7 +3915,7 @@ html[data-platform="windows"][data-scrollbars="always"] ::-webkit-scrollbar-thum
   font-weight: 500;
 }
 .nnt span {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
 }
 .nnt:hover {
   background: var(--hover);
@@ -3589,7 +3934,7 @@ html[data-platform="windows"][data-scrollbars="always"] ::-webkit-scrollbar-thum
   gap: 4px;
 }
 .nnhint {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   padding: 4px;
 }
 .nnhint:last-child {
@@ -3607,7 +3952,7 @@ html[data-platform="windows"][data-scrollbars="always"] ::-webkit-scrollbar-thum
 }
 .nnmain .h2,
 .rename .h2 {
-  font-size: 20px;
+  font-size: var(--fs-2xl);
 }
 .nnfields {
   display: grid;
@@ -3627,7 +3972,7 @@ html[data-platform="windows"][data-scrollbars="always"] ::-webkit-scrollbar-thum
   grid-column: span 1;
 }
 .nnf > span:first-child {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink2);
 }
@@ -3638,7 +3983,7 @@ select.inp:focus {
   outline: 0;
 }
 .nnname {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   flex-wrap: wrap;
 }
 .nnname .fname {
@@ -3672,7 +4017,7 @@ select.inp:focus {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 12px 14px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.7;
   color: var(--ink2);
   white-space: pre-wrap;
@@ -3687,7 +4032,7 @@ select.inp:focus {
   border-radius: 10px;
   background: var(--amber-soft);
   color: var(--amber);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .nnerr svg {
   flex: none;
@@ -3731,6 +4076,18 @@ button.rnhead {
 .rnhead svg:first-child {
   color: var(--accent);
 }
+
+/* Nothing to update: a plain line, not a heading that looks like it opens something. */
+button.rnhead.quiet {
+  cursor: default;
+  color: var(--ink2);
+}
+.rnhead.quiet b {
+  font-weight: 400;
+}
+.rnhead.quiet svg:first-child {
+  color: var(--ink3);
+}
 .rnfiles {
   max-height: 280px;
   overflow: auto;
@@ -3746,10 +4103,10 @@ button.rnhead {
   font-weight: 500;
 }
 .rnfile .row .faint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .rnba {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -3780,7 +4137,7 @@ button.rnhead {
   border-bottom: 1px solid var(--line);
 }
 .trsel .faint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .trlist {
   --tb-head: 34px;
@@ -3815,7 +4172,7 @@ button.rnhead {
   font-weight: 500;
 }
 .trwarn {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--amber);
   display: flex;
   gap: 6px;
@@ -3845,7 +4202,7 @@ button.rnhead {
   align-items: center;
   border-top: 1px solid var(--line);
   color: var(--ink3);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .btn.danger,
 .menu button.danger {
@@ -3885,14 +4242,14 @@ button.rnhead {
 .updnotes .prose h1,
 .updnotes .prose h2,
 .updnotes .prose h3 {
-  font-size: 14px;
+  font-size: var(--fs-md);
   margin: 12px 0 4px;
 }
 .updprog {
   min-height: 34px;
 }
 .updlabel {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -3938,7 +4295,7 @@ button.rnhead {
 /* Source (src/editor/cm.ts): the plain text in a monospaced font, nothing styled, so it's
    clearly not Edit. Beats a styled document's font too. */
 :is(.editor, .docsurf.styled .editor) .cm-editor.cm-source {
-  font: 13.5px / 1.6 var(--mono);
+  font: var(--fs-base) / 1.6 var(--mono);
 }
 
 .editor .cm-editor.cm-focused {
@@ -3961,7 +4318,7 @@ button.rnhead {
 }
 .editor .cm-selectionBackground,
 .editor .cm-focused .cm-selectionBackground {
-  background: var(--accent-soft) !important;
+  background: var(--select) !important;
 }
 .editor .cm-selectionMatch {
   background: var(--hover);
@@ -4103,7 +4460,7 @@ button.rnhead {
   padding: 8px 0 2px;
   color: var(--ink2);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   cursor: pointer;
 }
 .hlpick .hlnone:hover {
@@ -4188,6 +4545,22 @@ button.rnhead {
 }
 .prose .mdtag:hover {
   text-decoration: underline;
+}
+
+/* Inline fields in View (src/md/fields.ts): `[status:: open]` as a quiet label, its key faint. */
+.prose .mdfield {
+  font-style: normal;
+  font-size: 0.86em;
+  color: var(--ink2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 5px;
+  margin: 0 1px;
+  white-space: nowrap;
+}
+.prose .mdfield-k {
+  font-style: normal;
+  color: var(--ink3);
 }
 .docsurf :is(.editor .cm-tag, .prose .mdtag) {
   color: var(--doc-accent);
@@ -4334,7 +4707,7 @@ button.rnhead {
   border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--pop);
-  font: 13px var(--sans);
+  font: var(--fs-base) var(--sans);
 }
 .editor .cm-tooltip-autocomplete > ul > li {
   padding: 4px 10px;
@@ -4353,7 +4726,7 @@ button.rnhead {
   display: none;
 }
 .unsaved {
-  font: 500 12px var(--sans);
+  font: 500 var(--fs-sm) var(--sans);
   color: var(--amber);
   background: var(--amber-soft);
   border: 0;
@@ -4373,7 +4746,7 @@ button.rnhead {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--sunk);
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--ink2);
 }
 .doc-banner.warn {
@@ -4391,7 +4764,7 @@ button.rnhead {
   margin: 12px 0;
 }
 .compare pre {
-  font: 12px / 1.5 var(--mono);
+  font: var(--fs-sm) / 1.5 var(--mono);
   max-height: 50vh;
   overflow: auto;
   white-space: pre-wrap;
@@ -4460,7 +4833,7 @@ button.rnhead {
   --accent-ink: #174fb3;
   --accent-soft: #e8f0fd;
   --on-accent: #fff;
-  --ring: #a9c4f5;
+  --ring: #3a6bc0;
   --doc-heading: #143a5e;
   --doc-accent: #2e75b6;
   --doc-ink: #212730;
@@ -4502,6 +4875,7 @@ button.rnhead {
   --accent-soft: #1b2535;
   --on-accent: #fff;
   --ring: #3a6bc0;
+  --select: color-mix(in srgb, var(--accent) 40%, transparent);
   --doc-heading: #9fc4ea;
   --doc-accent: #6aa9e0;
   --doc-ink: #e6e9ee;
@@ -5216,7 +5590,7 @@ button.rnhead {
   border-radius: 8px;
   background: var(--surface);
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   cursor: pointer;
   text-align: left;
 }
@@ -5234,7 +5608,7 @@ button.rnhead {
   box-shadow: 0 0 0 1px var(--accent);
 }
 .lookstyles .aa {
-  font-size: 15px;
+  font-size: var(--fs-lg);
   font-weight: 600;
   width: 22px;
 }
@@ -5254,12 +5628,12 @@ button.rnhead {
   justify-content: space-between;
   gap: 8px;
   padding: 0 10px 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .lookdemo {
   margin-top: 14px;
   max-width: 640px;
-  font-size: 13px;
+  font-size: var(--fs-base);
 
   --read-size: 13px;
 }
@@ -5298,7 +5672,7 @@ button.rnhead {
   border-radius: 6px;
   background: none;
   color: var(--ink2);
-  font: 500 13px var(--sans);
+  font: 500 var(--fs-base) var(--sans);
   cursor: pointer;
 }
 .tbtn:hover {
@@ -5313,7 +5687,7 @@ button.rnhead {
 .tbtn i,
 .tbtn s {
   font: inherit;
-  font-size: 14px;
+  font-size: var(--fs-md);
 }
 .tbtn b {
   font-weight: 750;
@@ -5323,7 +5697,7 @@ button.rnhead {
   font-family: Georgia, serif;
 }
 .tbtn code {
-  font: 600 11px var(--mono);
+  font: 600 var(--fs-xs) var(--mono);
 }
 .tbtn.heading {
   min-width: 104px;
@@ -5337,19 +5711,19 @@ button.rnhead {
   background: var(--line);
 }
 .hpick.h1 {
-  font-size: 17px;
+  font-size: var(--fs-xl);
   font-weight: 700;
 }
 .hpick.h2 {
-  font-size: 15px;
+  font-size: var(--fs-lg);
   font-weight: 700;
 }
 .hpick.h3 {
-  font-size: 13.5px;
+  font-size: var(--fs-base);
   font-weight: 650;
 }
 .hpick.h4 {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 650;
 }
 .hpick.on {
@@ -5454,13 +5828,10 @@ button.rnhead {
   outline: 0;
   background: none;
   color: var(--ink);
-  font: 13px var(--sans);
-}
-.dpick-in::placeholder {
-  color: var(--ink3);
+  font: var(--fs-base) var(--sans);
 }
 .dpick-preview {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--ink2);
   padding: 0 2px;
   min-height: 16px;
@@ -5475,7 +5846,7 @@ button.rnhead {
   justify-content: space-between;
 }
 .dpick-title {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink);
 }
@@ -5485,7 +5856,7 @@ button.rnhead {
   gap: 2px;
 }
 .dpick-wd {
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   font-weight: 500;
   color: var(--ink3);
   text-align: center;
@@ -5497,7 +5868,7 @@ button.rnhead {
   border-radius: 7px;
   background: none;
   color: var(--ink);
-  font: 12.5px var(--sans);
+  font: var(--fs-sm) var(--sans);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
@@ -5537,7 +5908,7 @@ button.rnhead {
   gap: 6px;
   cursor: pointer;
   color: var(--ink);
-  font: 12.5px var(--sans);
+  font: var(--fs-sm) var(--sans);
 }
 .dfield-btn.empty {
   color: var(--ink3);
@@ -5555,7 +5926,7 @@ button.rnhead {
   flex-wrap: wrap;
   gap: 4px 12px;
   padding: 0 16px 10px 50px;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--ink2);
 }
 .capture.compact .chint {
@@ -5578,7 +5949,7 @@ button.rnhead {
   border-radius: 6px;
   background: var(--sunk);
   color: var(--ink2);
-  font: 11.5px var(--sans);
+  font: var(--fs-xs) var(--sans);
   cursor: pointer;
 }
 .cm-taskhint button:hover {
@@ -5586,12 +5957,12 @@ button.rnhead {
   color: var(--ink);
 }
 .cm-taskhint .k {
-  font: 11.5px var(--mono);
+  font: var(--fs-xs) var(--mono);
   color: var(--accent-ink);
 }
 .cm-taskhint .t {
   flex-basis: 100%;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
   padding: 2px 2px 0;
 }
@@ -5697,7 +6068,7 @@ button.rnhead {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 12px 14px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.7;
   color: var(--ink2);
 }
@@ -5772,7 +6143,7 @@ button.rnhead {
 .tqerr {
   margin: 0;
   padding: 8px 12px;
-  font: 11.5px/1.5 var(--mono);
+  font: var(--fs-xs)/1.5 var(--mono);
   white-space: pre-wrap;
   border-bottom: 1px solid var(--line);
   background: none;
@@ -5786,7 +6157,7 @@ button.rnhead {
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   border-top: 1px solid var(--line);
 }
 
@@ -5870,7 +6241,7 @@ button.rnhead {
   margin: 0;
   padding: 10px 12px;
   white-space: pre-wrap;
-  font: 11.5px/1.5 var(--mono);
+  font: var(--fs-xs)/1.5 var(--mono);
   color: var(--red);
   background: var(--red-soft);
   border: 0;
@@ -5928,7 +6299,7 @@ code.noscript {
   gap: 2px;
 }
 .dvcalgrid .dow {
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
   text-align: center;
 }
@@ -5949,7 +6320,7 @@ code.noscript {
   color: var(--doc-accent);
 }
 .dvcalgrid .n {
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .dvcalgrid .dots {
   display: flex;
@@ -5982,7 +6353,7 @@ code.noscript {
 .editor .cm-qdocs {
   margin-left: auto;
   flex: none;
-  font: 11.5px var(--sans);
+  font: var(--fs-xs) var(--sans);
   color: var(--ink3);
   text-decoration: none;
   border: 0;
@@ -6038,10 +6409,10 @@ code.noscript {
 .cm-qinfo {
   display: grid;
   gap: 6px;
-  font: 12px / 1.45 var(--sans);
+  font: var(--fs-sm) / 1.45 var(--sans);
 }
 .cm-qinfo code {
-  font: 11.5px var(--mono);
+  font: var(--fs-xs) var(--mono);
   color: var(--ink2);
   white-space: pre-wrap;
 }
@@ -6055,13 +6426,13 @@ code.noscript {
 }
 .editor .cm-completionDetail {
   margin-left: 10px;
-  font: 11px var(--mono);
+  font: var(--fs-xs) var(--mono);
   font-style: normal;
   color: var(--ink3);
 }
 .editor .cm-completionLabel {
   font-family: var(--mono);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .editor .cm-completionMatchedText {
   text-decoration: none;
@@ -6097,7 +6468,7 @@ code.noscript {
 }
 .editor .cm-diagnostic {
   padding: 6px 10px;
-  font: 12px / 1.4 var(--sans);
+  font: var(--fs-sm) / 1.4 var(--sans);
   color: var(--ink);
   white-space: pre-wrap;
 }
@@ -6144,7 +6515,7 @@ code.noscript {
 }
 .qblabel {
   padding-top: 6px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--ink3);
 }
@@ -6173,7 +6544,7 @@ code.noscript {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--ink2);
 }
 .qbcheck input {
@@ -6202,10 +6573,10 @@ code.noscript {
   border-radius: 8px;
   background: var(--amber-soft);
   color: var(--amber);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .qbnote code {
-  font: 11px var(--mono);
+  font: var(--fs-xs) var(--mono);
   color: var(--ink2);
 }
 .qbside {
@@ -6228,12 +6599,12 @@ code.noscript {
   border-radius: 8px;
   background: var(--sunk);
   color: var(--ink);
-  font: 12px / 1.5 var(--mono);
+  font: var(--fs-sm) / 1.5 var(--mono);
 }
 .qbprev {
   overflow: auto;
   padding: 10px 18px 18px;
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .qbfoot {
   display: flex;
@@ -6283,7 +6654,7 @@ code.noscript {
   border: 0;
   background: none;
   color: var(--ink2);
-  font: 500 12px var(--sans);
+  font: 500 var(--fs-sm) var(--sans);
   cursor: pointer;
 }
 .asktab.on > button[role="tab"] {
@@ -6334,7 +6705,7 @@ code.noscript {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   flex: none;
 }
 .ctxm .bar {
@@ -6382,7 +6753,7 @@ code.noscript {
   background: var(--accent-soft);
   border-radius: 14px 14px 4px;
   padding: 10px 14px;
-  font-size: 14px;
+  font-size: var(--fs-md);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -6392,7 +6763,7 @@ code.noscript {
   gap: 8px;
 }
 .aska .prose {
-  font-size: 14.5px;
+  font-size: var(--fs-md);
 }
 .looked {
   display: flex;
@@ -6437,7 +6808,7 @@ code.noscript {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
 }
 .askqueue .chip {
   max-width: 320px;
@@ -6459,7 +6830,7 @@ code.noscript {
   resize: none;
   background: transparent;
   color: var(--ink);
-  font: 14px/1.5 var(--sans);
+  font: var(--fs-md)/1.5 var(--sans);
   min-height: 22px;
   padding: 0;
 }
@@ -6472,7 +6843,7 @@ code.noscript {
   flex: 1;
 }
 .askbar select.sel {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 /* An effort menu with its label: Ask's message box, Settings › AI assistants */
@@ -6480,7 +6851,7 @@ code.noscript {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .ibtn.send {
   background: var(--accent);
@@ -6490,7 +6861,7 @@ code.noscript {
   background: var(--accent-ink);
 }
 .askhint {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   text-align: center;
 }
 .asksugg {
@@ -6521,11 +6892,11 @@ code.noscript {
   background: var(--accent-soft);
 }
 .asksugg .nm {
-  font: 500 12.5px var(--mono);
+  font: 500 var(--fs-sm) var(--mono);
   flex: none;
 }
 .asksugg .ds {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink2);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6536,7 +6907,7 @@ code.noscript {
   overflow: auto;
 }
 .mg {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink3);
   padding: 8px 9px 4px;
@@ -6546,7 +6917,7 @@ code.noscript {
 }
 .mpad {
   padding: 4px 9px 6px;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
 }
 .askhead {
   padding: 16px 18px 8px;
@@ -6599,7 +6970,7 @@ code.noscript {
   white-space: nowrap;
 }
 .hopen .faint {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
 }
 .hedit {
   flex: 1;
@@ -6608,20 +6979,20 @@ code.noscript {
   border: 1px solid var(--accent);
   border-radius: 7px;
   padding: 0 8px;
-  font: 13px var(--sans);
+  font: var(--fs-base) var(--sans);
   color: var(--ink);
   background: var(--surface);
   outline: 0;
 }
 
-/* Settings › Jobs & schedule (src/Jobs.tsx) */
+/* Settings › Automations (src/Jobs.tsx) */
 
 /* A note between a screen's settings: plain grey text, not a coloured box. */
 .jobnote {
   display: flex;
   gap: 8px;
   align-items: flex-start;
-  font-size: 13px;
+  font-size: var(--fs-base);
   line-height: 1.5;
   color: var(--ink2);
 }
@@ -6657,7 +7028,7 @@ code.noscript {
   font-weight: 600;
 }
 .job .faint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .jtime {
   display: inline-flex;
@@ -6672,7 +7043,7 @@ select.sel {
   border-radius: 7px;
   background: var(--surface);
   color: var(--ink);
-  font: 500 12.5px var(--sans);
+  font: 500 var(--fs-sm) var(--sans);
   padding: 0 8px;
 }
 .tfield {
@@ -6690,6 +7061,11 @@ select.sel {
 .row.gap {
   gap: 10px;
 }
+
+/* A checkbox and its words. */
+.row.tight {
+  gap: 6px;
+}
 .chip.ctx {
   background: var(--accent-soft);
   color: var(--accent-ink);
@@ -6698,7 +7074,7 @@ select.sel {
 .chip.proj {
   cursor: pointer;
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-weight: 500;
 }
 .chip.proj:hover {
@@ -6709,7 +7085,7 @@ select.sel {
   border: 1px solid var(--line2);
   border-radius: 999px;
   padding: 0 8px;
-  font: 11.5px var(--sans);
+  font: var(--fs-xs) var(--sans);
   background: var(--surface);
   color: var(--ink);
   outline: 0;
@@ -6784,7 +7160,7 @@ select.sel {
   display: flex;
   flex-wrap: wrap;
   gap: 2px 14px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink3);
 }
 .prow .pmeta .red {
@@ -6814,7 +7190,7 @@ select.sel {
 }
 .pband .pin {
   height: 24px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 /* The grips (drag an area or a project into order) sit in the row's left padding, shown on hover. */
@@ -6926,7 +7302,7 @@ select.sel {
   display: grid;
   grid-template-columns: 120px minmax(0, 1fr);
   gap: 6px 14px;
-  align-items: center;
+  align-items: baseline; /* a value on two lines keeps its label beside the first */
 }
 .pval {
   text-align: left;
@@ -6947,7 +7323,7 @@ select.sel {
   text-align: left;
   border-radius: 6px;
   margin: -2px -6px;
-  padding: 2px 6px;
+  padding: 2px 28px 2px 6px; /* room on the right for its pencil */
   cursor: text;
 }
 .phead .pname:hover {
@@ -6975,6 +7351,16 @@ select.sel {
 }
 .phead .pname .pedit {
   vertical-align: 0;
+  margin-right: -22px;
+}
+
+/* The pencils sit in room their buttons keep for them, so words that just fit don't leave one on a
+   line of its own. */
+.phead .pval {
+  padding-right: 24px;
+}
+.phead .pval .pedit {
+  margin-right: -18px;
 }
 .phead .pval:hover .pedit,
 .phead .pname:hover .pedit {
@@ -6989,7 +7375,7 @@ select.sel {
   border: 1px solid var(--accent);
   border-radius: 7px;
   padding: 0 8px;
-  font: 13px var(--sans);
+  font: var(--fs-base) var(--sans);
   color: var(--ink);
   background: var(--surface);
   outline: 0;
@@ -7007,7 +7393,7 @@ select.sel {
   border: 0;
   outline: 0;
   background: transparent;
-  font: 13px var(--sans);
+  font: var(--fs-base) var(--sans);
   color: var(--ink);
 }
 .pacts {
@@ -7023,7 +7409,7 @@ select.sel {
   display: flex;
   gap: 6px;
   align-items: center;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink2);
   min-width: 0;
 }
@@ -7077,7 +7463,7 @@ select.sel {
   padding: 9px 16px 9px 12px;
   text-align: left;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--fs-base);
   line-height: 1.35;
 }
 
@@ -7114,7 +7500,7 @@ select.sel {
   border: 1px solid var(--line2);
   border-radius: 8px;
   background: var(--sunk);
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .main.ask > .stillin {
   margin: 10px 16px 0;
@@ -7133,7 +7519,8 @@ select.sel {
   gap: 6px;
   align-items: center;
 }
-.irow .iprog.bad {
+.irow .iprog.bad,
+.bmband .irow .faint.bad {
   color: var(--amber);
 }
 
@@ -7168,7 +7555,7 @@ select.sel {
 }
 .irow .faint {
   display: block;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
 .iopen {
@@ -7181,10 +7568,10 @@ select.sel {
   container: iopen / inline-size;
 }
 
-/* A narrow detail (a wide list beside it in a small window): the suggestion's Accept goes under
-   "Suggested: ..." (together they take about 270px of the card) rather than past the card's edge. */
+/* A narrow detail (a wide list beside it in a small window): the suggestion's Accept, Edit and Skip
+   go under "Suggested: ..." (together they take about 300px of the card) rather than past its edge. */
 @container iopen (width <= 400px) {
-  .isugg-head {
+  .isugg .suggrow {
     flex-wrap: wrap;
   }
 }
@@ -7199,11 +7586,11 @@ select.sel {
   max-width: 720px;
 }
 .itext {
-  font-size: 20px;
+  font-size: var(--fs-2xl);
   overflow-wrap: anywhere;
 }
 .ibody .prose {
-  font-size: 14px;
+  font-size: var(--fs-md);
   color: var(--ink2);
 }
 
@@ -7216,40 +7603,34 @@ select.sel {
   align-self: stretch;
   border-color: var(--ring);
 }
-.isugg-head {
-  display: flex;
-  align-items: center;
+.isugg .suggrow,
+.bmbody .suggrow {
+  padding: 0;
   gap: 16px;
 }
 .isugg-what {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--accent-ink);
 }
 .isugg-text {
   margin-top: 3px;
-  font-size: 15px;
+  font-size: var(--fs-lg);
 }
 .isugg-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 2px 14px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink3);
 }
 .isugg-why {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink2);
-}
-.isugg .btn .kbd {
-  margin-left: 4px;
-  background: none;
-  border-color: color-mix(in srgb, var(--on-accent) 45%, transparent);
-  color: inherit;
 }
 
 /* Clarifying one item: GTD's question, does it need doing? A list of choices under each answer. */
@@ -7297,6 +7678,11 @@ select.sel {
 .iask {
   align-self: flex-start;
 }
+.iasks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .ikeys {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -7312,7 +7698,7 @@ select.sel {
   border-radius: 10px;
   border: 1px solid var(--line2);
   background: var(--surface);
-  font: 500 13px var(--sans);
+  font: 500 var(--fs-base) var(--sans);
   color: var(--ink);
   cursor: pointer;
   text-align: left;
@@ -7350,7 +7736,7 @@ select.sel {
   overflow-y: auto;
 }
 .wph {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink3);
   padding: 16px 10px 6px;
@@ -7367,7 +7753,7 @@ select.sel {
   border: 0;
   border-radius: 7px;
   background: none;
-  font: 400 13px/1.35 var(--sans);
+  font: 400 var(--fs-base)/1.35 var(--sans);
   color: var(--ink2);
   cursor: pointer;
   text-align: left;
@@ -7381,7 +7767,7 @@ select.sel {
   align-items: center;
   justify-content: center;
   flex: none;
-  font-size: 10px;
+  font-size: var(--fs-2xs);
   font-weight: 700;
   border: 1.5px solid var(--line2);
 }
@@ -7428,6 +7814,20 @@ select.sel {
 .wstart .row {
   gap: 8px;
 }
+
+/* Scheduled: the review's day and time pickers, then what that means, wrapping under them. */
+.wstart .wwhen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+
+  /* The pickers are taller than a line: centred on the Scheduled label's line, not below it. */
+  margin: -5px 0;
+}
+.wstart .wwhen .muted {
+  margin: 0;
+}
 .wphases {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -7441,7 +7841,7 @@ select.sel {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--ink2);
 }
 .wphases li.done {
@@ -7455,7 +7855,7 @@ select.sel {
   border: 1px solid var(--line2);
   border-radius: 10px;
   padding: 8px 10px;
-  font: 13px/1.5 var(--sans);
+  font: var(--fs-base)/1.5 var(--sans);
   color: var(--ink);
   background: var(--surface);
   resize: vertical;
@@ -7469,7 +7869,7 @@ select.sel {
   gap: 14px;
 }
 .wblock .prose {
-  font-size: 13.5px;
+  font-size: var(--fs-base);
 }
 .wkcard {
   display: flex;
@@ -7520,21 +7920,8 @@ select.sel {
   display: block;
   padding: 10px 0 2px;
 }
-.wsugg {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.wprep .suggrow {
   padding: 7px 0;
-}
-.wsugg + .wsugg {
-  border-top: 1px solid var(--line);
-}
-.wsugg > .t {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
 }
 .wsrc {
   max-width: 180px;
@@ -7560,7 +7947,7 @@ select.sel {
 .chip.sm {
   height: 18px;
   padding: 0 6px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   margin-left: 8px;
 }
 
@@ -7583,11 +7970,29 @@ select.sel {
 .qsearch .searchbox {
   width: 100%;
 }
+
+/* Changes › All's types and day, under the search. */
+.qtypes {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.qtypes .chip .icon,
+.qtypes .chip svg {
+  margin-left: 4px;
+}
+
+/* A line of log.md that isn't a change: not selectable, its title a link when it names a file. */
+.qrow.qlog {
+  cursor: default;
+}
+.qrow.qlog .tt.linkish {
+  font-weight: inherit;
+}
 .qsearch .nav {
   display: flex;
   gap: 6px;
   align-items: center;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
 .body.queue {
@@ -7605,7 +8010,7 @@ select.sel {
   width: 100%;
   padding: 9px 16px 9px 12px;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--fs-base);
   cursor: pointer;
 }
 
@@ -7633,7 +8038,7 @@ select.sel {
   overflow-wrap: anywhere;
 }
 .qrow .faint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .qopen {
   align-items: stretch;
@@ -7653,7 +8058,7 @@ select.sel {
   border-radius: 10px;
   overflow: hidden;
   background: var(--surface);
-  font: 12.5px/1.55 var(--mono);
+  font: var(--fs-sm)/1.55 var(--mono);
 }
 .diff.focus {
   border-color: var(--accent);
@@ -7673,7 +8078,7 @@ select.sel {
   padding: 6px 12px;
   background: var(--sunk);
   border-bottom: 1px solid var(--line);
-  font: 600 11px var(--sans);
+  font: 600 var(--fs-xs) var(--sans);
   letter-spacing: 0.03em;
   color: var(--ink3);
 }
@@ -7751,7 +8156,7 @@ select.sel {
   border-radius: 6px;
   background: none;
   color: var(--ink);
-  font: 500 13px var(--sans);
+  font: 500 var(--fs-base) var(--sans);
   text-align: left;
   cursor: pointer;
 }
@@ -7777,7 +8182,7 @@ select.sel {
   gap: 6px;
   border-radius: 10px;
   background: var(--sunk);
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .qstatus.held {
   background: var(--amber-soft);
@@ -7807,7 +8212,7 @@ select.sel {
   background: var(--amber-soft);
   border-bottom: 1px solid color-mix(in srgb, var(--amber) 25%, var(--line));
   color: var(--amber);
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .agentrow {
   display: flex;
@@ -7825,7 +8230,7 @@ select.sel {
   width: 100%;
   height: 260px;
   resize: vertical;
-  font: 12px/1.5 var(--mono);
+  font: var(--fs-sm)/1.5 var(--mono);
 }
 .qquotes {
   padding: 4px 0 0;
@@ -7846,7 +8251,7 @@ select.sel {
   padding-top: 4px;
 }
 
-/* Knowledge health (stage 7a) */
+/* Wiki health (stage 7a) */
 .body.health {
   --pane-side: 380px;
 
@@ -7882,7 +8287,7 @@ select.sel {
   gap: 2px;
 }
 .hnum b {
-  font: 600 34px/1 var(--sans);
+  font: 600 var(--fs-display)/1 var(--sans);
   letter-spacing: -0.03em;
 }
 .htrend {
@@ -7919,7 +8324,7 @@ select.sel {
   border-top: 1px solid var(--line);
   background: none;
   color: var(--ink);
-  font: 500 13px var(--sans);
+  font: 500 var(--fs-base) var(--sans);
   text-align: left;
   cursor: pointer;
 }
@@ -7958,7 +8363,7 @@ select.sel {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   min-height: 28px;
 }
 
@@ -8013,7 +8418,7 @@ select.sel {
 .ckitem .ckline {
   display: block;
   margin-top: 2px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .ckitem .why {
   color: var(--amber);
@@ -8031,7 +8436,7 @@ select.sel {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   min-width: 0;
 }
 .hqi .ell {
@@ -8147,7 +8552,7 @@ select.sel {
   overflow-wrap: anywhere;
 }
 .fnctx {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--ink2);
   overflow-wrap: anywhere;
 }
@@ -8210,7 +8615,7 @@ select.sel {
   grid-template-columns: 18px minmax(0, 1fr) auto;
   gap: 8px;
   align-items: start;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .runstep .grow {
   display: flex;
@@ -8284,11 +8689,11 @@ select.sel {
   border: 1px solid var(--line);
 }
 .cst b {
-  font-size: 17px;
+  font-size: var(--fs-xl);
   font-weight: 600;
 }
 .cst span {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
 }
 .cgrid {
@@ -8381,11 +8786,14 @@ select.sel {
   display: block;
   overflow-wrap: anywhere;
 }
+.mpick .mdate {
+  white-space: nowrap;
+}
 .mtext {
   overflow-y: auto;
   padding: 20px 28px;
   border-right: 1px solid var(--line);
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .mside {
   display: flex;
@@ -8417,7 +8825,7 @@ select.sel {
   display: flex;
   gap: 6px;
   align-items: center;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
 }
 .runs .card.run {
@@ -8439,7 +8847,7 @@ select.sel {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  font-size: 14px;
+  font-size: var(--fs-md);
   line-height: 1.55;
   color: var(--ink2);
 }
@@ -8450,7 +8858,7 @@ select.sel {
   color: var(--ink);
 }
 .mdetails {
-  margin: 20px 20px 0;
+  margin: 20px 14px 0; /* the sides of the runs below it (.runs), so the pane has one left edge */
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -8491,8 +8899,8 @@ select.sel {
   display: grid;
   grid-template-columns: 120px minmax(0, 1fr);
   gap: 10px;
-  align-items: center;
-  font-size: 12.5px;
+  align-items: baseline;
+  font-size: var(--fs-sm);
 }
 .krow dt {
   display: flex;
@@ -8517,7 +8925,7 @@ select.sel {
   margin: 0 1px;
   border-radius: 5px;
   vertical-align: super;
-  font: 600 10px/1 var(--sans);
+  font: 600 var(--fs-2xs)/1 var(--sans);
   color: var(--accent-ink);
   background: var(--accent-soft);
   text-decoration: none;
@@ -8537,7 +8945,7 @@ select.sel {
 }
 .wikisum {
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .wikifields {
   padding: 14px 16px;
@@ -8553,7 +8961,7 @@ select.sel {
   align-items: start;
 }
 .wf > span:first-child {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink3);
   padding-top: 3px;
 }
@@ -8573,13 +8981,13 @@ select.sel {
   border: 0;
   background: none;
   outline: none;
-  font: 12.5px var(--sans);
+  font: var(--fs-sm) var(--sans);
   color: var(--ink);
   min-width: 80px;
   height: 22px;
 }
 .wfdesc {
-  font: 13px/1.45 var(--sans);
+  font: var(--fs-base)/1.45 var(--sans);
   color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--line2);
@@ -8632,7 +9040,7 @@ select.sel {
   align-items: center;
   gap: 6px;
   color: var(--accent-ink);
-  font-size: 14px;
+  font-size: var(--fs-md);
 }
 .icapture {
   margin-top: 12px;
@@ -8642,7 +9050,16 @@ select.sel {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface);
-  font-size: 13px;
+  font-size: var(--fs-base);
+}
+
+/* A thread ends each message with a rule; the last one would rule off nothing. */
+.icapture hr:last-child {
+  display: none;
+}
+.icapture .prose > :last-child,
+.icapture .prose > :has(+ hr:last-child) {
+  margin-bottom: 0;
 }
 .icopen {
   align-self: flex-start;
@@ -8706,7 +9123,7 @@ select.sel {
   gap: 10px;
   padding: 5px 12px;
   margin-right: 4px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
 }
 .gdepth input {
@@ -8732,7 +9149,7 @@ select.sel {
   position: absolute;
   right: 20px;
   bottom: 16px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   pointer-events: none;
 }
 .gpane {
@@ -8744,12 +9161,12 @@ select.sel {
   gap: 16px;
 }
 .gpane .h2 {
-  font-size: 19px;
+  font-size: var(--fs-2xl);
   margin-top: 8px;
   overflow-wrap: anywhere;
 }
 .gpane .faint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   margin-top: 4px;
   overflow-wrap: anywhere;
 }
@@ -8758,7 +9175,7 @@ select.sel {
 }
 .gpane p {
   margin: 4px 0;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .glink {
   display: flex;
@@ -8771,7 +9188,7 @@ select.sel {
   border-radius: 6px;
   background: none;
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink);
   text-align: left;
   cursor: pointer;
@@ -8792,7 +9209,7 @@ select.sel {
   margin-left: auto;
   flex: none;
   font-style: normal;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
 }
 .gpick {
@@ -8808,20 +9225,16 @@ select.sel {
   white-space: nowrap;
 }
 
-/* Activity: the log's column and the side column (the pies, Most linked), each the full height, as
-   on Knowledge health. In the log's column everything above the rows stays put and only the rows
-   scroll; the side column scrolls on its own; the page itself never does. Narrow, the side column
-   goes under the log. */
+/* Activity: the heatmap with the day's files under it, or Sync & ingest, the full height. The
+   heatmap stays put and only the day's files (or the sync's rows) scroll; the page never does. */
 .body.activity {
-  --pane-side: 380px;
-
   padding: 20px 28px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--pane-side);
-  gap: 20px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 .actmain {
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -8829,31 +9242,51 @@ select.sel {
   min-height: 0;
 }
 .actmain > .actheat,
-.actmain > .actday,
-.actmain > .actfilters,
 .actmain > p {
   flex: none;
 }
-.actmain > .actlog {
+.actmain > .actday {
   flex: 1 1 0;
   min-height: 120px;
-  display: flex;
-  flex-direction: column;
-}
-.actside {
-  min-width: 0;
-  min-height: 0;
-  overflow-y: auto;
 }
 
-@container main (width <= 868px) {
-  .body.activity {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
-  }
-  .actside {
-    max-height: 40vh;
-  }
+/* Activity › Sync & ingest (src/SyncFeed.tsx). */
+.syncfeed {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1 1 0;
+  min-height: 0;
+}
+.syncfeed > .actfilters {
+  flex: none;
+}
+.syncfeed .actfilters .amber {
+  color: var(--amber);
+}
+.syncfeed > .actrows {
+  padding: 0;
+}
+.syncrow {
+  align-items: flex-start;
+}
+.syncrow > .icon,
+.syncrow > svg {
+  flex: none;
+  margin-top: 2px;
+}
+.syncrow .pt {
+  overflow-wrap: anywhere;
+}
+.synclinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 4px;
+}
+.synclinks .tlink:disabled {
+  color: var(--ink3);
+  cursor: default;
 }
 .actrows {
   flex: 1;
@@ -8864,7 +9297,7 @@ select.sel {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .acthead .sp {
   flex: 1;
@@ -8907,7 +9340,7 @@ select.sel {
 .actmonth {
   grid-row: 1;
   overflow: visible;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
   white-space: nowrap;
 }
@@ -8951,7 +9384,7 @@ button.hc {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
 }
 .actkey .hc {
   width: 11px;
@@ -8964,13 +9397,14 @@ button.hc {
   gap: 8px;
 }
 .actday .acthead b {
-  font-size: 13px;
+  font-size: var(--fs-base);
 }
 .actfiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  align-content: start;
   gap: 0 18px;
-  max-height: 220px;
+  min-height: 0;
   overflow: auto;
 }
 .actfile {
@@ -8984,7 +9418,7 @@ button.hc {
   border-radius: 6px;
   background: none;
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink);
   text-align: left;
   cursor: pointer;
@@ -9002,7 +9436,7 @@ button.hc {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .actfilters .sp {
   flex: 1;
@@ -9013,70 +9447,12 @@ button.hc {
   gap: 6px;
 }
 
-/* Activity's log, its heat map and side: no boxes, as the other screens (times in the text face). */
-.actlog {
-  overflow: hidden;
-  border-top: 1px solid var(--line);
-}
-.actside .card {
-  padding: 0;
-  background: none;
-  border: 0;
-  border-radius: 0;
-}
 .tnum {
   font-variant-numeric: tabular-nums;
 }
-.actlog .ar {
-  display: grid;
-  grid-template-columns: var(--col-when, 150px) minmax(0, 1fr) var(--col-action, 120px);
-  gap: 14px;
-  align-items: center;
-  padding: 0 16px;
-  min-height: 40px;
-  font-size: 12.5px;
-}
-.actlog.banded .ar {
-  grid-template-columns: var(--col-time, 64px) minmax(0, 1fr) var(--col-action, 120px);
-}
-.actlog .ar.tb-head {
-  min-height: 0;
-}
-.actlog .ar.tb-head > span,
 .dcr.th > span {
   position: relative;
   min-width: 0;
-}
-
-/* The last header (Action), with the count of entries shown on its right. */
-.actlog .itemh {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-.actlog .itemh .count {
-  margin-left: auto;
-  font-weight: 400;
-  text-transform: none;
-  letter-spacing: 0;
-  font-variant-numeric: tabular-nums;
-}
-.actrows .ar {
-  scroll-margin-top: 30px;
-}
-.actlog .when {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.actlog .item {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .linkish {
   padding: 0;
@@ -9096,11 +9472,6 @@ button.hc {
 .actempty {
   margin: 4px 0;
 }
-.actmore {
-  padding: 10px 16px;
-  text-align: center;
-  font-size: 12px;
-}
 
 /* Settings › General: the switch-over checklist (boxes as tasks' .cb) */
 .cb.auto {
@@ -9117,7 +9488,7 @@ button.hc {
 
 /* Tasks: the effort select, New task */
 .tfilters select.sel.sm {
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
 }
 .newtask {
   padding: 10px;
@@ -9130,7 +9501,7 @@ button.hc {
 /* A source's provenance card */
 .prov .kv {
   grid-template-columns: 64px 1fr;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .provciter {
   display: flex;
@@ -9147,7 +9518,7 @@ button.hc {
   border-left: 2px solid var(--amber-soft);
   background: none;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--ink2);
   text-align: left;
   cursor: pointer;
@@ -9179,7 +9550,7 @@ button.hc {
 }
 .asgroup {
   padding: 8px 10px 2px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--ink3);
 }
@@ -9240,8 +9611,8 @@ button.hc {
   flex-direction: column;
   gap: 10px;
 }
-.bmwhy p {
-  margin: 0 0 4px;
+.bmbody .suggrow p {
+  margin: 2px 0 0;
 }
 .bmkeys {
   display: flex;
@@ -9304,7 +9675,7 @@ button.hc {
 .rtext pre {
   margin: 0;
   white-space: pre-wrap;
-  font: 12.5px/1.5 var(--sans);
+  font: var(--fs-sm)/1.5 var(--sans);
   color: var(--ink2);
 }
 .rtext .btn {
@@ -9313,13 +9684,13 @@ button.hc {
 
 /* The captured thread, drawn as the note is, a size down. */
 .rthreadmd .prose {
-  font-size: 13px;
+  font-size: var(--fs-base);
   max-width: none;
   padding: 0;
 }
 .rpaste {
   padding: 12px 14px;
-  font: 13px/1.5 var(--sans);
+  font: var(--fs-base)/1.5 var(--sans);
   color: var(--ink);
   resize: none;
 }
@@ -9327,7 +9698,7 @@ button.hc {
   padding: 10px 12px;
   border-radius: 10px;
   background: var(--amber-soft);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   max-height: 35vh;
   overflow: auto;
 }
@@ -9340,7 +9711,7 @@ button.hc {
 }
 .rbody {
   padding: 12px 14px;
-  font: 14px/1.6 var(--sans);
+  font: var(--fs-md)/1.6 var(--sans);
   color: var(--ink);
   resize: none;
   outline: 0;
@@ -9377,13 +9748,13 @@ button.hc {
   gap: 12px;
   align-items: center;
   padding: 8px 14px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .dcr + .dcr {
   border-top: 1px solid var(--line);
 }
 .dcr.th {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--ink3);
   background: var(--sunk);
@@ -9443,7 +9814,7 @@ button.hc {
   gap: 10px;
 }
 .dcv {
-  font-size: 17px;
+  font-size: var(--fs-xl);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -9469,7 +9840,7 @@ button.hc {
   gap: 10px;
 }
 .dcq .q {
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   padding: 8px 10px;
   border-radius: 8px;
@@ -9480,13 +9851,13 @@ button.hc {
 /* The spelling menu */
 .spelldesc {
   margin: 4px 9px 6px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   line-height: 1.45;
 }
 .chip.draftmark {
   height: 18px;
   margin-left: 8px;
-  font-size: 10.5px;
+  font-size: var(--fs-2xs);
   vertical-align: 1px;
 }
 
@@ -9526,14 +9897,14 @@ button.hc {
 /* Cards beside a note: outline, open tasks */
 .blink.outline {
   padding: 3px 0;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   color: var(--ink2);
 }
 .ntask {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
   min-width: 0;
 }
 .ntask .cb {
@@ -9550,7 +9921,7 @@ button.hc {
   border-radius: 10px;
   background: var(--amber-soft);
   color: var(--amber);
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 
 /* Source preview: a PDF's bar and found pages; PowerPoint and Excel as text */
@@ -9608,7 +9979,7 @@ button.hc {
 .officepart pre {
   margin: 0;
   white-space: pre-wrap;
-  font: 13px/1.5 var(--sans);
+  font: var(--fs-base)/1.5 var(--sans);
 }
 .officetable {
   overflow: auto;
@@ -9616,7 +9987,7 @@ button.hc {
 }
 .officetable table {
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 .officetable td {
   border: 1px solid var(--line);
@@ -9645,7 +10016,7 @@ button.hc {
   border: 0;
   outline: 0;
   background: transparent;
-  font: 13px var(--sans);
+  font: var(--fs-base) var(--sans);
   color: var(--ink);
 }
 .findbar .grow {
@@ -9714,6 +10085,16 @@ button.hc {
   }
 }
 
+/* Busy without the sweep: a still, half-strength bar across the track says it's working. */
+@media (prefers-reduced-motion: reduce) {
+  .jprog .bar.busy i,
+  .tray-progress i.indef {
+    width: 100% !important;
+    opacity: 0.5;
+    animation: none !important;
+  }
+}
+
 /* A button whose document is gone: the wrapper carries the tooltip (src/docButton.tsx). */
 .gonewrap {
   display: inline-flex;
@@ -9753,7 +10134,7 @@ button.hc {
 .help-head .h2 {
   flex: 1;
   margin: 0;
-  font-size: 19px;
+  font-size: var(--fs-2xl);
 }
 .help-nav {
   display: flex;
@@ -9785,7 +10166,7 @@ button.hc {
   gap: 6px;
 }
 .help-text {
-  font-size: 13px;
+  font-size: var(--fs-base);
   line-height: 1.55;
   color: var(--ink2);
 }
@@ -9874,7 +10255,7 @@ button.hc {
 }
 .help-steptitle {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--fs-lg);
   font-weight: 600;
   color: var(--ink);
 }
@@ -9909,7 +10290,7 @@ button.hc {
   background: none;
   padding: 0;
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   color: var(--accent-ink);
   cursor: pointer;
 }
@@ -9967,7 +10348,7 @@ html.tray-view body {
   align-items: center;
   gap: 10px;
   font-family: var(--display);
-  font-size: 17px;
+  font-size: var(--fs-xl);
   font-weight: 650;
   letter-spacing: -0.02em;
   color: var(--ink);
@@ -9990,12 +10371,12 @@ html.tray-view body {
   background: var(--sunk);
   color: var(--ink2);
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
   text-align: left;
   cursor: pointer;
 }
 .tray-tile b {
-  font-size: 18px;
+  font-size: var(--fs-xl);
   font-weight: 650;
   color: var(--ink);
 }
@@ -10092,7 +10473,7 @@ html.tray-view body {
   font-weight: 600;
 }
 .tray-item .kbd {
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .tray-rule {
   height: 1px;
@@ -10106,7 +10487,7 @@ html.tray-view body {
 .tray-foot {
   padding: 10px 18px;
   background: var(--sunk);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--ink3);
 }
 .tray-capture .kbdhint {
@@ -10223,7 +10604,7 @@ html.tray-view body {
   background: var(--sunk);
   color: var(--ink2);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   cursor: pointer;
 }
@@ -10295,12 +10676,12 @@ html.tray-view body {
   opacity: 0.8;
 }
 .pietotal {
-  font: 600 20px var(--sans);
+  font: 600 var(--fs-2xl) var(--sans);
   fill: var(--ink);
   font-variant-numeric: tabular-nums;
 }
 .pieunit {
-  font: 11px var(--sans);
+  font: var(--fs-xs) var(--sans);
   fill: var(--ink3);
 }
 .pielegend {
@@ -10312,7 +10693,7 @@ html.tray-view body {
   gap: 2px;
   min-width: 0;
   flex: 1;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .pierow {
   border: 0;
@@ -10383,7 +10764,7 @@ html.tray-view body {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 12.5px;
+  font-size: var(--fs-sm);
 }
 .mostlinked li {
   display: flex;
@@ -10393,7 +10774,7 @@ html.tray-view body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Settings › Jobs & schedule: your tools that start Claude Code sessions. */
+/* Settings › Automations: your tools that start Claude Code sessions. */
 .autotools .autorow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1.6fr) auto;
@@ -10415,49 +10796,89 @@ html.tray-view body {
   padding: 8px 12px;
 }
 
-/* Find tasks and projects: suggestions at the top of Tasks (Next actions) and Projects (Active). */
-.card.found {
-  margin: 12px 16px 16px;
+/* The one suggestion component (src/Suggestions.tsx, D-20261119-06): a chip that opens to the list,
+   each row with Accept, Edit and Skip, and Suggest (again). Tasks has the chip at the end of its
+   filter bar and the list under it; Projects a line at the top of the list; the Inbox and Triage
+   the chip in the top bar; the weekly review the rows, always open. */
+.suggbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
-
-/* Suggested from your notes, at the top of Tasks and Projects: a heading and rows, no box. */
-.found {
+.tfilters .suggbar {
+  margin-left: auto;
+}
+.chip.suggchip {
+  gap: 5px;
+  cursor: pointer;
+}
+.chip.suggchip.on {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+.chip.suggchip:disabled {
+  cursor: default;
+}
+.chip.suggchip > svg {
+  flex: none;
+}
+.suggline {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--line);
 }
-.foundhead,
-.foundrow {
+.sugglist {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  container: sugglist / inline-size;
+}
+.sugghead {
+  padding: 6px 16px 0;
+}
+.suggrow {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 7px 16px;
 }
-.foundhead > svg {
-  color: var(--accent);
-}
-.foundrow {
+.sugglist .suggrow + .suggrow,
+.wprep .suggrow + .suggrow {
   border-top: 1px solid var(--line);
 }
-.foundrow .t {
+.suggrow > .t {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
-.foundrow .tlink + .tlink::before {
+.suggrow .suggbtns {
+  display: flex;
+  gap: 6px;
+  flex: none;
+  align-items: center;
+}
+.suggmeta .tlink + .tlink::before {
   content: "· ";
 }
+.suggrow .btn .kbd {
+  margin-left: 4px;
+  background: none;
+  border-color: color-mix(in srgb, var(--on-accent) 45%, transparent);
+  color: inherit;
+}
 
-/* Tasks' list between two wide panes in a small window: a suggestion's Accept, Edit and Skip, and
-   the heading's Look again, go under the text (the buttons and the heading's words take about
-   190px; the text keeps 200px to a line) rather than squeezing it to a word a line. After the
-   rules above, which set the text's flex. */
-@container tpage (width <= 400px) {
-  .foundhead,
-  .foundrow {
+/* A narrow list (Projects' list column, Tasks' list between two wide panes in a small window): a
+   suggestion's Accept, Edit and Skip go under the text (they take about 170px; the text keeps 240px
+   to a line) rather than squeezing it to a word a line. After the rules above, which set the text's
+   flex. */
+@container sugglist (width <= 440px) {
+  .suggrow {
     flex-wrap: wrap;
   }
-  .foundrow .t {
+  .suggrow > .t {
     flex-basis: 100%;
   }
 }
@@ -10509,12 +10930,14 @@ html.tray-view body {
 .tmenu .mrename .pin {
   width: 100%;
 }
-.tmenu.wide .tmacts {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+
+/* More… on the ⋯ menu: a chevron at its end; the row's +: a line saying what it adds. */
+.tmenu .mend {
+  margin-left: auto;
+  color: var(--ink3);
 }
-.tmenu:not(.wide) .tmacts {
-  display: contents;
+.tmenu .mhead {
+  padding: 6px 9px 4px;
 }
 
 /* A long name (a project's) is cut to the column, in full in its tooltip. */
@@ -10526,8 +10949,9 @@ html.tray-view body {
   line-height: 20px;
 }
 
-.tmenu .tmacts button {
+.tmenu > button {
   min-width: 0;
+  flex-shrink: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -10536,6 +10960,12 @@ html.tray-view body {
 /* A button with its menu beside it (Sources' Meeting note ▾). */
 .splitbtn {
   display: inline-flex;
+}
+
+/* Sources' rows are one line each beside a 28px action button: centre them, so the words sit level
+   with the button's rather than at its top. */
+.body.sources .frow {
+  align-items: center;
 }
 .splitbtn > .btn:first-child {
   border-top-right-radius: 0;
@@ -10557,7 +10987,7 @@ html.tray-view body {
 }
 
 /* Narrow top bars. The bar's controls condense in two bands of its content width (container top,
-   set on .top), so the bar fits a 1000px window and the 1040px minimum with the widest sidebar, on
+   set on .top), so the bar fits a 1000px window and a 1040px one with the widest sidebar (the minimum is 800px, with the rail), on
    Windows too, where the window's buttons take 156px of it. Tight (800px and under): a segmented
    control's details (.segd, the counts) go, and words with a tight form (.sq-t) take it. Narrow
    (680px and under): a segmented control becomes its drop-down twin (.segsel, drawn by Seg in a bar),
@@ -10641,8 +11071,7 @@ html.tray-view body {
   .body.meeting {
     --pane-side: 320px;
   }
-  .body.health,
-  .body.activity {
+  .body.health {
     --pane-side: 300px;
   }
   .docgrid {
@@ -10654,6 +11083,11 @@ html.tray-view body {
 }
 
 @container main (width <= 868px) {
+  /* Near the 800px minimum window Sources' runs take their narrowest width, so the table's action
+     buttons fit (the lists drop their least-needed columns too: tightWindow in src/Lists.tsx). */
+  .body.sources {
+    --pane-side: 260px;
+  }
   .igroups {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -10673,4 +11107,244 @@ html.tray-view body {
   .body.weekly .wside {
     display: none;
   }
+}
+
+/* The foot's Vault fold (D-20261119-05): its chevron says it folds, and what it holds sits under it. */
+.side .foot .foldkids {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+  /* Its rows hang from a rule under the Vault row's icon, indented, so it's clear they're its. */
+  margin: 2px 0 2px 16px;
+  padding-left: 6px;
+  border-left: 1px solid var(--line2);
+}
+
+/* The sidebar as an icon rail (src/sidebarRail.ts, D-20261119-12): on a narrow window, or when
+   ⌘\ chose it. The rows are their icons, centred, with the count small at the icon's corner; the
+   names, keys and counts are in the tooltips, the sections' headings thin rules. On macOS the rail
+   is wide enough for the traffic lights (x 18 to 70) to stay over it, clear of the top bar. */
+html[data-platform="macos"] .shell {
+  --rail-w: 80px;
+}
+.shell.rail {
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+}
+.brand .railtoggle {
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  color: var(--ink3);
+}
+.brand .railtoggle:hover {
+  color: var(--ink);
+}
+.side.rail {
+  padding: 0 10px 10px;
+}
+.side.rail .brand {
+  justify-content: center;
+  padding: 0 0 8px;
+}
+.side.rail .brand .railtoggle {
+  width: 30px;
+  height: 30px;
+  margin: 0;
+}
+.side.rail .search-pill {
+  justify-content: center;
+  padding: 0;
+  margin-bottom: 8px;
+}
+.side.rail .sidescroll {
+  margin: -3px -10px -3px -3px;
+  padding: 3px 10px 3px 3px;
+}
+.side.rail .navi {
+  position: relative;
+  justify-content: center;
+  padding: 0;
+}
+.side.rail .navi .lbl,
+.side.rail .navi .navchev {
+  display: none;
+}
+.side.rail .navi .n {
+  position: absolute;
+  top: -2px;
+  left: calc(50% + 4px);
+  min-width: 16px;
+  height: 15px;
+  padding: 0 4px;
+  margin: 0;
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
+  font-size: var(--fs-2xs);
+  line-height: 15px;
+  text-align: center;
+}
+.side.rail .navi .n.err,
+.side.rail .navi .n.busy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.side.rail .navi .n.busy .spin {
+  width: 9px;
+  height: 9px;
+}
+.side.rail .navi.open {
+  background: var(--hover);
+}
+.railsep {
+  flex: none;
+  height: 1px;
+  margin: 5px 6px;
+  background: var(--line);
+}
+
+/* The Vault fold opens in place: its rows under it, on a band (the rail has no room to indent). */
+.side.rail .foot .foldkids {
+  border-left: 0;
+  margin: 0 2px;
+  padding: 2px 0;
+  border-radius: 8px;
+  background: var(--hover);
+}
+.side.rail .statusrow {
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.side.rail .status {
+  justify-content: center;
+  padding: 4px 0 0;
+}
+.side.rail .status.ok {
+  display: none;
+}
+.ropill.rail {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  padding: 0;
+}
+
+/* The rail's Bookmarks, beside it. */
+.railbm {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.railbm .eyebrow {
+  padding: 0 8px 4px;
+}
+
+/* For a screen reader only. */
+.vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Tasks on a narrow main area: the lists and the list, and the task's pane over the list from the
+   right while a task is picked (src/Tasks.tsx), with its × at the top. usePanes sees the column
+   gone and the screen draws the pane as an overlay. */
+.tpane .tpaneclose {
+  display: none;
+}
+
+@container main (width <= 960px) {
+  .body.tasks3 {
+    grid-template-columns: var(--pane-left) minmax(0, 1fr);
+  }
+  .body.tasks3 .tpane.overlay {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 6;
+    width: min(360px, calc(100% - 96px));
+    padding-top: 44px;
+    background: var(--ground);
+    box-shadow: var(--pop);
+    animation: tpanein 0.18s ease-out;
+  }
+  .body.tasks3 .tpane.overlay .tpaneclose {
+    display: inline-flex;
+    position: absolute;
+    top: 10px;
+    right: 12px;
+  }
+}
+
+@keyframes tpanein {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .body.tasks3 .tpane.overlay {
+    animation: none;
+  }
+}
+
+/* Today's To process as a strip above the bands, when the side column is stacked under them: one
+   line of pills that wraps, each opening its screen, as the card's rows do. */
+.tstrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.tstrip-h {
+  margin-right: 4px;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--ink3);
+}
+.tstrip-i {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.tstrip-i:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.tstrip-i .n {
+  color: var(--ink3);
+  font-variant-numeric: tabular-nums;
+}
+.tstrip-i.hot .n {
+  color: var(--ink);
+  font-weight: 600;
+}
+.tstrip-i.quiet {
+  border-style: dashed;
+  background: none;
+  color: var(--ink3);
+  cursor: default;
 }

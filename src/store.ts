@@ -39,6 +39,8 @@ export class SettingsStore extends Store<Settings> {
   loaded = false;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private due: Settings | null = null;
+  /** The settings as Rust last took them: what the store goes back to when it refuses a change. */
+  private saved: Settings | null = null;
   /** Set while the screenshot scene runs: changes show but aren't saved. */
   frozen = false;
 
@@ -52,6 +54,7 @@ export class SettingsStore extends Store<Settings> {
   loadFrom(s: Settings) {
     this.loaded = true;
     this.set({ ...DEFAULT_SETTINGS, ...s });
+    this.saved = this.get();
   }
 
   update(patch: Partial<Settings>) {
@@ -71,11 +74,18 @@ export class SettingsStore extends Store<Settings> {
     if (!d) return;
     try {
       const saved = await this.write(d);
+      this.saved = { ...DEFAULT_SETTINGS, ...saved };
+      settingsError.set(null);
       // Only adopt it if nothing changed meanwhile.
       if (this.get() === d) this.set(saved);
     } catch (e) {
       settingsError.set(String(e));
       console.error("settings", e);
+      // Rust took none of it: the screens go back to what it has, or the refused value would ride
+      // along with every later change and each of those would be refused too.
+      clearTimeout(this.timer);
+      this.due = null;
+      if (this.saved) this.set(this.saved);
     }
   }
 

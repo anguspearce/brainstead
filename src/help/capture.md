@@ -3,7 +3,7 @@ title: Quick capture
 kind: screen
 screens: []
 order: 6
-summary: A small window over any app for catching a task or a thought in a few keystrokes.
+summary: A small window over any app for catching a task or a Scratchpad note in a few keystrokes.
 ---
 Quick capture opens a small box over whatever app you're in. Type, press `↩`, and you're back where you were.
 
@@ -12,11 +12,11 @@ Press `⌃⌥Space` from any app. It works with the main window closed, as long 
 
 To change it, click the shortcut under Quick capture in [Settings › General](app:settings/general) and press the new keys. **Reset to ⌃⌥Space** puts it back. The pane says if another app uses the keys; ⌥Space and ⌘⌥Space are often taken by launchers.
 
-## Choose Task or Thought
-The box captures a **Task** or a **Thought**; `Tab` or a click below the box switches.
+## Choose Task or Scratchpad note
+The box captures a **Task** (for the To Do list) or a **Scratchpad note**; `Tab` or a click below the box switches.
 
 - A task is one line. It goes on the To Do list as `- [ ] your text`, at the top of the `#### Other` section.
-- A thought can run to several lines (`⇧↩` for a new line). It goes to the Scratchpad as a block headed with the date and time, such as `## 2026-10-03 14:30`, newest first.
+- A Scratchpad note can run to several lines (`⇧↩` for a new line). It goes to the Scratchpad as a block headed with the date and time, such as `## 2026-10-03 14:30`, newest first. A line that starts with `#` or `##` is kept as text, written `\#`, so the note stays one block; code blocks are left alone.
 
 Both then wait in the [Inbox](app:inbox) to be clarified. Press `↩` to save, or `Esc` to close without saving.
 
@@ -29,7 +29,7 @@ In a task, a few words turn into the task format when you save:
 
 `[[` suggests notes to link and `#` suggests tags; `↑` and `↓` choose and `↩` or Tab inserts. An empty box shows a hint listing these.
 
-An assistant can capture a task or thought for you when you ask, with the same shorthand. It's listed in [Changes](app:review), with Revert.
+An assistant can capture a task or Scratchpad note for you when you ask, with the same shorthand. It's listed in [Changes](app:review), with Revert.
 
 ## If a capture is refused
 While **Read-only** is on in [Settings › Vault](app:settings/vault), captures are refused with a message and a button to that setting.

@@ -29,15 +29,20 @@ import { nav, openDoc, place } from "./nav";
 import { openRename, trashFile } from "./notes/actions";
 import { openNewNote } from "./notes/dialogs";
 import { useSearchOf } from "./Search";
-import { DAILY, FOOTER, HOTKEYS, hotkey, LIBRARY, TOOLS } from "./Sidebar";
+import { ASSISTANT, DAILY, FOOTER, HOTKEYS, hotkey, LIBRARY, VAULT } from "./Sidebar";
 
-/** What the Tools entries are found by besides their names (what ⌘K once called them). */
+/** Wiki health's Contradictions tab, gone to as a screen of its own. */
+const CONTRADICTIONS = { screen: "contradictions" as const, label: "Contradictions", icon: "info" };
+
+/** What the assistant's tools (and Contradictions) are found by besides their names (what ⌘K once called the tools). */
 const TOOL_WORDS: Partial<Record<string, string>> = {
   reply: "draft a reply email teams message respond",
   meeting: "meeting note from a transcript teams 1-1 write up",
   doccheck: "doc check check a document canonical register version in force feedback operating model align",
+  contradictions: "wiki health clashes disagree conflicting claims",
 };
 import { applyTheme, settings } from "./store";
+import { narrowWindow, railOn, toggleRail } from "./sidebarRail";
 import { LAYER_LABEL, useDebounced } from "./ui";
 import { fileManager, isMod, keyLabel } from "./platform";
 
@@ -61,8 +66,9 @@ const KBD: Partial<Record<string, string>> = {
 };
 
 export function commands(): Command[] {
-  // Every sidebar entry in the sidebar's order, the Tools menu's included (under their own names, found by what they do too).
-  const screens: Command[] = [...DAILY, ...LIBRARY, ...TOOLS, ...FOOTER].map((i) => ({
+  // Every sidebar entry in the sidebar's order, the Vault fold's included (the tools found by what they do too),
+  // then Contradictions, a tab of Wiki health.
+  const screens: Command[] = [...DAILY, ...LIBRARY, ...ASSISTANT, ...VAULT, ...FOOTER, CONTRADICTIONS].map((i) => ({
     id: `go:${i.screen}`,
     group: "Go to",
     icon: i.icon,
@@ -183,6 +189,14 @@ export function commands(): Command[] {
       run: () => nav.go({ screen: "settings", pane: "vault" }),
     },
     {
+      id: "automations",
+      group: "Do",
+      icon: "calendar",
+      label: "Automations settings",
+      keywords: "jobs schedule summaries daily brief daily check weekly review time preparation",
+      run: () => nav.go({ screen: "settings", pane: "jobs" }),
+    },
+    {
       id: "fixname",
       group: "Do",
       icon: "text",
@@ -242,6 +256,15 @@ export function commands(): Command[] {
       label: "Match the system appearance",
       keywords: "theme auto",
       run: theme("system"),
+    },
+    {
+      id: "rail",
+      group: "Appearance",
+      icon: "sidebar",
+      label: railOn(settings.get(), narrowWindow.get()) ? "Show the sidebar in full" : "Collapse the sidebar to icons",
+      keywords: "sidebar rail icons collapse expand toggle",
+      kbd: "⌘\\",
+      run: toggleRail,
     },
   ];
 }

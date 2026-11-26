@@ -14,12 +14,12 @@ To put areas or projects in your own order, point at a row and drag it by the gr
 
 To rename an area, point at its band and click the pencil, type the new name and press `↩`. It changes the area on every project under it, whatever its status, undone together with **Undo** in the toast. The area keeps its place in your order, and undoing the rename puts the old name back where it was. A name already in use merges the two, where that area was.
 
-An active project that's stuck says **No next action** in red, and one that's quiet says **Quiet** in amber when nothing has changed for two weeks; an assistant sees the same flags. The sidebar counts active projects, in bold when any has no next action.
+An active project that's stuck says **No next action** in red, and one that's quiet says **Quiet** in grey when nothing has changed for two weeks (worth a look, not a problem); an assistant sees the same flags. The sidebar counts active projects, in bold when any has no next action.
 
 ## Work on a project
 Click a project to open it. Edit its name, **Done looks like** (the outcome) and **Area** in place (each has a pencil): click, type and press `↩`. Renaming the project renames its note, as **Rename** in the file menu does: links to it follow, and **Undo** in the toast (or ⌘Z) puts the old name back. To change anything else in the note, click the pencil on the project's row, or **Edit** under its tasks: the project note opens in Edit.
 
-**Next actions** lists its open tasks. Tick them, drag them into order (an assistant can too), use each task's ⋯ menu or the task-list keys. Type in **Add a next action** and press `↩` to add one under the note's `## Next actions` heading; `@calls`, `effort:15m` and `due:fri` work as in capture.
+**Next actions** lists its open tasks. Tick them, drag them into order (an assistant can too), click a task's chips to change its fields, use its ⋯ menu or the task-list keys. Type in **Add a next action** and press `↩` to add one under the note's `## Next actions` heading; `@calls`, `effort:15m` and `due:fri` work as in capture.
 
 **Waiting for** and **Someday / maybe** list those tasks when there are any. Each waiting-for has **Draft nudge**, which asks [Ask](app:ask) for a follow-up to copy into Outlook or Teams.
 
@@ -37,6 +37,9 @@ A document's tasks are the project's, on its page, on [Tasks](app:tasks) and in 
 ## Trackers
 A tracker (`Tracker. <title>.md`) keeps where the work stands. Its shape is the opening with the `Project:` line, then `## Current state`, `## Blockers`, `## Next` and `## Log`, the Log a list of dated lines (`- 2026-10-02: …`) newest first. Any other sections stay below those. An assistant can put a tracker in this shape (reshape_pages, naming it), which adds the missing sections empty and sorts the Log without dropping a line, and can rewrite its Current state and add a Log line (write_current_state). Rewriting the Current state changes only its own text, above any `###` parts it has, and a Log line is spaced like the entries below it. Both are recorded in [Changes](app:review), where you can revert them.
 
+## Update a project with what's happened
+**Update…** in the project's bar takes a line saying what has happened ("the vendor signed, kickoff is on the 3rd"). An assistant applies it in the background, in an Ask chat of its own called **Update: …**, with Brainstead's own tools: it marks things done or dropped, changes a date, owner or wording, adds a follow-up (a waiting-for when someone else has the next step) and notes what happened on the project's or initiative's page. Change only what the update means is the rule it works to; when it can't tell, it changes nothing and says what it needs. While it works it's in the sidebar's Running line; when it ends a message says what it changed, with **Open** for its chat. Every change is in [Changes](help:review) with **Revert**, made at once as anything you start is.
+
 ## Change its status
 Under the tasks are **Mark complete** (or **Make active**), **Edit** and ⋯. They change only the note's status:
 
@@ -48,7 +51,7 @@ Under the tasks are **Mark complete** (or **Make active**), **Edit** and ⋯. Th
 **Ask about this project** (on ⋯) opens [Ask](app:ask) with the project note attached. **Move to the Trash** (on ⋯) says how many tasks are in the note and how many elsewhere link it, then moves it to the [Trash](app:trash). **Undo** in the toast, or restoring it, brings it back; until then, tasks elsewhere link a missing note.
 
 ## Find projects in your notes
-At the top of the **Active** projects, **Find tasks and projects** has an assistant read your last 90 days of notes for work they keep coming back to that isn't a project yet. Each suggestion has a name, what done looks like, the notes it rests on and up to three next actions. Suggested tasks show at the top of [Tasks](app:tasks).
+At the top of the **Active** projects, **Find tasks and projects** has an assistant read your last 90 days of notes for work they keep coming back to that isn't a project yet. A one-line chip says how many it found (**2 suggestions**, with a spinner while it reads), with **Suggest**, then **Suggest again**, beside it. Click the chip to open the list and again to fold it; Brainstead remembers which. Each suggestion has a name, what done looks like, the notes it rests on and up to three next actions. Suggested tasks show in [Tasks](app:tasks)' Next actions.
 
 - **Accept** makes the project note with its first actions, revertable in [Changes](app:review).
 - **Edit** changes its name or outcome first. A name can't contain `/ \ : * ? " < > | [ ] # ^` or start with a dot.
@@ -60,7 +63,7 @@ At the top of the **Active** projects, **Find tasks and projects** has an assist
 Or start one from ⌘K, or from an [Inbox](app:inbox) item with `P`.
 
 ## Link tasks to a project
-Add the project's link to a task's line, as in `- [ ] Draft the launch post [[Project. Orbit App launch]]`, or use Project in its ⋯ menu or the task pane on [Tasks](app:tasks). Rows show the project as a chip; click it to open the project. A task in one of the project's documents belongs to it already.
+Add the project's link to a task's line, as in `- [ ] Draft the launch post [[Project. Orbit App launch]]`, or click the row's **+** and choose Project (or its project chip, to change it), or use More… in its ⋯ menu or the task pane on [Tasks](app:tasks). Rows show the project as a chip; click it for **Open** with the project's name, or to choose another. A task in one of the project's documents belongs to it already.
 
 ## Resize the panes
 Drag the line between the project list and the open project to resize them, and the line beside a project's side column; a double-click puts either back ([pane widths](help:settings-general)).

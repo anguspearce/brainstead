@@ -44,7 +44,8 @@ pub enum Instruction {
     /// The page's whole text: a new page, or one written over.
     Page { content: String },
     /// A task line, at the end of a project's Next actions (or its `heading`, Waiting for as the
-    /// Inbox files a waiting task) or the top of the To Do list's Other.
+    /// Inbox files a waiting task) or the top of the To Do list's Other (or, with `heading`, the end
+    /// of that heading: To Do, as the Inbox's Task makes one).
     AddTask {
         line: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -96,7 +97,12 @@ impl Instruction {
                     return Err(format!("That task is in {name} already."));
                 }
                 if page == crate::inbox::TODO_LIST {
-                    crate::write::insert_other(&mut lines, line);
+                    match heading {
+                        Some(h) => {
+                            crate::write::append_under_todo(&mut lines, h, line);
+                        }
+                        None => crate::write::insert_other(&mut lines, line),
+                    }
                 } else {
                     crate::write::append_under(&mut lines, heading.as_deref().unwrap_or(crate::projects::NEXT_ACTIONS), line);
                 }
@@ -303,7 +309,7 @@ pub struct Change {
     #[serde(default)]
     pub flags: Vec<String>,
     /// Why only the user can accept it, in the app (decided 2026-10-05, D-20261005-09): it changes a
-    /// template, adds code that runs, or a job the user set holds its changes. An assistant can
+    /// template, adds or changes code that runs, or a job the user set holds its changes. An assistant can
     /// accept a held change only when this is None.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub for_user: Option<String>,
@@ -427,7 +433,7 @@ pub fn checks(f: &Facts) -> Vec<String> {
 }
 
 /// Why a change must wait for the user whoever started it: it changes a template (whose code runs
-/// when it's used) or adds code that runs when the note is drawn (a dataviewjs block, inline `$=`,
+/// when it's used) or adds or changes code that runs when the note is drawn (a dataviewjs block, inline `$=`,
 /// a Tasks `by function` line, Templater's `<% %>`). Scripts run with the app's full access, and an
 /// assistant's text may carry what a captured source told it to write.
 pub fn needs_the_user(page: &str, before: Option<&str>, after: &str) -> Option<String> {
@@ -441,7 +447,20 @@ pub fn needs_the_user(page: &str, before: Option<&str>, after: &str) -> Option<S
             return Some("It changes the note's system-note header, which other parts of Brainstead rely on.".into());
         }
     }
-    (runnable(after) > before.map_or(0, runnable)).then(|| "It adds code that runs when the note is shown (a script or a function).".into())
+    // Code the note didn't have, counted piece by piece: rewriting a script is adding one, and so
+    // is a second copy of one that's there.
+    let mut had: std::collections::HashMap<String, usize> = Default::default();
+    for s in before.map(runnable_snippets).unwrap_or_default() {
+        *had.entry(s).or_default() += 1;
+    }
+    let new = runnable_snippets(after).into_iter().any(|s| match had.get_mut(&s) {
+        Some(n) if *n > 0 => {
+            *n -= 1;
+            false
+        }
+        _ => true,
+    });
+    new.then(|| "It adds or changes code that runs when the note is shown (a script or a function).".into())
 }
 
 /// Templater's tags: `<% … %>`, `<%* … %>`, with `-` or `_` to trim around them.
@@ -451,8 +470,20 @@ static TEMPLATER: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|
 /// function` lines inside a Tasks query block, and Templater tags. The same words in prose aren't
 /// code.
 pub fn runnable(text: &str) -> usize {
+    runnable_snippets(text).len()
+}
+
+/// The pieces of runnable code themselves, each as written: a dataviewjs block's body, an inline
+/// `$=` query, a `by function` line, a Templater tag.
+pub fn runnable_snippets(text: &str) -> Vec<String> {
     let text = text.replace("\r\n", "\n");
-    let mut n = text.matches("`$=").count() + TEMPLATER.find_iter(&text).count();
+    let inline = text.match_indices("`$=").map(|(i, _)| {
+        let rest = &text[i + 1..];
+        rest[..rest.find(['`', '\n']).unwrap_or(rest.len())].to_string()
+    });
+    let mut out: Vec<String> = inline.chain(TEMPLATER.find_iter(&text).map(|m| m.as_str().to_string())).collect();
+    // The dataviewjs block being read: its lines so far.
+    let mut script: Option<String> = None;
     // The fence open (its marker and info), as code blocks are read.
     let mut fence: Option<(String, String)> = None;
     for line in text.lines() {
@@ -460,23 +491,32 @@ pub fn runnable(text: &str) -> usize {
         let mark: String = t.chars().take_while(|c| *c == '`' || *c == '~').collect();
         let is_fence = mark.len() >= 3 && mark.chars().all(|c| c == mark.chars().next().unwrap_or('`'));
         match &fence {
-            Some((open, _)) if is_fence && mark.starts_with(open.as_str()) && t[mark.len()..].trim().is_empty() => fence = None,
+            Some((open, _)) if is_fence && mark.starts_with(open.as_str()) && t[mark.len()..].trim().is_empty() => {
+                out.extend(script.take());
+                fence = None;
+            }
             Some((_, info)) => {
                 if info == "tasks" && t.to_lowercase().contains("by function") {
-                    n += 1;
+                    out.push(t.trim_end().to_string());
+                }
+                if let Some(s) = &mut script {
+                    s.push_str(line);
+                    s.push('\n');
                 }
             }
             None if is_fence => {
                 let info = t[mark.len()..].split_whitespace().next().unwrap_or("").to_lowercase();
                 if info == "dataviewjs" {
-                    n += 1;
+                    script = Some(String::new());
                 }
                 fence = Some((mark, info));
             }
             None => {}
         }
     }
-    n
+    // A block never closed runs to the end of the note.
+    out.extend(script);
+    out
 }
 
 /// Why a rename or a move to the Trash must wait for the user (D-20261005-11): the note is a
@@ -927,6 +967,22 @@ mod tests {
         // Under the heading given: a waiting task in the project's Waiting for, as the Inbox files it.
         let w = Instruction::AddTask { line: "- [ ] Lena's quote #waiting-for".into(), heading: Some("Waiting for".into()) };
         assert!(w.text(page, Some(&two)).unwrap().ends_with("## Waiting for\n\n- [ ] Lena's quote #waiting-for\n"));
+        // On the To Do list: the top of Other, or with a heading (the Inbox's Task) the end of To Do.
+        let todo = "#### To Do\n\n- [ ] One\n\n#### Other\n\n- [ ] Raw\n";
+        let bare = "#### Other\n\n- [ ] Raw\n";
+        // Below the section's query, when it lists nothing itself.
+        let query = "#### To Do\n\n```dataview\nTASK\n```\n\n#### Other\n";
+        let q = Instruction::AddTask { line: "- [ ] Two".into(), heading: Some(crate::inbox::TODO_TASKS.into()) };
+        assert_eq!(
+            q.text(crate::inbox::TODO_LIST, Some(query)).unwrap(),
+            "#### To Do\n\n```dataview\nTASK\n```\n\n- [ ] Two\n\n#### Other\n"
+        );
+        let made = Instruction::AddTask { line: "- [ ] Two".into(), heading: Some(crate::inbox::TODO_TASKS.into()) };
+        assert_eq!(made.text(crate::inbox::TODO_LIST, Some(bare)).unwrap(), "#### To Do\n\n- [ ] Two\n\n#### Other\n\n- [ ] Raw\n");
+        let t = Instruction::AddTask { line: "- [ ] Two".into(), heading: Some(crate::inbox::TODO_TASKS.into()) };
+        assert_eq!(t.text(crate::inbox::TODO_LIST, Some(todo)).unwrap(), "#### To Do\n\n- [ ] Two\n- [ ] One\n\n#### Other\n\n- [ ] Raw\n");
+        let o = Instruction::AddTask { line: "- [ ] Two".into(), heading: None };
+        assert!(o.text(crate::inbox::TODO_LIST, Some(todo)).unwrap().contains("#### Other\n\n- [ ] Two\n- [ ] Raw"));
     }
 
     #[test]
@@ -1055,6 +1111,27 @@ mod tests {
         assert!(needs_the_user("Notes.md", Some("a"), "```js\nsort by function x\n```\n").is_none());
         assert!(needs_the_user("Notes.md", Some("a"), "```tasks\nnot done\nsort by function task.urgency\n```\n").is_some());
         assert!(needs_the_user("Notes.md", Some("a"), "<%* tR += 1 %>").is_some());
+        // Code that's there and unchanged isn't held, wherever the change around it is.
+        let script = "# A\n\n```dataviewjs\ndv.paragraph(1)\n```\n";
+        assert!(needs_the_user("Notes.md", Some(script), &script.replace("# A", "# B")).is_none());
+        assert_eq!(runnable(script), 1);
+    }
+
+    #[test]
+    fn rewritten_code_waits_for_the_user() {
+        let script = "# A\n\n```dataviewjs\ndv.paragraph(1)\n```\n";
+        assert!(
+            needs_the_user("Notes.md", Some(script), &script.replace("dv.paragraph(1)", "dv.paragraph(2)")).is_some(),
+            "a block's body"
+        );
+        assert!(needs_the_user("Notes.md", Some(script), &format!("{script}{script}")).is_some(), "a second copy");
+        assert!(needs_the_user("Notes.md", Some("x `$= 1`"), "x `$= 2`").is_some(), "an inline query");
+        assert!(needs_the_user("Notes.md", Some("<% tp.date.now() %>"), "<% tp.file.title %>").is_some(), "a Templater tag");
+        let tasks = "```tasks\nnot done\nsort by function task.urgency\n```\n";
+        assert!(needs_the_user("Notes.md", Some(tasks), &tasks.replace("task.urgency", "task.due")).is_some(), "a Tasks function");
+        assert!(needs_the_user("Notes.md", Some(tasks), &tasks.replace("not done", "done")).is_none(), "the query around it");
+        // Taking code out adds none.
+        assert!(needs_the_user("Notes.md", Some(script), "# A\n").is_none());
     }
 
     #[test]

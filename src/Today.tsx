@@ -3,14 +3,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Today: what's overdue, due and deferred until today, what you're waiting for, a capture box,
-// and the notes you were in. Upcoming meetings show when Teams and Outlook sync is on (macOS), read
+// and the notes you were in. Upcoming meetings show when the sync (Teams and Outlook) is on (macOS), read
 // from the user's own Teams calendar — not Microsoft Graph (D-20261025-01).
 
-import { changes, decisions, health, held, pageName, startKnowledge } from "./knowledge";
+import { changes, health, startKnowledge } from "./knowledge";
+import { heldCount, toClarify, toDecide, toTriage } from "./needsYou";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, Draft, FileSummary, LatestSummary, ReviewsStatus, TaskRow } from "./api";
 import { fmtAccel } from "./Shortcuts";
-import { contextName, contextsInUse, unclarified, useInbox } from "./gtd";
+import { contextName, contextsInUse, useInbox } from "./gtd";
 import { CaptureBox } from "./Capture";
 import { settings, useStore } from "./store";
 import { isoWeek, keepsPaused, startWeekly } from "./Weekly";
@@ -21,10 +22,9 @@ import { nav, openDoc, useViewState } from "./nav";
 import { recentDocs } from "./recent";
 import { DraftNudge, LoadFailed, TaskList, TasksFailed, useTaskListKeys } from "./TaskList";
 import { deferredPast, tasksFailed, todayRows, useAllTasks, viewRows, VIEWS } from "./taskModel";
-import { useVaultOpening, useVaultVersion, vaultStatus } from "./state";
+import { useHourly, useVaultOpening, useVaultVersion, vaultStatus } from "./state";
 import { TopBar } from "./TopBar";
-import { ago, fmtCount, LayerTag, TableBand } from "./ui";
-import { iconizeEmoji } from "./md/fieldEmoji";
+import { ago, fmtCount, TableBand } from "./ui";
 import { captureDefault, hasSync, keyLabel } from "./platform";
 import { usePanes } from "./PaneResizer";
 import { PANES } from "./panes";
@@ -33,36 +33,6 @@ export function greeting(h: number, name?: string) {
   const g = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
   const first = name?.trim().split(/\s+/)[0];
   return first ? `${g}, ${first}` : g;
-}
-
-/** The time, redrawn on the hour (so the greeting and the date move on while the app stays open)
- *  and when the window comes back after the computer slept, as timers don't run during sleep. */
-function useHourly(): Date {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    let t = 0;
-    const arm = () => {
-      const d = new Date();
-      setNow(d);
-      const next = new Date(d);
-      next.setHours(d.getHours() + 1, 0, 1, 0);
-      t = window.setTimeout(arm, next.getTime() - d.getTime());
-    };
-    const wake = () => {
-      if (document.visibilityState !== "visible") return;
-      window.clearTimeout(t);
-      arm();
-    };
-    t = window.setTimeout(arm, 0);
-    document.addEventListener("visibilitychange", wake);
-    window.addEventListener("focus", wake);
-    return () => {
-      window.clearTimeout(t);
-      document.removeEventListener("visibilitychange", wake);
-      window.removeEventListener("focus", wake);
-    };
-  }, []);
-  return now;
 }
 
 export function TodayScreen() {
@@ -96,6 +66,8 @@ export function TodayScreen() {
   const failed = useStore(tasksFailed);
   const nothingDue = !!t && !failed && !overdue.length && !dueToday.length && !deferred.length;
   useTaskListKeys();
+  // The side column stacked under the bands (a narrow main area): To process moves above them.
+  const stacked = panes.gone.has("today.side");
   const tasks = (n: number) => (n === 1 ? "1 task" : `${fmtCount(n)} tasks`);
   return (
     <main className="main">
@@ -138,6 +110,7 @@ export function TodayScreen() {
               </p>
             )}
           </div>
+          {stacked && <ProcessCard strip />}
           <div className="card cardcap">
             <CaptureBox compact />
           </div>
@@ -235,11 +208,11 @@ export function TodayScreen() {
           </section>
         </section>
         <aside className="tside">
-          <ProcessCard />
+          {!stacked && <ProcessCard />}
           {hasSync && s.syncEnabled && <MeetingsCard />}
+          <SummaryCard kind="brief" />
           <SummaryCard kind="weekly" />
           <SummaryCard kind="daily" />
-          <HeldCard />
           <ContinueCard />
         </aside>
       </div>
@@ -336,7 +309,7 @@ function SideCard({ title, right, children }: { title: string; right?: React.Rea
   );
 }
 
-/** Today's remaining Teams meetings, from the sync's calendar (Settings › Teams and Outlook sync).
+/** Today's remaining Teams meetings, from the sync's calendar (Settings › Sync).
  *  Shows the last read at once and swaps in a fresh read only when it differs, so the card doesn't
  *  vanish or flicker while the calendar is re-read. Nothing shows when there are none, so a quiet
  *  day adds no clutter. */
@@ -392,7 +365,7 @@ function MeetingsCard() {
         {m.subject}
       </span>
       {m.online && (
-        <span title="Online meeting" style={{ display: "inline-flex" }}>
+        <span className="ricon" title="Online meeting" aria-label="Online meeting">
           <Icon name="globe" size={12} />
         </span>
       )}
@@ -417,12 +390,7 @@ function MeetingsCard() {
       {today.map(row)}
       {tomorrow.length > 0 && (
         <>
-          <div
-            className="rrow faint"
-            style={{ minHeight: 0, paddingTop: 8, textTransform: "uppercase", fontSize: "11px", letterSpacing: "0.04em" }}
-          >
-            Tomorrow
-          </div>
+          <div className="rrow rgroup">Tomorrow</div>
           {tomorrow.map(row)}
         </>
       )}
@@ -460,10 +428,10 @@ function summaryDate(label: string, today: string): string {
   return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
 }
 
-/** The latest daily or weekly summary, folded to a line until opened: its date and whether the
- *  next run is due or one is running. Shown when
- *  Brainstead runs the summaries or a block is on file. */
-function SummaryCard({ kind }: { kind: "daily" | "weekly" }) {
+/** The latest daily or weekly summary, or daily brief, folded to a line until opened: its date and
+ *  whether the next run is due or one is running. Shown when Brainstead runs the summaries (for the
+ *  brief, when it's switched on) or one is on file. */
+function SummaryCard({ kind }: { kind: "daily" | "weekly" | "brief" }) {
   const s = useStore(settings);
   const v = useVaultVersion();
   const [open, setOpen] = useViewState<boolean>(`today.${kind}Summary`, false);
@@ -494,10 +462,11 @@ function SummaryCard({ kind }: { kind: "daily" | "weekly" }) {
       live = false;
     };
   }, [kind, s.summariesHere, v, tries, changed]);
-  const name = kind === "daily" ? "Daily summary" : "Weekly summary";
-  if (!s.summariesHere && !block && !failed) return null;
+  const name = kind === "daily" ? "Daily summary" : kind === "brief" ? "Daily brief" : "Weekly summary";
+  const on = kind === "brief" ? !!s.summariesHere && !!s.summaries?.briefEnabled : !!s.summariesHere;
+  if (!on && !block && !failed) return null;
   // This period's run, for whether it failed.
-  const target = kind === "daily" ? today : isoWeek(today);
+  const target = kind === "weekly" ? isoWeek(today) : today;
   const run = status?.runs.find((r) => r.kind === kind && r.target === target);
   const next = status?.next[kind];
   const line = status?.running.includes(kind)
@@ -508,7 +477,8 @@ function SummaryCard({ kind }: { kind: "daily" | "weekly" }) {
         ? nextLabel(next)
         : "";
   const when = block ? summaryDate(block.label, today) : "Not written yet";
-  const anchor = block?.heading.replace(/^#+\s*/, "");
+  // A brief is a note of its own: opened at its top.
+  const anchor = kind === "brief" ? undefined : block?.heading.replace(/^#+\s*/, "");
   return (
     <section className="rcard sumcard" aria-label={name}>
       <button
@@ -539,13 +509,13 @@ function SummaryCard({ kind }: { kind: "daily" | "weekly" }) {
         (block ? (
           <>
             <div className="sumbody">
-              <Markdown content={block.text.replace(/^## .*\n/, "")} path={block.file} root={s.vaultPath ?? ""} />
+              <Markdown content={block.text.replace(/^#{1,2} .*\n/, "")} path={block.file} root={s.vaultPath ?? ""} />
             </div>
             <div className="rfoot">
               <button
                 type="button"
                 className="btn sm ghost ract"
-                title={`Open ${block.file} at ${anchor}`}
+                title={anchor ? `Open ${block.file} at ${anchor}` : `Open ${block.file}`}
                 onClick={() => openDoc(block.file, { anchor })}
               >
                 Open note
@@ -556,7 +526,11 @@ function SummaryCard({ kind }: { kind: "daily" | "weekly" }) {
         ) : (
           !failed && (
             <p className="faint rempty">
-              {kind === "daily" ? "Today's summary isn't written yet." : "This week's summary isn't written yet."}
+              {kind === "daily"
+                ? "Today's summary isn't written yet."
+                : kind === "brief"
+                  ? "Today's brief isn't written yet."
+                  : "This week's summary isn't written yet."}
             </p>
           )
         ))}
@@ -578,9 +552,11 @@ function OpeningBanner() {
   );
 }
 
-/** What there is to process: the Inbox, bookmarks, wiki issues, and the weekly review on its day
- *  (or while one is paused). What couldn't be checked says so, with Retry. */
-function ProcessCard() {
+/** What there is to process, the one list of what needs you (D-20261119-04): the Inbox, changes
+ *  held for you, bookmarks, Wiki health, and the weekly review on its day (or while one is paused).
+ *  Each row's count is the one the screen it opens shows (src/needsYou.ts), and its one button
+ *  names what you do there. What couldn't be checked says so, with Retry. */
+function ProcessCard({ strip = false }: { strip?: boolean }) {
   const inbox = useInbox();
   const s = useStore(settings);
   const [paused, setPaused] = useState(false);
@@ -603,8 +579,9 @@ function ProcessCard() {
       })
       .catch(fail("the weekly review"));
   }, [tries, v]);
-  const n = (inbox ?? []).filter(unclarified).length;
+  const n = toClarify(inbox ?? []);
   useEffect(startKnowledge, []);
+  const waiting = heldCount(useStore(changes) ?? []);
   // Bookmarks gone stale (two weeks untouched) or missing: worth a triage.
   const [bookmarks, setBookmarks] = useState(0);
   useEffect(() => {
@@ -612,129 +589,143 @@ function ProcessCard() {
       .bookmarksStatus()
       .then((b) => {
         ok("the bookmarks");
-        setBookmarks(b.filter((x) => x.stale || x.missing).length);
+        setBookmarks(toTriage(b));
       })
       .catch(fail("the bookmarks"));
     // Read again as the vault changes: on first run it's still being indexed when Today opens.
   }, [tries, v]);
-  const need = decisions(useStore(health)?.report);
+  const need = toDecide(useStore(health)?.report);
   const reviewDay = isReviewDay(s.weeklyReview?.day, s.weeklyReview?.time);
+  // Each thing that needs you: its icon, what it is, its count, and the button that opens it.
+  const rows: ProcessRow[] = [
+    n
+      ? {
+          icon: "inbox",
+          label: "Inbox to clarify",
+          n,
+          hot: true,
+          count: `${fmtCount(n)} in the Inbox`,
+          act: "Clarify",
+          tip: keyLabel("Go to the Inbox to decide what each item is (⌘2)"),
+          go: () => nav.go("inbox"),
+        }
+      : { icon: "check", label: "The Inbox is clear" },
+    ...(waiting > 0
+      ? [
+          {
+            icon: "review",
+            label: "Changes held for you",
+            n: waiting,
+            hot: true,
+            count: `${fmtCount(waiting)} change${waiting === 1 ? "" : "s"} held for you to accept or reject`,
+            act: "Decide",
+            tip: "Open Changes › Held to accept or reject each change",
+            go: () => nav.go({ screen: "review", view: { "review:view": "held" } }),
+          },
+        ]
+      : []),
+    ...(bookmarks > 0
+      ? [
+          {
+            icon: "pin",
+            label: "Bookmarks to triage",
+            n: bookmarks,
+            count: `${fmtCount(bookmarks)} stale or missing bookmarks`,
+            act: "Triage",
+            tip: "Go through the bookmarks waiting to be sorted",
+            go: () => nav.go("triage"),
+          },
+        ]
+      : []),
+    ...(need > 0
+      ? [
+          {
+            icon: "health",
+            label: "Wiki health to decide",
+            n: need,
+            count: `${fmtCount(need)} wiki issue${need === 1 ? "" : "s"} only you can settle`,
+            act: "Decide",
+            tip: "Go to Wiki health to decide the issues only you can settle",
+            go: () => nav.go("health"),
+          },
+        ]
+      : []),
+    ...(reviewDay || paused
+      ? [
+          {
+            icon: "calendar",
+            label: paused ? "Weekly review, paused" : "Weekly review day",
+            act: paused ? "Carry on" : "Start",
+            tip: paused ? "Pick up the weekly review where you left it" : "Start the weekly review",
+            go: startWeekly,
+          },
+        ]
+      : []),
+  ];
+  const problem = failed.length > 0 && <LoadFailed compact what={failed.join(" and ")} onRetry={retry} />;
+  // Above the bands when the side column is stacked under them (a narrow main area): one line of
+  // pills, each the row's button, so what needs you is in view without scrolling past the tasks.
+  if (strip)
+    return (
+      <section className="tstrip" aria-label="To process">
+        <span className="tstrip-h">To process</span>
+        {problem}
+        {rows.map((r) =>
+          r.go ? (
+            <button
+              key={r.label}
+              type="button"
+              className={`tstrip-i${r.hot ? " hot" : ""}`}
+              title={`${r.act}: ${r.tip}${r.count ? ` (${r.count})` : ""}`}
+              onClick={r.go}
+            >
+              <Icon name={r.icon} size={13} />
+              <span className="ell">{r.label}</span>
+              {r.n !== undefined && <span className="n">{fmtCount(r.n)}</span>}
+            </button>
+          ) : (
+            <span key={r.label} className="tstrip-i quiet">
+              <Icon name={r.icon} size={13} />
+              <span className="ell">{r.label}</span>
+            </span>
+          ),
+        )}
+      </section>
+    );
   return (
     <SideCard title="To process">
-      {failed.length > 0 && <LoadFailed compact what={failed.join(" and ")} onRetry={retry} />}
-      <div className="rrow">
-        <Icon name={n ? "inbox" : "check"} size={14} />
-        <span className="grow ell">{n ? "Inbox to clarify" : "The Inbox is clear"}</span>
-        {n > 0 && (
-          <>
-            <span className="n hot" title={`${fmtCount(n)} in the Inbox`}>
-              {fmtCount(n)}
+      {problem}
+      {rows.map((r) => (
+        <div key={r.label} className="rrow">
+          <Icon name={r.icon} size={14} />
+          <span className="grow ell">{r.label}</span>
+          {r.n !== undefined && (
+            <span className={`n${r.hot ? " hot" : ""}`} title={r.count}>
+              {fmtCount(r.n)}
             </span>
-            <button
-              type="button"
-              className="btn sm ghost ract"
-              title={keyLabel("Go to the Inbox to decide what each item is (⌘2)")}
-              onClick={() => nav.go("inbox")}
-            >
-              Clarify
+          )}
+          {r.go && (
+            <button type="button" className="btn sm ghost ract" title={r.tip} onClick={r.go}>
+              {r.act}
             </button>
-          </>
-        )}
-      </div>
-      {bookmarks > 0 && (
-        <div className="rrow">
-          <Icon name="pin" size={14} />
-          <span className="grow ell">Bookmarks to triage</span>
-          <span className="n" title={`${fmtCount(bookmarks)} stale or missing bookmarks`}>
-            {fmtCount(bookmarks)}
-          </span>
-          <button
-            type="button"
-            className="btn sm ghost ract"
-            title="Go through the bookmarks waiting to be sorted"
-            onClick={() => nav.go("triage")}
-          >
-            Triage
-          </button>
+          )}
         </div>
-      )}
-      {need > 0 && (
-        <div className="rrow">
-          <Icon name="health" size={14} />
-          <span className="grow ell">Wiki issues to decide</span>
-          <span className="n" title={`${fmtCount(need)} wiki issues need a decision`}>
-            {fmtCount(need)}
-          </span>
-          <button
-            type="button"
-            className="btn sm ghost ract"
-            title="Open Knowledge health to decide the wiki issues"
-            onClick={() => nav.go("health")}
-          >
-            Check
-          </button>
-        </div>
-      )}
-      {(reviewDay || paused) && (
-        <div className="rrow">
-          <Icon name="calendar" size={14} />
-          <span className="grow ell">{paused ? "Weekly review, paused" : "Weekly review day"}</span>
-          <button
-            type="button"
-            className="btn sm ghost ract"
-            title={paused ? "Pick up the weekly review where you left it" : "Start the weekly review"}
-            onClick={startWeekly}
-          >
-            {paused ? "Carry on" : "Start"}
-          </button>
-        </div>
-      )}
+      ))}
     </SideCard>
   );
 }
 
-/** Scheduled runs' changes held for you in Changes. */
-function HeldCard() {
-  useEffect(startKnowledge, []);
-  const rows = held(useStore(changes) ?? []);
-  if (!rows.length) return null;
-  return (
-    <SideCard
-      title="Changes held for you"
-      right={
-        <span className="n" title={rows.length === 1 ? "1 change held" : `${fmtCount(rows.length)} changes held`}>
-          {fmtCount(rows.length)}
-        </span>
-      }
-    >
-      {rows.slice(0, 4).map((p) => (
-        <button
-          key={p.id}
-          type="button"
-          className="rrow rlink"
-          title={`${pageName(p.page)}: ${p.title}\n${p.flags[0] ?? ""}\nOpen Changes to accept or reject it`}
-          onClick={() => nav.go("review")}
-        >
-          <span className="lbt">
-            <LayerTag layer={p.page.startsWith("wiki/") ? "wiki" : "note"} />
-            <span className="ell">{pageName(p.page)}</span>
-          </span>
-          <span className="ell grow">{iconizeEmoji(p.title)}</span>
-        </button>
-      ))}
-      <div className="rfoot">
-        <button
-          type="button"
-          className="btn sm ghost ract"
-          title="Open Changes to accept or reject the held changes"
-          onClick={() => nav.go("review")}
-        >
-          Review {fmtCount(rows.length)}
-          <Icon name="forward" size={12} />
-        </button>
-      </div>
-    </SideCard>
-  );
+/** One row of To process: what needs you and, where there's something to do, its count and button. */
+interface ProcessRow {
+  icon: string;
+  label: string;
+  n?: number;
+  hot?: boolean;
+  /** The count's tooltip. */
+  count?: string;
+  act?: string;
+  tip?: string;
+  go?: () => void;
 }
 
 /** Unsaved drafts, then notes you opened lately, then notes changed lately (in another editor or here). */

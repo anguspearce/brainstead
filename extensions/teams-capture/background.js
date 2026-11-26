@@ -346,7 +346,7 @@ async function sendToBrainstead(message) {
   return res;
 }
 
-// ── Sign-in handover (Brainstead's Teams and Outlook sync, D-20261025-01) ──────────────
+// ── Sign-in handover (Brainstead's sync, D-20261025-01) ──────────────
 //
 // While a Teams tab is open, Brainstead can read the user's own chats, mail and calendar if it has
 // the page's sign-in. The page keeps it (MSAL's cache) in localStorage; this reads it from an open
@@ -459,6 +459,12 @@ async function handOver(notes) {
           "Brainstead's answer",
         );
         answer = reply?.ok ? "handed over" : `Brainstead refused: ${reply?.message || "no answer"}`;
+        // Microsoft turned down the only token the tab had for these: reload it so Teams fetches
+        // fresh ones (Brainstead D-20261124-03), rather than handing the dead one over every time.
+        if (reply?.ok && reply.renew?.length) {
+          notes.push(`turned down: ${reply.renew.join(", ")}; ${await renewSignIn(tab)}`);
+          return answer;
+        }
       } catch (e) {
         // Brainstead not running or not registered yet; try again on the next alarm.
         answer = `Brainstead unreachable: ${e?.message || e}`;
@@ -474,6 +480,65 @@ async function handOver(notes) {
   }
   return "no tab had a sign-in to hand over";
 }
+
+// ── Put in Teams (Brainstead's Draft reply, D-20261120-05) ───────────
+//
+// Brainstead opens a chat's link with `brainstead-reply=<key>` on it. When that link starts to
+// load, the reply left under the key is collected from Brainstead's helper (once: the helper
+// forgets it) and, once the tab has loaded, typed into the chat's message box (reply-fill.js), but
+// only once the page shows that chat is the one open: never into another chat.
+// Nothing is sent. Should it not go in, the action's badge says so; Brainstead copied the reply too.
+
+importScripts("reply-fill.js");
+
+const replying = new Set();
+
+async function loaded(tabId) {
+  for (let i = 0; i < 120; i++) {
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (!tab) return false;
+    if (tab.status === "complete") return true;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
+}
+
+async function replyNotTyped(tabId, why) {
+  await chrome.action.setBadgeText({ tabId, text: "!" }).catch(() => {});
+  await chrome.action
+    .setTitle({ tabId, title: `Brainstead couldn't type the reply in (${why}): paste it, it's on the clipboard` })
+    .catch(() => {});
+}
+
+async function typeReply(tabId, url) {
+  const key = globalThis.brainsteadReply.keyOf(url);
+  if (!key || replying.has(key)) return;
+  replying.add(key);
+  let reply;
+  try {
+    reply = await sendToBrainstead({ type: "reply-draft", key });
+  } catch (err) {
+    return replyNotTyped(tabId, err instanceof Error ? err.message : String(err));
+  }
+  if (!(await loaded(tabId))) return replyNotTyped(tabId, "the chat didn't finish loading");
+  try {
+    const [r] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: globalThis.brainsteadReply.fill,
+      args: [reply.html, reply.text, reply.conversation],
+    });
+    if (!r?.result?.ok) await replyNotTyped(tabId, r?.result?.why || "no answer from the page");
+  } catch (err) {
+    await replyNotTyped(tabId, err instanceof Error ? err.message : String(err));
+  }
+}
+
+chrome.webNavigation.onBeforeNavigate.addListener(
+  (d) => {
+    if (d.frameId === 0) void typeReply(d.tabId, d.url);
+  },
+  { url: [{ urlContains: "brainstead-reply=" }] },
+);
 
 chrome.alarms.create(HANDOVER_ALARM, { periodInMinutes: HANDOVER_PERIOD_MIN });
 chrome.alarms.onAlarm.addListener((a) => {

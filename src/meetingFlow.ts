@@ -121,7 +121,10 @@ const leaveInbox = (transcript: string) => captureDone(transcript).catch(() => {
 const starting = new Set<string>();
 
 /** Make meeting note on these transcripts: the sure ones in one step, the rest on the meeting screen. */
-export async function makeMeetingNotes(paths: string[]) {
+/** `auto`: a transcript that has just arrived, with Ingest new sources as they arrive on
+ *  (D-20261118-05): a sure one is written and ingested with nobody asked (unattended for a synced
+ *  one), an unsure one just waits in the Inbox, without opening the meeting screen. */
+export async function makeMeetingNotes(paths: string[], auto?: { unattended: boolean }) {
   const fresh = [...new Set(paths)].filter((p) => !starting.has(p));
   if (!fresh.length) return;
   fresh.forEach((p) => starting.add(p));
@@ -133,7 +136,10 @@ export async function makeMeetingNotes(paths: string[]) {
     // Only the sure ones run now; the rest can be pressed again once the meeting screen has asked.
     fresh.filter((p) => !sure.some((t) => t.path === p)).forEach((p) => starting.delete(p));
     if (sure.length) {
-      await draftNotes(sure.map((t) => [t.path, specOf(t)]));
+      await draftNotes(
+        sure.map((t) => [t.path, specOf(t)]),
+        auto?.unattended ?? false,
+      );
       const f = followThrough();
       const then = [f.ingest && "ingested", f.trash && "its transcript moved to the Trash"].filter(Boolean).join(", ");
       toast(
@@ -142,12 +148,16 @@ export async function makeMeetingNotes(paths: string[]) {
           : `Writing ${sure.length} meeting notes, one after another`,
       );
     }
-    if (unsure.length) {
+    if (unsure.length && auto) {
+      toast(
+        `${unsure.length === 1 ? "A transcript waits" : `${unsure.length} transcripts wait`} in the Inbox: its meeting note needs a check first`,
+      );
+    } else if (unsure.length) {
       nav.go({ screen: "meeting", path: unsure[0].path });
       if (sure.length || unsure.length > 1)
         toast(`${unsure.length === 1 ? "One transcript needs" : `${unsure.length} transcripts need`} a check before its note is written`);
     }
-    if (!asked.length) toast("That isn't a transcript Brainstead can make a meeting note from", undefined, "bad");
+    if (!asked.length && !auto) toast("That isn't a transcript Brainstead can make a meeting note from", undefined, "bad");
   } catch (e) {
     fresh.forEach((p) => starting.delete(p));
     reportEditError(e);

@@ -2,6 +2,7 @@
 // See LICENSE for the full text.
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+mod actiontasks;
 mod applog;
 mod ask;
 mod bridge;
@@ -20,6 +21,7 @@ mod listnotes;
 mod menu;
 mod nativehost;
 mod notes;
+mod notify;
 mod ollama;
 mod platform;
 mod reviews;
@@ -89,6 +91,10 @@ fn settings_write(app: AppHandle, st: State<AppState>, settings: Settings) -> Re
     if scene().is_some() {
         return Ok(next);
     }
+    // The file couldn't be read at start, so what the window sent is the defaults with one change:
+    // saving that would replace the real settings. While it still can't be read the save is
+    // refused; once it can, the file's settings are put in use (and returned to the window) instead.
+    let next = if settings::unread() { settings::reread(&st.settings_path)? } else { next };
     // Saved first: a save that fails leaves the settings in use as they were, matching the file.
     let prev = {
         let mut cur = lock(&st.settings);
@@ -99,7 +105,11 @@ fn settings_write(app: AppHandle, st: State<AppState>, settings: Settings) -> Re
     // time rather than catching up at once.
     let mut stamp = prev.summaries.changed(&next.summaries);
     if next.summaries_here && !prev.summaries_here {
-        stamp = vec![brainstead_core::reviews::ReviewKind::Daily, brainstead_core::reviews::ReviewKind::Weekly];
+        stamp = vec![
+            brainstead_core::reviews::ReviewKind::Daily,
+            brainstead_core::reviews::ReviewKind::Weekly,
+            brainstead_core::reviews::ReviewKind::Brief,
+        ];
     }
     if !stamp.is_empty() {
         app.state::<reviews::Reviews>().stamp(&stamp);
@@ -310,23 +320,31 @@ async fn graph(app: AppHandle, center: Option<String>, depth: usize) -> Result<b
     .map_err(|e| e.to_string())?
 }
 
-/// The Activity screen: `log.md`'s entries and the heatmap of file changes by day.
+/// The Activity screen: the heatmap of file changes by day.
 #[derive(Serialize)]
 struct Activity {
-    log: Vec<brainstead_core::activity::LogEntry>,
     days: Vec<brainstead_core::activity::Day>,
 }
 
 #[tauri::command]
 async fn activity(app: AppHandle) -> Result<Activity, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let svc = app.state::<VaultService>();
-        let days = svc.with_index(|ix, _| ix.activity_files()).map(|f| brainstead_core::activity::heatmap(&f))?;
-        let log = brainstead_core::activity::parse_log(&svc.root().map(|r| root_note(&r, "log.md")).unwrap_or_default());
-        Ok(Activity { log, days })
+        let days = app.state::<VaultService>().with_index(|ix, _| ix.activity_files()).map(|f| brainstead_core::activity::heatmap(&f))?;
+        Ok(Activity { days })
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// `log.md`'s entries, newest first: Changes › All shows those that aren't a change (D-20261119-04).
+#[tauri::command]
+async fn vault_log(app: AppHandle) -> Result<Vec<brainstead_core::activity::LogEntry>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let svc = app.state::<VaultService>();
+        brainstead_core::activity::parse_log(&svc.root().map(|r| root_note(&r, "log.md")).unwrap_or_default())
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// The vault at a glance: notes and wiki pages by type, their top tags, and the most linked files.
@@ -695,7 +713,7 @@ struct Switchover {
 }
 
 /// Files only the previous app kept in the vault: its `scripts/` folder with the name
-/// corrections and the scripts Brainstead's reviews, ingest and Knowledge health replaced.
+/// corrections and the scripts Brainstead's reviews, ingest and Wiki health replaced.
 const PREVIOUS_APP_FILES: [&str; 6] = [
     brainstead_core::names::LEGACY,
     "scripts/lint_wiki.py",
@@ -731,7 +749,7 @@ const AGENT_END: &str = "<!-- brainstead:end -->";
 /// checked and recorded in Changes (decided 2026-10-05).
 const AGENT_BLOCK: &str = "## Changing the vault\n\n\
 Brainstead manages this vault. Change it only through the `brainstead` MCP tools, never with your own file tools: \
-edit_page (any page, or a new wiki page), create_note, add_image (an image for a note to embed), create_task, delete_task, rename_note, trash_note, and the task, Inbox and project tools. \
+edit_page (any page, or a new wiki page), create_note, add_image (an image for a note to embed), create_task, delete_task, rename_note, trash_note, and the task, Inbox, project and initiative tools. \
 Brainstead checks each change and records it in its Changes screen, where the user can revert it. \
 To ingest a source, use start_run with run ingest; to fix a misspelt name, fix_name; for the wiki's health, lint and fix_health. \
 Read with search, read_section, backlinks and resolve_entity. \
@@ -880,7 +898,7 @@ pub fn run() {
         platform::own_webview_data(&data);
     }
     let settings_path = data.join("settings.json");
-    let (settings, settings_warning) = settings::load_checked(&settings_path);
+    let (settings, settings_warning) = settings::load_at_start(&settings_path);
     applog::init(&data, log_days(&settings));
     if let Some(w) = &settings_warning {
         crate::applog!("settings: {w}");
@@ -969,12 +987,15 @@ pub fn run() {
             preview_move,
             preview_close,
             activity,
+            vault_log,
             activity_day,
             listnotes::bookmark_toggle,
             listnotes::smart_list_save,
             listnotes::smart_list_delete,
             ingest::fixname_plan,
             ingest::fixname_apply,
+            ingest::fixname_changes,
+            ingest::fixname_remember,
             ingest::ingest_start,
             ingest::source_provenance,
             ingest::meeting_transcripts,
@@ -1006,6 +1027,7 @@ pub fn run() {
             changes::change_project_note,
             knowledge::health_report,
             knowledge::health_fix,
+            knowledge::health_fix_changes,
             knowledge::health_ignore,
             knowledge::health_ignore_all,
             daily_check::catalogue_update,
@@ -1039,12 +1061,21 @@ pub fn run() {
             nativehost::capture_status,
             nativehost::capture_reveal,
             sync::sync_sign_in_state,
+            sync::log::sync_log,
             sync::sync_sign_out,
             sync::sync_now,
+            sync::sync_sign_out_outlook,
+            sync::skips::skip_suggestions,
+            sync::slack::slack_sign_in_state,
+            sync::slack::slack_sign_out,
+            sync::slack::slack_channels,
+            sync::skips::skip_suggestion_dismiss,
+            sync::skips::skip_suggestion_forget,
             sync::sync_today_meetings,
             sync::sync_cached_meetings,
             sync::sync_list_channels,
             sync::sync_pull,
+            sync::reply_place,
             bookmarks,
             smart_lists,
             asset_find,
@@ -1062,6 +1093,13 @@ pub fn run() {
             edits::capture,
             notes::doc_save,
             notes::doc_create,
+            notes::initiative_page,
+            gtd::initiative_action_line,
+            gtd::initiative_action_set,
+            gtd::initiative_action_move,
+            gtd::initiatives_list,
+            gtd::todo_add_task,
+            gtd::inbox_task_to_todo,
             notes::vault_create,
             notes::vault_add_examples,
             notes::draft_write,
@@ -1158,11 +1196,17 @@ pub fn run() {
             if std::env::args().skip(1).any(|a| a == "--quit") {
                 std::process::exit(0);
             }
-            // Runs an earlier session left waiting: nothing will take them now.
-            ingest::settle_stale();
+            // One copy on this data at a time: the installed app and a dev build don't run side
+            // by side (D-20261118-22). Not for screenshot scenes, which run several at once.
+            if scene().is_none() && !bridge::one_copy(app.handle()) {
+                std::process::exit(0);
+            }
+            // Runs an earlier session left waiting are taken again (those it was making changes for are stopped).
+            ingest::resume_stale(app.handle());
             // The capture extensions' host, registered with each browser (not by a screenshot demo,
             // and not by a dev build: that would point the browsers at target/debug).
-            if shares_instance_lock() && !cfg!(debug_assertions) {
+            let dev_host = std::env::var("BRAINSTEAD_DEV_HOST").is_ok_and(|v| v == "1");
+            if shares_instance_lock() && (!cfg!(debug_assertions) || dev_host) {
                 std::thread::spawn(nativehost::register);
             }
             nativehost::watch(app.handle().clone());
@@ -1203,8 +1247,7 @@ pub fn run() {
             }
             // A bad settings file: say what was put back, once the app is up.
             if let Some(w) = settings_warning {
-                use tauri_plugin_notification::NotificationExt;
-                let _ = app.notification().builder().title("Brainstead's settings").body(w).show();
+                crate::notify::show(app.handle(), crate::notify::Need::You, "Brainstead's settings", &w);
             }
             if let Err(e) = menu::install(app.handle()) {
                 crate::applog!("menu: {e}");

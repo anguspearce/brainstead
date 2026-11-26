@@ -23,13 +23,14 @@
   --line: #e3e7ed;
   --ink: #151a22;
   --ink2: #4d5664;
-  --ink3: #6e7785;
+  --ink3: #626c7a;
   --accent: #1d5fd6;
   --accent-ink: #174fb3;
   --accent-soft: #e8f0fd;
   --on-accent: #fff;
-  --grad-a: #1d5fd6;
-  --grad-b: #0d7f74;
+  --teal: #0b7269;
+  --ring: color-mix(in srgb, var(--accent) 24%, transparent);
+  --nav-h: 52px;
   --shadow: 0 2px 6px rgb(15 20 30 / 6%), 0 30px 80px -20px rgb(15 20 30 / 28%);
   --sans: "Geist", -apple-system, "SF Pro Display", system-ui, sans-serif;
   --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
@@ -47,6 +48,7 @@
 }
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: var(--nav-h);
   -webkit-text-size-adjust: 100%;
 }
 body {
@@ -66,6 +68,7 @@ img {
 a {
   color: var(--accent);
   text-decoration: none;
+  text-underline-offset: 0.18em;
 }
 h1,
 h2,
@@ -74,13 +77,35 @@ h3 {
   letter-spacing: -0.035em;
   line-height: 1.05;
   font-weight: 700;
+  text-wrap: balance;
+}
+/* The display sizes are set tight; a smaller heading that wraps needs more air. */
+h3 {
+  line-height: 1.15;
 }
 p {
   margin: 0;
+  text-wrap: pretty;
+}
+li,
+figcaption {
+  text-wrap: pretty;
+}
+/* The parts the browser draws: selected text and the keyboard's focus ring, in the app's blue. */
+::selection {
+  background: var(--ring);
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+/* A link in running text is underlined under the pointer. */
+:where(p, li, figcaption) > a:not([class]):hover {
+  text-decoration: underline;
 }
 code,
 kbd {
-  font: 500 0.88em var(--mono);
+  font: 500 0.88em/1.3 var(--mono);
   background: var(--sunk);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -90,13 +115,6 @@ kbd {
 .center {
   text-align: center;
 }
-.eyebrow {
-  color: var(--ink3);
-  font-weight: 600;
-  font-size: 19px;
-  letter-spacing: -0.01em;
-  margin-bottom: 14px;
-}
 .lede {
   color: var(--ink2);
   font-size: clamp(19px, 2.2vw, 24px);
@@ -104,12 +122,11 @@ kbd {
   max-width: 34em;
   margin: 22px auto 0;
   letter-spacing: -0.015em;
+  text-wrap: balance;
 }
-.grad {
-  background: linear-gradient(100deg, var(--grad-a), var(--grad-b));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+/* The second line of a two-line headline, in the app's blue. */
+.accent {
+  color: var(--accent);
 }
 h2 {
   font-size: clamp(40px, 6.4vw, 80px);
@@ -129,7 +146,7 @@ h2 {
   max-width: 1080px;
   margin: 0 auto;
   padding: 0 16px;
-  height: 52px;
+  height: var(--nav-h);
   display: flex;
   align-items: center;
   gap: 28px;
@@ -138,6 +155,7 @@ h2 {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 8px 0;
   color: var(--ink);
   font-weight: 600;
   font-size: 17px;
@@ -151,6 +169,7 @@ h2 {
 }
 .nav-links a {
   color: var(--ink2);
+  padding: 14px 0;
   transition: color 0.2s;
 }
 .nav-links a:hover {
@@ -177,11 +196,19 @@ h2 {
   transform: scale(0.97);
 }
 .btn-sm {
+  position: relative;
   font-size: 13px;
   padding: 6px 14px;
 }
+/* The small button is easier to hit than it looks. */
+.btn-sm::after {
+  content: "";
+  position: absolute;
+  inset: -8px -6px;
+}
 .link {
   font-size: 19px;
+  padding: 6px 0;
 }
 .link:hover {
   text-decoration: underline;
@@ -212,7 +239,7 @@ h2 {
   object-fit: cover;
 }
 /* A soft shimmer where a screenshot will be, until it has loaded (main.js marks it). */
-.window:not(.loaded) {
+.js .window:not(.loaded) {
   background: linear-gradient(100deg, var(--sunk) 30%, color-mix(in srgb, var(--sunk) 40%, #fff) 50%, var(--sunk) 70%) 0 0 / 300% 100%;
   animation: shimmer 1.6s linear infinite;
 }
@@ -248,7 +275,7 @@ h2 {
 }
 .hero h1 {
   font-size: clamp(48px, 9vw, 112px);
-  letter-spacing: -0.045em;
+  letter-spacing: -0.04em;
   line-height: 1;
 }
 .hero-stage {
@@ -260,21 +287,6 @@ h2 {
 .hero-window {
   transform-origin: 50% 0;
   will-change: transform;
-}
-.glow {
-  position: absolute;
-  inset: 10% 8% -4%;
-  z-index: -1;
-  filter: blur(80px);
-  opacity: 0.28;
-  background:
-    radial-gradient(40% 50% at 30% 40%, var(--grad-a), transparent 70%), radial-gradient(40% 50% at 72% 60%, var(--grad-b), transparent 70%);
-  animation: drift 14s ease-in-out infinite alternate;
-}
-@keyframes drift {
-  to {
-    transform: translate3d(3%, -3%, 0) scale(1.06);
-  }
 }
 
 /* Statement */
@@ -291,6 +303,9 @@ h2 {
 }
 .statement .dim {
   color: var(--ink3);
+}
+.statement .w {
+  transition: opacity 0.25s linear;
 }
 
 /* GTD story */
@@ -317,11 +332,11 @@ h2 {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  opacity: 0.25;
   transition: opacity 0.5s var(--ease);
 }
-.step.on {
-  opacity: 1;
+/* The steps off stage are dimmed only while the script is there to light them again. */
+.js .step:not(.on) {
+  opacity: 0.25;
 }
 .step h3 {
   font-size: 34px;
@@ -381,13 +396,14 @@ h2 {
   z-index: 1;
   border: 0;
   background: none;
-  font: 500 15px var(--sans);
+  font: 500 15px/1.3 var(--sans);
   color: var(--ink2);
-  padding: 7px 22px;
+  padding: 10px 22px;
   cursor: pointer;
   border-radius: 980px;
   transition: color 0.3s;
 }
+.seg button:hover,
 .seg button[aria-selected="true"] {
   color: var(--ink);
 }
@@ -447,10 +463,7 @@ h2 {
   display: block;
   font-size: clamp(28px, 3.4vw, 40px);
   letter-spacing: -0.03em;
-  background: linear-gradient(100deg, var(--grad-a), var(--grad-b));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--accent);
 }
 .fact span {
   color: var(--ink2);
@@ -503,7 +516,7 @@ h2 {
   font-size: clamp(40px, 5vw, 64px);
   margin-bottom: 22px;
 }
-.split-copy p:not(.eyebrow) {
+.split-copy p {
   color: var(--ink2);
   font-size: 19px;
 }
@@ -587,7 +600,7 @@ h2 {
   margin: 0 auto 32px;
   width: 96px;
   height: 96px;
-  filter: drop-shadow(0 12px 30px rgb(29 95 214 / 35%));
+  filter: drop-shadow(0 12px 24px rgb(15 20 30 / 18%));
 }
 .fine {
   color: var(--ink3);
@@ -624,7 +637,7 @@ h2 {
 }
 
 .foot {
-  padding: 28px 16px 40px;
+  padding: 20px 16px 40px;
   font-size: 13px;
   color: var(--ink3);
   background: var(--sunk);
@@ -638,17 +651,18 @@ h2 {
 .foot-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 28px;
+  gap: 0 28px;
   font-size: 15px;
 }
 .foot-links a {
   color: var(--ink2);
+  padding: 8px 0;
 }
 .foot-links a:hover {
   color: var(--ink);
 }
 .foot .copy {
-  margin-top: 16px;
+  margin-top: 8px;
 }
 
 /* The hero rises in by itself, without waiting for the script. */
@@ -714,6 +728,9 @@ a.level:hover {
   transform: translateY(-4px);
   box-shadow: var(--shadow);
 }
+a.level:active {
+  transform: translateY(-1px);
+}
 /* The card's picture: a small app window on a tinted panel, peeking up from the foot of the card,
    so it reads as the app and not as the tutorial's text. The picture is drawn at its own size
    (the window's own pixels, with a 2x copy) and the panel crops what doesn't fit. */
@@ -722,9 +739,7 @@ a.level:hover {
   height: 200px;
   padding: 22px 0 0 26px;
   overflow: hidden;
-  background:
-    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--grad-a) 16%, transparent), transparent 65%),
-    radial-gradient(120% 140% at 100% 100%, color-mix(in srgb, var(--grad-b) 16%, transparent), transparent 65%), var(--sunk);
+  background: var(--sunk);
   border-top: 1px solid var(--line);
 }
 .mini {
@@ -779,6 +794,7 @@ a.level:hover .mini {
 }
 .level h2 {
   font-size: 28px;
+  line-height: 1.15;
 }
 .level p {
   color: var(--ink2);
@@ -804,20 +820,18 @@ a.level:hover .mini {
   font-size: 17px;
   color: var(--ink2);
 }
-.next-step a:hover {
-  text-decoration: underline;
-}
 
 /* Narrow screens */
 @media (max-width: 860px) {
-  .nav-links {
+  /* The links to this page's sections go; the one to the tutorials stays. */
+  .nav-in {
+    gap: 20px;
+  }
+  .nav-links a[href*="#"] {
     display: none;
   }
   .levels {
     grid-template-columns: 1fr;
-  }
-  .nav-in .btn-sm {
-    margin-left: auto;
   }
   .story-grid {
     grid-template-columns: 1fr;
@@ -915,7 +929,6 @@ a.level:hover .mini {
 .card h3 {
   font-size: 26px;
   letter-spacing: -0.03em;
-  line-height: 1.15;
   margin-bottom: 10px;
 }
 .card p {
@@ -1038,7 +1051,7 @@ a.level:hover .mini {
 }
 .chip.tag {
   background: #dcead9;
-  color: #1b7a4c;
+  color: #17683f;
 }
 @keyframes pop {
   from {
@@ -1061,8 +1074,10 @@ a.level:hover .mini {
 }
 .cap-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
   margin-top: 12px;
   font-size: 13px;
   color: var(--ink3);
@@ -1127,6 +1142,13 @@ a.level:hover .mini {
 .term .caret {
   background: #e9ecf1;
 }
+/* Without the script to type it, the command and its answer are simply there. */
+html:not(.js) .t-type::before {
+  content: attr(data-text);
+}
+html:not(.js) .term .t-out {
+  opacity: 1;
+}
 
 /* Questions */
 .faq {
@@ -1136,10 +1158,12 @@ a.level:hover .mini {
 }
 .qs {
   margin-top: 40px;
-  border-top: 1px solid var(--line);
 }
 .qs details {
   border-bottom: 1px solid var(--line);
+}
+.qs details:first-child {
+  border-top: 1px solid var(--line);
 }
 .qs summary {
   list-style: none;
@@ -1150,6 +1174,7 @@ a.level:hover .mini {
   gap: 16px;
   padding: 22px 0;
   font-size: 20px;
+  line-height: 1.35;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -1163,12 +1188,16 @@ a.level:hover .mini {
   color: var(--ink3);
   transition: transform 0.3s var(--ease);
 }
+.qs summary:hover::after {
+  color: var(--ink);
+}
 .qs details[open] summary::after {
   transform: rotate(45deg);
 }
 .qs details p {
   color: var(--ink2);
   font-size: 17px;
+  max-width: 40em;
   padding: 0 40px 24px 0;
 }
 
@@ -1194,6 +1223,16 @@ a.level:hover .mini {
   }
 }
 
+/* A very narrow screen has room for the name and the button only. */
+@media (max-width: 359px) {
+  .nav-links {
+    display: none;
+  }
+  .nav-in .btn-sm {
+    margin-left: auto;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1209,7 +1248,4 @@ a.level:hover .mini {
     opacity: 1;
     transform: none;
   }
-}
-.statement .w {
-  transition: opacity 0.25s linear;
 }
