@@ -22,7 +22,7 @@ import { InfoTip, TaskEditor, taskKey, TaskList, TasksFailed, useTaskListKeys } 
 import { taskDate } from "./taskDates";
 import { tasksFailed, useAllTasks, viewRows, VIEWS, ViewId } from "./taskModel";
 import { askLink, askQuote, TopBar } from "./TopBar";
-import { fmtCount, Popover, SearchBox, Seg, Squeeze, TableBand, useDebounced, usePinnedBar } from "./ui";
+import { BandFold, fmtCount, Popover, SearchBox, Seg, Squeeze, TableBand, useDebounced, usePinnedBar } from "./ui";
 import { settings, useStore } from "./store";
 import type { SavedTaskList } from "./api";
 import { keyLabel } from "./platform";
@@ -75,6 +75,13 @@ export function TasksScreen() {
   // The whole manual list, with what the search and filters hide, for a drag's renumber.
   const every = useMemo(() => (all && view.manual ? viewRows(all, view, today, inbox) : undefined), [all, inbox, view, today]);
   const groups = useMemo(() => groupTasks(rows, groupBy, today), [rows, groupBy, today]);
+  // The groups folded shut, by key ("" is the one with no project or context), for each grouping;
+  // kept across visits and restarts.
+  const [folded, setFolded] = useViewState<string[]>(`tasks:folded:${groupBy}`, []);
+  const fold = (key: string) => setFolded((f) => (f.includes(key) ? f.filter((k) => k !== key) : [...f, key]));
+  const allFolded = groups.every((g) => folded.includes(g.key));
+  // Collapse all folds the groups showing and leaves folded the ones a search or filter hides.
+  const foldAll = () => setFolded((f) => (allFolded ? [] : [...new Set([...f, ...groups.map((g) => g.key)])]));
   // Saved lists: a view with its context, effort and grouping, by name (settings `taskLists`).
   const saved = useStore(settings).taskLists ?? [];
   const savedOn = saved.find((l) => l.view === view.id && l.context === ctx && l.effort === effort && l.group === groupBy)?.name ?? null;
@@ -164,6 +171,17 @@ export function TasksScreen() {
             ["due", "Due"],
           ]}
         />
+        {groupBy !== "none" && groups.length > 0 && (
+          <button
+            type="button"
+            className="btn"
+            title={allFolded ? "Show the tasks in every group" : "Fold every group away, leaving its band and count"}
+            onClick={foldAll}
+          >
+            <Icon name={allFolded ? "chevdown" : "chevup"} size={14} />
+            <Squeeze full={allFolded ? "Expand all" : "Collapse all"} narrow="" />
+          </button>
+        )}
         <button
           type="button"
           className="btn pri"
@@ -286,31 +304,40 @@ export function TasksScreen() {
                   <div key={g.key} className="tb-group" role="rowgroup">
                     {groupBy !== "none" && (
                       <TableBand
-                        icon={GROUP_ICON[groupBy]}
-                        label={g.label}
+                        label={
+                          <BandFold
+                            icon={GROUP_ICON[groupBy]}
+                            label={g.label}
+                            folded={folded.includes(g.key)}
+                            onFold={() => fold(g.key)}
+                            title={folded.includes(g.key) ? `Show the tasks in ${g.label}` : `Fold ${g.label} away`}
+                          />
+                        }
                         none={g.key === "" || g.key === "none"}
                         n={g.rows.length}
                         tip={`${fmtCount(g.rows.length)} ${g.rows.length === 1 ? "task" : "tasks"} ${groupTip(groupBy, g.label)}`}
                       />
                     )}
-                    <TaskList
-                      table
-                      rows={g.rows}
-                      manual={view.manual && groupBy === "none"}
-                      every={every}
-                      selected={sel}
-                      onSelect={(t) => pick(taskKey(t))}
-                      onDeselect={() => pick(null)}
-                      onOpen={() => document.querySelector<HTMLElement>(".trow.sel .trename")?.click()}
-                      keys
-                      empty={
-                        dq
-                          ? `No tasks in this list match “${dq}”.`
-                          : ctx || effort
-                            ? "No tasks here match the filter."
-                            : "No tasks in this list."
-                      }
-                    />
+                    {(groupBy === "none" || !folded.includes(g.key)) && (
+                      <TaskList
+                        table
+                        rows={g.rows}
+                        manual={view.manual && groupBy === "none"}
+                        every={every}
+                        selected={sel}
+                        onSelect={(t) => pick(taskKey(t))}
+                        onDeselect={() => pick(null)}
+                        onOpen={() => document.querySelector<HTMLElement>(".trow.sel .trename")?.click()}
+                        keys
+                        empty={
+                          dq
+                            ? `No tasks in this list match “${dq}”.`
+                            : ctx || effort
+                              ? "No tasks here match the filter."
+                              : "No tasks in this list."
+                        }
+                      />
+                    )}
                   </div>
                 ))}
               </div>
