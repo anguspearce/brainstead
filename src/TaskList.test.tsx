@@ -14,7 +14,7 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 
 import type { TaskRow } from "./api";
 import { threadLabel } from "./skills/Reply";
-import { TaskList, TasksFailed, TaskText } from "./TaskList";
+import { TaskEditor, TaskList, TasksFailed, TaskText } from "./TaskList";
 import { retitled, retryTasks, tasksFailed } from "./taskModel";
 import { toast, Toasts } from "./Toast";
 
@@ -208,5 +208,19 @@ describe("Draft reply's thread names", () => {
     expect(threadLabel({ path: "sources/Teams. Chat. Lena - 2026-10-01.md", title: "Teams. Chat. Lena - 2026-10-01", date: null })).toBe(
       "Teams: Lena",
     );
+  });
+});
+
+describe("the task editor's priority", () => {
+  const pressed = (name: string) => screen.getByRole("button", { name }).getAttribute("aria-pressed");
+
+  it("shows the priority the row's chip shows, wherever it is on the line", () => {
+    for (const text of ["Call Sam ⏫ [effort:: 15m]", "⏫ Review the plan", "Call Sam ⏫"]) {
+      render(<TaskEditor t={t(text)} />);
+      expect([pressed("High"), pressed("None"), pressed("Low")], text).toEqual(["true", "false", "false"]);
+      cleanup();
+    }
+    render(<TaskEditor t={t("Plain words")} />);
+    expect([pressed("High"), pressed("None")]).toEqual(["false", "true"]);
   });
 });

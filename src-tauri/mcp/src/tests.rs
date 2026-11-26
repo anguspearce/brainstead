@@ -938,6 +938,7 @@ fn rebuilding_the_index_and_pinning_a_chat_go_to_the_app() {
     for (tool_name, arg) in [
         ("list_tasks", "effort"),
         ("list_tasks", "group"),
+        ("list_tasks", "sort"),
         ("list_inbox", "suggest"),
         ("fix_name", "files"),
         ("list_changes", "view"),
@@ -947,6 +948,10 @@ fn rebuilding_the_index_and_pinning_a_chat_go_to_the_app() {
     ] {
         assert!(props(tool_name).get(arg).is_some(), "{tool_name} takes {arg}");
     }
+    // Priority is a sort and a grouping, as on the Tasks screen.
+    let has = |tool_name: &str, arg: &str, v: &str| props(tool_name)[arg]["enum"].as_array().unwrap().iter().any(|x| x == v);
+    assert!(has("list_tasks", "sort", "priority") && has("list_tasks", "sort", "manual"));
+    assert!(has("list_tasks", "group", "priority") && has("task_lists", "group", "priority"));
     let screens = props("open")["screen"]["enum"].clone();
     for s in ["meeting", "reply", "doc_check"] {
         assert!(screens.as_array().unwrap().iter().any(|x| x == s), "open on {s}");

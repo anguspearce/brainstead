@@ -30,7 +30,7 @@ import {
   toggleTask,
   useAllTasks,
 } from "./taskModel";
-import { fieldIcon, fieldTip, fieldValue, TASK_FIELDS, taskFieldsOf } from "./taskFields";
+import { fieldIcon, fieldTip, fieldValue, priorityOf, TASK_FIELDS, taskFieldsOf } from "./taskFields";
 import { parseTask, PriorityName } from "./tasksq/fields";
 import { urgency } from "./tasksq/task";
 import { splitTaskDates, taskDate, TaskDateId } from "./taskDates";
@@ -284,7 +284,6 @@ const PRIORITY_CHOICES: [PriorityName, string][] = [
   ["high", "High"],
   ["highest", "Highest"],
 ];
-const priorityOf = (t: TaskRow) => parseTask(t.lineText)?.priority ?? "none";
 
 /** A field the row's chips, the ⋯ menu's More… and the task pane each edit, with the same quick
  *  picks from the sections below, so the three can't drift. */

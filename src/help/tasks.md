@@ -19,7 +19,7 @@ Each list on the left shows its count:
 
 To copy a task's words, drag across them (or double-click a word) and press `⌘C`, or right-click the selection and choose Copy. Selecting doesn't choose the row. The same works for Inbox items, answers in Ask, quotes and the other text you'd want to copy.
 
-In Next actions, Follow-ups, Waiting for and Someday / maybe, drag rows by their grip to set your own order (not while grouped). The order is saved at the end of each line as `^rank-1024`, and the list is renumbered when it needs room. Tasks a search or filter hides at the time keep their places next to the tasks they followed. An assistant moves a task the same way.
+In Next actions, Follow-ups, Waiting for and Someday / maybe, drag rows by their grip to set your own order (not while grouped, or sorted by priority). The order is saved at the end of each line as `^rank-1024`, and the list is renumbered when it needs room. Tasks a search or filter hides at the time keep their places next to the tasks they followed. An assistant moves a task the same way.
 
 ## Use the keys
 - `↑` and `↓` choose a task, carrying on into the next list.
@@ -63,11 +63,13 @@ To change a task's words in any list, point at it and click the pencil after the
 **Lives in** shows the note, line and heading; click it to open the note there. **Ask about this** opens [Ask](app:ask) about the task. ⌘Z undoes any change.
 
 ## Group, filter and save lists
-**Group by** in the top bar (**None**, **Project**, **Context** or **Due**) groups the list, with a band and count per group; in a narrow window it's a drop-down menu instead. Grouped lists can't be dragged.
+**Group by** in the top bar (**None**, **Project**, **Context**, **Due** or **Priority**) groups the list, with a band and count per group; in a narrow window it's a drop-down menu instead. Grouped lists can't be dragged. Priority bands run Highest, High, Medium, Low, Lowest, then **No priority**.
+
+The **Sort** menu beside the effort menu picks **Manual order** (the list's own order, the default: your dragged order, or by date in Deferred and the Done lists) or **By priority**: highest first, tasks with no priority last, and tasks of the same priority keep the list's own order. A sorted list can't be dragged; switch back to **Manual order** to reorder. The sort isn't kept in saved lists.
 
 **Search tasks** narrows every list to tasks with all the words you type, in their text, note, heading, project, tags or context. The counts on the left follow, and `Esc` clears it. Context chips (**All**, `@calls`, `@office`…) show one context; click the chip again, or **All**, to show all. The effort menu shows tasks of 15 minutes, 30 minutes or an hour or less.
 
-**Save this list…** keeps a context, effort and grouping under a name, under Saved on the left. Its x forgets it; the tasks stay. An assistant can use the same search, grouping and filters.
+**Save this list…** keeps a context, effort and grouping under a name, under Saved on the left. Its x forgets it; the tasks stay. An assistant can use the same search, sort, grouping and filters.
 
 ## Find tasks in your notes
 In **Next actions**, **Find tasks and projects** has an assistant read your last 90 days of notes (not the wiki, sources, templates or project notes) for things you'd do, or are waiting on, that aren't tasks yet. At the end of the search and filter bar, a chip says how many it found (**2 suggestions**, with a spinner while it reads) and **Suggest** starts it, then **Suggest again** looks once more; **Stop** shows while it runs. It runs only when you start it, here, in [Projects](app:projects) or from `⌘K`. Click the chip to open the list under the filters and again to fold it; Brainstead remembers which.

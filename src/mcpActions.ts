@@ -113,7 +113,8 @@ import { runHooks, vaultEnv } from "./notes/TemplateRun";
 import { deferredPast, rankBetween, retitled, todayRows, toggleTaskEdit, undoAction, viewRows, VIEWS } from "./taskModel";
 import { taskLabel } from "./md/TaskBlock";
 import { cancelled, completion, inQuote, LineChange, reopened, started, tagToggled, waitingToggled, withPriority } from "./tasksq/edits";
-import { parseTask, statusOf, type PriorityName } from "./tasksq/fields";
+import { priorityOf } from "./taskFields";
+import { statusOf, type PriorityName } from "./tasksq/fields";
 import { toast } from "./Toast";
 import { fmtBytes, fmtCount } from "./ui";
 import { diskUsageText } from "./diskUsage";
@@ -193,7 +194,7 @@ import { ANSWERED, placedText, replyTask, replyTo } from "./skills/Reply";
 import { actionLabel } from "./activityModel";
 import { allTimeline, AllFilter, changeShown, entryShown, logOnly, typesIn } from "./changesLog";
 import { FEED_FILTERS, FeedFilter, FeedRow, groupLine, syncFeed, syncLine } from "./syncActivity";
-import { EFFORT_LIMITS, GroupBy, groupTasks, matchesSearch, withinEffort } from "./taskGroups";
+import { EFFORT_LIMITS, GROUP_NAMES, GroupBy, groupTasks, matchesSearch, SORT_NAMES, SortBy, sortTasks, withinEffort } from "./taskGroups";
 import { captureDefault, halfRenamedText, isMac, keyLabel, terminalApp, vaultFile } from "./platform";
 
 const TODO_LIST = "Me. To Do List.md";
@@ -347,9 +348,9 @@ const shownText = (text: string) =>
 /** A task's #tags but its contexts (#context/…), without the #. */
 const otherTags = (t: TaskRow) => t.tags.map((x) => x.replace(/^#/, "")).filter((g) => !/^context\//.test(g));
 /** Its priority as the task menu names it (edit_task's), or null for none. */
-const priorityOf = (t: TaskRow) => {
-  const p = parseTask(t.lineText)?.priority;
-  return p && p !== "none" ? p : null;
+const priorityName = (t: TaskRow) => {
+  const p = priorityOf(t);
+  return p === "none" ? null : p;
 };
 /** Its status in edit_task's words, done added: open, in_progress, done or cancelled. */
 const statusName = (t: TaskRow) => {
@@ -365,7 +366,7 @@ export function taskLineOut(t: TaskRow, detail = false): string {
   if (t.start) bits.push(`starts ${t.start}`);
   for (const c of t.contexts ?? []) bits.push(`@${c}`);
   if (t.effort) bits.push(`effort ${t.effort}`);
-  const p = priorityOf(t);
+  const p = priorityName(t);
   if (p) bits.push(`priority ${p}`);
   // Its #tags, the lists' among them; contexts are the @ chips above.
   for (const g of otherTags(t)) bits.push(`#${g}`);
@@ -432,7 +433,23 @@ async function listTasks(a: Args): Promise<Listing> {
   if (effort && !EFFORT_LIMITS.some(([v]) => v === effort)) throw new Error("effort is 15, 30 or 60 (minutes), or left out.");
   if (effort) rows = rows.filter((t) => withinEffort(t, effort));
   const group = (str(a, "group") ?? "none") as GroupBy;
-  if (!["none", "project", "context", "due"].includes(group)) throw new Error("group is none, project, context or due.");
+  if (!GROUP_NAMES.includes(group)) throw new Error("group is none, project, context, due or priority.");
+  // The Tasks screen's Sort: manual keeps the order above (the list's own, or Today's bands);
+  // priority puts the most important first, within each of Today's bands, and ties keep their order.
+  const sort = (str(a, "sort") ?? "manual") as SortBy;
+  if (!SORT_NAMES.includes(sort)) throw new Error("sort is manual or priority.");
+  if (sort === "priority") {
+    const bands = [...new Set(band.values())];
+    const inBand = (t: TaskRow) => bands.indexOf(band.get(t) ?? "");
+    rows = bands.length
+      ? bands.flatMap((_, i) =>
+          sortTasks(
+            rows.filter((t) => inBand(t) === i),
+            sort,
+          ),
+        )
+      : sortTasks(rows, sort);
+  }
   // Grouped as the screen groups them: each group's rows together, under its heading.
   const under = new Map<TaskRow, string>();
   if (group !== "none") {
@@ -481,7 +498,7 @@ const taskItem = (t: TaskRow) => ({
   project: t.project ? projectName(t.project) : null,
   contexts: t.contexts ?? [],
   tags: otherTags(t),
-  priority: priorityOf(t),
+  priority: priorityName(t),
   status: statusName(t),
   created: t.created,
   effort: t.effort ?? null,
@@ -3765,7 +3782,7 @@ async function taskLists(a: Args): Promise<string> {
   const effort = a.effort == null ? "" : String(a.effort);
   if (effort && !EFFORT_LIMITS.some(([v]) => v === effort)) throw new Error("effort is 15, 30 or 60 (minutes), or left out.");
   const group = str(a, "group") ?? "none";
-  if (!["none", "project", "context", "due"].includes(group)) throw new Error("group is none, project, context or due.");
+  if (!GROUP_NAMES.includes(group as GroupBy)) throw new Error("group is none, project, context, due or priority.");
   // none is no context: any context, as the list with none chosen.
   const ctx = str(a, "context");
   const l = { name, view, context: ctx && ctx.toLowerCase() !== "none" ? contextName(ctx) : "", effort, group };

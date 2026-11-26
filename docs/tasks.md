@@ -65,10 +65,10 @@ Tasks (⌘3) has the GTD lists: **Next actions**, **Follow-ups**, **Waiting for*
 
 - Tick to finish a task; a recurring one gets its next occurrence. ⌘Z undoes.
 - A row's chips (due, defer, priority, context, effort, project) each open a picker with their quick choices, and its **+** adds a field it hasn't got. The ⋯ menu, or a right-click, renames a task, marks it in progress or waiting for, cancels, deletes or opens its note, and its **More…** sets every date, priority, context, effort and project in one place. The pane on the right shows all of them at once.
-- Drag rows into your own order, kept in the file as `^rank-N`.
+- Drag rows into your own order, kept in the file as `^rank-N`. **Sort** switches from **Manual order** (the list's own order: yours, or by date in Deferred and the Done lists) to **By priority**: highest first, tasks with no priority last, same-priority tasks in the list's own order. Drag only works in **Manual order** and while the list isn't grouped.
 - Keys: `↑` `↓` choose, `↩` opens, `Space` ticks, `⌫` deletes (⌘Z puts it back), `/` searches. They work on Today, Projects and the weekly review too.
 - **Search tasks** narrows every list to tasks matching all its words.
-- Group by **Project**, **Context** or **Due**, filter by context and effort, and **Save this list…**.
+- Group by **Project**, **Context**, **Due** or **Priority**, filter by context and effort, and **Save this list…**.
 - **New task** takes the current list's tag and context. From a list with neither, it waits in the Inbox.
 - **Find tasks and projects** has an assistant read your last 90 days of notes for tasks and projects you haven't written down. A one-line chip (at the end of Tasks' filter bar, at the top of Projects) says how many it found, with **Suggest**, then **Suggest again**; click it to open the list. Each suggestion quotes its note; **Accept**, **Edit** or **Skip** it. Accepted ones are listed in Changes with Revert. It runs only when you start it.
 

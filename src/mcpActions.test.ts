@@ -22,6 +22,7 @@ vi.mock("@tauri-apps/api/webviewWindow", () => ({ getCurrentWebviewWindow: () =>
 
 import type { InboxItem, ReviewRun, TaskRow } from "./api";
 import { clarifyItem, findTask, Listing, renewArgs, runAction, summaryRunLine, taskLineOut } from "./mcpActions";
+import { localToday } from "./md/taskQuery";
 import { settings } from "./store";
 import { focusMode, startFocus } from "./focus";
 import { nav } from "./nav";
@@ -87,6 +88,77 @@ describe("MCP actions", () => {
     expect(out).toContain("- [ ] Call Sam about the launch · due 2026-10-06 · project Orbit App launch  (Me. To Do List.md:12)");
     expect(taskLineOut(row({ effort: "15m" }), true)).toContain("effort 15m");
     await expect(run("tasks.list", { view: "soon" })).rejects.toThrow(/No view/);
+  });
+
+  it("lists in the Tasks screen's manual order by default, or by priority, or grouped by it", async () => {
+    // As the screen reads them: unranked first, then by rank (the app answers in that order).
+    const task = (line: number, text: string, emoji: string, rank: number | null) =>
+      row({ line, text: `${text} ${emoji}`.trim(), lineText: `- [ ] ${text} ${emoji}`.trim(), rank });
+    answers.tasks_all = () => [
+      task(1, "Plain", "", null),
+      task(2, "Low one", "🔽", 1024),
+      task(3, "High one", "⏫", 2048),
+      task(4, "Top one", "🔺", 3072),
+      task(5, "Other high", "⏫", 4096),
+    ];
+    const texts = async (args: Record<string, unknown>) =>
+      ((await data("tasks.list", { view: "all", ...args })).items as { text: string }[]).map((t) => t.text);
+    expect(await texts({})).toEqual(["Plain", "Low one", "High one", "Top one", "Other high"]);
+    expect(await texts({ sort: "manual" })).toEqual(await texts({}));
+    expect(await texts({ sort: "priority" })).toEqual(["Top one", "High one", "Other high", "Low one", "Plain"]);
+    const grouped = (await data("tasks.list", { view: "all", group: "priority" })).items as { text: string; group: string }[];
+    expect(grouped.map((t) => [t.group, t.text])).toEqual([
+      ["Highest", "Top one"],
+      ["High", "High one"],
+      ["High", "Other high"],
+      ["Low", "Low one"],
+      ["No priority", "Plain"],
+    ]);
+    // The sort applies inside a group, and the headings come with the text.
+    expect(await texts({ sort: "priority", group: "priority" })).toEqual(["Top one", "High one", "Other high", "Low one", "Plain"]);
+    expect(await run("tasks.list", { view: "all", group: "priority" })).toContain("High:");
+    await expect(run("tasks.list", { sort: "urgency" })).rejects.toThrow(/sort is manual or priority/);
+    await expect(run("tasks.list", { group: "colour" })).rejects.toThrow(/priority/);
+  });
+
+  it("reads priority where the row's chip does: mid-line, before an effort field or opening the words", async () => {
+    const task = (line: number, text: string) => row({ line, text, lineText: `- [ ] ${text}`, rank: null });
+    answers.tasks_all = () => [task(1, "Plain"), task(2, "Call Sam ⏫ [effort:: 15m]"), task(3, "🔺 Review [[Project. Orbit]]")];
+    const items = async (args: Record<string, unknown>) =>
+      (await data("tasks.list", { view: "all", ...args })).items as { text: string; priority: string | null }[];
+    expect((await items({})).map((t) => [t.text, t.priority])).toEqual([
+      ["Plain", null],
+      ["Call Sam", "high"],
+      ["Review [[Project. Orbit]]", "highest"],
+    ]);
+    expect((await items({ sort: "priority" })).map((t) => t.priority)).toEqual(["highest", "high", null]);
+    expect(await run("tasks.list", { view: "all" })).toContain("priority high");
+  });
+
+  it("sorts Today's bands by priority within each band, not across them", async () => {
+    const today = localToday();
+    const task = (line: number, text: string, emoji: string, due: string) =>
+      row({ line, text: `${text} ${emoji} 📅 ${due}`, lineText: `- [ ] ${text} ${emoji} 📅 ${due}`, due, rank: null });
+    answers.tasks_all = () => [
+      task(1, "Overdue low", "🔽", "2000-01-01"),
+      task(2, "Overdue top", "🔺", "2000-01-01"),
+      task(3, "Today plain", "", today),
+      task(4, "Today high", "⏫", today),
+    ];
+    const items = async (sort: string) =>
+      ((await data("tasks.list", { view: "today", sort })).items as { text: string; band: string }[]).map((t) => `${t.band}: ${t.text}`);
+    expect(await items("manual")).toEqual([
+      "Overdue: Overdue low",
+      "Overdue: Overdue top",
+      "Due today: Today plain",
+      "Due today: Today high",
+    ]);
+    expect(await items("priority")).toEqual([
+      "Overdue: Overdue top",
+      "Overdue: Overdue low",
+      "Due today: Today high",
+      "Due today: Today plain",
+    ]);
   });
 
   it("matches query as the Tasks screen's search does: project, heading and tags too, accents ignored", async () => {
@@ -1237,6 +1309,17 @@ describe("MCP actions", () => {
       expect(await run("task_lists")).toBe("No saved lists.");
     });
 
+    it("saves a task list grouped by priority and lists it that way", async () => {
+      answers.settings_write = (a) => a!.settings;
+      await run("task_lists", { action: "save", name: "By priority", view: "next", group: "priority" });
+      expect(await run("task_lists")).toBe("1 saved list:\n- By priority: next, by priority");
+      answers.tasks_all = () => [row({ text: "Plain one" }), row({ line: 3, text: "High one ⏫", lineText: "- [ ] High one ⏫" })];
+      answers.inbox_list = () => [];
+      const out = (await run("tasks.list", { list: "By priority" })) as string;
+      expect(out.split("\n").filter((l) => !l.startsWith("- "))).toEqual(["2 tasks in next:", "High:", "No priority:"]);
+      await run("task_lists", { action: "remove", name: "By priority" });
+    });
+
     it("reads and changes the settings it's allowed, never Read-only", async () => {
       answers.settings_write = (a) => a!.settings;
       expect(await run("settings")).toMatch(/dailyCheckTime · Settings › Automations › Daily check time: "09:00"/);
@@ -1413,6 +1496,7 @@ describe("MCP actions", () => {
       const today = new Date().toLocaleDateString("en-CA");
       answers.tasks_all = () => [
         row({
+          text: "Call Sam about the launch ⏫ #budget #context/calls ➕ 2026-10-01",
           lineText: "- [/] Call Sam about the launch ⏫ #budget #context/calls ➕ 2026-10-01",
           status: "/",
           tags: ["budget", "context/calls"],
