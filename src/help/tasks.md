@@ -5,7 +5,7 @@ screens: [tasks]
 order: 3
 summary: Every task in the vault, live from the notes it's written in, as GTD lists you can tick, date, filter and reorder.
 ---
-A task is a `- [ ]` line in any note. Tasks lists them all, and each change rewrites only that one line in its note.
+A task is a `- [ ]` line in any note. Tasks lists them all, and each change rewrites only that one line in its note. A checklist inside a wiki page, a source or a template isn't a task here, and isn't counted in the tray, in Projects or by an assistant either.
 
 ## Choose a list
 Each list on the left shows its count:
@@ -94,7 +94,7 @@ Tasks are plain markdown, so other editors read them too.
 - Dates are emoji before the date: `📅` due, `⏳` deferred until, `🛫` start, `➕` created, `✅` done.
 - Priority is one emoji: `🔺` highest, `⏫` high, `🔼` medium, `🔽` low, `⏬` lowest.
 - A context is a tag like `#context/calls`, and effort a field like `[effort:: 30m]`.
-- A task belongs to a project when it's in the project's note or links `[[Project. Orbit App launch]]`. A project link at the end of the words shows as the project under the row; one inside the sentence stays in the words.
+- A task belongs to a project when it's in the project's note, links `[[Project. Orbit App launch]]`, or is in one of its documents, a note with a `Project: [[Project. Orbit App launch]]` line near its top ([Documents](help:projects)). A project link at the end of the words shows as the project under the row; one inside the sentence stays in the words.
 - A recurring task carries a rule such as `🔁 every week`. Tick it and the next one is added above, with its dates moved on.
 - Tasks inside quotes and callouts (`> - [ ] Call Maya`) work like any other.
 

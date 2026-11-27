@@ -206,6 +206,7 @@ mod tests {
             size: 1,
             mtime: at(when),
             tags: vec![],
+            project: None,
         };
         let files = [
             f("a.md", "note", "2026-09-29 08:00"),

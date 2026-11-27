@@ -77,7 +77,7 @@ const when = (iso: string | null) => {
 
 async function load(): Promise<TrayData> {
   const [tasks, inbox, changes, runs, syncLog] = await Promise.all([
-    api.tasksAll().catch(() => null as TaskRow[] | null),
+    api.tasksNotes().catch(() => null as TaskRow[] | null),
     api.inboxList().catch(() => null),
     api.changesList().catch(() => null),
     loadRunStates(),

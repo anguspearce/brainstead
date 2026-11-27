@@ -18,6 +18,7 @@ import { taskLabel } from "./md/TaskBlock";
 import { daysUntil, localToday } from "./md/taskQuery";
 import { contextName, contextsInUse, effortMinutes, fmtEffort, projectName, useProjects } from "./gtd";
 import { nav, openDoc } from "./nav";
+import { noteProject } from "./projectDocs";
 import {
   changeTask,
   moveTask,
@@ -487,6 +488,8 @@ function ProjectSection({ t, done }: { t: TaskRow; done: () => void }) {
     void setTaskGtd(t, { project });
   };
   const active = (projects ?? []).filter((p) => p.status === "active" || p.path === t.project);
+  // A task in a note with a Project: line has that note's project once its line links none.
+  const home = t.projectFrom === "line" ? noteProject(projects ?? [], t.path) : undefined;
   // The few shown: its own project first, then those with the newest tasks (by created date).
   const latest = new Map<string, string>();
   for (const x of all ?? []) if (x.project && (x.created ?? "") > (latest.get(x.project) ?? "")) latest.set(x.project, x.created ?? "");
@@ -536,8 +539,24 @@ function ProjectSection({ t, done }: { t: TaskRow; done: () => void }) {
             {!active.length && <span className="faint small">No active projects yet.</span>}
           </>
         )}
-        {t.project && (
-          <button type="button" className="chip f" aria-label="Clear project" title="Take it out of its project" onClick={() => run(null)}>
+        {/* A project from the note's Project: line stays when the task's line loses its project link, so it has no Clear. */}
+        {t.project && t.projectFrom === "member" && (
+          <span className="faint small" title="The note this task is in names the project on its Project: line">
+            From its note's Project: line
+          </span>
+        )}
+        {t.project && t.projectFrom !== "member" && (
+          <button
+            type="button"
+            className="chip f"
+            aria-label="Clear project"
+            title={
+              home
+                ? `Take its line's project link off: it goes back to ${home.name}, from its note's Project: line`
+                : "Take it out of its project"
+            }
+            onClick={() => run(null)}
+          >
             <Icon name="x" size={11} />
             Clear
           </button>

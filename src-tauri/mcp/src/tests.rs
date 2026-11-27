@@ -594,6 +594,24 @@ fn renames_trash_and_deletes_are_sent() {
     assert_eq!(c["instruction"], json!({"op": "delete_line", "line": line, "at": n}));
     assert!(!made(&f, &c).contains("Walk through the Dashboard"));
     assert!(refused(&f.ctx, "delete_task", json!({"task": "Me. To Do List.md:1", "text": "no such task"})).contains("no task"));
+    // Not a task in the wiki, a source or a template, which the Tasks screen and list_tasks leave out.
+    for path in ["sources/Roadmap Update 2026-09-18.md", "wiki/entities/Orbit App.md", "Templates/Meeting.md"] {
+        let r = refused(&f.ctx, "delete_task", json!({"task": format!("{path}:1"), "text": "anything"}));
+        assert!(r.contains("only tasks in notes can be edited, moved or deleted"), "{path}: {r}");
+    }
+    // edit_task and move_task are refused the same way here, before the app is asked, for the task
+    // and the one it's moved beside; so are the folders that hold no notes.
+    for path in ["wiki/entities/Orbit App.md", "templates/Meeting.md", "images/a.md", "attachments/a.md", "node_modules/p/README.md"] {
+        let id = format!("{path}:1");
+        for (tool, args) in [
+            ("edit_task", json!({"task": id, "text": "x", "due": "today"})),
+            ("move_task", json!({"task": id, "text": "x", "after": "Me. To Do List.md:1"})),
+            ("move_task", json!({"task": "Me. To Do List.md:1", "text": "x", "before": id})),
+        ] {
+            let r = refused(&f.ctx, tool, args);
+            assert!(r.contains("only tasks in notes can be edited, moved or deleted"), "{tool} {path}: {r}");
+        }
+    }
     // Text with no words in it (only a tag, or nothing) fits any task, so it never goes looking: a
     // note's only task isn't taken for a line that isn't one. The line itself is still taken.
     std::fs::write(f.ctx.vault().join("Idea. Single.md"), "# Single\n\n- [ ] Call Maya #followup\n").unwrap();

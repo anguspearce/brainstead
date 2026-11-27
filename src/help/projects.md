@@ -5,7 +5,7 @@ screens: [projects]
 order: 4
 summary: Every project note by status and area, with its next actions, waiting-fors and a flag when one is stuck.
 ---
-A project is a note named `Project. <name>.md`. Its properties hold its status, area and outcome. Its tasks are those written in it plus any task elsewhere that links it. In the daily and weekly summaries, area Personal goes under **Personal** and any other area under **Work done**, done projects included.
+A project is a note named `Project. <name>.md`. Its properties hold its status, area and outcome. Its tasks are those written in it, those in its documents, and any task elsewhere that links it. In the daily and weekly summaries, area Personal goes under **Personal** and any other area under **Work done**, done projects included.
 
 ## Find a project
 **Active**, **On hold**, **Someday** and **Completed** in the top bar switch by status, each with its count (in a narrow window the counts go, then the four become a drop-down menu). The list groups projects by area (no area last). Under each project's name, a grey line says how many next actions and waiting-fors it has and when the note or any of its tasks last changed. Click a project to open it on the right, and click it again to let it go. Click an area's name to fold its projects away or show them again; what's folded is remembered.
@@ -23,7 +23,12 @@ Click a project to open it. Edit its name, **Done looks like** (the outcome) and
 
 **Waiting for** and **Someday / maybe** list those tasks when there are any. Each waiting-for has **Draft nudge**, which asks [Ask](app:ask) for a follow-up to copy into Outlook or Teams.
 
-The side shows the project note, notes that link it, wiki pages it links, recent activity and what's done (cancelled tasks struck through).
+The side shows the project note, its **Documents**, the other notes that link it (**Show all** when there are more than 12), wiki pages it links, recent activity and what's done (cancelled tasks struck through).
+
+## Documents
+A note belongs to a project when a line near its top, within its first 15 lines after the properties, says `Project: [[Project. <name>]]` (an alias such as `[[Project. <name>|<name>]]` is fine). Only the first such line counts. The line can be indented, but it must start with `Project:` and the link: a Dataview field (`Project:: [[…]]`), a bold label (`**Project:**`) and a line in a code block or an HTML comment don't count, nor does a link inside an HTML comment on the line. Only notes belong to projects, not wiki pages, sources or templates. **Documents** lists these notes by type: Tracker, Plan, Findings, Review, Ticket, Prompt, then Other, each with its `summary` property when it has one.
+
+A document's tasks are the project's, on its page, on [Tasks](app:tasks) and in its counts, and in the task's pane each says **From its note's Project: line** instead of offering Clear: to take it out of the project, move it to another note. The exception is a task whose own line links a different project: its Clear takes that link off, and the task is the note's project's again. A task whose own line links a project note that isn't there is in no project and has no Clear; picking a project in its pane puts that one in place of the missing link.
 
 ## Update a project with what's happened
 **Update…** in the project's bar takes a line saying what has happened ("the vendor signed, kickoff is on the 3rd"). An assistant applies it in the background, in an Ask chat of its own called **Update: …**, with Brainstead's own tools: it marks things done or dropped, changes a date, owner or wording, adds a follow-up (a waiting-for when someone else has the next step) and notes what happened on the project's or initiative's page. Change only what the update means is the rule it works to; when it can't tell, it changes nothing and says what it needs. While it works it's in the sidebar's Running line; when it ends a message says what it changed, with **Open** for its chat. Every change is in [Changes](help:review) with **Revert**, made at once as anything you start is.
@@ -36,7 +41,7 @@ Under the tasks are **Mark complete** (or **Make active**), **Edit** and ⋯. Th
 - **Put on hold** (on ⋯) moves an active project to On hold.
 - **Someday** (on ⋯) parks it on Someday.
 
-**Ask about this project** (on ⋯) opens [Ask](app:ask) with the project note attached. **Move to the Trash** (on ⋯) says how many tasks are in the note and how many elsewhere link it, then moves it to the [Trash](app:trash). **Undo** in the toast, or restoring it, brings it back; until then, tasks elsewhere link a missing note.
+**Ask about this project** (on ⋯) opens [Ask](app:ask) with the project note attached. **Move to the Trash** (on ⋯) says how many tasks are in the note, how many elsewhere link it and how many are in its documents, then moves it to the [Trash](app:trash). **Undo** in the toast, or restoring it, brings it back; until then, tasks elsewhere link a missing note, and the tasks in its documents have no project.
 
 ## Find projects in your notes
 At the top of the **Active** projects, **Find tasks and projects** has an assistant read your last 90 days of notes for work they keep coming back to that isn't a project yet. A one-line chip says how many it found (**2 suggestions**, with a spinner while it reads), with **Suggest**, then **Suggest again**, beside it. Click the chip to open the list and again to fold it; Brainstead remembers which. Each suggestion has a name, what done looks like, the notes it rests on and up to three next actions. Suggested tasks show in [Tasks](app:tasks)' Next actions.
@@ -51,7 +56,7 @@ At the top of the **Active** projects, **Find tasks and projects** has an assist
 Or start one from ⌘K, or from an [Inbox](app:inbox) item with `P`.
 
 ## Link tasks to a project
-Add the project's link to a task's line, as in `- [ ] Draft the launch post [[Project. Orbit App launch]]`, or click the row's **+** and choose Project (or its project chip, to change it), or use More… in its ⋯ menu or the task pane on [Tasks](app:tasks). Rows show the project as a chip; click it for **Open** with the project's name, or to choose another.
+Add the project's link to a task's line, as in `- [ ] Draft the launch post [[Project. Orbit App launch]]`, or click the row's **+** and choose Project (or its project chip, to change it), or use More… in its ⋯ menu or the task pane on [Tasks](app:tasks). Rows show the project as a chip; click it for **Open** with the project's name, or to choose another. A task in one of the project's documents belongs to it already.
 
 ## Resize the panes
 Drag the line between the project list and the open project to resize them, and the line beside a project's side column; a double-click puts either back ([pane widths](help:settings-general)).

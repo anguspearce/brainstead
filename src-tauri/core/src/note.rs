@@ -35,6 +35,9 @@ pub struct Parsed {
     pub links: Vec<Link>,
     pub tasks: Vec<Task>,
     pub chunks: Vec<Chunk>,
+    /// The 0-based line of its `Project: [[…]]` line, saying which project it belongs to, and the
+    /// keys of the links on it outside comments (`projects::project_line_links`).
+    pub project_line: Option<(usize, Vec<String>)>,
 }
 
 /// A section longer than this is split at its blank lines, so a search hit points somewhere near.
@@ -58,6 +61,7 @@ pub fn file_only(rel: &str) -> Parsed {
         links: vec![],
         tasks: vec![],
         chunks: vec![],
+        project_line: None,
     }
 }
 
@@ -142,6 +146,7 @@ pub fn parse(rel: &str, layer: Layer, src: &str) -> Parsed {
         links: parse_links(&ls),
         tasks: parse_tasks(&ls),
         chunks: chunks(src, fm.body_start, &ls),
+        project_line: crate::projects::project_line_links(&ls),
     }
 }
 

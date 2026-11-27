@@ -483,7 +483,7 @@ pub fn tools() -> Vec<Value> {
             }), &[])),
         // Tasks.
         tool("list_tasks", "List tasks", Read,
-            "Tasks as Brainstead's lists show them (needs the app). Each line gives the task, its dates and chips (priority and #tags among them), and its id (path:line) to act on it with edit_task, move_task or delete_task. Narrow with view, project, context, effort, query (every word somewhere in the task's words, note, heading, project, #tags or contexts, accents ignored, as the Tasks screen's search matches) or a saved list rather than raising limit; offset gives the next page, as the reply says. group puts them under headings, as the Tasks screen's Group by does.",
+            "Tasks as Brainstead's lists show them (needs the app). Each line gives the task, its dates and chips (priority and #tags among them), and its id (path:line) to act on it with edit_task, move_task or delete_task. Narrow with view, project, context, effort, query (every word somewhere in the task's words, note, heading, project, #tags or contexts, accents ignored, as the Tasks screen's search matches) or a saved list rather than raising limit; offset gives the next page, as the reply says. group puts them under headings, as the Tasks screen's Group by does. Like the Tasks screen, it lists tasks in notes only, not in wiki pages, sources or templates.",
             schema(json!({
                 "view": {"type": "string", "enum": ["today", "next", "followups", "waiting", "deferred", "someday", "done-this-week", "done-last-week", "all"], "description": "today: the Today screen's bands, Overdue, Due today, Deferred until now, Coming up this week (due in the next seven days) and Waiting for, each under its label (a task can be in two), leaving out tasks deferred to a later day. next: open tasks that aren't follow-ups, waiting, someday, deferred, still in the Inbox or in a project that's on hold or someday (the default). deferred: the Deferred list, tasks deferred to a later day. all: every open task."},
                 "project": {"type": "string", "description": "Only this project's tasks, by its name."},
@@ -503,7 +503,7 @@ pub fn tools() -> Vec<Value> {
                 "priority": {"type": "string", "enum": ["highest", "high", "medium", "low", "lowest", "none"], "description": "none takes the priority off."},
                 "contexts": {"type": "array", "items": {"type": "string"}, "description": "The task's contexts, replacing what it has: [\"calls\"]. [] clears them."},
                 "effort": {"type": ["string", "null"], "description": "15m, 1h, 1h30m, 2d; null clears it."},
-                "project": {"type": ["string", "null"], "description": "A project's name; null takes it out of its project."},
+                "project": {"type": ["string", "null"], "description": "A project's name; null takes the project link off its line (in a note with a Project: line the task then has that note's project, else none), unless the project comes from its note's Project: line (then move the task to another note, or give it another project)."},
                 "waiting": {"type": "boolean", "description": "true marks it waiting for someone (#waiting-for), false no longer."},
                 "followup": {"type": "boolean", "description": "true makes it a follow-up (#followup, in the Follow-ups list), false no longer."},
                 "status": {"type": "string", "enum": ["cancelled", "open", "in_progress"], "description": "cancelled drops it without deleting the line."}
@@ -568,7 +568,7 @@ pub fn tools() -> Vec<Value> {
                 "project": {"type": "string", "description": "A project's name, as list_projects gives it."}
             }), &["update"])),
         tool("list_projects", "List projects", Read,
-            "Every project, as the Projects screen lists them (needs the app), in its order (by area, as dragged there or with move_project, then A to Z): its name, status and count of next actions, flagged as the screen flags an active one (Stuck: no next action; Quiet: nothing has happened for two weeks), with its note's path. detail adds the area, what done looks like and the waiting, someday and done counts. Statuses are the screen's tabs: active, on-hold, someday, completed. Use the name with list_tasks' project, create_task or update_project.",
+            "Every project, as the Projects screen lists them (needs the app), in its order (by area, as dragged there or with move_project, then A to Z): its name, status and count of next actions, flagged as the screen flags an active one (Stuck: no next action; Quiet: nothing has happened for two weeks), with its note's path. detail adds the area, what done looks like and the waiting, someday and done counts. Statuses are the screen's tabs: active, on-hold, someday, completed. Use the name with list_tasks' project, create_task or update_project. A project's tasks are those in its note, those whose line links it, and those in its member notes: notes (not wiki pages, sources or templates) whose first Project: [[Project. <name>]] line, within their first 15 lines and outside code and HTML comments, names it, unless the task's line links another project or one that isn't there. detail also lists each project's member notes (its Documents: Tracker, Plan, Findings, Review, Ticket, Prompt and others) with their summary property.",
             schema(json!({"detail": detail}), &[])),
         tool("create_project", "Create a project", Change,
             "Makes a project note, as the Projects screen does (needs the app). It's named and laid out as the vault's other projects are, and recorded in Changes, where the user can revert it. Add its first tasks with create_task and the project's name.",
@@ -1318,8 +1318,14 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
             }
         }
         "list_tasks" => act("tasks.list", obj),
-        "edit_task" => act("task.edit", obj),
-        "move_task" => act("task.move", obj),
+        "edit_task" => {
+            task_ids_in_notes(ctx, &obj)?;
+            act("task.edit", obj)
+        }
+        "move_task" => {
+            task_ids_in_notes(ctx, &obj)?;
+            act("task.move", obj)
+        }
         "list_inbox" => act("inbox.list", obj),
         "clarify_inbox" => act("inbox.clarify", obj),
         "capture" => act("inbox.capture", obj),
@@ -1576,11 +1582,35 @@ fn task_words(s: &str) -> String {
     NOISE.replace_all(s, " ").split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
 }
 
+/// Refuses a task path outside the notes: the Tasks screen and list_tasks have only tasks in
+/// notes, as the vault classifies a path (`Vault::classify`), so the wiki, sources, templates and
+/// the folders that hold no notes have none to edit, move or delete.
+fn in_a_note(ctx: &Ctx, path: &str) -> Result<(), String> {
+    let layer = brainstead_core::vault::Vault::new(ctx.vault(), vec![]).classify(&path.replace('\\', "/"));
+    if layer == Some(brainstead_core::vault::Layer::Note) {
+        return Ok(());
+    }
+    Err(format!(
+        "{path} isn't a note: only tasks in notes can be edited, moved or deleted, not ones in the wiki, sources, Templates or images folders."
+    ))
+}
+
+/// edit_task's and move_task's task ids (`task`, `after`, `before`), refused when one is outside
+/// the notes; the app finds the task itself.
+fn task_ids_in_notes(ctx: &Ctx, obj: &Value) -> Result<(), String> {
+    for k in ["task", "after", "before"] {
+        let Some((path, _)) = obj.get(k).and_then(Value::as_str).and_then(|id| id.trim().rsplit_once(':')) else { continue };
+        in_a_note(ctx, path)?;
+    }
+    Ok(())
+}
+
 /// `path:line` (1-based) and the task's text to the line in the file, as the app's own lookup.
 fn find_task(ctx: &Ctx, id: &str, text: &str) -> Result<(String, usize, String), String> {
     let (path, n) = id.rsplit_once(':').ok_or_else(|| format!("“{id}” isn't a task id: use the path:line that list_tasks gives."))?;
     let n: usize = n.parse().map_err(|_| format!("“{id}” isn't a task id: use the path:line that list_tasks gives."))?;
     brainstead_core::trash::safe_rel(path).map_err(|e| e.to_string())?;
+    in_a_note(ctx, path)?;
     let body = read_text(ctx, path).map_err(|_| format!("{path} isn't in the vault."))?;
     let want = task_words(text);
     let lines: Vec<&str> = body.lines().collect();

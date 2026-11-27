@@ -161,6 +161,7 @@ import { imageView } from "./ImageViewer";
 import { TOPICS } from "./help";
 import { HelpView, openHelp } from "./help/HelpDrawer";
 import { IMAGE_EXT } from "./md/wikilinks";
+import { documentGroups, noteProject } from "./projectDocs";
 import { nav, place, Screen, SettingsPane } from "./nav";
 import { focusMode } from "./focus";
 import { RAIL_BELOW, RailWidth, railOn, railWidth, setRail } from "./sidebarRail";
@@ -382,7 +383,7 @@ export function taskLineOut(t: TaskRow, detail = false): string {
 const viewName = (id: string) => (id === "scheduled" ? "deferred" : id);
 
 async function listTasks(a: Args): Promise<Listing> {
-  const all = await api.tasksAll();
+  const all = await api.tasksNotes();
   const today = localToday();
   // The Deferred list's id is `scheduled` (saved lists keep it); `deferred` is its name.
   const saved = str(a, "list");
@@ -522,7 +523,7 @@ async function editTask(a: Args, r: McpRequest): Promise<string> {
   const o = await submitAll([change]);
   told(o.applied ? `${done.join(", ")}: “${was}”` : `held a change to “${was}” for you in Changes`);
   if (!o.applied) return o.message;
-  const now = (await api.tasksAll()).find((x) => x.path === t.path && x.lineText === line) ?? t;
+  const now = (await api.tasksNotes()).find((x) => x.path === t.path && x.lineText === line) ?? t;
   return `Done (${done.join(", ")}). The task is now:\n${taskLineOut(now)}\n${o.message}`;
 }
 
@@ -531,7 +532,14 @@ async function editTask(a: Args, r: McpRequest): Promise<string> {
 async function taskEdit(a: Args, r: McpRequest): Promise<{ t: TaskRow; line: string; change: ChangeSubmit; done: string[] }> {
   const id = str(a, "task");
   if (!id) throw new Error("Which task? Give its id from list_tasks (path:line).");
-  const t = findTask(await api.tasksAll(), id, str(a, "text"));
+  const t = findTask(await api.tasksNotes(), id, str(a, "text"));
+  // A task whose project is the one its note's Project: line names (its line links no other
+  // project; it may link that one) stays in it once its line's project link is taken off, so
+  // clearing is refused (the task pane offers no Clear for it either).
+  if (has(a, "project") && !a.project && t.projectFrom === "member")
+    throw new Error(
+      `Its project, ${projectName(t.project ?? "")}, comes from the Project: line of ${t.path}, not from the task's own line, so it can't be cleared: move the task to another note, or give it another project.`,
+    );
   const today = localToday();
   const day = moment(today, "YYYY-MM-DD");
   // The line worked out edit by edit (a recurring tick makes two; the rest act on the last), then
@@ -582,7 +590,10 @@ async function taskEdit(a: Args, r: McpRequest): Promise<{ t: TaskRow; line: str
   if (has(a, "project")) {
     const p = a.project ? await projectPath(String(a.project)) : null;
     await rust({ op: "project", project: p });
-    done.push(p ? `project ${projectName(p)}` : "no project");
+    // A task in a note with a Project: line has that note's project once its line links none (a
+    // link to a project note that isn't there, which kept it out, comes off too).
+    const home = !p && t.projectFrom !== "note" ? noteProject(await api.projectsList(), t.path) : undefined;
+    done.push(p ? `project ${projectName(p)}` : home ? `back to ${home.name}, from its note's Project: line` : "no project");
   }
   if (has(a, "waiting")) {
     const now = t.tags.some((g) => g === "waiting-for" || g === "#waiting-for");
@@ -627,7 +638,7 @@ const RANK_SPACING = 1024;
  *  the list both tasks are in (or, with project, the project page's Next actions), between its real neighbours there, or the whole list renumbered when
  *  some rows have no rank or there's no room. Every line it changes is one change, made together. */
 async function moveTask(a: Args, r: McpRequest): Promise<string> {
-  const all = await api.tasksAll();
+  const all = await api.tasksNotes();
   const t = findTask(all, str(a, "task") ?? "", str(a, "text"));
   const ref = (k: string) => (str(a, k) ? findTask(all, str(a, k)!) : null);
   const after = ref("after");
@@ -1115,7 +1126,7 @@ async function updateItem(a: Args): Promise<string> {
     const i = (await api.inboxList()).filter(unclarified).find((x) => inboxKey(x) === key);
     if (!i) throw new Error(`No Inbox item ${key}. list_inbox shows them, each with its id.`);
     target = { kind: "inbox", item: i };
-  } else if (str(a, "task")) target = { kind: "task", task: findTask(await api.tasksAll(), str(a, "task")!, str(a, "text")) };
+  } else if (str(a, "task")) target = { kind: "task", task: findTask(await api.tasksNotes(), str(a, "task")!, str(a, "text")) };
   else {
     const path = await projectPath(str(a, "project")!);
     const p = (await api.projectsList()).find((x) => x.path === path)!;
@@ -1173,11 +1184,18 @@ const flagLine = (p: ProjectRow) => {
   return f === "stuck" ? " · Stuck: it has no next action" : f === "quiet" ? " · Quiet: nothing has happened for two weeks" : "";
 };
 
-/** A project's line: its name, status, next actions and flag; with detail its area, what done looks like and every count. */
+/** A project's line: its name, status, next actions and flag; with detail its area, what done looks like, every count
+ *  and its documents (member notes) under it, by type as its page groups them. */
 const projectOut = (p: ProjectRow, detail = true) =>
   detail
-    ? `- ${p.name} · ${statusOut(p.status)}${p.area ? ` · ${p.area}` : ""} · ${p.next} next, ${p.waiting} waiting, ${p.someday} someday, ${p.done} done${flagLine(p)}${p.outcome ? ` · done looks like: ${p.outcome}` : ""}  (${p.path})`
+    ? `- ${p.name} · ${statusOut(p.status)}${p.area ? ` · ${p.area}` : ""} · ${p.next} next, ${p.waiting} waiting, ${p.someday} someday, ${p.done} done${flagLine(p)}${p.outcome ? ` · done looks like: ${p.outcome}` : ""}  (${p.path})${documentsOut(p)}`
     : `- ${p.name} · ${statusOut(p.status)} · ${p.next} next${flagLine(p)}  (${p.path})`;
+
+/** A project's member notes, one indented line each, by type: its page's Documents card. */
+const documentsOut = (p: ProjectRow) =>
+  documentGroups(p.documents ?? [])
+    .flatMap((g) => g.docs.map((d) => `\n  - ${g.type}: ${d.title}${d.summary ? ` · ${d.summary}` : ""}  (${d.path})`))
+    .join("");
 
 async function updateProject(a: Args, r: McpRequest): Promise<string> {
   const path = await projectPath(str(a, "project") ?? "");
@@ -3262,6 +3280,9 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
         waiting: p.waiting,
         someday: p.someday,
         done: p.done,
+        documents: documentGroups(p.documents ?? []).flatMap((g) =>
+          g.docs.map((d) => ({ type: g.type, title: d.title, path: d.path, summary: d.summary })),
+        ),
       }),
       empty: "No projects.",
     }),

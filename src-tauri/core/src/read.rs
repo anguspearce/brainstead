@@ -5,6 +5,8 @@
 //! Read-only questions to the index: the files in a layer, one document with what it links to and
 //! what links to it.
 
+use std::sync::LazyLock;
+
 use rusqlite::{params, OptionalExtension, Row};
 use serde::Serialize;
 
@@ -27,10 +29,19 @@ pub struct FileSummary {
     pub size: i64,
     pub mtime: i64,
     pub tags: Vec<String>,
+    /// The project note it belongs to: itself for a project note, else the one its
+    /// `Project: [[…]]` line names (`projects::project_line`).
+    pub project: Option<String>,
 }
 
-const SUMMARY_COLS: &str =
-    "f.path, f.layer, f.type, f.title, f.date, f.size, f.mtime, (SELECT group_concat(tag, char(31)) FROM tags t WHERE t.file_id = f.id)";
+static SUMMARY_COLS: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "f.path, f.layer, f.type, f.title, f.date, f.size, f.mtime, (SELECT group_concat(tag, char(31)) FROM tags t WHERE t.file_id = f.id),
+         CASE WHEN {} THEN f.path ELSE (SELECT sp.path FROM files sp WHERE sp.id = {}) END",
+        crate::projects::is_project_sql("f"),
+        crate::projects::member_project_sql("f")
+    )
+});
 
 fn summary(r: &Row) -> rusqlite::Result<FileSummary> {
     let tags: Option<String> = r.get(7)?;
@@ -43,6 +54,7 @@ fn summary(r: &Row) -> rusqlite::Result<FileSummary> {
         size: r.get(5)?,
         mtime: r.get(6)?,
         tags: tags.map(|t| t.split('\u{1f}').map(String::from).collect()).unwrap_or_default(),
+        project: r.get(8)?,
     })
 }
 
@@ -83,19 +95,19 @@ pub struct DocMeta {
 impl Index {
     /// Every file in a layer ("note", "wiki", "source", "template"), or all of them for None.
     pub fn list(&self, layer: Option<&str>) -> Result<Vec<FileSummary>> {
-        let sql = format!("SELECT {SUMMARY_COLS} FROM files f WHERE ?1 IS NULL OR f.layer = ?1 ORDER BY f.path");
+        let sql = format!("SELECT {} FROM files f WHERE ?1 IS NULL OR f.layer = ?1 ORDER BY f.path", *SUMMARY_COLS);
         let mut st = self.conn().prepare(&sql).map_err(e)?;
         let rows = st.query_map([layer], summary).map_err(e)?;
         rows.collect::<std::result::Result<_, _>>().map_err(e)
     }
 
     pub fn summary(&self, path: &str) -> Result<Option<FileSummary>> {
-        let sql = format!("SELECT {SUMMARY_COLS} FROM files f WHERE f.path = ?1");
+        let sql = format!("SELECT {} FROM files f WHERE f.path = ?1", *SUMMARY_COLS);
         self.conn().query_row(&sql, [path], summary).optional().map_err(e)
     }
 
     pub fn summary_by_id(&self, id: i64) -> Result<Option<FileSummary>> {
-        let sql = format!("SELECT {SUMMARY_COLS} FROM files f WHERE f.id = ?1");
+        let sql = format!("SELECT {} FROM files f WHERE f.id = ?1", *SUMMARY_COLS);
         self.conn().prepare_cached(&sql).map_err(e)?.query_row([id], summary).optional().map_err(e)
     }
 

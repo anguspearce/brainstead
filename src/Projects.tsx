@@ -38,6 +38,8 @@ import { iconizeEmoji } from "./md/fieldEmoji";
 import { ago, Dialog, fmtCount, LayerTag, Seg, Squeeze } from "./ui";
 import { usePanes } from "./PaneResizer";
 import { PANES } from "./panes";
+import { TypeDot } from "./typeTone";
+import { documentGroups } from "./projectDocs";
 
 /** ⌘K's New project: the Projects screen opens with New project showing. */
 export const newProjectAsked = new Store<boolean>(false);
@@ -635,18 +637,7 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
             <span className="faint">Changed {ago(p.lastTouched)}</span>
           </button>
         </div>
-        <div className="card side-card">
-          <div className="eyebrow">Notes that link it</div>
-          {!p.links.length && <p className="faint small">Any note that links [[Project. {p.name}]] shows here.</p>}
-          {p.links.slice(0, 12).map((l) => (
-            <button key={l} type="button" className="blink" title={`Open ${l}`} onClick={() => openDoc(l)}>
-              <span className="lbt">
-                <LayerTag layer="note" />
-                <span className="ell">{l.replace(/\.md$/, "").split("/").pop()}</span>
-              </span>
-            </button>
-          ))}
-        </div>
+        <ProjectDocuments p={p} />
         <ProjectWiki path={p.path} />
         <RecentActivity links={p.links} done={t.done} />
         {!!t.done.length && (
@@ -669,6 +660,71 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
       </aside>
       {deleting && <DeleteProject p={p} tasks={t} onClose={() => setDeleting(false)} />}
     </div>
+  );
+}
+
+/** How many of the other notes that link a project show before Show all. */
+const LINKS_SHOWN = 12;
+
+/** The project's member notes by type, then the other notes that link it. */
+function ProjectDocuments({ p }: { p: ProjectRow }) {
+  const [all, setAll] = useState(false);
+  const groups = documentGroups(p.documents);
+  const members = new Set(p.documents.map((d) => d.path));
+  const others = p.links.filter((l) => !members.has(l));
+  const name = (l: string) => l.replace(/\.md$/, "").split("/").pop();
+  return (
+    <>
+      {!!groups.length && (
+        <div className="card side-card">
+          <div className="eyebrow">Documents</div>
+          {groups.map((g) => (
+            <div key={g.type} className="pdocs">
+              <div className="pdocs-type faint small">
+                {g.type !== "Other" && <TypeDot type={g.type} />}
+                {g.type} <span className="faint">{g.docs.length}</span>
+              </div>
+              {g.docs.map((d) => (
+                <button key={d.path} type="button" className="blink" title={`Open ${d.path}`} onClick={() => openDoc(d.path)}>
+                  <span className="lbt">
+                    <span className="ell">{d.title}</span>
+                  </span>
+                  {d.summary && <span className="faint">{d.summary}</span>}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="card side-card">
+        <div className="eyebrow">{groups.length ? "Other notes that link it" : "Notes that link it"}</div>
+        {!others.length && (
+          <p className="faint small">
+            {groups.length
+              ? `Any other note that links [[Project. ${p.name}]] shows here.`
+              : `Any note that links [[Project. ${p.name}]] shows here; one with a Project: [[Project. ${p.name}]] line near its top is one of its documents.`}
+          </p>
+        )}
+        {(all ? others : others.slice(0, LINKS_SHOWN)).map((l) => (
+          <button key={l} type="button" className="blink" title={`Open ${l}`} onClick={() => openDoc(l)}>
+            <span className="lbt">
+              <LayerTag layer="note" />
+              <span className="ell">{name(l)}</span>
+            </span>
+          </button>
+        ))}
+        {others.length > LINKS_SHOWN && (
+          <button
+            type="button"
+            className="btn sm ghost"
+            title={all ? "Show the first few again" : "Show every note that links the project"}
+            onClick={() => setAll(!all)}
+          >
+            {all ? "Show fewer" : `Show all ${fmtCount(others.length)}`}
+          </button>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -758,10 +814,12 @@ function RecentActivity({ links, done }: { links: string[]; done: TaskRow[] }) {
 }
 
 /** Delete project: asks first, then moves the project's note to the Trash (Undo, or restore from Trash). */
-function DeleteProject({ p, tasks, onClose }: { p: ProjectRow; tasks: ReturnType<typeof projectTasks>; onClose: () => void }) {
+export function DeleteProject({ p, tasks, onClose }: { p: ProjectRow; tasks: ReturnType<typeof projectTasks>; onClose: () => void }) {
   const all = [...tasks.next, ...tasks.waiting, ...tasks.someday, ...tasks.done];
   const inNote = all.filter((t) => t.path === p.path).length;
-  const elsewhere = all.length - inNote;
+  // Tasks in its documents belong to it by their note's Project: line, the rest by their own link.
+  const inDocs = all.filter((t) => t.path !== p.path && t.projectFrom === "member").length;
+  const linking = all.length - inNote - inDocs;
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
   const del = () => {
     onClose();
@@ -775,10 +833,17 @@ function DeleteProject({ p, tasks, onClose }: { p: ProjectRow; tasks: ReturnType
           Moves its note, {p.path}, to the Trash
           {inNote ? `, with the ${plural(inNote, "task")} written in it` : ""}. You can undo it or restore it from the Trash.
         </p>
-        {elsewhere > 0 && (
+        {linking > 0 && (
           <p className="muted">
-            {plural(elsewhere, "task")} in other notes link it; they stay where they are, and their link shows as missing until the project
-            comes back.
+            {plural(linking, "task")} in {linking === 1 ? "another note links" : "other notes link"} it;{" "}
+            {linking === 1 ? "it stays where it is, and its" : "they stay where they are, and their"} link shows as missing until the
+            project comes back.
+          </p>
+        )}
+        {inDocs > 0 && (
+          <p className="muted">
+            {plural(inDocs, "task")} in its documents (notes whose Project: line names it) {inDocs === 1 ? "stays" : "stay"} where{" "}
+            {inDocs === 1 ? "it is" : "they are"}, with no project until it comes back.
           </p>
         )}
         <div className="row">

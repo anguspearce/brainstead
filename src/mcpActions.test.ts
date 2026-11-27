@@ -78,7 +78,7 @@ describe("MCP actions", () => {
   });
 
   it("lists a view, one line per task with its id", async () => {
-    answers.tasks_all = () => [
+    answers.tasks_notes = () => [
       row({ due: "2026-10-06", project: "Project. Orbit App launch.md" }),
       row({ line: 3, text: "Old", done: true }),
     ];
@@ -90,7 +90,7 @@ describe("MCP actions", () => {
   });
 
   it("matches query as the Tasks screen's search does: project, heading and tags too, accents ignored", async () => {
-    answers.tasks_all = () => [
+    answers.tasks_notes = () => [
       row({ text: "Book the café", lineText: "- [ ] Book the café", project: "Project. Orbit App launch.md" }),
       row({ line: 4, text: "Call Lena", lineText: "- [ ] Call Lena", heading: "Venue", tags: ["#followup"] }),
     ];
@@ -113,7 +113,7 @@ describe("MCP actions", () => {
   const submitted = () => calls.filter(([c]) => c === "changes_submit_many").flatMap(([, a]) => a!.changes as Record<string, unknown>[]);
 
   it("edits a task through Changes: worked out edit by edit, made as one change", async () => {
-    answers.tasks_all = () => [row({})];
+    answers.tasks_notes = () => [row({})];
     answers.change_task_line = (a) => {
       const e = a!.edit as { op: string; date?: string; names?: string[] };
       const l = a!.line as string;
@@ -143,8 +143,55 @@ describe("MCP actions", () => {
     await expect(run("task.edit", { task: "Me. To Do List.md:12", text: "Call Sam" })).rejects.toThrow(/Nothing to change/);
   });
 
+  it("won't clear a project that comes from the note's Project: line, and clears one the line links", async () => {
+    const inherited = row({ path: "Tracker. Orbit.md", project: "Project. Orbit.md", projectFrom: "member" });
+    answers.tasks_notes = () => [inherited];
+    await expect(run("task.edit", { task: "Tracker. Orbit.md:12", text: "Call Sam", project: null })).rejects.toThrow(
+      /comes from the Project: line of Tracker\. Orbit\.md/,
+    );
+    expect(calls.some(([c]) => c === "changes_submit_many")).toBe(false);
+    answers.projects_list = () => [
+      { name: "Hub", path: "Project. Hub.md", status: "active", documents: [] },
+      { name: "Orbit", path: "Project. Orbit.md", status: "active", documents: [{ path: "Tracker. Orbit.md" }] },
+    ];
+    // A project the line links, in a note with no Project: line: cleared, the task has none.
+    answers.tasks_notes = () => [
+      row({
+        project: "Project. Orbit.md",
+        projectFrom: "line",
+        lineText: "- [ ] Call Sam about the launch [[Project. Orbit]]",
+        text: "Call Sam about the launch [[Project. Orbit]]",
+      }),
+    ];
+    answers.change_task_line = (a) => (a!.line as string).replace(" [[Project. Orbit]]", "");
+    answers.changes_submit_many = outcomes(true);
+    expect(await run("task.edit", { task: "Me. To Do List.md:12", text: "Call Sam", project: null })).toMatch(/^Done \(no project\)/);
+    // In a note whose Project: line names another project, the task goes back to that one.
+    answers.tasks_notes = () => [
+      {
+        ...inherited,
+        project: "Project. Hub.md",
+        projectFrom: "line",
+        lineText: "- [ ] Call Sam [[Project. Hub]]",
+        text: "Call Sam [[Project. Hub]]",
+      },
+    ];
+    answers.change_task_line = (a) => (a!.line as string).replace(" [[Project. Hub]]", "");
+    const out = await run("task.edit", { task: "Tracker. Orbit.md:12", text: "Call Sam", project: null });
+    expect(out).toMatch(/^Done \(back to Orbit, from its note's Project: line\)/);
+    expect(submitted().at(-1)!.title).toContain("back to Orbit");
+    // A link to a project note that isn't there: taken off, the task has the note's project.
+    answers.tasks_notes = () => [
+      { ...inherited, project: null, projectFrom: null, lineText: "- [ ] Call Sam [[Project. Gone]]", text: "Call Sam [[Project. Gone]]" },
+    ];
+    answers.change_task_line = (a) => (a!.line as string).replace(" [[Project. Gone]]", "");
+    expect(await run("task.edit", { task: "Tracker. Orbit.md:12", text: "Call Sam", project: null })).toMatch(
+      /^Done \(back to Orbit, from its note's Project: line\)/,
+    );
+  });
+
   it("an unattended edit carries its origin, and says when it's held", async () => {
-    answers.tasks_all = () => [row({})];
+    answers.tasks_notes = () => [row({})];
     answers.changes_submit_many = outcomes(false);
     const origin = { kind: "chat", run: "session-1", trigger: "scheduled" };
     const out = (await run("task.edit", { task: "Me. To Do List.md:12", text: "Call Sam", status: "cancelled", origin })) as string;
@@ -153,7 +200,10 @@ describe("MCP actions", () => {
   });
 
   it("moves a task by its rank, through Changes", async () => {
-    answers.tasks_all = () => [row({ rank: 1024 }), row({ line: 12, lineText: "- [ ] Book the room", text: "Book the room", rank: 2048 })];
+    answers.tasks_notes = () => [
+      row({ rank: 1024 }),
+      row({ line: 12, lineText: "- [ ] Book the room", text: "Book the room", rank: 2048 }),
+    ];
     answers.change_task_line = (a) => `${a!.line} [rank:: 1536]`;
     answers.changes_submit_many = outcomes(true);
     await run("task.move", { task: "Me. To Do List.md:13", text: "Book the room", after: "Me. To Do List.md:12" });
@@ -163,7 +213,7 @@ describe("MCP actions", () => {
 
   it("moves a task between its two real neighbours, or renumbers the list, as the screen's drag does", async () => {
     const task = (line: number, text: string, rank: number | null) => row({ line, lineText: `- [ ] ${text}`, text, rank });
-    answers.tasks_all = () => [task(1, "Ask Maya", 1024), task(2, "Book the room", 2048), task(3, "Call Lena", 3072)];
+    answers.tasks_notes = () => [task(1, "Ask Maya", 1024), task(2, "Book the room", 2048), task(3, "Call Lena", 3072)];
     answers.change_task_line = (a) => `${a!.line} ^rank-${JSON.stringify(a!.edit)}`;
     answers.changes_submit_many = outcomes(true);
     await run("task.move", { task: "Me. To Do List.md:4", text: "Call Lena", after: "Me. To Do List.md:2" });
@@ -172,7 +222,7 @@ describe("MCP actions", () => {
     expect(submitted()).toHaveLength(1);
     // A row with no rank: the list renumbered in its new order, each line a change made together.
     calls.length = 0;
-    answers.tasks_all = () => [task(1, "Ask Maya", null), task(2, "Book the room", 2048), task(3, "Call Lena", 3072)];
+    answers.tasks_notes = () => [task(1, "Ask Maya", null), task(2, "Book the room", 2048), task(3, "Call Lena", 3072)];
     const out = (await run("task.move", { task: "Me. To Do List.md:4", text: "Call Lena", before: "Me. To Do List.md:3" })) as string;
     const edits = calls.filter(([c]) => c === "change_task_line").map(([, a]) => [a!.line, a!.edit]);
     expect(edits).toEqual([
@@ -661,7 +711,7 @@ describe("MCP actions", () => {
   });
 
   it("takes the Deferred list as deferred, and scheduled as before", async () => {
-    answers.tasks_all = () => [row({ scheduled: "2099-01-01" })];
+    answers.tasks_notes = () => [row({ scheduled: "2099-01-01" })];
     const out = (await run("tasks.list", { view: "deferred" })) as string;
     expect(out).toMatch(/^1 task in deferred:/);
     expect(await run("tasks.list", { view: "scheduled" })).toBe(out);
@@ -731,7 +781,7 @@ describe("MCP actions", () => {
       answers.weekly_state_read = () => state;
       answers.weekprep_status = () => ({ prep, running: false, error: null });
       answers.projects_list = () => [];
-      answers.tasks_all = () => [row({})];
+      answers.tasks_notes = () => [row({})];
       answers.task_toggle = edited;
       answers.changes_submit_many = outcomes(true);
     });
@@ -820,7 +870,7 @@ describe("MCP actions", () => {
       expect(await made("m")).toMatchObject({ instruction: { new: ["- [ ] Call Sam about the launch #someday-maybe"] } });
       expect(await made("e")).toMatchObject({ instruction: { new: ["- [ ] Ring Sam about the launch"] } });
       // As the screen refuses one that's there already.
-      answers.tasks_all = () => [row({ tags: ["#waiting-for"] })];
+      answers.tasks_notes = () => [row({ tags: ["#waiting-for"] })];
       answers.weekly_state_read = () => ({ ...state, handled: {} });
       await expect(run("weekly.suggestion", { id: "w", action: "accept" })).rejects.toThrow(/already waiting/);
     });
@@ -1224,7 +1274,7 @@ describe("MCP actions", () => {
       answers.settings_write = (a) => a!.settings;
       await run("task_lists", { action: "save", name: "Quick calls", view: "next", context: "@calls", effort: 15 });
       expect(await run("task_lists")).toBe("1 saved list:\n- Quick calls: next, @calls, 15 min or less");
-      answers.tasks_all = () => [
+      answers.tasks_notes = () => [
         row({ contexts: ["calls"], effortMin: 10 }),
         row({ line: 3, contexts: ["calls"], effortMin: 60, text: "Long call" }),
         row({ line: 4, text: "Not a call" }),
@@ -1356,7 +1406,7 @@ describe("MCP actions", () => {
     });
 
     it("pages tasks like every list, with all of query's words, and names the defer date as edit_task does", async () => {
-      answers.tasks_all = () => [
+      answers.tasks_notes = () => [
         row({ text: "Call Sam about the launch", scheduled: "2026-01-01" }),
         row({ line: 3, text: "Call Lena about the budget" }),
         row({ line: 4, text: "Email Sam the launch plan" }),
@@ -1411,7 +1461,7 @@ describe("MCP actions", () => {
 
     it("gives a task's tags, priority, status and created date, and Today's bands", async () => {
       const today = new Date().toLocaleDateString("en-CA");
-      answers.tasks_all = () => [
+      answers.tasks_notes = () => [
         row({
           lineText: "- [/] Call Sam about the launch ⏫ #budget #context/calls ➕ 2026-10-01",
           status: "/",
@@ -1809,7 +1859,7 @@ describe("MCP actions", () => {
     });
 
     it("filters tasks by effort and groups them, as the Tasks screen does", async () => {
-      answers.tasks_all = () => [
+      answers.tasks_notes = () => [
         row({ text: "Call Sam", effortMin: 10, project: "Project. Orbit App launch.md" }),
         row({ line: 3, text: "Write the plan", effortMin: 120, project: "Project. Orbit App launch.md" }),
         row({ line: 4, text: "Book the room", effortMin: 15 }),
@@ -2528,7 +2578,7 @@ describe("MCP actions", () => {
 
   describe("the 2026-10-07 re-audit's screen actions", () => {
     it("rewords a task as the Tasks screen's rename does, and makes it a follow-up", async () => {
-      answers.tasks_all = () => [row({ lineText: "- [ ] Call Sam about the launch 📅 2026-10-09 #work", tags: ["#work"] })];
+      answers.tasks_notes = () => [row({ lineText: "- [ ] Call Sam about the launch 📅 2026-10-09 #work", tags: ["#work"] })];
       answers.changes_submit_many = outcomes(true);
       const out = (await run("task.edit", {
         task: "Me. To Do List.md:12",
@@ -2540,11 +2590,11 @@ describe("MCP actions", () => {
       expect(out).toMatch(/^Done \(reworded to “Call Lena about the launch”, follow-up\)/);
       // Taking it off again.
       calls.length = 0;
-      answers.tasks_all = () => [row({ lineText: "- [ ] Call Sam about the launch #followup", tags: ["#followup"] })];
+      answers.tasks_notes = () => [row({ lineText: "- [ ] Call Sam about the launch #followup", tags: ["#followup"] })];
       await run("task.edit", { task: "Me. To Do List.md:12", text: "Call Sam", followup: false });
       expect(submitted()[0].instruction).toMatchObject({ new: ["- [ ] Call Sam about the launch"] });
       // Words that can't be found on the line once can't be changed simply.
-      answers.tasks_all = () => [row({ lineText: "- [ ] go go", text: "go" })];
+      answers.tasks_notes = () => [row({ lineText: "- [ ] go go", text: "go" })];
       await expect(run("task.edit", { task: "Me. To Do List.md:12", text: "go", words: "x" })).rejects.toThrow(/isn't on its line once/);
     });
 
@@ -2802,6 +2852,39 @@ describe("MCP actions", () => {
       expect(out).toContain("- Orbit · active · 0 next · Stuck: it has no next action  (Project. Orbit.md)");
       expect(out).toContain("- Hub · active · 2 next · Quiet: nothing has happened for two weeks  (Project. Hub.md)");
       expect(((await data("projects.list")).items as { flag: string | null }[]).map((x) => x.flag)).toEqual(["quiet", null, "stuck"]);
+    });
+
+    it("lists a project's documents with detail, by type as its page groups them", async () => {
+      const doc = (title: string, type: string, summary: string | null) => ({
+        path: `${type}. ${title}.md`,
+        title,
+        type,
+        summary,
+        mtime: 0,
+      });
+      answers.projects_list = () => [
+        {
+          name: "Orbit",
+          path: "Project. Orbit.md",
+          status: "active",
+          area: null,
+          outcome: null,
+          next: 1,
+          waiting: 0,
+          someday: 0,
+          done: 0,
+          lastTouched: Date.now(),
+          links: [],
+          documents: [doc("Comms", "Plan", null), doc("Rollout", "Tracker", "Where it stands.")],
+        },
+      ];
+      const out = (await run("projects.list", { detail: true })) as string;
+      expect(out).toContain(
+        "(Project. Orbit.md)\n  - Tracker: Rollout · Where it stands.  (Tracker. Rollout.md)\n  - Plan: Comms  (Plan. Comms.md)",
+      );
+      expect(await run("projects.list")).not.toContain("Tracker: Rollout");
+      const items = (await data("projects.list")).items as { documents: { type: string; title: string }[] }[];
+      expect(items[0].documents.map((d) => `${d.type}: ${d.title}`)).toEqual(["Tracker: Rollout", "Plan: Comms"]);
     });
 
     it("gives the judge's fix and whether it's waiting in Changes", async () => {
@@ -3256,7 +3339,7 @@ describe("MCP actions", () => {
       const task = (line: number, text: string, rank: number | null, tags: string[] = []) =>
         row({ path: project, line, lineText: `- [ ] ${text}`, text, rank, tags, project });
       answers.projects_list = () => [{ name: "Orbit App launch", path: project, status: "active" }];
-      answers.tasks_all = () => [
+      answers.tasks_notes = () => [
         task(1, "Ask Maya", 2048),
         task(2, "Wait for Lena", 1536, ["waiting-for"]),
         task(3, "Book the room", 1024),

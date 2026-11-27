@@ -14,6 +14,7 @@ const f = (path: string, mtime: number, layer: FileSummary["layer"] = "note"): F
   size: 1,
   mtime,
   tags: [],
+  project: null,
 });
 
 const files = [

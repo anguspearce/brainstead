@@ -63,6 +63,7 @@ A capture offers only the choices that fit its kind. A transcript: make a meetin
 
 Tasks (⌘3) has the GTD lists: **Next actions**, **Follow-ups**, **Waiting for**, **Deferred**, **Someday / maybe**, and **Done this week** and **last week**. Next actions leaves out deferred tasks until their day, Inbox tasks until you clarify them, and the tasks of a project that's On hold or Someday until it's active again (the task's `projectStatus`, read from its project note's `status`; they still show on the project's page).
 
+- Only tasks in your notes count. A checklist in a wiki page, a source or a template isn't listed here, counted in the tray or Projects, or listed by an assistant.
 - Tick to finish a task; a recurring one gets its next occurrence. ⌘Z undoes.
 - A row's chips (due, defer, priority, context, effort, project) each open a picker with their quick choices, and its **+** adds a field it hasn't got. The ⋯ menu, or a right-click, renames a task, marks it in progress or waiting for, cancels, deletes or opens its note, and its **More…** sets every date, priority, context, effort and project in one place. The pane on the right shows all of them at once.
 - Drag rows into your own order, kept in the file as `^rank-N`.
@@ -76,7 +77,9 @@ Tasks (⌘3) has the GTD lists: **Next actions**, **Follow-ups**, **Waiting for*
 
 <a href="images/index.md#tasks-and-gtd"><picture><source media="(prefers-color-scheme: dark)" srcset="images/projects-dark.png"><img alt="Projects: active projects by area with their next actions and waiting-fors, one open on the right" src="images/projects-light.png"></picture></a>
 
-A project is a note named `Project. <name>.md`, with its status, area and outcome as properties. Its tasks are the ones written in it plus any that link it. Projects (⌘4) lists them by status and area.
+A project is a note named `Project. <name>.md`, with its status, area and outcome as properties. Its tasks are the ones written in it, the ones in its documents, and any that link it. Projects (⌘4) lists them by status and area.
+
+A note is one of a project's documents when one of its first 15 lines after the properties says `Project: [[Project. <name>]]` (an alias is fine; indented is fine; a `Project::` field, a bold label, a line in code or an HTML comment doesn't count, nor does a link in a comment on the line; only the first such line counts; notes only, not the wiki, sources or templates). Its tasks belong to that project, and the task pane says **From its note's Project: line** in place of Clear, unless a task's own line links another project, or a project note that isn't there. The project's page lists its documents by type (Tracker, Plan, Findings, Review, Ticket, Prompt, Other) with each one's `summary` property.
 
 An active project with no next action says **No next action** in red, and one where nothing has moved for two weeks says **Quiet** in grey. Add next actions, edit the outcome, area and status, and draft nudges for waiting-fors. **New project** writes the note with its headings.
 
@@ -121,7 +124,7 @@ Tasks follow the widely used Tasks format, so other markdown editors read them:
 - A deferred task stays off Next actions until its day. A start date doesn't hide a task; it only makes it less urgent until then.
 - A context is a `#context/<name>` tag, and effort a `[effort:: …]` field.
 - `#followup`, `#waiting-for` and `#someday-maybe` put a task on those lists.
-- A task belongs to a project when it's in the project's note or links it.
+- A task belongs to a project when it's in the project's note, links it, or is in one of its documents (a note whose `Project:` line names it) without linking another project or a project note that isn't there.
 - Tasks inside quotes and callouts (`> - [ ] …`) count too.
 
 The app shows dates and fields as icons and plain text under the task, never the emoji.

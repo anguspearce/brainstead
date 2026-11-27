@@ -88,6 +88,56 @@ pub fn heading(line: &str) -> Option<(usize, &str)> {
     Some((level, text))
 }
 
+/// One line's text with what HTML comments (`<!-- … -->`) cover of it blanked to spaces, and
+/// whether the line starts inside a comment.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Uncommented<'a> {
+    pub text: std::borrow::Cow<'a, str>,
+    pub opens_in_comment: bool,
+}
+
+/// `lines` with HTML comments blanked out, a comment running across lines until its `-->`. A
+/// `<!--` in inline code or in a fenced code block opens nothing, and a fenced line comes back as
+/// it is. Blanking keeps every byte offset.
+pub fn uncommented<'a>(lines: &[Line<'a>]) -> Vec<Uncommented<'a>> {
+    let mut comment = false;
+    let mut out = Vec::with_capacity(lines.len());
+    for l in lines {
+        let opens_in_comment = comment;
+        if l.code {
+            out.push(Uncommented { text: l.text.into(), opens_in_comment });
+            continue;
+        }
+        let mut text: Option<Vec<u8>> = None;
+        let mut blank = |from: usize, to: usize| text.get_or_insert_with(|| l.text.as_bytes().to_vec())[from..to].fill(b' ');
+        let mut i = 0;
+        loop {
+            if comment {
+                // To the end of the comment, or of the line: a backtick inside it starts no code.
+                let end = l.text[i..].find("-->").map(|k| i + k + 3);
+                blank(i, end.unwrap_or(l.text.len()));
+                let Some(end) = end else { break };
+                comment = false;
+                i = end;
+            } else {
+                // An opener is looked for with the inline code after the last comment blanked, at
+                // the same offsets: whichever starts first, the code or the comment, wins.
+                let Some(at) = blank_code_spans(&l.text[i..]).find("<!--").map(|k| i + k) else { break };
+                blank(at, at + 4);
+                comment = true;
+                i = at + 4;
+            }
+        }
+        // Blanked from one char boundary to another, by ASCII, so it's still valid UTF-8.
+        let text = match text {
+            Some(b) => String::from_utf8(b).map(Into::into).unwrap_or_else(|_| l.text.into()),
+            None => l.text.into(),
+        };
+        out.push(Uncommented { text, opens_in_comment });
+    }
+    out
+}
+
 /// `line` with each inline code span (`` `x` ``, ``` ``x`` ```) replaced by spaces of the same byte
 /// length, so offsets still line up with the original.
 pub fn blank_code_spans(line: &str) -> std::borrow::Cow<'_, str> {
@@ -164,6 +214,19 @@ mod tests {
         assert_eq!(heading("####### seven"), None);
         assert_eq!(heading("    # code"), None);
         assert_eq!(heading("# C#"), Some((1, "C#")));
+    }
+
+    #[test]
+    fn comments() {
+        let src = "a <!-- b\nc\nd --> e\n`<!--` f\n```\n<!--\n```\ng <!-- h --> i";
+        let u = uncommented(&lines(src, 0));
+        let text: Vec<&str> = u.iter().map(|u| u.text.as_ref()).collect();
+        let sp = |n: usize| " ".repeat(n);
+        let want = [format!("a{}", sp(7)), sp(1), format!("{}e", sp(6)), "`<!--` f".into(), "```".into(), "<!--".into(), "```".into()];
+        assert_eq!(text[..7], want.iter().map(String::as_str).collect::<Vec<_>>());
+        assert_eq!(text[7], format!("g{}i", sp(12)));
+        let opens: Vec<bool> = u.iter().map(|u| u.opens_in_comment).collect();
+        assert_eq!(opens, [false, true, true, false, false, false, false, false]);
     }
 
     #[test]

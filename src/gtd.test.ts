@@ -40,6 +40,7 @@ const proj = (o: Partial<ProjectRow> = {}): ProjectRow => ({
   done: 0,
   lastTouched: Date.parse("2026-10-01"),
   links: [],
+  documents: [],
   ...o,
 });
 
