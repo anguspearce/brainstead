@@ -481,6 +481,45 @@ fn edit_page_changes_a_note() {
 }
 
 #[test]
+fn write_current_state_writes_a_trackers_state() {
+    let f = fixture();
+    let rel = "Tracker. Orbit rollout.md";
+    std::fs::write(
+        f.ctx.vault().join(rel),
+        "---\nupdated: 2026-09-01\n---\n\nProject: [[Project. Orbit App launch]]\n\n## Log\n\n- 2026-09-30: Steerco.\n\n## Decisions\n\n1. Ship.\n",
+    )
+    .unwrap();
+    let mut ix = Index::open(&f.ctx.data.join("index.db")).unwrap();
+    ix.sync(&brainstead_core::vault::Vault::new(f.ctx.vault(), vec![])).unwrap();
+    drop(ix);
+    let (t, c) = submitted(
+        &f,
+        "write_current_state",
+        json!({"page": "Tracker. Orbit rollout", "text": "Staged; cutover next.", "log": "Wrote the state."}),
+    );
+    assert!(t.contains("Revert it in Changes"), "{t}");
+    assert_eq!((c["kind"].as_str(), c["page"].as_str()), (Some("edit"), Some(rel)));
+    assert_eq!(c["title"], "Wrote the Current state and a Log line");
+    assert_eq!(c["origin"]["chat"], "chat-1");
+    // Only the Current state and the Log change, and `updated:` moves to today.
+    assert_eq!(
+        made(&f, &c),
+        "---\nupdated: 2026-10-02\n---\n\nProject: [[Project. Orbit App launch]]\n\n## Current state\n\nStaged; cutover next.\n\n## Log\n\n- 2026-10-02: Wrote the state.\n- 2026-09-30: Steerco.\n\n## Decisions\n\n1. Ship.\n"
+    );
+    // Not a tracker: refused, with what to use instead.
+    assert!(refused(&f.ctx, "write_current_state", json!({"page": "Orbit App", "text": "x"})).contains("edit_page"));
+    assert!(refused(&f.ctx, "write_current_state", json!({"text": "x"})).contains("Give page"));
+    // page alone isn't the wiki run: it asks for text or log.
+    let r = refused(&f.ctx, "write_current_state", json!({"page": "Tracker. Orbit rollout"}));
+    assert!(r.contains("text") && r.contains("log"), "{r}");
+    // page_shape reads it by the tracker shape.
+    let shape = ok(&f.ctx, "page_shape", json!({"page": rel}));
+    assert!(shape.contains("isn't in the tracker shape") && shape.contains("reshape_pages can reshape it by itself"), "{shape}");
+    let all = ok(&f.ctx, "page_shape", json!({}));
+    assert!(all.contains("1 of 1 Tracker notes aren't in the tracker shape"), "{all}");
+}
+
+#[test]
 fn help_answers_from_the_apps_own_help() {
     let f = fixture();
     let list = ok(&f.ctx, "help", json!({}));

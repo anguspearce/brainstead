@@ -7154,7 +7154,10 @@ select.sel {
   color: var(--ink3);
 }
 
-/* The project's Documents by type (src/Projects.tsx). */
+/* The project's tracker's Current state, and its Documents by type (src/Projects.tsx). */
+.pstate {
+  padding: 4px 16px;
+}
 .pdocs {
   display: flex;
   flex-direction: column;

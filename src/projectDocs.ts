@@ -4,7 +4,8 @@
 
 // A project's member notes: those whose `Project: [[Project. <name>]]` line names it (the index
 // works out which, core/src/projects.rs). The project page lists them by type, and the Notes
-// screen can hide the working ones or group every note by its project.
+// screen can hide the working ones or group every note by its project. A tracker's Current state
+// comes from the index (core pageshape), so the rule for finding it lives in one place.
 
 import type { FileSummary, ProjectDoc } from "./api";
 

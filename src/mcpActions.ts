@@ -3281,7 +3281,7 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
         someday: p.someday,
         done: p.done,
         documents: documentGroups(p.documents ?? []).flatMap((g) =>
-          g.docs.map((d) => ({ type: g.type, title: d.title, path: d.path, summary: d.summary })),
+          g.docs.map((d) => ({ type: g.type, title: d.title, path: d.path, summary: d.summary, current_state: d.currentState ?? null })),
         ),
       }),
       empty: "No projects.",

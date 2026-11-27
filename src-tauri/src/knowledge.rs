@@ -432,6 +432,7 @@ pub struct Reshaped {
 /// Reshape pages (D-20261006-06): every page not in the shape that can be reshaped by itself,
 /// or the pages named (by path or name, reshaped as proposed even when they'd need the user), each
 /// one change in Changes in one run, revertable alone or together. One `log.md` line for the run.
+/// Tracker notes are reshaped to the tracker shape only when named.
 fn health_reshape_now(app: AppHandle, pages: Option<Vec<String>>, unattended: bool) -> Res<Reshaped> {
     use brainstead_core::pageshape;
     writable(&app.state::<AppState>())?;
@@ -454,28 +455,51 @@ fn health_reshape_now(app: AppHandle, pages: Option<Vec<String>>, unattended: bo
     };
     let mut done = Reshaped { run, applied: 0, failed: vec![], left: 0 };
     let mut found = 0;
-    for (r, new) in pageshape::survey(&root) {
+    let trackers = match pages {
+        // The index's notes, so excluded folders are left out.
+        Some(_) => {
+            let notes = app.state::<VaultService>().with_index(|ix, _| ix.list(Some("note")))?;
+            pageshape::survey_trackers(&root, &notes.into_iter().map(|f| f.path).collect::<Vec<_>>())
+        }
+        None => vec![],
+    };
+    for (r, new) in pageshape::survey(&root).into_iter().chain(trackers) {
         let want = named(&r.path);
         found += usize::from(want == Some(true));
+        // A tracker named that isn't reshaped says why.
+        if want == Some(true) && pageshape::is_tracker(&r.path) {
+            if let Some(why) = pageshape::tracker_left_why(&r, new.as_deref()) {
+                done.failed.push(format!("{}: {why}", r.path));
+                continue;
+            }
+        }
         let (Some(new), true) = (new, want.unwrap_or(r.auto) && r.report.broken.is_empty()) else {
             done.left += usize::from(want.is_none() && !r.in_shape);
             continue;
         };
         let Some(before) = read_opt(&root.join(&r.path)) else { continue };
         let rp = &r.report;
-        let mut reason = format!(
-            "Put in the page shape: {} Timeline entries, {} headings rewritten, {} Source lines added.",
-            rp.entries,
-            rp.headings.len(),
-            rp.added.iter().filter(|a| a.starts_with("Source:")).count()
-        );
+        let mut reason = if pageshape::is_tracker(&r.path) {
+            format!(
+                "Put in the tracker shape: {} Log entries, {} sections added (empty).",
+                rp.entries,
+                rp.added.iter().filter(|a| a.starts_with("## ")).count()
+            )
+        } else {
+            format!(
+                "Put in the page shape: {} Timeline entries, {} headings rewritten, {} Source lines added.",
+                rp.entries,
+                rp.headings.len(),
+                rp.added.iter().filter(|a| a.starts_with("Source:")).count()
+            )
+        };
         if !rp.reasons.is_empty() {
             reason.push_str(&format!(" Reshaped as proposed although {}.", rp.reasons.join("; ")));
         }
         let s = crate::changes::Submit::new(
             &r.path,
             Kind::Edit,
-            "Reshaped to the page shape",
+            if pageshape::is_tracker(&r.path) { "Reshaped to the tracker shape" } else { "Reshaped to the page shape" },
             &reason,
             origin.clone(),
             brainstead_core::changes::from_texts(Some(&before), &new),
@@ -488,7 +512,10 @@ fn health_reshape_now(app: AppHandle, pages: Option<Vec<String>>, unattended: bo
     }
     if let Some(ps) = &pages {
         if found < ps.len() {
-            return Err(invalid(format!("Only {found} of the {} pages named are wiki entity or concept pages.", ps.len())));
+            return Err(invalid(format!(
+                "Only {found} of the {} pages named are wiki entity or concept pages or Tracker notes.",
+                ps.len()
+            )));
         }
     }
     if done.applied > 0 {

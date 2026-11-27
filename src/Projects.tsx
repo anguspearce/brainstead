@@ -9,7 +9,7 @@
 import { UpdateBox } from "./UpdateBox";
 import { FoundBar, FoundList } from "./Found";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, ProjectRow, TaskRow } from "./api";
+import { api, ProjectDoc, ProjectRow, TaskRow } from "./api";
 import { askAboutNote } from "./Ask";
 import { prepareCapture } from "./Capture";
 import {
@@ -38,6 +38,7 @@ import { iconizeEmoji } from "./md/fieldEmoji";
 import { ago, Dialog, fmtCount, LayerTag, Seg, Squeeze } from "./ui";
 import { usePanes } from "./PaneResizer";
 import { PANES } from "./panes";
+import { Markdown } from "./md/Markdown";
 import { TypeDot } from "./typeTone";
 import { documentGroups } from "./projectDocs";
 
@@ -502,6 +503,7 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
             {field("area", "Area", p.area)}
           </div>
         </div>
+        <TrackerState docs={p.documents} />
         <section>
           <div className="ghead">
             <h2 className="h3">Next actions</h2>
@@ -660,6 +662,33 @@ function ProjectDetail({ p, all }: { p: ProjectRow; all: ReturnType<typeof useAl
       </aside>
       {deleting && <DeleteProject p={p} tasks={t} onClose={() => setDeleting(false)} />}
     </div>
+  );
+}
+
+/** The project's tracker's Current state, the first tracker by title when it has several. */
+function TrackerState({ docs }: { docs: ProjectDoc[] }) {
+  const tracker = documentGroups(docs).find((g) => g.type === "Tracker")?.docs[0] ?? null;
+  const root = useStore(settings).vaultPath ?? "";
+  if (!tracker) return null;
+  return (
+    <section>
+      <div className="ghead">
+        <h2 className="h3">Current state</h2>
+        <button type="button" className="btn sm ghost" title={`Open ${tracker.path}`} onClick={() => openDoc(tracker.path)}>
+          <Icon name="note" size={12} />
+          {tracker.title}
+        </button>
+      </div>
+      <div className="card pstate">
+        {tracker.currentState ? (
+          <Markdown content={tracker.currentState} path={tracker.path} root={root} />
+        ) : (
+          <p className="faint small">
+            The tracker has no Current state yet: write one under a ## Current state heading, or ask an assistant to write it.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 

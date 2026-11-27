@@ -12,6 +12,10 @@
 //! what a section is, reading a date from a dated section's heading; `reshape` puts a page in the
 //! shape by moving whole sections and rewriting dated headings, and checks the result (`check`)
 //! before handing it back. It never asks a model and never changes a line it doesn't have to.
+//!
+//! Tracker notes (`Tracker. <title>.md`) have a shape of their own: the opening (with the note's
+//! `Project: [[…]]` line), then Current state, Blockers, Next and Log, the Log's dated entries
+//! newest first, and any other sections below those (`reshape_tracker`).
 
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -69,6 +73,12 @@ pub fn parse(page: &str) -> Page<'_> {
             cuts.push((l.start, t));
         }
     }
+    cut(page, cuts)
+}
+
+/// The page cut at `cuts`, each a level-2 heading's byte offset and text, after its frontmatter.
+fn cut<'a>(page: &'a str, cuts: Vec<(usize, &'a str)>) -> Page<'a> {
+    let start = crate::frontmatter::split(page).body_start;
     let first = cuts.first().map_or(page.len(), |c| c.0);
     let sections = cuts
         .iter()
@@ -677,15 +687,20 @@ fn reshape_unchecked(page: &str, is_source: &dyn Fn(&str) -> bool) -> (String, R
         units.extend(entries.into_iter().map(|e| e.unit));
     }
     units.extend(closing);
+    (with_tail(&assemble(p.front, &units), page), r)
+}
 
-    let mut out = p.front.to_string();
+/// The page's units after its frontmatter, in order: each as it was, with a blank line put
+/// before one that didn't follow the one before it on the old page.
+fn assemble(front: &str, units: &[Unit]) -> String {
+    let mut out = front.to_string();
     let mut last: Option<usize> = None;
     for (k, u) in units.iter().enumerate() {
         if u.text.is_empty() {
             continue;
         }
         let follows = k > 0 && last.is_some() && u.ord.is_some() && u.ord == last.map(|l| l + 1);
-        if out.len() > p.front.len() {
+        if out.len() > front.len() {
             if !out.ends_with('\n') {
                 out.push('\n');
             }
@@ -696,7 +711,7 @@ fn reshape_unchecked(page: &str, is_source: &dyn Fn(&str) -> bool) -> (String, R
         out.push_str(&u.text);
         last = u.ord;
     }
-    (with_tail(&out, page), r)
+    out
 }
 
 /// Entries from one source on the same date as one (D-20261006-14): the first keeps its heading,
@@ -925,6 +940,16 @@ fn with_tail(out: &str, page: &str) -> String {
 /// left out; no longer run of blank lines; reshaping it again changes nothing; the frontmatter
 /// byte for byte the same. The failures, if any.
 pub fn check(old: &str, new: &str, report: &Report, is_source: &dyn Fn(&str) -> bool) -> Vec<String> {
+    let mut out = kept_lines(old, new, report);
+    if reshape_unchecked(new, is_source).0 != new {
+        out.push("reshaping it again changes it".into());
+    }
+    out
+}
+
+/// `check` without the second reshape: the frontmatter, every non-blank line and the longest run
+/// of blank lines kept.
+fn kept_lines(old: &str, new: &str, report: &Report) -> Vec<String> {
     let mut out = Vec::new();
     let (fo, fnew) = (crate::frontmatter::split(old).body_start, crate::frontmatter::split(new).body_start);
     if old[..fo] != new[..fnew] {
@@ -956,9 +981,6 @@ pub fn check(old: &str, new: &str, report: &Report, is_source: &dyn Fn(&str) -> 
         |s: &str| s.lines().fold((0, 0), |(best, cur), l| if l.trim().is_empty() { (best.max(cur + 1), cur + 1) } else { (best, 0) }).0;
     if run(&new[fnew..]) > run(&old[fo..]).max(1) {
         out.push("a longer run of blank lines".into());
-    }
-    if reshape_unchecked(new, is_source).0 != new {
-        out.push("reshaping it again changes it".into());
     }
     out
 }
@@ -998,6 +1020,23 @@ pub fn survey(root: &std::path::Path) -> Vec<(PageResult, Option<String>)> {
         .collect()
 }
 
+/// Every Tracker note among `notes` (the index's notes, vault-relative, which leave out the user's
+/// excluded folders and the folders that hold no notes) of the vault at `root`, reshaped in memory
+/// to the tracker shape, as `survey` does the wiki's pages. Kept apart from `survey`, so Wiki
+/// health and Reshape pages' run over every page leave notes alone; they're reshaped when named.
+pub fn survey_trackers(root: &std::path::Path, notes: &[String]) -> Vec<(PageResult, Option<String>)> {
+    let mut pages: Vec<&String> = notes.iter().filter(|f| is_tracker(f)).collect();
+    pages.sort();
+    let none = Sources::from_paths(std::iter::empty());
+    pages
+        .iter()
+        .filter_map(|p| {
+            let text = std::fs::read(root.join(p)).ok().map(|b| String::from_utf8_lossy(&b).into_owned())?;
+            Some(one(p, &text, &none))
+        })
+        .collect()
+}
+
 /// The vault's files, vault-relative, outside dot folders.
 pub fn vault_files(root: &std::path::Path) -> Vec<String> {
     walkdir::WalkDir::new(root)
@@ -1011,10 +1050,27 @@ pub fn vault_files(root: &std::path::Path) -> Vec<String> {
 
 /// One page reshaped: its result, and its new text when it changes.
 pub fn one(path: &str, text: &str, sources: &Sources) -> (PageResult, Option<String>) {
+    if is_tracker(path) {
+        let (new, report) = reshape_tracker(text);
+        // A Log it can't sort leaves the text as it was, but the note isn't in the shape.
+        let in_shape = new == text && report.broken.is_empty() && report.reasons.is_empty();
+        let auto = report.auto();
+        return (PageResult { path: path.to_string(), in_shape, auto, report }, (new != text).then_some(new));
+    }
     let (new, report) = reshape(text, &|t| sources.is_source(t));
     let in_shape = new == text && report.broken.is_empty();
     let auto = report.auto();
     (PageResult { path: path.to_string(), in_shape, auto, report }, (new != text).then_some(new))
+}
+
+/// Why a Tracker note named to Reshape pages is left as it is, given `one`'s result for it, or
+/// None when it's reshaped or already in the shape: what stops it, or, when reshaping changes
+/// nothing, what still needs the user (an undated Log entry, text between entries).
+pub fn tracker_left_why(r: &PageResult, new: Option<&str>) -> Option<String> {
+    if !r.report.broken.is_empty() {
+        return Some(r.report.broken.join("; "));
+    }
+    (new.is_none() && !r.in_shape).then(|| r.report.reasons.join("; "))
 }
 
 /// The Wiki health item for a page not in the shape: safe when Reshape pages can do it by
@@ -1241,11 +1297,24 @@ pub fn with_topic(page: &str, heading: &str, content: &str) -> Result<String, St
 
 /// A section's new text, as an edit gives it (`edit_page`, a change's section): on an entity or
 /// concept page a heading it doesn't have goes where the shape puts it, a topical one above the
-/// Timeline and a summing one (Summary, Status…) as Current state after the opening; anything
-/// else as `proposals::patched` does it.
+/// Timeline and a summing one (Summary, Status…) as Current state after the opening; on a
+/// Tracker note one of the tracker shape's sections goes where that shape puts it; anything else
+/// as `proposals::patched` does it.
 pub fn with_section(rel: &str, page: &str, heading: &str, content: &str) -> Result<String, String> {
     let page = page.replace("\r\n", "\n");
     let h = heading.trim().trim_start_matches('#').trim();
+    if is_tracker(rel) {
+        if let Some(k) = tracker_slot(h) {
+            // The note's own section, found by its name as the tracker shape reads it (`## Next:`
+            // for Next; not an H3 or a heading inside an HTML comment).
+            let new = match parse_tracker(&page).sections.iter().find(|s| tracker_slot(s.heading) == Some(k)) {
+                Some(s) => tracker_section_replaced(&page, s, content),
+                None => tracker_insert(&page, k, content),
+            };
+            project_line_kept(&page, &new)?;
+            return Ok(new);
+        }
+    }
     let has =
         markdown::lines(&page, 0).iter().any(|l| !l.code && markdown::heading(l.text).is_some_and(|(_, t)| t.eq_ignore_ascii_case(h)));
     if shaped(rel) && !has {
@@ -1277,6 +1346,461 @@ pub fn with_current_state_text(page: &str, text: &str) -> Result<String, String>
     } else {
         Ok(with_current_state(page, text))
     }
+}
+
+/// The sections a Tracker note has, in this order, after its opening (the H1, the
+/// `Project: [[…]]` line and any text before the first section). Sections not in the list stay,
+/// in their order, below these.
+pub const TRACKER_SECTIONS: [&str; 4] = [CURRENT_STATE, "Blockers", "Next", "Log"];
+/// Where the Log is in `TRACKER_SECTIONS`.
+const LOG_SLOT: usize = 3;
+
+/// Whether a vault path is a Tracker note: `Tracker. <title>.md` that the vault classifies as a
+/// note (`Vault::classify`: not in the wiki, the sources, the templates or a folder that holds no
+/// notes). The user's excluded folders can't be told from a path: `survey_trackers` takes the
+/// index's notes, which leave them out.
+pub fn is_tracker(rel: &str) -> bool {
+    rel.ends_with(".md")
+        && crate::vault::Vault::new("", vec![]).classify(rel) == Some(crate::vault::Layer::Note)
+        && crate::filename::parse(rel).kind.as_deref() == Some("Tracker")
+}
+
+/// The pages with a shape: wiki entity and concept pages, and Tracker notes.
+pub fn has_shape(rel: &str) -> bool {
+    shaped(rel) || is_tracker(rel)
+}
+
+/// Which of `TRACKER_SECTIONS` a heading is, in any case, alone or with more after a bracket or
+/// separator (`Log (newest first)`), as `named` reads a wiki page's headings.
+fn tracker_slot(heading: &str) -> Option<usize> {
+    TRACKER_SECTIONS.iter().position(|s| named(heading, &[&s.to_lowercase()]).is_some())
+}
+
+/// A line of a Tracker note as the tracker code reads it: a heading or a Log entry inside an HTML
+/// comment is neither, as one in a fenced code block isn't.
+struct TLine<'a> {
+    line: markdown::Line<'a>,
+    /// Its text with HTML comments blanked out (`markdown::uncommented`).
+    seen: std::borrow::Cow<'a, str>,
+    /// It starts inside a comment, so nothing on it starts a block.
+    in_comment: bool,
+}
+
+impl<'a> TLine<'a> {
+    /// Its ATX heading: the level, and the text as written on the page.
+    fn heading(&self) -> Option<(usize, &'a str)> {
+        if self.line.code || self.in_comment {
+            return None;
+        }
+        let (n, t) = markdown::heading(&self.seen)?;
+        let at = t.as_ptr() as usize - self.seen.as_ptr() as usize;
+        Some((n, &self.line.text[at..at + t.len()]))
+    }
+
+    /// Whether it starts a Log entry: a top-level bullet.
+    fn entry(&self) -> bool {
+        !self.line.code && !self.in_comment && top_bullet(&self.seen)
+    }
+
+    fn blank(&self) -> bool {
+        self.line.text.trim().is_empty()
+    }
+}
+
+/// A Tracker note's body lines (after its frontmatter) from byte `from` on; comments are read from
+/// the top of the body.
+fn tracker_lines(page: &str, from: usize) -> Vec<TLine<'_>> {
+    let lines = markdown::lines(page, crate::frontmatter::split(page).body_start);
+    let seen = markdown::uncommented(&lines);
+    lines
+        .into_iter()
+        .zip(seen)
+        .filter(|(l, _)| l.start >= from)
+        .map(|(line, u)| TLine { line, seen: u.text, in_comment: u.opens_in_comment })
+        .collect()
+}
+
+/// `parse` for a Tracker note: a level-2 heading inside an HTML comment starts no section.
+fn parse_tracker(page: &str) -> Page<'_> {
+    let cuts = tracker_lines(page, 0)
+        .iter()
+        .filter_map(|t| match t.heading() {
+            Some((2, h)) => Some((t.line.start, h)),
+            _ => None,
+        })
+        .collect();
+    cut(page, cuts)
+}
+
+/// The lines of section `s` of `page` under its heading line.
+fn section_lines<'a>(page: &'a str, s: &Section) -> Vec<TLine<'a>> {
+    let (start, end) = (offset(page, s), offset(page, s) + s.text.len());
+    tracker_lines(page, start).into_iter().take_while(|t| t.line.start < end).skip(1).collect()
+}
+
+/// Whether a Tracker note puts a blank line after its level-2 headings, as the first one followed
+/// by a line that isn't a heading does; yes when none is.
+fn spaced(page: &str) -> bool {
+    let ls = tracker_lines(page, 0);
+    ls.iter()
+        .enumerate()
+        .filter(|(_, t)| matches!(t.heading(), Some((2, _))))
+        .find_map(|(i, _)| ls.get(i + 1).filter(|n| n.heading().is_none()).map(TLine::blank))
+        .unwrap_or(true)
+}
+
+/// A Log entry's date: a top-level bullet that starts with `YYYY-MM-DD` (bold or not).
+static LOG_DATE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[-*+][ \t]+(?:\*\*|__)?(\d{4}-\d{2}-\d{2})\b").unwrap());
+
+/// A top-level list item's first line: `- `, `* ` or `+ ` with no indent.
+fn top_bullet(l: &str) -> bool {
+    l.len() > 1 && l.starts_with(['-', '*', '+']) && l[1..].starts_with([' ', '\t'])
+}
+
+/// How many blank lines end a run of lines.
+fn blank_after(ls: &[&str]) -> usize {
+    ls.iter().rev().take_while(|l| l.trim().is_empty()).count()
+}
+
+/// The Log section `s` of `page` with its entries newest first. An entry is a top-level bullet and
+/// the indented lines under it; text above the first entry stays above. A Log with text between its
+/// entries, or with an entry that has no date, is left as it is and the reason given. Entries of
+/// one date keep their order, and the entries keep the spacing the first two had (a blank line
+/// between them or none).
+fn sorted_log(page: &str, s: &Section, r: &mut Report) -> String {
+    let end = offset(page, s) + s.text.len();
+    let ls = section_lines(page, s);
+    // Each line with its line ending.
+    let raw = |i: usize| &page[ls[i].line.start..ls.get(i + 1).map_or(end, |n| n.line.start)];
+    let Some(first) = ls.iter().position(TLine::entry) else { return s.text.to_string() };
+    let mut items: Vec<Vec<&str>> = Vec::new();
+    for (i, t) in ls.iter().enumerate().skip(first) {
+        if t.entry() {
+            items.push(vec![raw(i)]);
+        } else if t.blank() || t.line.text.starts_with([' ', '\t']) {
+            if let Some(it) = items.last_mut() {
+                it.push(raw(i));
+            }
+        } else {
+            r.reasons.push("the Log has text between its entries".into());
+            return s.text.to_string();
+        }
+    }
+    r.entries = items.len();
+    let dates: Vec<Option<&str>> = items.iter().map(|i| LOG_DATE.captures(i[0]).and_then(|c| c.get(1)).map(|m| m.as_str())).collect();
+    let undated = dates.iter().filter(|d| d.is_none()).count();
+    if undated > 0 {
+        r.reasons.push(format!("{undated} Log entr{} with no date (- YYYY-MM-DD …)", if undated == 1 { "y" } else { "ies" }));
+        return s.text.to_string();
+    }
+    let dates: Vec<&str> = dates.into_iter().flatten().collect();
+    if dates.windows(2).all(|w| w[0] >= w[1]) {
+        return s.text.to_string();
+    }
+    // Each entry without the blank lines after it, then the first two entries' spacing between
+    // every two.
+    let loose = blank_after(&items[0]) > 0;
+    let tail: String = items.last().map(|i| i[i.len() - blank_after(i)..].concat()).unwrap_or_default();
+    let mut order: Vec<usize> = (0..items.len()).collect();
+    order.sort_by(|&a, &b| dates[b].cmp(dates[a]));
+    // The heading and what's above the first entry.
+    let mut out = page[offset(page, s)..ls[first].line.start].to_string();
+    for (k, &i) in order.iter().enumerate() {
+        let item = &items[i];
+        let mut t = item[..item.len() - blank_after(item)].concat();
+        if !t.ends_with('\n') {
+            t.push('\n');
+        }
+        out.push_str(&t);
+        if loose && k + 1 < order.len() {
+            out.push('\n');
+        }
+    }
+    out.push_str(&tail);
+    out
+}
+
+/// `new`, worked out from `page` with LF line endings, with `page`'s endings put back as
+/// `write::save_file` puts them back: a line `page` had keeps its own (CRLF, LF or a mix), and a
+/// new one takes the ending of the line it replaced, or else the one before it.
+fn with_endings_of(page: &str, new: &str) -> String {
+    if !page.contains("\r\n") {
+        return new.to_string();
+    }
+    let (_, eol, _) = crate::write::split_lines(page);
+    let (lines, _, trailing) = crate::write::split_lines(new);
+    crate::write::join_lines(&lines, &eol, trailing)
+}
+
+/// Why a Tracker note can't be reshaped as it is: its `Project:` line is inside a section, where
+/// the sections moved or added above it could push it past the lines `projects::project_line`
+/// reads, and its tasks would leave the project.
+fn project_line_in_section(page: &str) -> Option<String> {
+    let p = parse_tracker(page);
+    let opening_end = p.front.len() + p.opening.len();
+    let body = markdown::lines(page, p.front.len());
+    let no = crate::projects::project_line(&body)?;
+    body.iter().find(|l| l.no == no).is_some_and(|l| l.start >= opening_end).then(|| {
+        "the Project: line is inside a section, where sections put above it could push it out of the note's first lines: move it above the first section".into()
+    })
+}
+
+/// A Tracker note in the tracker shape, and what was done: Current state, Blockers, Next and Log
+/// after the opening (each added, empty, when missing), the Log's entries newest first, and every
+/// other section kept below them in its order. The result is checked (`check`'s line counts, and
+/// reshaping it again changes nothing); if it fails, or the note's `Project:` line is inside a
+/// section, the note comes back as it was with the reasons in `broken`. Each line keeps its line
+/// ending (`with_endings_of`).
+pub fn reshape_tracker(page: &str) -> (String, Report) {
+    if page.contains("\r\n") {
+        let lf = page.replace("\r\n", "\n");
+        let (new, report) = reshape_tracker(&lf);
+        return (if new == lf { page.to_string() } else { with_endings_of(page, &new) }, report);
+    }
+    let (new, mut report) = reshape_tracker_unchecked(page);
+    report.broken = kept_lines(page, &new, &report);
+    if reshape_tracker_unchecked(&new).0 != new {
+        report.broken.push("reshaping it again changes it".into());
+    }
+    report.broken.extend(project_line_in_section(page));
+    if report.broken.is_empty() {
+        (new, report)
+    } else {
+        (page.to_string(), report)
+    }
+}
+
+fn reshape_tracker_unchecked(page: &str) -> (String, Report) {
+    let p = parse_tracker(page);
+    let mut r = Report::default();
+    let mut slots: [Option<Unit>; 4] = Default::default();
+    let mut rest: Vec<Unit> = Vec::new();
+    for (i, s) in p.sections.iter().enumerate() {
+        let ord = Some(i + 1);
+        match tracker_slot(s.heading) {
+            Some(k) if slots[k].is_none() => {
+                let text = if k == LOG_SLOT { sorted_log(page, s, &mut r) } else { s.text.to_string() };
+                slots[k] = Some(Unit { text, ord });
+            }
+            Some(k) => {
+                r.reasons.push(format!("more than one {} section", TRACKER_SECTIONS[k]));
+                rest.push(Unit { text: s.text.to_string(), ord });
+            }
+            None => rest.push(Unit { text: s.text.to_string(), ord }),
+        }
+    }
+    let mut units = vec![Unit { text: p.opening.to_string(), ord: Some(0) }];
+    for (k, u) in slots.into_iter().enumerate() {
+        units.push(u.unwrap_or_else(|| {
+            let h = format!("## {}", TRACKER_SECTIONS[k]);
+            r.added.push(h.clone());
+            Unit { text: format!("{h}\n"), ord: None }
+        }));
+    }
+    units.extend(rest);
+    (with_tail(&assemble(p.front, &units), page), r)
+}
+
+/// A Tracker note's Current state text (everything under its `## Current state`, its `###`
+/// parts too), trimmed; None when it has none or it's empty, HTML comments left out (a template's
+/// guidance comment alone). The project page shows it.
+pub fn tracker_current_state(page: &str) -> Option<String> {
+    let page = page.replace("\r\n", "\n");
+    let p = parse_tracker(&page);
+    let s = p.sections.iter().find(|s| tracker_slot(s.heading) == Some(0))?;
+    let t = s.body().trim();
+    let seen = section_lines(&page, s).iter().any(|l| !l.seen.trim().is_empty());
+    seen.then(|| t.to_string())
+}
+
+/// `before` and `text`, with a blank line between them when `spaced` (none when `before` is
+/// empty).
+fn joined(before: &str, text: &str, spaced: bool) -> String {
+    if before.trim().is_empty() {
+        return format!("{before}{text}");
+    }
+    let nl = if before.ends_with('\n') { "" } else { "\n" };
+    let gap = if spaced && !ends_blank(before) { "\n" } else { "" };
+    format!("{before}{nl}{gap}{text}")
+}
+
+/// Where a section starts on the page, by byte.
+fn offset(page: &str, s: &Section) -> usize {
+    s.text.as_ptr() as usize - page.as_ptr() as usize
+}
+
+/// `body` as a new `TRACKER_SECTIONS[k]` section where the tracker shape puts it among the shape's
+/// sections the note has: right after the nearest one before it in the shape, else above the
+/// nearest one after it, else above the note's first section (or at the end when it has none).
+/// Spaced as the note is (`spaced`).
+fn tracker_insert(page: &str, k: usize, body: &str) -> String {
+    let sp = spaced(page);
+    let gap = if sp { "\n" } else { "" };
+    let text = format!("## {}\n{gap}{}\n", TRACKER_SECTIONS[k], body.trim());
+    let p = parse_tracker(page);
+    let shaped: Vec<(usize, &Section)> = p.sections.iter().filter_map(|s| tracker_slot(s.heading).map(|j| (j, s))).collect();
+    let before = shaped.iter().filter(|(j, _)| *j < k).max_by_key(|(j, _)| *j);
+    let after = shaped.iter().filter(|(j, _)| *j > k).min_by_key(|(j, _)| *j);
+    // None: at the end of the page.
+    let at = match (before, after) {
+        (Some((_, s)), _) => Some(offset(page, s) + s.text.len()).filter(|&e| e < page.len()),
+        (None, Some((_, s))) => Some(offset(page, s)),
+        (None, None) => p.sections.first().map(|s| offset(page, s)),
+    };
+    match at {
+        Some(at) => format!("{}{gap}{}", joined(&page[..at], &text, sp), &page[at..]),
+        None => {
+            let end = content_end(page, 0, page.len());
+            format!("{}{}", joined(&page[..end], &text, sp), &page[end..])
+        }
+    }
+}
+
+/// `page` with the text under section `s`'s heading replaced by `content`, keeping the blank
+/// lines the section had after its heading and before what follows (an empty one is spaced as
+/// the note is, `spaced`). The section runs to the next heading as the tracker code reads
+/// headings, so one inside an HTML comment doesn't end it.
+fn tracker_section_replaced(page: &str, s: &Section, content: &str) -> String {
+    let start = offset(page, s);
+    let head = s.text.split_inclusive('\n').next().unwrap_or("").len();
+    let ls = section_lines(page, s);
+    let end = ls.iter().find(|l| l.heading().is_some_and(|(n, _)| n < 2)).map_or(start + s.text.len(), |l| l.line.start);
+    let body = content.replace("\r\n", "\n");
+    let body = body.trim_matches('\n');
+    let nl = if s.text[..head].ends_with('\n') { "" } else { "\n" };
+    // Whether a blank line follows the heading, and one comes before what follows.
+    let old: Vec<&str> = page[start + head..end].split_inclusive('\n').collect();
+    let (lead, gap) = if old.iter().all(|l| l.trim().is_empty()) {
+        let sp = spaced(page);
+        (sp, sp)
+    } else {
+        (old.first().is_some_and(|l| l.trim().is_empty()), old.last().is_some_and(|l| l.trim().is_empty()))
+    };
+    let lead = if lead { "\n" } else { "" };
+    let after = &page[end..];
+    let tail = match (after.is_empty(), page.ends_with('\n')) {
+        (false, _) if gap => "\n\n",
+        (false, _) => "\n",
+        (true, true) => "\n",
+        (true, false) => "",
+    };
+    format!("{}{nl}{lead}{body}{tail}{after}", &page[..start + head])
+}
+
+/// Err when `new` has lost the `Project:` line `old` has within the lines `projects::project_line`
+/// reads: sections put above it pushed it down, and the note's tasks would leave the project.
+fn project_line_kept(old: &str, new: &str) -> Result<(), String> {
+    let at = |p: &str| crate::projects::project_line(&markdown::lines(p, crate::frontmatter::split(p).body_start));
+    if at(old).is_some() && at(new).is_none() {
+        return Err("This would push the note's Project: line out of its first lines, and its tasks would leave the project: move the Project: line above the note's first section first.".into());
+    }
+    Ok(())
+}
+
+/// A Tracker note with its Current state's text `state`, and with `log` (a day and one line) a
+/// dated entry at the top of its Log, `- YYYY-MM-DD: …`. Only the Current state's own text
+/// changes: its `###` parts stay, and so do the blank lines around its text; an empty one is
+/// spaced as the note is. A section it lacks goes where the tracker shape puts it; nothing else on
+/// the page changes, and each line keeps its line ending (`with_endings_of`). Err when the write
+/// would push the note's `Project:` line out of the lines read for it (`project_line_kept`), or
+/// the text or the Log line leaves an HTML comment open, which would hide the rest of the note.
+pub fn tracker_with_state(page: &str, state: Option<&str>, log: Option<(Date, &str)>) -> Result<String, String> {
+    let given = page;
+    let old = page.replace("\r\n", "\n");
+    let mut page = old.clone();
+    if state.is_none() && log.is_none() {
+        return Err("Give the Current state's text, a Log line, or both.".into());
+    }
+    // Whether the text ends inside an HTML comment: a line after it would start in one.
+    let opens_comment = |t: &str| {
+        let probe = format!("{t}\n.");
+        markdown::uncommented(&markdown::lines(&probe, 0)).last().is_some_and(|u| u.opens_in_comment)
+    };
+    if let Some(t) = state {
+        let t = t.trim();
+        if t.is_empty() {
+            return Err("The Current state's text is empty.".into());
+        }
+        if markdown::lines(t, 0).iter().any(|l| !l.code && markdown::heading(l.text).is_some()) {
+            return Err("The Current state's text has headings in it: give the section's text only.".into());
+        }
+        if opens_comment(t) {
+            return Err("The Current state's text opens an HTML comment (<!--) it doesn't close, which would hide the rest of the note: close it with -->.".into());
+        }
+        let p = parse_tracker(&page);
+        let span = p
+            .sections
+            .iter()
+            .find(|s| tracker_slot(s.heading) == Some(0))
+            .map(|s| (offset(&page, s), s.text.len(), section_lines(&page, s)));
+        page = match span {
+            Some((start, len, ls)) => {
+                let head = page[start..start + len].split_inclusive('\n').next().unwrap_or("").len();
+                // The section's own text: to its first sub-heading, else its end.
+                let end = ls.iter().find(|l| l.heading().is_some()).map_or(start + len, |l| l.line.start);
+                let own = &page[start + head..end];
+                if own.trim().is_empty() {
+                    let sp = spaced(&page);
+                    let nl = if page[..start + head].ends_with('\n') { "" } else { "\n" };
+                    let (lead, gap) = if sp { ("\n", if end < page.len() { "\n" } else { "" }) } else { ("", "") };
+                    format!("{}{nl}{lead}{t}\n{gap}{}", &page[..start + head], &page[end..])
+                } else {
+                    // Its text replaced between the blank lines above and below it, which stay.
+                    let blank_above: usize = own.split_inclusive('\n').take_while(|l| l.trim().is_empty()).map(str::len).sum();
+                    let from = start + head + blank_above;
+                    let to = content_end(&page, from, end);
+                    let nl = if page[from..to].ends_with('\n') { "\n" } else { "" };
+                    format!("{}{t}{nl}{}", &page[..from], &page[to..])
+                }
+            }
+            None => tracker_insert(&page, 0, t),
+        };
+    }
+    if let Some((date, line)) = log {
+        let line = line.split_whitespace().collect::<Vec<_>>().join(" ");
+        if line.is_empty() {
+            return Err("The Log line is empty.".into());
+        }
+        if opens_comment(&line) {
+            return Err(
+                "The Log line opens an HTML comment (<!--) it doesn't close, which would hide the rest of the note: close it with -->."
+                    .into(),
+            );
+        }
+        let entry = format!("- {}: {line}", date.iso());
+        let p = parse_tracker(&page);
+        let span = p
+            .sections
+            .iter()
+            .find(|s| tracker_slot(s.heading) == Some(LOG_SLOT))
+            .map(|s| (offset(&page, s), s.text.len(), section_lines(&page, s)));
+        page = match span {
+            Some((start, len, ls)) => {
+                // Its entries, and whether the first two have a blank line between them.
+                let entries: Vec<usize> = (0..ls.len()).filter(|&i| ls[i].entry()).collect();
+                let loose = entries.len() > 1 && entries[1] > 0 && ls[entries[1] - 1].blank();
+                match entries.first() {
+                    // Above the newest entry, spaced as the entries are.
+                    Some(&i) => {
+                        let at = ls[i].line.start;
+                        format!("{}{entry}\n{}{}", &page[..at], if loose { "\n" } else { "" }, &page[at..])
+                    }
+                    // None yet: after any text under its heading, spaced as the note is.
+                    None => {
+                        let sp = spaced(&page);
+                        let end = content_end(&page, start, start + len);
+                        let body = joined(&page[..end], &format!("{entry}\n"), sp);
+                        let after = &page[end..];
+                        let sep = if sp && !after.is_empty() && !after.starts_with('\n') { "\n" } else { "" };
+                        format!("{body}{sep}{after}")
+                    }
+                }
+            }
+            None => tracker_insert(&page, LOG_SLOT, &entry),
+        };
+    }
+    project_line_kept(&old, &page)?;
+    Ok(with_endings_of(given, &page))
 }
 
 /// Which link targets are vault notes or sources rather than wiki pages, from the vault's file
@@ -1853,5 +2377,387 @@ mod tests {
         assert_eq!(p.sections.iter().map(|s| s.heading).collect::<Vec<_>>(), ["A", "B"]);
         assert!(p.sections[0].text.contains("### Sub"));
         assert_eq!(format!("{}{}{}", p.front, p.opening, p.sections.iter().map(|s| s.text).collect::<String>()), page);
+    }
+
+    #[test]
+    fn knows_tracker_notes() {
+        assert!(is_tracker("Tracker. Orbit rollout.md") && is_tracker("Work/Tracker. Orbit rollout.md"));
+        assert!(
+            !is_tracker("wiki/concepts/Tracker. X.md") && !is_tracker("Templates/Tracker. X.md") && !is_tracker("sources/Tracker. X.md")
+        );
+        assert!(!is_tracker("Plan. Orbit.md") && !is_tracker("Tracker. X.txt"));
+        assert!(has_shape("Tracker. X.md") && has_shape("wiki/entities/Maya.md") && !has_shape("Plan. X.md"));
+    }
+
+    const TRACKER: &str = "---\nupdated: 2026-10-01\n---\n\nProject: [[Project. Orbit]]\n\nWhere the rollout stands.\n\n## Decisions\n\n1. Ship in stages.\n\n## Log\n\n- 2026-09-01: Started.\n- 2026-10-02: Staged in Acme's test site.\n  Lena signed it off.\n- **2026-09-15** Plan agreed.\n\n## Next\n\n- [ ] Book the cutover\n";
+
+    #[test]
+    fn reshapes_a_tracker_keeping_everything() {
+        let (new, r) = reshape_tracker(TRACKER);
+        assert!(r.auto(), "{r:?}");
+        assert_eq!(
+            new,
+            "---\nupdated: 2026-10-01\n---\n\nProject: [[Project. Orbit]]\n\nWhere the rollout stands.\n\n## Current state\n\n## Blockers\n\n## Next\n\n- [ ] Book the cutover\n\n## Log\n\n- 2026-10-02: Staged in Acme's test site.\n  Lena signed it off.\n- **2026-09-15** Plan agreed.\n- 2026-09-01: Started.\n\n## Decisions\n\n1. Ship in stages.\n"
+        );
+        assert_eq!(r.added, ["## Current state", "## Blockers"]);
+        assert_eq!(r.entries, 3);
+        // Idempotent: in the shape now, and reshaping it again changes nothing.
+        let (again, r2) = reshape_tracker(&new);
+        assert_eq!(again, new);
+        assert!(r2.added.is_empty() && r2.auto());
+        let (res, changed) = one("Tracker. Orbit.md", &new, &Sources::from_paths(std::iter::empty()));
+        assert!(res.in_shape && changed.is_none());
+        let (res, changed) = one("Tracker. Orbit.md", TRACKER, &Sources::from_paths(std::iter::empty()));
+        assert!(!res.in_shape && res.auto && changed.as_deref() == Some(new.as_str()));
+    }
+
+    #[test]
+    fn a_tracker_in_the_shape_is_left_alone() {
+        let page = "Project: [[Project. Orbit]]\n## current state\nGoing well.\n## Blockers\n## Next\n## Log\n- 2026-10-02: b\n- 2026-10-01: a\n## Notes\nx";
+        let (new, r) = reshape_tracker(page);
+        assert_eq!(new, page);
+        assert!(r.auto() && r.added.is_empty());
+    }
+
+    #[test]
+    fn a_tracker_log_it_cannot_sort_needs_the_user() {
+        for (log, why) in [
+            ("- 2026-09-01: a\nSome prose.\n- 2026-10-01: b\n", "text between its entries"),
+            ("- 2026-09-01: a\n- Undated thing\n- 2026-10-01: b\n", "1 Log entry with no date"),
+        ] {
+            let page = format!("Project: [[Project. Orbit]]\n\n## Current state\n\n## Blockers\n\n## Next\n\n## Log\n\n{log}");
+            let (new, r) = reshape_tracker(&page);
+            assert_eq!(new, page, "{why}");
+            assert!(r.reasons.iter().any(|x| x.contains(why)), "{r:?}");
+            let (res, _) = one("Tracker. Orbit.md", &page, &Sources::from_paths(std::iter::empty()));
+            assert!(!res.in_shape && !res.auto);
+        }
+        // A second Log is kept, below, and named.
+        let page = "## Log\n\n- 2026-10-01: a\n\n## Log\n\n- 2026-09-01: b\n";
+        let (new, r) = reshape_tracker(page);
+        assert!(new.contains("- 2026-09-01: b") && new.contains("- 2026-10-01: a"));
+        assert!(r.reasons.iter().any(|x| x.contains("more than one Log")));
+    }
+
+    #[test]
+    fn a_loose_tracker_log_stays_loose() {
+        let page = "## Current state\n\n## Blockers\n\n## Next\n\n## Log\n\nNewest first.\n\n- 2026-09-01: a\n\n- 2026-10-01: b\n  more\n\n## Other\n\ntext\n";
+        let (new, r) = reshape_tracker(page);
+        assert!(r.auto(), "{r:?}");
+        assert_eq!(
+            new,
+            "## Current state\n\n## Blockers\n\n## Next\n\n## Log\n\nNewest first.\n\n- 2026-10-01: b\n  more\n\n- 2026-09-01: a\n\n## Other\n\ntext\n"
+        );
+    }
+
+    #[test]
+    fn writes_a_trackers_current_state() {
+        let d = Date::parse_iso("2026-11-02").unwrap();
+        // Replaced where it is; nothing else changes.
+        let shaped = reshape_tracker(TRACKER).0;
+        let new = tracker_with_state(&shaped, Some("Staged; cutover next week."), None).unwrap();
+        assert_eq!(new, shaped.replace("## Current state\n\n## Blockers", "## Current state\n\nStaged; cutover next week.\n\n## Blockers"));
+        // And again, over the text it has.
+        let again = tracker_with_state(&new, Some("Live."), None).unwrap();
+        assert!(again.contains("## Current state\n\nLive.\n\n## Blockers") && !again.contains("Staged; cutover"));
+        // With a Log line: at the top of the Log, dated.
+        let logged = tracker_with_state(&new, None, Some((d, "Cutover booked\nfor Friday."))).unwrap();
+        assert!(logged.contains("## Log\n\n- 2026-11-02: Cutover booked for Friday.\n- 2026-10-02: Staged"), "{logged}");
+        assert!(reshape_tracker(&logged).1.auto());
+
+        // A tracker without the sections: Current state after the opening, above the others; the
+        // Log made where the shape puts it.
+        let bare = "---\nupdated: 2026-10-01\n---\n\nProject: [[Project. Orbit]]\n\nIntro.\n\n## Decisions\n\n1. Ship.\n";
+        let new = tracker_with_state(bare, Some("- Staged\n- Cutover Friday"), Some((d, "Wrote it."))).unwrap();
+        assert_eq!(
+            new,
+            "---\nupdated: 2026-10-01\n---\n\nProject: [[Project. Orbit]]\n\nIntro.\n\n## Current state\n\n- Staged\n- Cutover Friday\n\n## Log\n\n- 2026-11-02: Wrote it.\n\n## Decisions\n\n1. Ship.\n"
+        );
+        // A note with Windows line endings keeps them.
+        let crlf = tracker_with_state(&bare.replace('\n', "\r\n"), Some("Staged."), None).unwrap();
+        assert!(crlf.contains("## Current state\r\n\r\nStaged.\r\n\r\n## Decisions") && !crlf.replace("\r\n", "").contains('\n'));
+        // An empty Log at the end of the note.
+        let new = tracker_with_state("Project: [[Project. Orbit]]\n\n## Log\n", None, Some((d, "First."))).unwrap();
+        assert_eq!(new, "Project: [[Project. Orbit]]\n\n## Log\n\n- 2026-11-02: First.\n");
+        // What it won't write.
+        assert!(tracker_with_state(bare, Some("## Heading\n\ntext"), None).is_err());
+        assert!(tracker_with_state(bare, Some("  "), None).is_err());
+        assert!(tracker_with_state(bare, None, Some((d, " "))).is_err());
+        assert!(tracker_with_state(bare, None, None).is_err());
+    }
+
+    #[test]
+    fn an_edit_puts_a_trackers_section_where_the_shape_does() {
+        let page = "Project: [[Project. Orbit]]\n\n## Next\n\n- [ ] x\n\n## Notes\n\ny\n";
+        let new = with_section("Tracker. Orbit.md", page, "Blockers", "Waiting on Lena.").unwrap();
+        assert_eq!(new, "Project: [[Project. Orbit]]\n\n## Blockers\n\nWaiting on Lena.\n\n## Next\n\n- [ ] x\n\n## Notes\n\ny\n");
+        let new = with_section("Tracker. Orbit.md", page, "Log", "- 2026-11-02: x").unwrap();
+        assert_eq!(new, "Project: [[Project. Orbit]]\n\n## Next\n\n- [ ] x\n\n## Log\n\n- 2026-11-02: x\n\n## Notes\n\ny\n");
+        // Not a tracker: as before, at the end.
+        let plain = with_section("Plan. Orbit.md", page, "Blockers", "z").unwrap();
+        assert!(plain.ends_with("## Blockers\n\nz\n"), "{plain}");
+    }
+
+    #[test]
+    fn writes_the_trackers_own_current_state_only() {
+        // An H3 of the same name above it is left alone; the H2 is the one written.
+        let page = "Intro\n\n### Current state\nold h3\n\n## Current state\n\nold h2\n\n## Log\n";
+        let new = tracker_with_state(page, Some("new"), None).unwrap();
+        assert_eq!(new, "Intro\n\n### Current state\nold h3\n\n## Current state\n\nnew\n\n## Log\n");
+        // Its ### parts stay; only the text above them changes.
+        let page = "## Current state\n\nold\n\n### Risks\n\n- late\n\n## Log\n";
+        let new = tracker_with_state(page, Some("new"), None).unwrap();
+        assert_eq!(new, "## Current state\n\nnew\n\n### Risks\n\n- late\n\n## Log\n");
+        // At the end of the note, and with no text yet.
+        assert_eq!(tracker_with_state("## Current state", Some("x"), None).unwrap(), "## Current state\n\nx\n");
+        assert_eq!(tracker_current_state("## Current state\r\n\r\nx\r\n### Part\r\ny\r\n## Log\r\n").as_deref(), Some("x\n### Part\ny"));
+        assert_eq!(tracker_current_state("## Current state\n\n## Log\n"), None);
+        // Only a template's guidance comment is no text either.
+        assert_eq!(tracker_current_state("## Current state\n\n<!-- What is true now. -->\n\n## Log\n"), None);
+    }
+
+    #[test]
+    fn a_log_line_skips_code_and_keeps_the_logs_spacing() {
+        let d = Date::parse_iso("2026-11-02").unwrap();
+        // A bullet in a code block isn't an entry.
+        let page = "## Log\n\n```\n- not an entry\n```\n\n- 2026-10-01: a\n";
+        let new = tracker_with_state(page, None, Some((d, "b"))).unwrap();
+        assert_eq!(new, "## Log\n\n```\n- not an entry\n```\n\n- 2026-11-02: b\n- 2026-10-01: a\n");
+        // A Log with a blank line between its entries gets one after the new line too.
+        let page = "## Log\n\n- 2026-10-02: b\n\n- 2026-10-01: a\n";
+        let new = tracker_with_state(page, None, Some((d, "c"))).unwrap();
+        assert_eq!(new, "## Log\n\n- 2026-11-02: c\n\n- 2026-10-02: b\n\n- 2026-10-01: a\n");
+        // Sorting keeps the first two entries' spacing: tight here, though a later pair was loose.
+        let page = "## Current state\n\n## Blockers\n\n## Next\n\n## Log\n\n- 2026-09-01: a\n- 2026-09-02: b\n\n- 2026-09-03: c\n";
+        let (new, r) = reshape_tracker(page);
+        assert!(r.auto(), "{r:?}");
+        assert!(new.ends_with("## Log\n\n- 2026-09-03: c\n- 2026-09-02: b\n- 2026-09-01: a\n"), "{new}");
+    }
+
+    #[test]
+    fn a_crlf_tracker_keeps_its_line_endings() {
+        let page = TRACKER.replace('\n', "\r\n");
+        let (new, r) = reshape_tracker(&page);
+        assert!(r.auto(), "{r:?}");
+        assert_eq!(new, reshape_tracker(TRACKER).0.replace('\n', "\r\n"));
+        assert!(!new.replace("\r\n", "").contains('\n'));
+        let (again, _) = reshape_tracker(&new);
+        assert_eq!(again, new);
+    }
+
+    /// A CRLF note another editor added LF lines to, written as Changes writes it: the change made
+    /// from the texts, run on the page, then saved with `write::save_file`.
+    #[test]
+    fn a_tracker_with_mixed_line_endings_keeps_each_lines_own() {
+        let page = "Project: [[Project. O]]\r\n\r\n## Next\n\n- [ ] x\n\n## Log\r\n\r\n- 2026-01-01: a\r\n- 2026-02-01: b\r\n";
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("Tracker. O.md");
+        let saved = |new: &str| {
+            std::fs::write(&p, page).unwrap();
+            let after = crate::changes::from_texts(Some(page), new).text("Tracker. O.md", Some(page)).unwrap();
+            crate::write::save_file(&p, &after, &crate::write::version(page.as_bytes())).unwrap();
+            std::fs::read_to_string(&p).unwrap()
+        };
+        let (new, r) = reshape_tracker(page);
+        assert!(r.auto(), "{r:?}");
+        assert!(new.contains("## Next\n\n- [ ] x\n") && new.contains("- 2026-02-01: b\r\n- 2026-01-01: a\r\n"), "{new:?}");
+        assert_eq!(saved(&new), new);
+        let day = Date::parse_iso("2026-11-02").unwrap();
+        let new = tracker_with_state(page, Some("Live."), Some((day, "c"))).unwrap();
+        assert!(new.contains("## Next\n\n- [ ] x\n") && new.contains("## Log\r\n\r\n- 2026-11-02: c\r\n"), "{new:?}");
+        assert_eq!(saved(&new), new);
+    }
+
+    #[test]
+    fn a_tracker_write_that_leaves_a_comment_open_is_refused() {
+        let page = "Project: [[Project. O]]\n\n## Current state\n\nold\n\n## Log\n\n- 2026-10-01: a\n";
+        let day = Date::parse_iso("2026-11-02").unwrap();
+        let err = tracker_with_state(page, Some("Live <!-- draft"), Some((day, "x"))).unwrap_err();
+        assert!(err.contains("<!--"), "{err}");
+        let err = tracker_with_state(page, None, Some((day, "x <!-- y"))).unwrap_err();
+        assert!(err.contains("<!--"), "{err}");
+        // One closed in the text, or written as code, is fine.
+        assert!(tracker_with_state(page, Some("Live <!-- draft -->"), None).is_ok());
+        assert!(tracker_with_state(page, Some("Hide with `<!--`."), None).is_ok());
+    }
+
+    #[test]
+    fn a_tracker_heading_with_words_after_its_name_is_that_section() {
+        let day = Date::parse_iso("2026-11-02").unwrap();
+        let page = "Project: [[Project. O]]\n\n## Log (newest first)\n\n- 2026-10-01: a\n";
+        assert_eq!(
+            tracker_with_state(page, None, Some((day, "x"))).unwrap(),
+            "Project: [[Project. O]]\n\n## Log (newest first)\n\n- 2026-11-02: x\n- 2026-10-01: a\n"
+        );
+        let new = with_section("Tracker. O.md", page, "Log", "- 2026-10-01: b").unwrap();
+        assert_eq!(new, "Project: [[Project. O]]\n\n## Log (newest first)\n\n- 2026-10-01: b\n");
+        let (new, r) = reshape_tracker(page);
+        assert!(r.auto(), "{r:?}");
+        assert_eq!(new.matches("## Log").count(), 1, "{new}");
+        // A name that only starts with it isn't it.
+        assert_eq!((tracker_slot("Next steps"), tracker_slot("Logistics")), (None, None));
+    }
+
+    #[test]
+    fn an_edit_to_a_tracker_without_blank_lines_keeps_them_out() {
+        let page = "Project: [[Project. Orbit]]\n## Current state\nold\n## Log\n- 2026-10-01: a\n";
+        let new = with_section("Tracker. Orbit.md", page, "Current state", "new").unwrap();
+        assert_eq!(new, page.replace("old", "new"));
+        let page = "Project: [[Project. Orbit]]\n## Current state\n## Log\n- 2026-10-01: a\n";
+        let new = with_section("Tracker. Orbit.md", page, "Current state", "new").unwrap();
+        assert_eq!(new, "Project: [[Project. Orbit]]\n## Current state\nnew\n## Log\n- 2026-10-01: a\n");
+    }
+
+    #[test]
+    fn missing_tracker_sections_go_in_shape_order() {
+        // Among shape sections out of order and others: after the nearest before it in the shape.
+        let page = "## Jira\n\nj\n\n## Current state\n\ncs\n\n## Log\n\nl\n";
+        assert_eq!(tracker_insert(page, 1, "b"), "## Jira\n\nj\n\n## Current state\n\ncs\n\n## Blockers\n\nb\n\n## Log\n\nl\n");
+        // None before it: above the nearest after it, not above an unknown section.
+        let page = "## Jira\n\nj\n\n## Next\n\nn\n";
+        assert_eq!(tracker_insert(page, 0, "cs"), "## Jira\n\nj\n\n## Current state\n\ncs\n\n## Next\n\nn\n");
+        // After the last section when that's the nearest before it.
+        assert_eq!(tracker_insert("## Next\n\nn\n", 3, "- x"), "## Next\n\nn\n\n## Log\n\n- x\n");
+    }
+
+    #[test]
+    fn a_trackers_html_comment_hides_its_headings() {
+        // A reshape keeps Next, its task and the added sections out of the comment.
+        let page =
+            "Project: [[Project. Orbit]]\n\n<!--\n## Log\nDated lines go here, newest first.\n-->\n\n## Next\n\n- [ ] Book the cutover\n";
+        let (new, r) = reshape_tracker(page);
+        assert!(r.auto(), "{r:?}");
+        assert_eq!(
+            new,
+            "Project: [[Project. Orbit]]\n\n<!--\n## Log\nDated lines go here, newest first.\n-->\n\n## Current state\n\n## Blockers\n\n## Next\n\n- [ ] Book the cutover\n\n## Log\n"
+        );
+        // A commented-out Current state isn't the one written or read.
+        let page = "<!--\n## Current state\nWhat is true now.\n-->\n\n## Current state\n\nStaged.\n\n## Log\n";
+        assert_eq!(tracker_current_state(page).as_deref(), Some("Staged."));
+        let new = tracker_with_state(page, Some("Live."), None).unwrap();
+        assert_eq!(new, "<!--\n## Current state\nWhat is true now.\n-->\n\n## Current state\n\nLive.\n\n## Log\n");
+        // Nor is a heading in a comment where a missing section would go.
+        let page = "Project: [[Project. Orbit]]\n\n<!-- ## Next -->\n\n## Notes\n\nx\n";
+        let new = tracker_with_state(page, Some("Live."), None).unwrap();
+        assert_eq!(new, "Project: [[Project. Orbit]]\n\n<!-- ## Next -->\n\n## Current state\n\nLive.\n\n## Notes\n\nx\n");
+    }
+
+    #[test]
+    fn a_trackers_html_comment_hides_its_log_entries() {
+        let d = Date::parse_iso("2026-11-02").unwrap();
+        // A new line goes above the first real entry, not into the placeholder.
+        let page = "## Log\n\n<!--\n- 2026-01-01: what happened\n-->\n- 2026-10-01: a\n";
+        let new = tracker_with_state(page, None, Some((d, "b"))).unwrap();
+        assert_eq!(new, "## Log\n\n<!--\n- 2026-01-01: what happened\n-->\n- 2026-11-02: b\n- 2026-10-01: a\n");
+        // With no real entry, after the comment.
+        let page = "## Log\n\n<!-- - 2026-01-01: what happened -->\n";
+        let new = tracker_with_state(page, None, Some((d, "b"))).unwrap();
+        assert_eq!(new, "## Log\n\n<!-- - 2026-01-01: what happened -->\n\n- 2026-11-02: b\n");
+        // Sorting leaves the comment above the entries.
+        let page = "## Current state\n\n## Blockers\n\n## Next\n\n## Log\n\n<!--\n- 2026-01-01: what happened\n-->\n- 2026-09-01: a\n- 2026-10-01: b\n";
+        let (new, r) = reshape_tracker(page);
+        assert!(r.auto(), "{r:?}");
+        assert!(new.ends_with("## Log\n\n<!--\n- 2026-01-01: what happened\n-->\n- 2026-10-01: b\n- 2026-09-01: a\n"), "{new}");
+    }
+
+    #[test]
+    fn an_edit_finds_a_trackers_section_by_its_name() {
+        let page = "Project: [[Project. Orbit]]\n\n## Next:\n\n- [ ] x\n\n## Log\n";
+        let new = with_section("Tracker. Orbit.md", page, "Next", "- [ ] y").unwrap();
+        assert_eq!(new, "Project: [[Project. Orbit]]\n\n## Next:\n\n- [ ] y\n\n## Log\n");
+    }
+
+    #[test]
+    fn an_edit_writes_the_trackers_own_section() {
+        // Not a commented-out heading of the same name, nor an H3 above it.
+        let page =
+            "Project: [[Project. Orbit]]\n\n<!--\n## Current state\nWhat is true now.\n-->\n\n## Current state\n\nStaged.\n\n## Log\n";
+        let new = with_section("Tracker. Orbit.md", page, "Current state", "Live.").unwrap();
+        assert_eq!(new, page.replace("Staged.", "Live."));
+        let page = "Project: [[Project. Orbit]]\n\n### Current state\nold h3\n\n## Current state\n\nold h2\n\n## Log\n";
+        let new = with_section("Tracker. Orbit.md", page, "Current state", "new").unwrap();
+        assert_eq!(new, page.replace("old h2", "new"));
+        // A commented heading inside the section is part of its text, not its end.
+        let page = "## Current state\n\nold\n<!--\n## Log\n-->\n\n## Log\n\n- 2026-10-01: a\n";
+        let new = with_section("Tracker. Orbit.md", page, "Current state", "new").unwrap();
+        assert_eq!(new, "## Current state\n\nnew\n\n## Log\n\n- 2026-10-01: a\n");
+    }
+
+    #[test]
+    fn a_tracker_write_keeps_the_project_line_in_reach() {
+        // Sections added above a Project: line low in the note would push it past the lines read.
+        let page = "# Orbit\n\n1\n2\n3\n4\n5\n\n## Notes\n\nProject: [[Project. Orbit]]\n\n- [ ] A task\n";
+        let d = Date::parse_iso("2026-11-02").unwrap();
+        let err = tracker_with_state(page, Some("Live."), Some((d, "x"))).unwrap_err();
+        assert!(err.contains("Project: line"), "{err}");
+        // One that stays in reach is written.
+        assert!(tracker_with_state(page, None, Some((d, "x"))).is_ok());
+        let lower = page.replace("5\n", "5\n6\n");
+        let err = with_section("Tracker. Orbit.md", &lower, "Current state", "Live.").unwrap_err();
+        assert!(err.contains("Project: line"), "{err}");
+    }
+
+    #[test]
+    fn a_tracker_with_its_project_line_in_a_section_is_left_alone() {
+        let page = "## Notes\n\nProject: [[Project. Orbit]]\n";
+        let (new, r) = reshape_tracker(page);
+        assert_eq!(new, page);
+        assert!(r.broken.iter().any(|x| x.contains("Project: line")), "{r:?}");
+        let (res, changed) = one("Tracker. Orbit.md", page, &Sources::from_paths(std::iter::empty()));
+        assert!(!res.in_shape && !res.auto && changed.is_none());
+        assert!(tracker_left_why(&res, changed.as_deref()).is_some_and(|w| w.contains("Project: line")));
+    }
+
+    #[test]
+    fn a_named_tracker_reshaping_cannot_change_says_why() {
+        let none = Sources::from_paths(std::iter::empty());
+        let page = "Project: [[Project. Orbit]]\n\n## Current state\n\n## Blockers\n\n## Next\n\n## Log\n\n- 2026-09-01: a\n- Undated\n";
+        let (res, changed) = one("Tracker. Orbit.md", page, &none);
+        assert!(!res.in_shape && changed.is_none() && res.report.broken.is_empty(), "{res:?}");
+        assert!(tracker_left_why(&res, changed.as_deref()).is_some_and(|w| w.starts_with("1 Log entry with no date")));
+        // One in the shape, or one it reshapes, isn't left.
+        let fine = "Project: [[Project. Orbit]]\n\n## Current state\n\n## Blockers\n\n## Next\n\n## Log\n\n- 2026-09-01: a\n";
+        let (res, changed) = one("Tracker. Orbit.md", fine, &none);
+        assert!(res.in_shape);
+        assert_eq!(tracker_left_why(&res, changed.as_deref()), None);
+        let (res, changed) = one("Tracker. Orbit.md", "Project: [[Project. Orbit]]\n\n## Log\n\n- 2026-09-01: a\n", &none);
+        assert!(changed.is_some());
+        assert_eq!(tracker_left_why(&res, changed.as_deref()), None);
+    }
+
+    #[test]
+    fn a_tracker_written_without_blank_lines_keeps_them_out() {
+        let d = Date::parse_iso("2026-11-02").unwrap();
+        let page = "Project: [[Project. Orbit]]\n## Current state\nold\n## Log\n- 2026-10-01: a\n";
+        assert_eq!(
+            tracker_with_state(page, Some("new"), Some((d, "b"))).unwrap(),
+            "Project: [[Project. Orbit]]\n## Current state\nnew\n## Log\n- 2026-11-02: b\n- 2026-10-01: a\n"
+        );
+        // A section it adds, and a first Log line, are spaced the same way.
+        let page = "Project: [[Project. Orbit]]\n## Log\n## Notes\nx\n";
+        assert_eq!(
+            tracker_with_state(page, Some("new"), Some((d, "b"))).unwrap(),
+            "Project: [[Project. Orbit]]\n## Current state\nnew\n## Log\n- 2026-11-02: b\n## Notes\nx\n"
+        );
+        // An empty section between two others, in a note written with blank lines, gets them.
+        let page = "## Current state\n\n## Log\n\n- 2026-10-01: a\n";
+        assert_eq!(tracker_with_state(page, Some("new"), None).unwrap(), "## Current state\n\nnew\n\n## Log\n\n- 2026-10-01: a\n");
+    }
+
+    #[test]
+    fn trackers_are_the_notes_the_vault_indexes() {
+        assert!(!is_tracker("images/Tracker. X.md") && !is_tracker("attachments/Tracker. X.md") && !is_tracker(".obsidian/Tracker. X.md"));
+        let d = tempfile::tempdir().unwrap();
+        for rel in ["Tracker. A.md", "images/Tracker. B.md", "Old/Tracker. C.md", "Work/Old/Tracker. D.md", "Work/Tracker. E.md"] {
+            let p = d.path().join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, "Project: [[Project. Orbit]]\n").unwrap();
+        }
+        let vault = crate::vault::Vault::new(d.path().to_path_buf(), vec!["Old".into()]);
+        let mut ix = crate::index::Index::open_in_memory().unwrap();
+        ix.sync(&vault).unwrap();
+        let notes: Vec<String> = ix.list(Some("note")).unwrap().into_iter().map(|f| f.path).collect();
+        let found: Vec<String> = survey_trackers(d.path(), &notes).into_iter().map(|(r, _)| r.path).collect();
+        assert_eq!(found, ["Tracker. A.md", "Work/Tracker. E.md"]);
     }
 }

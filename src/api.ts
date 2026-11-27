@@ -593,6 +593,8 @@ export interface ProjectDoc {
   /** Its `summary` property. */
   summary: string | null;
   mtime: number;
+  /** A tracker's `## Current state` text, as the index read it (core pageshape). */
+  currentState: string | null;
 }
 
 /** Something to clarify: a Scratchpad block or a To Do `#### Other` task. */

@@ -12,6 +12,7 @@ const doc = (title: string, type: string | null): ProjectDoc => ({
   type,
   summary: null,
   mtime: 0,
+  currentState: null,
 });
 
 describe("project documents", () => {

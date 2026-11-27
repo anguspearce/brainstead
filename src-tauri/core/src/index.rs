@@ -21,12 +21,12 @@ use crate::note::{self, Parsed};
 use crate::vault::{Vault, VaultFile};
 
 /// Bump when the schema or what's parsed into it changes; the index is then rebuilt.
-const SCHEMA_VERSION: i64 = 10;
+const SCHEMA_VERSION: i64 = 11;
 
 const SCHEMA: &str = r#"
 CREATE TABLE files (id INTEGER PRIMARY KEY, path TEXT UNIQUE NOT NULL, key TEXT NOT NULL, layer TEXT NOT NULL,
   sha256 TEXT NOT NULL, size INTEGER, mtime INTEGER, type TEXT, title TEXT, date TEXT, frontmatter TEXT, frontmatter_error TEXT,
-  project_line INTEGER, project_keys TEXT);
+  project_line INTEGER, project_keys TEXT, current_state TEXT);
 CREATE INDEX files_key ON files(key);
 CREATE TABLE links (src INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE, target TEXT NOT NULL, target_key TEXT NOT NULL,
   target_id INTEGER REFERENCES files(id) ON DELETE SET NULL, kind TEXT NOT NULL, heading TEXT, block TEXT, alias TEXT, line INTEGER);
@@ -487,16 +487,16 @@ fn store(tx: &rusqlite::Transaction, f: &VaultFile, sha: &str, p: &Parsed) -> Re
                 tx.execute(&format!("DELETE FROM {t} WHERE {col} = ?1"), [id]).map_err(e)?;
             }
             tx.execute(
-                "UPDATE files SET key=?2, layer=?3, sha256=?4, size=?5, mtime=?6, type=?7, title=?8, date=?9, frontmatter=?10, frontmatter_error=?11, project_line=?12, project_keys=?13 WHERE id=?1",
-                params![id, key(&f.rel), f.layer.as_str(), sha, f.size as i64, f.mtime, p.kind, p.title, p.date, fm, p.frontmatter_error, project_line, project_keys],
+                "UPDATE files SET key=?2, layer=?3, sha256=?4, size=?5, mtime=?6, type=?7, title=?8, date=?9, frontmatter=?10, frontmatter_error=?11, project_line=?12, project_keys=?13, current_state=?14 WHERE id=?1",
+                params![id, key(&f.rel), f.layer.as_str(), sha, f.size as i64, f.mtime, p.kind, p.title, p.date, fm, p.frontmatter_error, project_line, project_keys, p.current_state],
             )
             .map_err(e)?;
             id
         }
         None => {
             tx.execute(
-                "INSERT INTO files(path, key, layer, sha256, size, mtime, type, title, date, frontmatter, frontmatter_error, project_line, project_keys) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
-                params![f.rel, key(&f.rel), f.layer.as_str(), sha, f.size as i64, f.mtime, p.kind, p.title, p.date, fm, p.frontmatter_error, project_line, project_keys],
+                "INSERT INTO files(path, key, layer, sha256, size, mtime, type, title, date, frontmatter, frontmatter_error, project_line, project_keys, current_state) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+                params![f.rel, key(&f.rel), f.layer.as_str(), sha, f.size as i64, f.mtime, p.kind, p.title, p.date, fm, p.frontmatter_error, project_line, project_keys, p.current_state],
             )
             .map_err(e)?;
             tx.last_insert_rowid()
@@ -579,6 +579,18 @@ mod tests {
         drop(ix);
         let again = Index::open(&path).unwrap();
         assert_eq!(again.conn.query_row("SELECT count(*) FROM sqlite_master WHERE name = 'kept'", [], |r| r.get::<_, i64>(0)).unwrap(), 1);
+    }
+
+    #[test]
+    fn an_index_from_before_trackers_current_state_is_rebuilt() {
+        let t = tempfile::tempdir().unwrap();
+        let path = t.path().join("index.db");
+        // Version 10's files table had no current_state column.
+        let ix = Index::open(&path).unwrap();
+        ix.conn.execute_batch("ALTER TABLE files DROP COLUMN current_state; PRAGMA user_version=10;").unwrap();
+        drop(ix);
+        let mut ix = Index::open(&path).unwrap();
+        ix.sync(&Vault::new(fixture(), vec![])).unwrap();
     }
 
     /// The fixture vault copied to a temp dir, so tests can change it.

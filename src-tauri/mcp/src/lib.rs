@@ -361,7 +361,7 @@ fn tool(name: &str, title: &str, effect: Effect, description: &str, mut input: V
     })
 }
 
-const EDIT_PAGE: &str = "Changes one page (a note, a wiki page, a project: any page in the vault), or makes a new wiki page (needs the app); a new note is create_note. The change is made at once and recorded in Brainstead's Changes, where the user can revert it. Give exactly one of: section + content (that section's new text, without its heading; a section that isn't there is added at the end, or on a wiki entity or concept page where the page shape puts it: a topical one above the Timeline, a summing one such as Summary or Status as the Current state), edits (exact find and replace pairs, each find text appearing once in the page), or content alone (the whole page; required for a new page, whose path must be wiki/entities/<Name>.md, wiki/concepts/<Name>.md or wiki/summaries/<Name>.md). Keep what's in the text you replace that you aren't changing: links, tags, and block ids such as ^q3 at a line's end. Cite what the change rests on in quotes, copied word for word from the source; cite in the text as [[Source#Heading]] or [[Source.pdf#page=6]]; a PDF quote with anchor page=N must be on that page. A quote that isn't in its source is flagged to the user.";
+const EDIT_PAGE: &str = "Changes one page (a note, a wiki page, a project: any page in the vault), or makes a new wiki page (needs the app); a new note is create_note. The change is made at once and recorded in Brainstead's Changes, where the user can revert it. Give exactly one of: section + content (that section's new text, without its heading; a section that isn't there is added at the end, or on a wiki entity or concept page where the page shape puts it: a topical one above the Timeline, a summing one such as Summary or Status as the Current state; on a Tracker note, its Current state, Blockers, Next or Log is found as the tracker shape reads headings, an HTML comment's left out, and one it lacks goes where that shape puts it, unless that would push the note's Project: line out of its first 15 lines), edits (exact find and replace pairs, each find text appearing once in the page), or content alone (the whole page; required for a new page, whose path must be wiki/entities/<Name>.md, wiki/concepts/<Name>.md or wiki/summaries/<Name>.md). Keep what's in the text you replace that you aren't changing: links, tags, and block ids such as ^q3 at a line's end. Cite what the change rests on in quotes, copied word for word from the source; cite in the text as [[Source#Heading]] or [[Source.pdf#page=6]]; a PDF quote with anchor page=N must be on that page. A quote that isn't in its source is flagged to the user.";
 
 /// The tools, as `tools/list` gives them. Those marked "needs the app" run in Brainstead itself
 /// (the server opens it when it isn't running), so they behave as the screens do. What only reads
@@ -568,7 +568,7 @@ pub fn tools() -> Vec<Value> {
                 "project": {"type": "string", "description": "A project's name, as list_projects gives it."}
             }), &["update"])),
         tool("list_projects", "List projects", Read,
-            "Every project, as the Projects screen lists them (needs the app), in its order (by area, as dragged there or with move_project, then A to Z): its name, status and count of next actions, flagged as the screen flags an active one (Stuck: no next action; Quiet: nothing has happened for two weeks), with its note's path. detail adds the area, what done looks like and the waiting, someday and done counts. Statuses are the screen's tabs: active, on-hold, someday, completed. Use the name with list_tasks' project, create_task or update_project. A project's tasks are those in its note, those whose line links it, and those in its member notes: notes (not wiki pages, sources or templates) whose first Project: [[Project. <name>]] line, within their first 15 lines and outside code and HTML comments, names it, unless the task's line links another project or one that isn't there. detail also lists each project's member notes (its Documents: Tracker, Plan, Findings, Review, Ticket, Prompt and others) with their summary property.",
+            "Every project, as the Projects screen lists them (needs the app), in its order (by area, as dragged there or with move_project, then A to Z): its name, status and count of next actions, flagged as the screen flags an active one (Stuck: no next action; Quiet: nothing has happened for two weeks), with its note's path. detail adds the area, what done looks like and the waiting, someday and done counts. Statuses are the screen's tabs: active, on-hold, someday, completed. Use the name with list_tasks' project, create_task or update_project. A project's tasks are those in its note, those whose line links it, and those in its member notes: notes (not wiki pages, sources or templates) whose first Project: [[Project. <name>]] line, within their first 15 lines and outside code and HTML comments, names it, unless the task's line links another project or one that isn't there. detail also lists each project's member notes (its Documents: Tracker, Plan, Findings, Review, Ticket, Prompt and others) with their summary property; a tracker's structured item carries its current_state.",
             schema(json!({"detail": detail}), &[])),
         tool("create_project", "Create a project", Change,
             "Makes a project note, as the Projects screen does (needs the app). It's named and laid out as the vault's other projects are, and recorded in Changes, where the user can revert it. Add its first tasks with create_task and the project's name.",
@@ -790,15 +790,19 @@ pub fn tools() -> Vec<Value> {
                 "as": {"type": "string", "enum": ["resolved", "ignored"], "description": "For mark."}
             }), &["action"])),
         tool("page_shape", "Page shape", Read,
-            "Wiki health's Page shape check: which wiki entity and concept pages aren't in the page shape (opening text, Current state, topical sections, a Timeline of `### YYYY-MM-DD — title` entries newest first, each with a Source: [[…]] line, then See also), which of them Reshape pages can do by itself and why the rest need the user. With page, that page's report: the headings it would rewrite and the lines it would add.",
+            "Wiki health's Page shape check: which wiki entity and concept pages aren't in the page shape (opening text, Current state, topical sections, a Timeline of `### YYYY-MM-DD — title` entries newest first, each with a Source: [[…]] line, then See also), which of them Reshape pages can do by itself and why the rest need the user, then how many Tracker notes aren't in the tracker shape. With page, that page's report: the headings it would rewrite and the lines it would add. A Tracker note (Tracker. <title>) has a shape of its own: its opening with the Project: [[…]] line, then ## Current state, ## Blockers, ## Next and ## Log (dated bullets, - YYYY-MM-DD: …, newest first), any other sections kept below those.",
             schema(json!({"page": page}), &[])),
         tool("reshape_pages", "Reshape pages", Change,
-            "Reshape pages, as Wiki health's Page shape check does it (needs the app): every page that can be reshaped by itself, or the pages named (as proposed, even those that need the user; only when the user asked). Sections move whole and dated headings are rewritten; no text is lost. Each page is one change in Changes, in one run the user can revert alone or all together (changes revert_run).",
+            "Reshape pages, as Wiki health's Page shape check does it (needs the app): every wiki page that can be reshaped by itself, or the pages named (as proposed, even those that need the user; only when the user asked). Sections move whole and dated headings are rewritten; no text is lost. A Tracker note is reshaped to the tracker shape (see page_shape) only when named: its missing sections are added empty, its Log sorted newest first, and its other sections kept below; headings and Log lines inside an HTML comment don't count, and a tracker whose Project: line is inside a section, or one that needs the user where reshaping changes nothing (an undated Log entry, text between entries), is left as it is, with why. Each page is one change in Changes, in one run the user can revert alone or all together (changes revert_run).",
             schema(json!({"pages": {"type": "array", "items": page, "description": "Only these pages, by name or path."}}), &[])),
         tool("write_current_state", "Write Current state", Run,
-            "Wiki health's Write Current state (needs the app): for wiki pages with a Timeline but no Current state (lint lists them under Pages with no Current state), the cheap model writes one from each page's opening and newest Timeline entries only, checked (no links the page doesn't have) and made as a change in one Changes run. Runs in the background: limit does only that many first (a sample to look at), pages only those named; status says how the run is going; stop stops it after the page it's on.",
+            "Wiki health's Write Current state (needs the app): for wiki pages with a Timeline but no Current state (lint lists them under Pages with no Current state), the cheap model writes one from each page's opening and newest Timeline entries only, checked (no links the page doesn't have) and made as a change in one Changes run. Runs in the background: limit does only that many first (a sample to look at), pages only those named; status says how the run is going; stop stops it after the page it's on. For a Tracker note, give page and text: the text of its ## Current state section, above any ### parts it has (which stay), becomes text (the section is made where the tracker shape puts it when the note has none) and nothing else changes but an updated: property, which moves to today; log also adds - <today>: <log> at the top of its ## Log, spaced like the entries below it. A write that would push the note's Project: line out of its first 15 lines, or text or a log line that opens an HTML comment (<!--) without closing it, is refused. That's one change, recorded in Changes, where the user can revert it; no model is asked.",
             schema(json!({
                 "pages": {"type": "array", "items": page, "description": "Only these pages; every page without a Current state when left out."},
+                "page": {"type": "string", "description": "A Tracker note (Tracker. <title>), with text or log."},
+                "text": {"type": "string", "description": "With page: the tracker's Current state, the section's text only (no heading): what is true now, in a few bullets or a short paragraph."},
+                "log": {"type": "string", "description": "With page: one line for the top of the tracker's Log, dated today: what happened."},
+                "reason": reason,
                 "limit": {"type": "integer", "minimum": 1, "description": "Only this many pages first, as a sample to look at."},
                 "status": {"type": "boolean", "description": "true only says how the run is going; nothing is started."},
                 "stop": {"type": "boolean", "description": "true stops the run after the page it's on."}
@@ -1419,6 +1423,10 @@ fn call(ctx: &Ctx, name: &str, args: Value) -> Result<Out, CallError> {
             Ok(page_shape_tool(ctx, obj.get("page").and_then(Value::as_str), &paging)?.into())
         }
         "reshape_pages" => act("health.reshape", obj),
+        // page, text and log are a tracker's; only pages (or nothing) is the wiki's model run.
+        "write_current_state" if ["page", "text", "log"].iter().any(|k| obj.get(*k).is_some_and(|v| !v.is_null())) => {
+            Ok(tracker_state(ctx, parse(obj)?)?.into())
+        }
         "write_current_state" => act("health.current_state", obj),
         "fix_name" => act("fix_name", obj),
         "triage_bookmarks" => {
@@ -2817,22 +2825,24 @@ fn page_shape_tool(ctx: &Ctx, page: Option<&str>, paging: &Paging) -> Result<Str
     use brainstead_core::pageshape;
     if let Some(p) = page.filter(|p| !p.trim().is_empty()) {
         let rel = existing(ctx, &ctx.index()?, p)?;
-        if !pageshape::shaped(&rel) {
-            return Ok(format!("{rel} isn't a wiki entity or concept page: only those have the page shape."));
+        if !pageshape::has_shape(&rel) {
+            return Ok(format!("{rel} isn't a wiki entity or concept page or a Tracker note: only those have a page shape."));
         }
         let text = read_text(ctx, &rel)?;
         let files = pageshape::vault_files(&ctx.vault());
         let (r, _) = pageshape::one(&rel, &text, &pageshape::Sources::from_paths(files.iter().map(String::as_str)));
+        let (shape, entries) =
+            if pageshape::is_tracker(&rel) { ("tracker shape", "Log entries") } else { ("page shape", "Timeline entries") };
         if r.in_shape {
-            return Ok(format!("{rel} is in the page shape ({} Timeline entries).", r.report.entries));
+            return Ok(format!("{rel} is in the {shape} ({} {entries}).", r.report.entries));
         }
         let rp = &r.report;
         let mut out = vec![if !rp.broken.is_empty() {
             format!("{rel} can't be reshaped by script: {}.", rp.broken.join("; "))
         } else if r.auto {
-            format!("{rel} isn't in the page shape; reshape_pages can reshape it by itself ({} Timeline entries).", rp.entries)
+            format!("{rel} isn't in the {shape}; reshape_pages can reshape it by itself ({} {entries}).", rp.entries)
         } else {
-            format!("{rel} isn't in the page shape and needs the user first: {}.", rp.reasons.join("; "))
+            format!("{rel} isn't in the {shape} and needs the user first: {}.", rp.reasons.join("; "))
         }];
         if !rp.headings.is_empty() {
             out.push("Headings it would rewrite:".into());
@@ -2856,9 +2866,24 @@ fn page_shape_tool(ctx: &Ctx, page: Option<&str>, paging: &Paging) -> Result<Str
         return Ok(out.join("\n"));
     }
     let all = pageshape::survey(&ctx.vault());
+    let notes: Vec<String> = ctx.index()?.list(Some("note"))?.into_iter().map(|f| f.path).collect();
+    let trackers = pageshape::survey_trackers(&ctx.vault(), &notes);
+    let off: Vec<&str> = trackers.iter().filter(|t| !t.0.in_shape).map(|t| t.0.path.as_str()).collect();
+    let trackers_line = (!off.is_empty()).then(|| {
+        format!(
+            "{} of {} Tracker notes aren't in the tracker shape (page for one's report; reshape_pages with pages reshapes those named): {}.",
+            off.len(),
+            trackers.len(),
+            off.join(", ")
+        )
+    });
     let out_of: Vec<_> = all.iter().map(|x| &x.0).filter(|r| !r.in_shape).collect();
     if out_of.is_empty() {
-        return Ok(format!("All {} wiki entity and concept pages are in the page shape.", all.len()));
+        let mut out = format!("All {} wiki entity and concept pages are in the page shape.", all.len());
+        if let Some(t) = trackers_line {
+            out.push_str(&format!("\n{t}"));
+        }
+        return Ok(out);
     }
     let auto: Vec<&str> = out_of.iter().filter(|r| r.auto).map(|r| r.path.as_str()).collect();
     let mut out = vec![format!(
@@ -2883,7 +2908,56 @@ fn page_shape_tool(ctx: &Ctx, page: Option<&str>, paging: &Paging) -> Result<Str
     let (shown, head) = page_of(&rows, |r| format!("{} {}", r.path, why(r)), paging, ("page", "pages"), 50);
     out.push(format!("Those that need the user first, then the rest: {head}:"));
     out.extend(shown.into_iter().map(|r| format!("- {}: {}", r.path, why(r))));
+    out.extend(trackers_line);
     Ok(out.join("\n"))
+}
+
+#[derive(Deserialize)]
+struct TrackerStateArgs {
+    page: Option<String>,
+    #[serde(default)]
+    pages: Vec<String>,
+    text: Option<String>,
+    log: Option<String>,
+    #[serde(default)]
+    reason: String,
+    #[serde(default)]
+    unattended: bool,
+}
+
+/// write_current_state for a Tracker note: its Current state, and a Log line, as one change.
+fn tracker_state(ctx: &Ctx, a: TrackerStateArgs) -> Result<String, String> {
+    use brainstead_core::pageshape;
+    if a.text.is_none() && a.log.is_none() {
+        return Err("With page, give text (the tracker's Current state), log (a line for its Log) or both. For wiki pages' missing Current states, give pages instead, or nothing.".into());
+    }
+    let page = match (a.page.filter(|p| !p.trim().is_empty()), a.pages.as_slice()) {
+        (Some(p), _) => p,
+        (None, [p]) => p.clone(),
+        _ => return Err("Give page: the one Tracker note to write, with text, log or both.".into()),
+    };
+    let ix = ctx.index()?;
+    let rel = existing(ctx, &ix, &page)?;
+    if !pageshape::is_tracker(&rel) {
+        return Err(format!(
+            "{rel} isn't a Tracker note: text and log are for Tracker notes. For a wiki page, edit_page its Current state, or leave text out to have the model write the missing ones."
+        ));
+    }
+    let before = read_text(ctx, &rel)?;
+    let today = pageshape::Date::parse_iso(&ctx.today().to_string()).ok_or("Today's date didn't read.")?;
+    let after = pageshape::tracker_with_state(&before, a.text.as_deref(), a.log.as_deref().map(|l| (today, l)))?;
+    let after = proposals::bump_updated(&before, &after, &ctx.today().to_string());
+    if after.replace("\r\n", "\n") == before.replace("\r\n", "\n") {
+        return Err("That changes nothing in the page.".into());
+    }
+    let title = match (&a.text, &a.log) {
+        (Some(_), Some(_)) => "Wrote the Current state and a Log line",
+        (Some(_), None) => "Wrote the Current state",
+        _ => "Added a Log line",
+    };
+    let reason = if a.reason.trim().is_empty() { "The tracker's state, as the assistant gave it." } else { a.reason.trim() };
+    let c = change(ctx, &rel, Kind::Edit, title, reason, a.unattended, changes::from_texts(Some(&before), &after));
+    send(ctx, c, vec![])
 }
 
 fn lint_tool(ctx: &Ctx, a: LintArgs) -> Result<String, String> {

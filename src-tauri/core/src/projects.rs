@@ -146,6 +146,8 @@ pub struct ProjectDoc {
     /// Its `summary` property, when it has one.
     pub summary: Option<String>,
     pub mtime: i64,
+    /// A tracker's Current state text, when it has one.
+    pub current_state: Option<String>,
 }
 
 impl Index {
@@ -210,8 +212,8 @@ impl Index {
     /// Every member note, by the id of the project note it belongs to, by path.
     fn documents(&self) -> Result<HashMap<i64, Vec<ProjectDoc>>> {
         let sql = format!(
-            "SELECT pid, path, title, type, frontmatter, mtime FROM
-               (SELECT {} AS pid, f.path, f.title, f.type, f.frontmatter, f.mtime FROM files f
+            "SELECT pid, path, title, type, frontmatter, mtime, current_state FROM
+               (SELECT {} AS pid, f.path, f.title, f.type, f.frontmatter, f.mtime, f.current_state FROM files f
                 WHERE f.project_line IS NOT NULL AND NOT {})
              WHERE pid IS NOT NULL ORDER BY path",
             member_project_sql("f"),
@@ -230,6 +232,7 @@ impl Index {
                         kind: r.get(3)?,
                         summary: crate::frontmatter::string(&fm, "summary"),
                         mtime: r.get(5)?,
+                        current_state: r.get(6)?,
                     },
                 ))
             })
@@ -561,6 +564,10 @@ mod tests {
         let ps = ix.projects().unwrap();
         let o = ps.iter().find(|p| p.name == "Orbit").unwrap();
         assert!(o.documents.iter().all(|x| !x.path.starts_with("sources/") && !x.path.starts_with("wiki/")));
+        // The tracker's Current state comes with it, for the project page.
+        let t = o.documents.iter().find(|x| x.kind.as_deref() == Some("Tracker")).unwrap();
+        assert_eq!(t.current_state.as_deref(), Some("Staged."));
+        assert!(o.documents.iter().filter(|x| x.kind.as_deref() != Some("Tracker")).all(|x| x.current_state.is_none()));
         let all = ix.list(None).unwrap();
         assert!(all.iter().filter(|f| f.layer != "note").all(|f| f.project.is_none()));
     }

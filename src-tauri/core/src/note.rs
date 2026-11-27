@@ -38,6 +38,8 @@ pub struct Parsed {
     /// The 0-based line of its `Project: [[…]]` line, saying which project it belongs to, and the
     /// keys of the links on it outside comments (`projects::project_line_links`).
     pub project_line: Option<(usize, Vec<String>)>,
+    /// A Tracker note's Current state text (`pageshape::tracker_current_state`), for its project's page.
+    pub current_state: Option<String>,
 }
 
 /// A section longer than this is split at its blank lines, so a search hit points somewhere near.
@@ -62,6 +64,7 @@ pub fn file_only(rel: &str) -> Parsed {
         tasks: vec![],
         chunks: vec![],
         project_line: None,
+        current_state: None,
     }
 }
 
@@ -147,6 +150,9 @@ pub fn parse(rel: &str, layer: Layer, src: &str) -> Parsed {
         tasks: parse_tasks(&ls),
         chunks: chunks(src, fm.body_start, &ls),
         project_line: crate::projects::project_line_links(&ls),
+        current_state: (matches!(layer, Layer::Note) && crate::pageshape::is_tracker(rel))
+            .then(|| crate::pageshape::tracker_current_state(src))
+            .flatten(),
     }
 }
 
