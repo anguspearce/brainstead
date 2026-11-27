@@ -14,6 +14,7 @@ import { Icon } from "../../icons";
 import { nav, openDoc } from "../../nav";
 import { taskDateByEmoji } from "../../taskDates";
 import { TaskDateChip } from "../Markdown";
+import { isExternalHref, tokenize, useRefPatterns } from "../refs";
 import { parseWikilink, wikiLabel } from "../wikilinks";
 import { durationText, Link, toText, typeOf, Value } from "./values";
 
@@ -44,20 +45,50 @@ const PRIORITY: Record<string, [string, string]> = {
   "⏬": ["lowest", "Lowest priority"],
 };
 
-/** Inline markdown in a value: links, bold, italic, code, tags, and task fields as icons. */
+/** Inline markdown in a value: links, bold, italic, code, tags, reference keys (Settings › Notes ›
+ *  Reference links), and task fields as icons. */
 export function DvText({ text, done = false }: { text: string; done?: boolean }) {
   const re =
     /(`[^`\n]+`|!?\[\[[^[\]\n]+?\]\]|\[[^\]\n]+\]\([^)\s]+\)|\*\*[^*]+\*\*|\*[^*\s][^*]*\*|(?:^|(?<=\s))#[\p{L}\p{N}_/-]*[\p{L}_/-][\p{L}\p{N}_/-]*|[📅⏳🛫➕✅❌]️?\s*\d{4}-\d{2}-\d{2}|🗓️?\s*\d{4}-\d{2}-\d{2}|[🔺⏫🔼🔽⏬]️?|🔁️?\s*[^📅⏳🛫➕✅❌🆔⛔🏁🔺⏫🔼🔽⏬^]+|🆔\s*[\w-]+|⛔\s*[\w,-]+|🏁\s*\w+|\s*\^rank-\d+\s*$)/gu;
   const out: ReactNode[] = [];
   let last = 0;
   let k = 0;
+  // Words between the pieces above, with any reference key in them as a link.
+  const words = (s: string) => out.push(<RefWords key={k++} text={s} />);
   for (const m of text.matchAll(re)) {
-    if (m.index! > last) out.push(text.slice(last, m.index));
+    if (m.index! > last) words(text.slice(last, m.index));
     last = m.index! + m[0].length;
     out.push(<Piece key={k++} p={m[0]} done={done} />);
   }
-  if (last < text.length) out.push(text.slice(last));
+  if (last < text.length) words(text.slice(last));
   return <>{out}</>;
+}
+
+/** Words with any reference key in them as a link. */
+function RefWords({ text }: { text: string }) {
+  const patterns = useRefPatterns();
+  return (
+    <>
+      {tokenize(text, { patterns, links: false }).map((seg, i) => {
+        if (!("href" in seg)) return seg.text;
+        const href = seg.href;
+        return (
+          <a
+            key={i}
+            href={href}
+            title={href}
+            className="mdref"
+            onClick={(e) => {
+              e.preventDefault();
+              void openUrl(href);
+            }}
+          >
+            {seg.text}
+          </a>
+        );
+      })}
+    </>
+  );
 }
 
 function Piece({ p, done }: { p: string; done: boolean }) {
@@ -85,15 +116,25 @@ function Piece({ p, done }: { p: string; done: boolean }) {
         href={m[2]}
         onClick={(e) => {
           e.preventDefault();
-          if (/^(https?:|mailto:)/.test(m[2])) void openUrl(m[2]);
+          if (isExternalHref(m[2])) void openUrl(m[2]);
         }}
       >
         {m[1]}
       </a>
     );
   }
-  if (p.startsWith("**")) return <b>{p.slice(2, -2)}</b>;
-  if (p.startsWith("*")) return <i>{p.slice(1, -1)}</i>;
+  if (p.startsWith("**"))
+    return (
+      <b>
+        <RefWords text={p.slice(2, -2)} />
+      </b>
+    );
+  if (p.startsWith("*"))
+    return (
+      <i>
+        <RefWords text={p.slice(1, -1)} />
+      </i>
+    );
   if (p.startsWith("#"))
     return (
       <span className="mdtag" role="link" tabIndex={0} onClick={() => nav.go({ screen: "search", q: `tag:${p.slice(1)}` })}>

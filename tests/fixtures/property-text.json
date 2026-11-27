@@ -1,0 +1,35 @@
+{
+  "about": "The text a note's properties hold, where reference keys are looked for: brainstead_core::projects::property_text (a project's, for Tickets and links and list_projects' references) and propertyText in src/md/noteRefs.ts (a note's, for its References card) give it from the properties as the index parses them. Both tests read these cases. yaml: the front matter; properties: what it parses to; text: what both give, in any order.",
+  "cases": [
+    {
+      "name": "text values and the items of a list, not a number, a tag or an alias",
+      "yaml": "status: active\ntickets: [ORBIT-12, ORBIT-14]\nstage: 3\ntags: [ORBIT-99]\naliases: [ORBIT-98]\n",
+      "properties": { "status": "active", "tickets": ["ORBIT-12", "ORBIT-14"], "stage": 3, "tags": ["ORBIT-99"], "aliases": ["ORBIT-98"] },
+      "text": ["active", "ORBIT-12", "ORBIT-14"]
+    },
+    {
+      "name": "a comment is not a value",
+      "yaml": "status: active # ORBIT-3\n# ORBIT-7 on a line of its own\n",
+      "properties": { "status": "active" },
+      "text": ["active"]
+    },
+    {
+      "name": "a nested property is not read",
+      "yaml": "jira:\n  epic: ORBIT-4\nsummary: About ORBIT-5\n",
+      "properties": { "jira": { "epic": "ORBIT-4" }, "summary": "About ORBIT-5" },
+      "text": ["About ORBIT-5"]
+    },
+    {
+      "name": "a block list, trimmed, without its blank and other items; label names in any case",
+      "yaml": "tickets:\n  - ORBIT-6\n  - 7\n  - \" \"\n  - [ORBIT-8]\nnote: \"\"\nTag: ORBIT-9\nAlias: [ORBIT-10]\nowner: \"  Maya  \"\n",
+      "properties": {
+        "tickets": ["ORBIT-6", 7, " ", ["ORBIT-8"]],
+        "note": "",
+        "Tag": "ORBIT-9",
+        "Alias": ["ORBIT-10"],
+        "owner": "  Maya  "
+      },
+      "text": ["ORBIT-6", "Maya"]
+    }
+  ]
+}

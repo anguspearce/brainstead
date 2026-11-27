@@ -97,6 +97,7 @@ def write(demo, home):
     intermediate(home / "Work" / "My notes", demo / "data-intermediate", now)
     advanced(home / "Wiki" / "My notes", demo / "data-advanced", now)
     power(home / "Power" / "My notes", demo / "data-power", now)
+    refs(home / "Refs" / "My notes", demo / "data-refs", now)
     welcome = demo / "data-welcome"
     welcome.mkdir(parents=True, exist_ok=True)
     (welcome / "settings.json").write_text(json.dumps({"theme": "system", "skippedFullDiskAccess": True}, indent=2))
@@ -428,6 +429,34 @@ BURNDOWN = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 360" font
     <rect x="420" y="326" width="14" height="14" rx="3" fill="#0d7f74" opacity="0.55"/><text x="442" y="338">Forecast</text></g>
 </svg>
 """
+
+
+def refs(vault, data, now):
+    """The advanced vault with ticket keys written where they belong, for the reference-links
+    scenes (which set the FAC- prefix themselves): on tasks, in a note's tickets property and text, and
+    in a project's Tracker, so the project page and the note's side pane have something to gather."""
+    day = lambda n=0: (now.date() + datetime.timedelta(days=n)).isoformat()  # noqa: E731
+    power(vault, data, now)
+    project = vault / "Project. Office move.md"
+    project.write_text(project.read_text().replace("---\n", "---\ntickets: FAC-130\n", 1))
+    (vault / "Tracker. Office move rollout.md").write_text(
+        "---\n"
+        "summary: Where the move stands, week by week.\n"
+        "tickets: [FAC-142, FAC-147]\n"
+        "board: https://tickets.example.com/boards/mill-lane\n"
+        "---\n\n"
+        "Project: [[Project. Office move]]\n\n"
+        "## Current state\n\n"
+        "The fibre goes in on 10 November (FAC-142). The furniture slot waits on the "
+        "[delivery schedule](https://example.com/delivery), tracked in FAC-147.\n\n"
+        "## Blockers\n\n"
+        "- Two more parking permits for the movers (FAC-152)\n\n"
+        "## Next\n\n"
+        f"- [ ] Confirm the keys handover with the agent FAC-155 #context/calls 📅 {day(3)}\n"
+        f"- [ ] Check the lift booking for 22 November, see FAC-152 and [the lease](https://example.com/lease) 📅 {day(5)}\n\n"
+        "## Log\n\n"
+        f"- {day(-1)}: Fibre date confirmed for 10 November.\n"
+    )
 
 
 def power(vault, data, now):

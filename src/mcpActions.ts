@@ -161,6 +161,8 @@ import { imageView } from "./ImageViewer";
 import { TOPICS } from "./help";
 import { HelpView, openHelp } from "./help/HelpDrawer";
 import { IMAGE_EXT } from "./md/wikilinks";
+import { type RefPattern, refPatterns, rowProblem } from "./md/refs";
+import { fromLabel, projectRefs, type RefUse, rowRefs } from "./md/refUses";
 import { nav, place, Screen, SettingsPane } from "./nav";
 import { focusMode } from "./focus";
 import { RAIL_BELOW, RailWidth, railOn, railWidth, setRail } from "./sidebarRail";
@@ -468,7 +470,7 @@ async function listTasks(a: Args): Promise<Listing> {
 }
 
 /** A task as list_tasks' data gives it. */
-const taskItem = (t: TaskRow) => ({
+const taskItem = (t: TaskRow, patterns: readonly RefPattern[] = refPatterns()) => ({
   id: taskId(t),
   text: shownText(t.text),
   path: t.path,
@@ -486,6 +488,9 @@ const taskItem = (t: TaskRow) => ({
   created: t.created,
   effort: t.effort ?? null,
   heading: t.heading,
+  // The reference keys and links in its words, as the task row draws them, once a Reference links
+  // pattern is set (Settings › Notes).
+  ...(patterns.length ? { refs: rowRefs(t, patterns).map(({ key, url }) => ({ key, url })) } : {}),
 });
 
 const DATE_KEYS: [string, TaskDateKind][] = [
@@ -1173,11 +1178,16 @@ const flagLine = (p: ProjectRow) => {
   return f === "stuck" ? " · Stuck: it has no next action" : f === "quiet" ? " · Quiet: nothing has happened for two weeks" : "";
 };
 
-/** A project's line: its name, status, next actions and flag; with detail its area, what done looks like and every count. */
-const projectOut = (p: ProjectRow, detail = true) =>
+/** A project's line: its name, status, next actions and flag; with detail its area, what done looks like, every count
+ *  and its reference keys and links under it. */
+const projectOut = (p: ProjectRow, detail = true, refs: RefUse[] = []) =>
   detail
-    ? `- ${p.name} · ${statusOut(p.status)}${p.area ? ` · ${p.area}` : ""} · ${p.next} next, ${p.waiting} waiting, ${p.someday} someday, ${p.done} done${flagLine(p)}${p.outcome ? ` · done looks like: ${p.outcome}` : ""}  (${p.path})`
+    ? `- ${p.name} · ${statusOut(p.status)}${p.area ? ` · ${p.area}` : ""} · ${p.next} next, ${p.waiting} waiting, ${p.someday} someday, ${p.done} done${flagLine(p)}${p.outcome ? ` · done looks like: ${p.outcome}` : ""}  (${p.path})${referencesOut(refs)}`
     : `- ${p.name} · ${statusOut(p.status)} · ${p.next} next${flagLine(p)}  (${p.path})`;
+
+/** A project's reference keys and links, one indented line each: its page's Tickets and links card. */
+const referencesOut = (refs: RefUse[]) =>
+  refs.map((r) => `\n  - Reference ${r.key} · ${r.url} · ${r.from.map(fromLabel).join(", ")}`).join("");
 
 async function updateProject(a: Args, r: McpRequest): Promise<string> {
   const path = await projectPath(str(a, "project") ?? "");
@@ -3246,11 +3256,32 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
   "inbox.clarify": clarify,
   "inbox.capture": captureTool,
   "item.update": updateItem,
-  "projects.list": async (a) =>
-    listed(a, orderedProjects(await api.projectsList()), {
+  "projects.list": async (a) => {
+    const projects = orderedProjects(await api.projectsList());
+    // The keys and links each project's properties and open tasks hold, as its page's Tickets and
+    // links card: only once a Reference links pattern is set, and then the tasks are read.
+    const patterns = refPatterns();
+    let tasks: TaskRow[] = [];
+    let failed = "";
+    if (patterns.length) {
+      try {
+        tasks = (await api.tasksAll()) ?? [];
+      } catch (e) {
+        failed = e instanceof Error ? e.message : String(e);
+      }
+    }
+    const on = patterns.length > 0 && !failed;
+    const found = new Map<ProjectRow, RefUse[]>();
+    const refsOf = (p: ProjectRow) => {
+      if (!on) return [];
+      if (!found.has(p)) found.set(p, projectRefs(p, tasks, patterns));
+      return found.get(p)!;
+    };
+    return listed(a, projects, {
+      before: failed ? [`References are left out: the tasks couldn't be read (${failed}).`] : [],
       text: (p) => projectOut(p),
       noun: ["project", "projects"],
-      line: (p) => projectOut(p, a.detail === true),
+      line: (p) => projectOut(p, a.detail === true, refsOf(p)),
       item: (p) => ({
         name: p.name,
         path: p.path,
@@ -3262,9 +3293,11 @@ const ACTIONS: Record<string, (a: Args, r: McpRequest) => Promise<unknown>> = {
         waiting: p.waiting,
         someday: p.someday,
         done: p.done,
+        ...(on ? { references: refsOf(p).map((r) => ({ key: r.key, url: r.url, from: r.from.map(fromLabel) })) } : {}),
       }),
       empty: "No projects.",
-    }),
+    });
+  },
   "project.create": createProject,
   "project.update": updateProject,
   "project.rename_area": renameArea,
@@ -3778,7 +3811,20 @@ async function taskLists(a: Args): Promise<string> {
 // ---- Settings
 
 type SettingKind =
-  "bool" | "time" | "text" | "number" | "day" | "theme" | "choice" | "model" | "speed" | "size" | "percent" | "shortcut" | "panes";
+  | "bool"
+  | "time"
+  | "text"
+  | "number"
+  | "day"
+  | "theme"
+  | "choice"
+  | "model"
+  | "speed"
+  | "size"
+  | "percent"
+  | "shortcut"
+  | "panes"
+  | "links";
 /** A choice setting's choices, as its menu offers them: each value and how the screen names it. */
 type Choices = () => Promise<[string, string][]> | [string, string][];
 /** What the settings tool can change, by key: its pane, label, kind and default, a choice's
@@ -3884,6 +3930,8 @@ const settingRows = (): SettingRow[] => [
     "As the app",
   ],
   ["templateScripts", "Notes", "User scripts folder", "text", "Templates/scripts"],
+  // A list of rows, each a prefix and an address with {key} or {num} in it; set as an array of {prefix, url}, [] for none.
+  ["referenceLinks", "Notes", "Reference links (rows of a prefix and an address)", "links", []],
   ["askModel", "AI assistants", "New chats use", "model", DEFAULT_MODEL, modelChoices],
   ...MODEL_JOBS.map(([job, label]): SettingRow => [
     `jobModels.${job}`,
@@ -3962,6 +4010,36 @@ function shortcutSpec(spec: string): string {
   return [...SHORTCUT_MODS.filter((m) => mods.includes(m)), k].join("+");
 }
 
+/** referenceLinks as the screen keeps them: rows of a prefix and the address it opens (https://… or
+ *  http://…, with {key} or {num} in it). As on the screen, a row that doesn't work (no prefix, an
+ *  address that isn't a web one, a prefix an earlier row has) is kept and not used; the reply says
+ *  why. Null, an empty list or empty text clears them. */
+function referenceLinksIn(key: string, v: unknown): { prefix: string; url: string }[] {
+  let list: unknown = v;
+  if (typeof v === "string") {
+    try {
+      list = v.trim() ? JSON.parse(v) : [];
+    } catch {
+      throw new Error(`${key} is a list of {prefix, url} rows, as an array.`);
+    }
+  }
+  if (list === null) list = [];
+  if (!Array.isArray(list)) throw new Error(`${key} is a list of {prefix, url} rows, as an array; [] for none.`);
+  const rows = list.map((r) => ({
+    prefix: String((r as { prefix?: unknown })?.prefix ?? "").trim(),
+    url: String((r as { url?: unknown })?.url ?? "").trim(),
+  }));
+  return rows;
+}
+
+/** What the reply says of the rows that are kept but not used, by the rule the Settings rows and
+ *  the scanner use. */
+const unusedRows = (rows: { prefix: string; url: string }[]) =>
+  rows
+    .map((_, i) => rowProblem(rows, i))
+    .map((problem, i) => (problem ? ` Row ${i + 1} is kept but not used: ${problem}` : ""))
+    .join("");
+
 async function settingsTool(a: Args): Promise<string> {
   const s = settings.get();
   /** The settings kept as objects, with their defaults filled in. */
@@ -4006,6 +4084,8 @@ async function settingsTool(a: Args): Promise<string> {
           const list = cs.map(([v, l]) => (v === l ? v : `${v} (${l})`)).join(", ");
           extra = ` (one of: ${list || "none here"}${none ? `; null for ${none}` : ""})`;
         }
+        if (kind === "links")
+          extra = ` (a list of {prefix, url}: a key that is the prefix and digits, as ORBIT-12, opens the url, where {key} is the whole key and {num} its digits; set it to the whole list, [] for none)`;
         if (kind === "panes") {
           // Each pane's key with what the screen calls it (a column by its heading), its range and
           // usual width, as the dividers clamp them, and whether its type is locked.
@@ -4078,7 +4158,11 @@ async function settingsTool(a: Args): Promise<string> {
       "Only in the menu bar when the window is closed is there only while Show in the menu bar (menuBar) is on: turn that on first.",
     );
   let v: unknown = a.value;
-  if (v === null) {
+  if (kind === "links") {
+    v = referenceLinksIn(key!, v);
+  } else if (Array.isArray(v)) {
+    throw new Error(`${key} takes one value, not a list.`);
+  } else if (v === null) {
     if (!none) throw new Error(`${key} has no default choice to go back to: give a value.`);
     v = undefined;
   } else if (kind === "bool") {
@@ -4171,7 +4255,8 @@ async function settingsTool(a: Args): Promise<string> {
     return `${where(pane, label)} is now ${said}, registered with the system.`;
   }
   noted(`set ${label} to ${said}`);
-  return `${where(pane, label)} is now ${said}.${dropped}`;
+  const unused = kind === "links" ? unusedRows(v as { prefix: string; url: string }[]) : "";
+  return `${where(pane, label)} is now ${said}.${dropped}${unused}`;
 }
 
 // ---- a note's own look

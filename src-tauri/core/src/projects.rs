@@ -76,6 +76,29 @@ pub struct ProjectRow {
     pub last_touched: i64,
     /// Notes that link it, by path.
     pub links: Vec<String>,
+    /// The text in its properties: each text value, and each text item of a list. The window finds
+    /// reference keys in it (Settings › Notes › Reference links), so the patterns stay out of here.
+    pub property_text: Vec<String>,
+}
+
+/// The text a note's properties hold: each string value and each string item of a list, in order,
+/// except those of `tags` and `aliases`, which are labels and never references. The same rule as
+/// `propertyText` in src/md/noteRefs.ts, which gives a note's; both are tested against
+/// tests/fixtures/property-text.json.
+fn property_text(fm: &serde_json::Value) -> Vec<String> {
+    use serde_json::Value;
+    let mut out = Vec::new();
+    let labels = ["tags", "tag", "aliases", "alias"];
+    for (_, v) in fm.as_object().into_iter().flat_map(|o| o.iter()).filter(|(k, _)| !labels.iter().any(|l| k.eq_ignore_ascii_case(l))) {
+        match v {
+            Value::String(s) if !s.trim().is_empty() => out.push(s.trim().to_string()),
+            Value::Array(items) => {
+                out.extend(items.iter().filter_map(|i| i.as_str()).map(str::trim).filter(|s| !s.is_empty()).map(String::from))
+            }
+            _ => {}
+        }
+    }
+    out
 }
 
 impl Index {
@@ -124,6 +147,7 @@ impl Index {
                 done: tasks.iter().filter(|t| t.done && t.status != "-").count(),
                 last_touched: tasks.iter().map(|t| t.mtime).fold(mtime, i64::max),
                 links,
+                property_text: property_text(&fm),
                 path,
             });
         }
@@ -230,6 +254,42 @@ mod tests {
         assert_eq!(call.project_status.as_deref(), Some("active"));
         let hub: Vec<_> = tasks.iter().filter(|t| t.project.as_deref() == Some("Project. Hub migration.md")).collect();
         assert!(!hub.is_empty() && hub.iter().all(|t| t.project_status.as_deref() == Some("on-hold")));
+    }
+
+    #[test]
+    fn projects_carry_their_property_text() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(
+            d.path().join("Project. Orbit.md"),
+            "---\nstatus: active\ntickets: [ORBIT-12, ORBIT-14]\nstage: 3\ntags: [ORBIT-99]\naliases: [ORBIT-98]\n---\n\n## Next actions\n",
+        )
+        .unwrap();
+        std::fs::write(d.path().join("Project. Hub.md"), "## Next actions\n").unwrap();
+        let mut ix = Index::open_in_memory().unwrap();
+        ix.sync(&Vault::new(d.path().to_path_buf(), vec![])).unwrap();
+        let ps = ix.projects().unwrap();
+        let orbit = ps.iter().find(|p| p.name == "Orbit").unwrap();
+        let mut text = orbit.property_text.clone();
+        text.sort();
+        // Text values and the items of a list, not a number, a tag or an alias.
+        assert_eq!(text, ["ORBIT-12", "ORBIT-14", "active"]);
+        assert!(ps.iter().find(|p| p.name == "Hub").unwrap().property_text.is_empty());
+    }
+
+    #[test]
+    fn property_text_reads_the_shared_cases() {
+        let cases: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(fixture().join("../property-text.json")).unwrap()).unwrap();
+        for c in cases["cases"].as_array().unwrap() {
+            let name = c["name"].as_str().unwrap();
+            let fm = crate::frontmatter::split(&format!("---\n{}---\n", c["yaml"].as_str().unwrap()));
+            assert_eq!(fm.data, c["properties"], "{name}");
+            let mut got = property_text(&fm.data);
+            got.sort();
+            let mut want: Vec<String> = serde_json::from_value(c["text"].clone()).unwrap();
+            want.sort();
+            assert_eq!(got, want, "{name}");
+        }
     }
 
     #[test]

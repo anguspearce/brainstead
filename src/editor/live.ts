@@ -8,7 +8,7 @@
 // the text except a tick, which is an ordinary edit.
 
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
-import { EditorState, Extension, Range, StateField } from "@codemirror/state";
+import { EditorState, Extension, Range, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate, WidgetType } from "@codemirror/view";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { iconElement } from "../icons";
@@ -22,6 +22,8 @@ import { chipOf, FIELD_RE, splitTaskFields } from "../taskFields";
 import type { EditorHooks } from "./Editor";
 import { frontmatterEnd, frontmatterKeys, tickChange, tickedText } from "./text";
 import { isMod, keyLabel } from "../platform";
+import { refPatterns, tokenize } from "../md/refs";
+import { settings } from "../store";
 
 const hide = Decoration.replace({});
 /** Inline HTML pairs Edit draws as their formatting, tags hidden. */
@@ -376,7 +378,7 @@ function foldProps(state: EditorState): DecorationSet {
   return Decoration.set([Decoration.replace({ widget: new PropsWidget(keys), block: true }).range(0, end)]);
 }
 
-const IN_CODE = new Set(["InlineCode", "FencedCode", "CodeBlock", "CodeText", "HTMLBlock", "Comment", "URL", "Autolink"]);
+const IN_CODE = new Set(["InlineCode", "FencedCode", "CodeBlock", "CodeText", "HTMLBlock", "Comment", "CommentBlock", "URL", "Autolink"]);
 
 function inCode(state: EditorState, pos: number): boolean {
   for (let n: ReturnType<typeof syntaxTree>["topNode"] | null = syntaxTree(state).resolveInner(pos, 1); n; n = n.parent)
@@ -596,6 +598,9 @@ function build(view: EditorView, hooks: EditorHooks): DecorationSet {
       }
     }
 
+    // Reference keys (Settings › Notes › Reference links), away from front matter, code and wikilinks.
+    for (const r of refsIn(state, from, to, fm)) out.push(mark("cm-link cm-ref", { "data-ref": r.key }).range(r.from, r.to));
+
     // A task's fields, away from the cursor's line: an icon and the value, never the emoji.
     const fields = new RegExp(FIELD_RE.source, "gu");
     for (let m; (m = fields.exec(text));) {
@@ -676,7 +681,92 @@ function clicks(hooks: EditorHooks) {
   });
 }
 
-/** The link under a position: a wikilink's target, a markdown link's URL, or a bare URL. */
+/** The labels the note defines for reference links (`[label]: https://…`), as they are matched:
+ *  lower case, white space as one space. Kept for as long as the text is the same. */
+const definitions = new WeakMap<object, Set<string>>();
+const labelKey = (s: string) => s.trim().replace(/\s+/g, " ").toLowerCase();
+function definedLabels(state: EditorState): Set<string> {
+  let set = definitions.get(state.doc);
+  if (!set) {
+    set = new Set();
+    for (const m of state.doc.toString().matchAll(/^ {0,3}\[([^\]\n]+)\]:[ \t]*\S/gm)) set.add(labelKey(m[1]));
+    definitions.set(state.doc, set);
+  }
+  return set;
+}
+
+/** Whether the key at `a` to `b` in a line is in the words of a reference link View draws as one: a
+ *  `[label]` that the note defines, or the label of a definition itself. */
+function inReference(state: EditorState, line: string, a: number, b: number): boolean {
+  const open = line.lastIndexOf("[", a);
+  const close = line.indexOf("]", b);
+  if (open < 0 || close < 0 || line.indexOf("]", open) < a || line.slice(open + 1, a).includes("[") || line.slice(b, close).includes("["))
+    return false;
+  // A definition's own label.
+  if (line[close + 1] === ":" && /^ {0,3}$/.test(line.slice(0, open))) return true;
+  return definedLabels(state).has(labelKey(line.slice(open + 1, close)));
+}
+
+/** Whether a position is in a markdown link with an address or a reference (`[label](url)`,
+ *  `[label][ref]`) or an image, where a key is just words. A bare `[label]` is text, as View draws it. */
+function inLink(state: EditorState, pos: number): boolean {
+  for (let n: ReturnType<typeof syntaxTree>["topNode"] | null = syntaxTree(state).resolveInner(pos, 1); n; n = n.parent)
+    if (n.name === "Image" || (n.name === "Link" && (n.getChild("URL") || n.getChild("LinkLabel")))) return true;
+  return false;
+}
+
+/** Whether a position is inside an inline HTML tag (`<span title="ORBIT-12">`), whose attributes
+ *  View never draws as text. */
+function inHtmlTag(state: EditorState, pos: number): boolean {
+  for (let n: ReturnType<typeof syntaxTree>["topNode"] | null = syntaxTree(state).resolveInner(pos, 1); n; n = n.parent)
+    if (n.name === "HTMLTag") return true;
+  return false;
+}
+
+/** Whether column `i` of a line is inside inline maths, `$$…$$` on the line, which View draws as
+ *  maths (the editor's syntax tree has no maths). */
+function inInlineMaths(line: string, i: number): boolean {
+  for (const m of line.matchAll(/\$\$.+?\$\$/g)) if (i >= m.index && i < m.index + m[0].length) return true;
+  return false;
+}
+
+/** The blocks whose text is read for keys, each on its own: a paragraph (a list item's and a
+ *  quote's among them), a task, a heading and a table cell. Code, HTML and comment blocks aren't. */
+const TEXT_BLOCK = /^(Paragraph|Task|ATXHeading\d|SetextHeading\d|TableCell)$/;
+
+/** The reference keys from `from` to `to` in the document: where each is and the address it opens.
+ *  Each text block is read whole and on its own, so a code span never runs from one block into the
+ *  next, as in View. Not before `fm` (the end of the front matter), in code, maths, an HTML tag or a
+ *  link, or inside a wikilink. */
+function refsIn(state: EditorState, from: number, to: number, fm: number): { key: string; url: string; from: number; to: number }[] {
+  const patterns = refPatterns();
+  const out: { key: string; url: string; from: number; to: number }[] = [];
+  if (!patterns.length) return out;
+  syntaxTree(state).iterate({
+    from,
+    to,
+    enter: (n) => {
+      if (!TEXT_BLOCK.test(n.name)) return;
+      let at = n.from;
+      for (const s of tokenize(state.doc.sliceString(n.from, n.to), { patterns, links: false })) {
+        const a = at;
+        at += s.text.length;
+        if (!("href" in s) || a < from || a >= to || a < fm || inCode(state, a) || inLink(state, a) || inHtmlTag(state, a)) continue;
+        const l = state.doc.lineAt(a);
+        if (inInlineMaths(l.text, a - l.from)) continue;
+        const before = l.text.slice(0, a - l.from);
+        if (before.lastIndexOf("[[") > before.lastIndexOf("]]")) continue;
+        if (inReference(state, l.text, a - l.from, at - l.from)) continue;
+        out.push({ key: s.text, url: s.href, from: a, to: at });
+      }
+      return false;
+    },
+  });
+  return out;
+}
+
+/** The link under a position: a wikilink's target, a markdown link's URL, a bare URL, or, failing
+ *  those, a reference key's address (a key inside a link is never one). */
 export function linkAt(state: EditorState, pos: number): { target: string; wiki: boolean } | null {
   const l = state.doc.lineAt(pos);
   const re = /\[\[([^[\]\n]+?)\]\]/g;
@@ -688,22 +778,52 @@ export function linkAt(state: EditorState, pos: number): { target: string; wiki:
     if (n.name === "URL") return { target: state.doc.sliceString(n.from, n.to), wiki: false };
     if (n.name === "Link") {
       const u = n.getChild("URL");
-      return u ? { target: state.doc.sliceString(u.from, u.to), wiki: false } : null;
+      if (u) return { target: state.doc.sliceString(u.from, u.to), wiki: false };
+      break;
     }
   }
-  return null;
+  const fm = frontmatterEnd(state.doc.sliceString(0, Math.min(state.doc.length, 20000))) ?? -1;
+  const ref = refsIn(state, l.from, l.to, fm).find((r) => pos >= r.from && pos <= r.to);
+  return ref ? { target: ref.url, wiki: false } : null;
 }
+
+/** Asks the live preview to draw its marks again, as the Reference links patterns changed. */
+const redraw = StateEffect.define<null>();
 
 export function livePreview(hooks: EditorHooks): Extension {
   const plugin = ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
+      private patterns = refPatterns();
+      private off: () => void;
       constructor(view: EditorView) {
         this.decorations = build(view, hooks);
+        // Keys are marked by the patterns in force: a change in Settings marks them again.
+        this.off = settings.subscribe(() => {
+          const now = refPatterns();
+          if (now === this.patterns) return;
+          this.patterns = now;
+          queueMicrotask(() => {
+            try {
+              view.dispatch({ effects: redraw.of(null) });
+            } catch {
+              // The editor went away first.
+            }
+          });
+        });
       }
       update(u: ViewUpdate) {
-        if (u.docChanged || u.viewportChanged || u.selectionSet || syntaxTree(u.state) !== syntaxTree(u.startState))
+        if (
+          u.docChanged ||
+          u.viewportChanged ||
+          u.selectionSet ||
+          syntaxTree(u.state) !== syntaxTree(u.startState) ||
+          u.transactions.some((t) => t.effects.some((e) => e.is(redraw)))
+        )
           this.decorations = build(u.view, hooks);
+      }
+      destroy() {
+        this.off();
       }
     },
     { decorations: (v) => v.decorations },

@@ -116,6 +116,9 @@ export interface Settings {
   docAccent?: string;
   /** Templater's user scripts folder, vault-relative (Settings › Notes; default Templates/scripts). */
   templateScripts?: string;
+  /** Reference links (Settings › Notes; src/md/refs.ts): text that starts with a prefix and ends in
+   *  digits (ORBIT-12) opens the URL, where {key} is the whole key and {num} its digits. None by default. */
+  referenceLinks?: { prefix: string; url: string }[];
   /** Notes with their own theme or colour, by vault path. */
   docLooks?: Record<string, { style?: string; accent?: string }>;
   /** Documents light or dark on their own; absent: as the app. */
@@ -237,6 +240,7 @@ export const DEFAULT_SETTINGS: Settings = {
   readOnly: true,
   theme: "system",
   skippedFullDiskAccess: false,
+  referenceLinks: [],
 };
 
 export interface IndexStats {
@@ -574,6 +578,8 @@ export interface ProjectRow {
   lastTouched: number;
   /** Notes that link the project. */
   links: string[];
+  /** The text in its properties: each text value and each text item of a list (reference keys are found in it, src/md/refs.ts). */
+  propertyText?: string[];
 }
 
 /** Something to clarify: a Scratchpad block or a To Do `#### Other` task. */

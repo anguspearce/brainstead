@@ -23,6 +23,7 @@ vi.mock("@tauri-apps/api/webviewWindow", () => ({ getCurrentWebviewWindow: () =>
 import type { InboxItem, ReviewRun, TaskRow } from "./api";
 import { clarifyItem, findTask, Listing, renewArgs, runAction, summaryRunLine, taskLineOut } from "./mcpActions";
 import { settings } from "./store";
+import { refPatterns } from "./md/refs";
 import { focusMode, startFocus } from "./focus";
 import { nav } from "./nav";
 import { imageView } from "./ImageViewer";
@@ -2802,6 +2803,149 @@ describe("MCP actions", () => {
       expect(out).toContain("- Orbit · active · 0 next · Stuck: it has no next action  (Project. Orbit.md)");
       expect(out).toContain("- Hub · active · 2 next · Quiet: nothing has happened for two weeks  (Project. Hub.md)");
       expect(((await data("projects.list")).items as { flag: string | null }[]).map((x) => x.flag)).toEqual(["quiet", null, "stuck"]);
+    });
+
+    it("gives each task's reference keys and links, and each project's, as the screens draw them", async () => {
+      settings.update({ referenceLinks: [{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }] });
+      onTestFinished(() => settings.update({ referenceLinks: [] }));
+      answers.tasks_all = () => [
+        row({
+          // The id and the block id aren't drawn in the row's words, so their keys aren't links.
+          text: "Ship ORBIT-12 after [the spec](https://example.com/spec) and XORBIT-9 \u{1F194} ORBIT-30 ^ORBIT-31",
+          project: "Project. Orbit.md",
+          projectStatus: "active",
+        }),
+        row({ line: 3, text: "Chase ORBIT-14 #waiting-for", tags: ["waiting-for"], project: "Project. Orbit.md", projectStatus: "active" }),
+        row({ line: 4, text: "No keys here" }),
+      ];
+      answers.inbox_list = () => [];
+      const tasks = (await data("tasks.list", { view: "all" })).items as { text: string; refs: { key: string; url: string }[] }[];
+      expect(tasks.map((t) => t.refs)).toEqual([
+        [
+          { key: "ORBIT-12", url: "https://tickets.example.com/browse/ORBIT-12" },
+          { key: "the spec", url: "https://example.com/spec" },
+        ],
+        [{ key: "ORBIT-14", url: "https://tickets.example.com/browse/ORBIT-14" }],
+        [],
+      ]);
+      answers.projects_list = () => [
+        {
+          name: "Orbit",
+          path: "Project. Orbit.md",
+          status: "active",
+          area: null,
+          outcome: null,
+          next: 1,
+          waiting: 1,
+          someday: 0,
+          done: 0,
+          lastTouched: Date.now(),
+          links: [],
+          propertyText: ["ORBIT-9"],
+        },
+      ];
+      const items = (await data("projects.list")).items as { references: { key: string; url: string; from: string[] }[] }[];
+      expect(items[0].references.map((r) => [r.key, r.from])).toEqual([
+        ["ORBIT-9", ["Project note"]],
+        ["ORBIT-12", ["Next action"]],
+        ["the spec", ["Next action"]],
+        ["ORBIT-14", ["Waiting for"]],
+      ]);
+      expect(items[0].references[0].url).toBe("https://tickets.example.com/browse/ORBIT-9");
+      expect((await run("projects.list", { detail: true })) as string).toContain(
+        "\n  - Reference ORBIT-12 · https://tickets.example.com/browse/ORBIT-12 · Next action",
+      );
+    });
+
+    it("gives no refs or references, and reads no tasks for them, with no Reference links pattern set", async () => {
+      answers.tasks_all = () => [row({ text: "Ship ORBIT-12 and [the spec](https://example.com/spec)", project: "Project. Orbit.md" })];
+      answers.inbox_list = () => [];
+      const task = ((await data("tasks.list", { view: "all" })).items as Record<string, unknown>[])[0];
+      expect("refs" in task).toBe(false);
+      answers.projects_list = () => [
+        {
+          name: "Orbit",
+          path: "Project. Orbit.md",
+          status: "active",
+          area: null,
+          outcome: null,
+          next: 1,
+          waiting: 0,
+          someday: 0,
+          done: 0,
+          lastTouched: Date.now(),
+          links: [],
+          propertyText: ["https://example.com/x"],
+        },
+      ];
+      calls.length = 0;
+      const items = (await data("projects.list", { detail: true })).items as Record<string, unknown>[];
+      expect("references" in items[0]).toBe(false);
+      expect(calls.some(([c]) => c === "tasks_all")).toBe(false);
+      expect((await run("projects.list", { detail: true })) as string).not.toContain("Reference");
+    });
+
+    it("says so when the tasks for a project's references can't be read", async () => {
+      settings.update({ referenceLinks: [{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }] });
+      onTestFinished(() => settings.update({ referenceLinks: [] }));
+      answers.tasks_all = () => {
+        throw new Error("the index is busy");
+      };
+      answers.projects_list = () => [
+        {
+          name: "Orbit",
+          path: "Project. Orbit.md",
+          status: "active",
+          area: null,
+          outcome: null,
+          next: 1,
+          waiting: 0,
+          someday: 0,
+          done: 0,
+          lastTouched: Date.now(),
+          links: [],
+          propertyText: ["ORBIT-9"],
+        },
+      ];
+      const out = (await run("projects.list")) as string;
+      expect(out).toContain("References are left out: the tasks couldn't be read (the index is busy).");
+      expect(out).toContain("- Orbit · active");
+      const items = (await data("projects.list")).items as Record<string, unknown>[];
+      expect("references" in items[0]).toBe(false);
+    });
+
+    it("keeps the reference links setting as a list of rows, kept and used as the screen's are", async () => {
+      answers.settings_write = (a) => a!.settings;
+      onTestFinished(() => settings.update({ referenceLinks: [] }));
+      expect(await run("settings")).toContain("referenceLinks · Settings › Notes › Reference links");
+      const rows = [{ prefix: " ORBIT- ", url: "https://tickets.example.com/browse/{key}" }];
+      expect(await run("settings", { action: "set", key: "referenceLinks", value: rows })).toMatch(/is now \[/);
+      expect(settings.get().referenceLinks).toEqual([{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }]);
+      expect(await run("settings")).toContain(
+        'referenceLinks · Settings › Notes › Reference links (rows of a prefix and an address): [{"prefix":"ORBIT-"',
+      );
+      // What the screen saves is saved, and a row that doesn't work is kept and not used: the empty
+      // row Add a prefix makes, an address that isn't a web one, a prefix an earlier row has.
+      const sent = [
+        ...rows,
+        { prefix: "", url: "" },
+        { prefix: "X-", url: "javascript:alert(1)" },
+        { prefix: "ORBIT-", url: "https://b.example.com/{key}" },
+      ];
+      const reply = await run("settings", { action: "set", key: "referenceLinks", value: sent });
+      expect(reply).toContain("Row 2 is kept but not used: Needs a prefix");
+      expect(reply).toContain("Row 3 is kept but not used: The address must start with http");
+      expect(reply).toContain("Row 4 is kept but not used: An earlier row has this prefix already.");
+      expect(settings.get().referenceLinks).toHaveLength(4);
+      expect(refPatterns()).toEqual([{ prefix: "ORBIT-", url: "https://tickets.example.com/browse/{key}" }]);
+      await expect(run("settings", { action: "set", key: "referenceLinks", value: "not a list" })).rejects.toThrow(/as an array/);
+      await run("settings", { action: "set", key: "referenceLinks", value: null });
+      expect(settings.get().referenceLinks).toEqual([]);
+      // Only referenceLinks takes a list; any other setting refuses one rather than saving it as text.
+      const before = settings.get().templateScripts;
+      await expect(run("settings", { action: "set", key: "templateScripts", value: ["a", "b"] })).rejects.toThrow(/not a list/);
+      await expect(run("settings", { action: "set", key: "spellCheck", value: [true] })).rejects.toThrow(/not a list/);
+      expect(settings.get().templateScripts).toBe(before);
     });
 
     it("gives the judge's fix and whether it's waiting in Changes", async () => {

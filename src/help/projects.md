@@ -23,7 +23,9 @@ Click a project to open it. Edit its name, **Done looks like** (the outcome) and
 
 **Waiting for** and **Someday / maybe** list those tasks when there are any. Each waiting-for has **Draft nudge**, which asks [Ask](app:ask) for a follow-up to copy into Outlook or Teams.
 
-The side shows the project note, notes that link it, wiki pages it links, recent activity and what's done (cancelled tasks struck through).
+The side shows the project note, notes that link it, **Tickets and links**, wiki pages it links, recent activity and what's done (cancelled tasks struck through).
+
+**Tickets and links** appears once a prefix is set under **Reference links** in [Settings › Notes](app:settings/notes). It gathers each ticket key and link written in the project note's properties and the project's open tasks, once each. Each says where it appears: **Project note**, **Next action**, **Waiting for** or **Someday / maybe**. Click one to open it in your browser. It isn't shown when there are none. Write a key where it belongs, on the task or in the project note's `tickets:` property, and the card collects it.
 
 ## Update a project with what's happened
 **Update…** in the project's bar takes a line saying what has happened ("the vendor signed, kickoff is on the 3rd"). An assistant applies it in the background, in an Ask chat of its own called **Update: …**, with Brainstead's own tools: it marks things done or dropped, changes a date, owner or wording, adds a follow-up (a waiting-for when someone else has the next step) and notes what happened on the project's or initiative's page. Change only what the update means is the rule it works to; when it can't tell, it changes nothing and says what it needs. While it works it's in the sidebar's Running line; when it ends a message says what it changed, with **Open** for its chat. Every change is in [Changes](help:review) with **Revert**, made at once as anything you start is.
